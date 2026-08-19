@@ -1,0 +1,47 @@
+{
+  "generated_at_utc": "2026-08-18T22:33:53.209395+00:00",
+  "grader": {
+    "path": "ops/grade_external_test_capture.py",
+    "sha256": "2cd60d418e920291af3091d7d5135166f744d642194e13549be08de5e68d2bf5"
+  },
+  "mandatory_settlement_field_literal_evidence": {
+    "game_id": true,
+    "line_value": true,
+    "player_id": true,
+    "prop_type": true
+  },
+  "purpose": "Static contract audit between production market-pricing source and immutable grader. This does not replace first-live-file runtime schema validation.",
+  "recognized_group_literal_evidence": {
+    "edge": [],
+    "ev": [],
+    "external_test_record": [
+      "external_test_record"
+    ],
+    "odds": [
+      "over_odds",
+      "under_odds"
+    ],
+    "probability": [
+      "p_over",
+      "p_under"
+    ],
+    "side": []
+  },
+  "runtime_confirmation_required_for": [],
+  "source_records": [
+    {
+      "path": "scripts/15_price_markets.py",
+      "sha256": "270e62c263a0d9ccc6e4f75762903d9fedecbb31c5f117ac99218c9af8d25778"
+    },
+    {
+      "path": "src/nba_prop_quant/normalize.py",
+      "sha256": "694f43f1e87da878aa9b52eeb8de2657db5cd8f6dc7d225a98eb41c0fa0f26a9"
+    }
+  ],
+  "status": "PASS_WITH_RUNTIME_CONFIRMATION",
+  "warnings": [
+    "No recognized side candidate was found as a source literal. Runtime schema validation is required.",
+    "No recognized edge candidate was found as a source literal. Runtime schema validation is required.",
+    "No recognized ev candidate was found as a source literal. Runtime schema validation is required."
+  ]
+}

@@ -1,0 +1,97 @@
+{
+  "decay": {
+    "ast_rate": {
+      "beta": 0.994962668518518,
+      "global_prior": 0.0864211584166741,
+      "prior_strength": 8.0
+    },
+    "blk_rate": {
+      "beta": 0.9980099855154712,
+      "global_prior": 0.02045784935831586,
+      "prior_strength": 8.0
+    },
+    "fg3m_rate": {
+      "beta": 0.9960403507695137,
+      "global_prior": 0.03289433815978666,
+      "prior_strength": 8.0
+    },
+    "min": {
+      "beta": 0.9159844256289454,
+      "global_prior": 23.321839739381787,
+      "prior_strength": 8.0
+    },
+    "pts_rate": {
+      "beta": 0.9953706440286707,
+      "global_prior": 0.390094231269174,
+      "prior_strength": 8.0
+    },
+    "reb_rate": {
+      "beta": 0.9973954067559513,
+      "global_prior": 0.17734835574387514,
+      "prior_strength": 8.0
+    },
+    "stl_rate": {
+      "beta": 0.9989275717357772,
+      "global_prior": 0.030542834174331405,
+      "prior_strength": 8.0
+    }
+  },
+  "kalman": {
+    "ast_rate": {
+      "epsilon": 0.05,
+      "global_prior": 0.0864211584166741,
+      "initial_variance": 1.0,
+      "q": 0.0011775858763030077,
+      "r": 1.6105113621272669,
+      "team_change_multiplier": 2.0
+    },
+    "blk_rate": {
+      "epsilon": 0.05,
+      "global_prior": 0.02045784935831586,
+      "initial_variance": 1.0,
+      "q": 6.540785723808075e-05,
+      "r": 0.6656043017497164,
+      "team_change_multiplier": 2.0
+    },
+    "fg3m_rate": {
+      "epsilon": 0.05,
+      "global_prior": 0.03289433815978666,
+      "initial_variance": 1.0,
+      "q": 0.0005944811369844054,
+      "r": 1.1323556598552555,
+      "team_change_multiplier": 2.0
+    },
+    "min": {
+      "epsilon": 0.05,
+      "global_prior": 23.321839739381787,
+      "initial_variance": 1.0,
+      "q": 0.10202571725844047,
+      "r": 3.048255775560454,
+      "team_change_multiplier": 2.0
+    },
+    "pts_rate": {
+      "epsilon": 0.05,
+      "global_prior": 0.390094231269174,
+      "initial_variance": 1.0,
+      "q": 0.0024951725715879535,
+      "r": 15.554188596300676,
+      "team_change_multiplier": 2.0
+    },
+    "reb_rate": {
+      "epsilon": 0.05,
+      "global_prior": 0.17734835574387514,
+      "initial_variance": 1.0,
+      "q": 0.00045372092436465693,
+      "r": 2.998346430703573,
+      "team_change_multiplier": 2.0
+    },
+    "stl_rate": {
+      "epsilon": 0.05,
+      "global_prior": 0.030542834174331405,
+      "initial_variance": 1.0,
+      "q": 0.0,
+      "r": 30.986778387676157,
+      "team_change_multiplier": 2.0
+    }
+  }
+}

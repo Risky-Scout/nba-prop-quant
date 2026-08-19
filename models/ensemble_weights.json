@@ -1,0 +1,122 @@
+{
+  "ast": {
+    "components": [
+      "xgb",
+      "decay",
+      "kalman"
+    ],
+    "constraint": "nonnegative_simplex",
+    "fit_rows": 245210,
+    "fit_seasons": [
+      2017,
+      2025
+    ],
+    "objective": "mean_squared_error",
+    "strict_oof_evaluation_start_season": 2018,
+    "weights": {
+      "decay": 0.12042095236204674,
+      "kalman": 0.057512370992422325,
+      "xgb": 0.8220666766455309
+    }
+  },
+  "blk": {
+    "components": [
+      "xgb",
+      "decay",
+      "kalman"
+    ],
+    "constraint": "nonnegative_simplex",
+    "fit_rows": 245210,
+    "fit_seasons": [
+      2017,
+      2025
+    ],
+    "objective": "mean_squared_error",
+    "strict_oof_evaluation_start_season": 2018,
+    "weights": {
+      "decay": 0.3025358485972406,
+      "kalman": 0.061716480619628825,
+      "xgb": 0.6357476707831307
+    }
+  },
+  "fg3m": {
+    "components": [
+      "xgb",
+      "decay",
+      "kalman"
+    ],
+    "constraint": "nonnegative_simplex",
+    "fit_rows": 245210,
+    "fit_seasons": [
+      2017,
+      2025
+    ],
+    "objective": "mean_squared_error",
+    "strict_oof_evaluation_start_season": 2018,
+    "weights": {
+      "decay": 0.18656286575000194,
+      "kalman": 0.012359789432056508,
+      "xgb": 0.8010773448179417
+    }
+  },
+  "pts": {
+    "components": [
+      "xgb",
+      "decay",
+      "kalman"
+    ],
+    "constraint": "nonnegative_simplex",
+    "fit_rows": 245210,
+    "fit_seasons": [
+      2017,
+      2025
+    ],
+    "objective": "mean_squared_error",
+    "strict_oof_evaluation_start_season": 2018,
+    "weights": {
+      "decay": 0.15153264453185428,
+      "kalman": 7.349435153383119e-19,
+      "xgb": 0.8484673554681457
+    }
+  },
+  "reb": {
+    "components": [
+      "xgb",
+      "decay",
+      "kalman"
+    ],
+    "constraint": "nonnegative_simplex",
+    "fit_rows": 245210,
+    "fit_seasons": [
+      2017,
+      2025
+    ],
+    "objective": "mean_squared_error",
+    "strict_oof_evaluation_start_season": 2018,
+    "weights": {
+      "decay": 0.32814942101284594,
+      "kalman": 0.04627874179475564,
+      "xgb": 0.6255718371923985
+    }
+  },
+  "stl": {
+    "components": [
+      "xgb",
+      "decay",
+      "kalman"
+    ],
+    "constraint": "nonnegative_simplex",
+    "fit_rows": 245210,
+    "fit_seasons": [
+      2017,
+      2025
+    ],
+    "objective": "mean_squared_error",
+    "strict_oof_evaluation_start_season": 2018,
+    "weights": {
+      "decay": 0.2382233186499173,
+      "kalman": 0.030266477258938402,
+      "xgb": 0.7315102040911443
+    }
+  }
+}

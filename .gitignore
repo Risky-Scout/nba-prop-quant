@@ -1,0 +1,67 @@
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+*.egg-info/
+
+# Environments / secrets
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*.json
+secrets*.json
+
+# IDE / local state
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Raw / generated data
+data/raw/
+data/processed/
+data/external_test/
+data/cache/
+data/tmp/
+data/**/*.parquet
+data/**/*.feather
+data/**/*.arrow
+
+# Local model binaries: distribute via GitHub Release assets, not ordinary Git history.
+models/**/*.joblib
+models/**/*.pkl
+models/**/*.pickle
+models/**/*.onnx
+models/**/*.bin
+models/**/*.npy
+models/**/*.npz
+
+# Local package/release output
+dist/
+*.zip
+*.tar
+*.tar.gz
+*.7z
+
+# Local backups created during operations
+*.before_*
+*.before-*
+*_backup
+*_backup.*
+
+# Logs
+*.log
+logs/

@@ -1,0 +1,49 @@
+{
+  "by_prop": {
+    "assists": {
+      "intercept": -0.05778247226580689,
+      "slope": 0.386794430076103
+    },
+    "blocks": {
+      "intercept": -0.028108271604723182,
+      "slope": 0.9513317710756926
+    },
+    "points": {
+      "intercept": -0.004940413013824057,
+      "slope": 0.14071147064173672
+    },
+    "points_assists": {
+      "intercept": -0.025098708353012162,
+      "slope": 0.12836421939220577
+    },
+    "points_rebounds": {
+      "intercept": -0.0003783931485257711,
+      "slope": 0.17856191950632316
+    },
+    "points_rebounds_assists": {
+      "intercept": -0.04455559580350249,
+      "slope": 0.11164023664343037
+    },
+    "rebounds": {
+      "intercept": -0.087219300019484,
+      "slope": 0.38038730885482136
+    },
+    "rebounds_assists": {
+      "intercept": -0.06843249743782161,
+      "slope": 0.23786321153589302
+    },
+    "steals": {
+      "intercept": -0.019879677540837384,
+      "slope": 0.8057169066523724
+    },
+    "threes": {
+      "intercept": -0.07486770480831707,
+      "slope": 0.6886247681116154
+    }
+  },
+  "global": {
+    "intercept": -0.04887284993990918,
+    "slope": 0.48420815856799776
+  },
+  "note": "Fit on all 2025 development market contracts. 2026-27 is the first external evaluation."
+}

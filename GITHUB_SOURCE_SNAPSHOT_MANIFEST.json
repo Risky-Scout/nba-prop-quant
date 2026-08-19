@@ -1,0 +1,649 @@
+{
+  "file_count": 128,
+  "files": [
+    {
+      "bytes": 22,
+      "path": "src/nba_prop_quant/__init__.py",
+      "sha256": "91447944015cec709e8aa7655f7e9d64e1e4508e7023a57fe3746911c0fc6fed"
+    },
+    {
+      "bytes": 8152,
+      "path": "src/nba_prop_quant/api.py",
+      "sha256": "109e1b4dd37c3cfcd385b03a7593b865311fbcaea89251157d7def4a2f622b67"
+    },
+    {
+      "bytes": 3775,
+      "path": "src/nba_prop_quant/availability.py",
+      "sha256": "2b6e342d0baeac5d1bd7a6bc097b5581ca4b90f5695d7effe613bb18080bd319"
+    },
+    {
+      "bytes": 4260,
+      "path": "src/nba_prop_quant/copula.py",
+      "sha256": "7b51641a6404fe04047b5aa72fad82ff1df9a0c9073b12ab3cebeba9057ce76b"
+    },
+    {
+      "bytes": 2741,
+      "path": "src/nba_prop_quant/ctmc.py",
+      "sha256": "f39350cf97e059aca02f09dcc23e2eda95663f43edc79e115186fb85a78305a0"
+    },
+    {
+      "bytes": 2927,
+      "path": "src/nba_prop_quant/decay.py",
+      "sha256": "bd31f506bc2dd545fb8296a3cbb32bd326ef46d09dccbbd3717071142063dec3"
+    },
+    {
+      "bytes": 12743,
+      "path": "src/nba_prop_quant/distributions.py",
+      "sha256": "0fac50865b33dcbdb5ac2b4e63b1a66f179c2ab446f1575e62053e48b0402ba6"
+    },
+    {
+      "bytes": 4853,
+      "path": "src/nba_prop_quant/experience.py",
+      "sha256": "2605db999b087b804aea32bd60b33bdf08fe0d6301026f5acebba99a3e48e65a"
+    },
+    {
+      "bytes": 15561,
+      "path": "src/nba_prop_quant/features.py",
+      "sha256": "956a95456dc5e344ef679d5e8bfacbabca9486caa745be2d1080d8517dcc4124"
+    },
+    {
+      "bytes": 11896,
+      "path": "src/nba_prop_quant/game_context.py",
+      "sha256": "8c2b015559b4ed3329ad7be5f02d4b8bca7a56c14b5e7eeca4e21f7840e6c22a"
+    },
+    {
+      "bytes": 3982,
+      "path": "src/nba_prop_quant/ingest.py",
+      "sha256": "029c7ba59dbf05c503365b7c2b5edc216223aac126c3cb19e6bb69539922b847"
+    },
+    {
+      "bytes": 1627,
+      "path": "src/nba_prop_quant/interpret.py",
+      "sha256": "b7d443ae5001414c128e7c37d328965c5b44502d22cd2b294a201dff0d31056b"
+    },
+    {
+      "bytes": 4263,
+      "path": "src/nba_prop_quant/kalman.py",
+      "sha256": "898213b89e7c96def9ec5e0fd151569619b675d22cdb3f478a091d9d5e124f78"
+    },
+    {
+      "bytes": 9375,
+      "path": "src/nba_prop_quant/live.py",
+      "sha256": "db0830a7fbde2e7c8d879b4dc2e3c0dcac5cb68dca8e3822cff53797d258eb94"
+    },
+    {
+      "bytes": 7309,
+      "path": "src/nba_prop_quant/market.py",
+      "sha256": "6c6664cc2ede2566e07ff55a9bef10e5fd89a7f6a9c796b09fb210eaadd594c7"
+    },
+    {
+      "bytes": 9218,
+      "path": "src/nba_prop_quant/model.py",
+      "sha256": "53f5c2257c96a6f079935e6ec881798a5337044b4977ee481d9c3ed3867b00d9"
+    },
+    {
+      "bytes": 6311,
+      "path": "src/nba_prop_quant/normalize.py",
+      "sha256": "694f43f1e87da878aa9b52eeb8de2657db5cd8f6dc7d225a98eb41c0fa0f26a9"
+    },
+    {
+      "bytes": 2173,
+      "path": "src/nba_prop_quant/pipeline.py",
+      "sha256": "c3cf7718daa892c5e094cd2e5983429b1954f8c143437d19cdafcb87cc30d552"
+    },
+    {
+      "bytes": 13512,
+      "path": "src/nba_prop_quant/pricing.py",
+      "sha256": "1a757e9ee4d955eea2d2e6150bafe647d5e3c4b6adafca0ea1be022c2589fb2a"
+    },
+    {
+      "bytes": 21973,
+      "path": "src/nba_prop_quant/production.py",
+      "sha256": "0f709dda1cae1d9d2ad7316372cdf6ab2600541fcb262de0440de8479e88ba93"
+    },
+    {
+      "bytes": 1318,
+      "path": "src/nba_prop_quant/sequence.py",
+      "sha256": "c4aa3ee93bb3cc5463cc91ac0f11ebab944784f8d1bcc3b1e51ae0074e93a8d0"
+    },
+    {
+      "bytes": 1385,
+      "path": "src/nba_prop_quant/settings.py",
+      "sha256": "642d03376ace773e44e4a531127a4d609b85eddbc0c408dd331e7b9c8cca5ded"
+    },
+    {
+      "bytes": 12164,
+      "path": "src/nba_prop_quant/slate.py",
+      "sha256": "c6c8880a37c933e0a15947c80e20750884204ae44aa33726c861a661aa608318"
+    },
+    {
+      "bytes": 1735,
+      "path": "src/nba_prop_quant/storage.py",
+      "sha256": "6169c3eb1d02411878743fa67d1bcae08f4d91d5505d3a9f21d5e227ff40e359"
+    },
+    {
+      "bytes": 8164,
+      "path": "src/nba_prop_quant.egg-info/PKG-INFO",
+      "sha256": "82255040ff4e5ba909451e7f9139a55f4909041b6f8d76a083dc70ad3501c3f5"
+    },
+    {
+      "bytes": 1057,
+      "path": "src/nba_prop_quant.egg-info/SOURCES.txt",
+      "sha256": "112329f95be0053b3194476887ad72d5188b587e15146dde5ae1e9b7fc590cf1"
+    },
+    {
+      "bytes": 1,
+      "path": "src/nba_prop_quant.egg-info/dependency_links.txt",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "bytes": 296,
+      "path": "src/nba_prop_quant.egg-info/requires.txt",
+      "sha256": "36a9c166a1de210aaa89c3a7c5fd8b8ae2364b838126d0eebcae03d6e3c651db"
+    },
+    {
+      "bytes": 15,
+      "path": "src/nba_prop_quant.egg-info/top_level.txt",
+      "sha256": "e37e57cf8f4826b826deb60d9841cbbcc025b13a32c950e27c211533849865b0"
+    },
+    {
+      "bytes": 1541,
+      "path": "scripts/00_check_api.py",
+      "sha256": "427dc10e57c25d26b239bdc8321e16fc73dee1c01b64920407d082c4d18cb141"
+    },
+    {
+      "bytes": 2029,
+      "path": "scripts/01_ingest_history.py",
+      "sha256": "627330687d6292754c5fe5c87764ff909ab844dd55e92560fee994cd56104b3f"
+    },
+    {
+      "bytes": 16412,
+      "path": "scripts/01_ingest_history_resume.py",
+      "sha256": "6b0f1dc83ac11c05c420b95c9f8af3992ac91e5e627c325193bd32797434e25f"
+    },
+    {
+      "bytes": 1159,
+      "path": "scripts/02_build_base.py",
+      "sha256": "cc72054f885b88957ab75861db7aa7a8eda94b0d2f4c409846a25a9a3b21dc32"
+    },
+    {
+      "bytes": 4689,
+      "path": "scripts/03_tune_dynamic_priors.py",
+      "sha256": "7a98c321da8b11ccad2209bd55c28e7f6684809c8d2bd30c1be5b5405f45d2ff"
+    },
+    {
+      "bytes": 1491,
+      "path": "scripts/04_build_features.py",
+      "sha256": "4b27c6d0f1ceb68904ba5daace725329fd1c6f7ba7b85517aef5286409d73a5a"
+    },
+    {
+      "bytes": 4491,
+      "path": "scripts/05_train_minutes.py",
+      "sha256": "c5261fa9e928edab665460e8813d93b82a9cb18232ba54199df5cfb53afe4847"
+    },
+    {
+      "bytes": 12293,
+      "path": "scripts/06_train_targets.py",
+      "sha256": "e646b10936c2bf647e76ffa321a24b7966e11b778bac530c98fe12e5eb6ddbab"
+    },
+    {
+      "bytes": 16333,
+      "path": "scripts/06b_fit_mean_ensemble.py",
+      "sha256": "80c99250fbaa07ada3e18a85cdb816ba88ab1236dc8636224cb5038b952d02b2"
+    },
+    {
+      "bytes": 8458,
+      "path": "scripts/06c_select_mean_models.py",
+      "sha256": "d53c7a8e3f597fc73b4c945bfea5b469f8b42370e262c30eb81f916704dc5505"
+    },
+    {
+      "bytes": 23815,
+      "path": "scripts/07_fit_marginals.py",
+      "sha256": "afe2616c3296c1f42a39e21203d8f6f6ecb5c2e8349daf8dc7bed0527a47bbed"
+    },
+    {
+      "bytes": 21558,
+      "path": "scripts/08_fit_copula.py",
+      "sha256": "c98efe4f9b0a862dd1cd9ade846e379fa53728ea54a7d54c63c63598635ff7ba"
+    },
+    {
+      "bytes": 6298,
+      "path": "scripts/08b_bootstrap_copula_crps.py",
+      "sha256": "b0e76ffe6c19740428419e4ebee17d21c7e276b76caf27ee036742bf47fc9db4"
+    },
+    {
+      "bytes": 14928,
+      "path": "scripts/08c_tune_copula_shrinkage.py",
+      "sha256": "720586f2dcf29cb7e33baeb1d934985ba38f35cb7d2b7d1cadc3776c6deb9fdc"
+    },
+    {
+      "bytes": 17718,
+      "path": "scripts/08d_refine_copula_shrinkage_cv.py",
+      "sha256": "d9d159f1ac436df3800027ae4ca867358daea972db8f36ded88192fac15dcf64"
+    },
+    {
+      "bytes": 25693,
+      "path": "scripts/09_backtest.py",
+      "sha256": "c1b4dab650781cd98e3d7b0e44c1c01c63c3999f0918b9373e3bc7960c0b6a9b"
+    },
+    {
+      "bytes": 22382,
+      "path": "scripts/09b_diagnose_market_backtest.py",
+      "sha256": "b000d6320a1ab2d53783cae163380c034f15b2de0dcdc0d7b40a8a2be8de75ac"
+    },
+    {
+      "bytes": 21165,
+      "path": "scripts/09c_fit_probability_calibration.py",
+      "sha256": "cfa97ab8f1926cf0be0a9aad3f3a22484c837dc7ca1db4a85914991bfedeab6c"
+    },
+    {
+      "bytes": 14800,
+      "path": "scripts/09d_select_probability_calibration.py",
+      "sha256": "efcf6cc9cbc815a1446c35ae219d00c7cc3172f1fef7f6af3f5c29b0a83f2e51"
+    },
+    {
+      "bytes": 23846,
+      "path": "scripts/09e_evaluate_oof_calibrated_betting.py",
+      "sha256": "f98059195ea33b034039cbccf7d16c78d2416127dbac3e5dce09dac6061f7468"
+    },
+    {
+      "bytes": 11661,
+      "path": "scripts/10_predict_slate.py",
+      "sha256": "1d63c46b0cfc08ae117ec5bdddc6ef68e6c5c1b4eabeafc13889934f8875ed73"
+    },
+    {
+      "bytes": 5929,
+      "path": "scripts/10a_validate_production_contract.py",
+      "sha256": "7cb29035b590a7acfdca8bdd58bf5084a5aed0c37c070fc930c0ec7300353134"
+    },
+    {
+      "bytes": 1870,
+      "path": "scripts/11_collect_snapshots.py",
+      "sha256": "3a2ff3e9cb41d91fa64fbddbf7f216b415d7b9faf66545bcf21ed4cffd430d25"
+    },
+    {
+      "bytes": 2193,
+      "path": "scripts/12_collect_live_box.py",
+      "sha256": "7ea51da33dfdc4a1890894b129f5942fa9087abe7ca663bb41d3c17229dc3516"
+    },
+    {
+      "bytes": 1872,
+      "path": "scripts/13_train_live_ingarch.py",
+      "sha256": "834f093230b51ca78947ce93fc0dcc9d3445c388d79ecffdce5c145bc94538ee"
+    },
+    {
+      "bytes": 5898,
+      "path": "scripts/14_live_price.py",
+      "sha256": "39ff8bc85d4bc49653710301021cfa12f4ecdb56a3392d7de3ff113d03e6fb8a"
+    },
+    {
+      "bytes": 18580,
+      "path": "scripts/15_price_markets.py",
+      "sha256": "270e62c263a0d9ccc6e4f75762903d9fedecbb31c5f117ac99218c9af8d25778"
+    },
+    {
+      "bytes": 1708,
+      "path": "scripts/16_explain_projection.py",
+      "sha256": "6dc855606ff7085496d601b31e4a14157327b3afc896b36e743a4d67613670c1"
+    },
+    {
+      "bytes": 1092,
+      "path": "scripts/17_build_completed_history.py",
+      "sha256": "d384e3b6ba592a3ab25ee4b40f9de225a5b198a943f4e793e32701aae46bb515"
+    },
+    {
+      "bytes": 16550,
+      "path": "scripts/freeze_production_manifest.py",
+      "sha256": "b74b2132bcd5efc288ee7b60d1d3e668f321a05c7bda50cb79c56b808493ad88"
+    },
+    {
+      "bytes": 3145,
+      "path": "scripts/verify_frozen_manifest.py",
+      "sha256": "d684000e49db6afdb2f1236f990c8be545ec4b4ce7dbed46ad054da17f5f4cb1"
+    },
+    {
+      "bytes": 8196,
+      "path": "ops/.DS_Store",
+      "sha256": "20a9005984aa2f1ef497d426e6cbde04cf1784b38c9e6a382a4dc65dfbd613f2"
+    },
+    {
+      "bytes": 6149,
+      "path": "ops/EXTERNAL_TEST_GRADING_2026_27.md",
+      "sha256": "5c846926aded5976c38708435d69aff993bf3b42a7771f12a38856fe49667275"
+    },
+    {
+      "bytes": 11024,
+      "path": "ops/EXTERNAL_TEST_OPERATIONS_2026_27.md",
+      "sha256": "42153c2227836e869235b4904fcdcaaf277dc47be0a734fd5ff22c8e36b5273a"
+    },
+    {
+      "bytes": 6986,
+      "path": "ops/audit_pricing_grading_contract.py",
+      "sha256": "ff4a80321486bd8056c9e8b50b86c64cb8b9a73699faa19cd1a1989d7b2f59af"
+    },
+    {
+      "bytes": 11309,
+      "path": "ops/audit_senior_quant_dossier_clarity.py",
+      "sha256": "f61e7923c6d6a9c14d21fa42e54cdb2a951d4c8c01430cb541b249d5551693be"
+    },
+    {
+      "bytes": 19371,
+      "path": "ops/build_full_model_package.py",
+      "sha256": "f4d34ff8bcb8491aec2aa9026c4e04816b0f36bd7246ac0956a9d63aecef7196"
+    },
+    {
+      "bytes": 25211,
+      "path": "ops/build_senior_quant_review_dossier.py",
+      "sha256": "d1a6314eb8eb2a2b5ee88d2021f1672fa249604c1dee9aa7bf55da7d963496ef"
+    },
+    {
+      "bytes": 15201,
+      "path": "ops/build_senior_quant_reviewer_handoff.py",
+      "sha256": "96b2779dff0620cf56b793ec958e452184541d1f1a4247c843e8ef75b7bf2129"
+    },
+    {
+      "bytes": 25841,
+      "path": "ops/capture_external_test_day.py",
+      "sha256": "a7ca11b5d921dcfb231efa551e85951391f726ed203f13c9210cd61815dff279"
+    },
+    {
+      "bytes": 37224,
+      "path": "ops/grade_external_test_capture.py",
+      "sha256": "2cd60d418e920291af3091d7d5135166f744d642194e13549be08de5e68d2bf5"
+    },
+    {
+      "bytes": 2184,
+      "path": "ops/grade_external_test_day.py",
+      "sha256": "09317fce834d117e8b293718cf3ba1b599c307d7fe183b6bdefc50667130b3b9"
+    },
+    {
+      "bytes": 40237,
+      "path": "ops/inventory_model_constants.py",
+      "sha256": "2a6068efde2648dffd76b94bd2006e5f1d7349156cca31e8a8f102e4476fc726"
+    },
+    {
+      "bytes": 912,
+      "path": "ops/list_external_test_captures.py",
+      "sha256": "4fe9ad4d1704f39cecb81e60e9ef8bab494f728488009005cd1b1f5b477bea5a"
+    },
+    {
+      "bytes": 844,
+      "path": "ops/list_external_test_grades.py",
+      "sha256": "932c942618ffd392a679070ba677c5812065714db98b1ca176c4058ab3480414"
+    },
+    {
+      "bytes": 13590,
+      "path": "ops/preflight_current_season_refresh.py",
+      "sha256": "a6e3b896245e48a5a8aafd2ef98f589137e9969eb7b66aaf1eb66871b2bc4721"
+    },
+    {
+      "bytes": 11822,
+      "path": "ops/qa_grading_synthetic_integration.py",
+      "sha256": "3c742d32e22d24804d36b55108ecce52738d8ac122411fe0c1afecf06cc0bc9a"
+    },
+    {
+      "bytes": 16249,
+      "path": "ops/qa_replay_2025_grading.py",
+      "sha256": "0bcd6046b963181055583a800ff8906218fb00a334641e90beb2d015932fb60e"
+    },
+    {
+      "bytes": 893,
+      "path": "ops/run_dossier_review_and_package.py",
+      "sha256": "b612c3a240d219246711e0f58e0cea028518ae82428f24ea3250082662061049"
+    },
+    {
+      "bytes": 4516,
+      "path": "ops/run_external_test_day.sh",
+      "sha256": "5145ea6285fc98e3b6d96ccda53cd7138ba32e80879f0d73af83bf3e80b29a9a"
+    },
+    {
+      "bytes": 1628,
+      "path": "ops/run_senior_quant_review_preflight.py",
+      "sha256": "cd254d438bede82d973e6b89bc331566a6ef9cb3673ec27a55c274b175018482"
+    },
+    {
+      "bytes": 3695,
+      "path": "ops/verify_external_test_capture.py",
+      "sha256": "3bba3b170dbb18fda1c99f238770627cb97001a79404103c4478253bb10cc569"
+    },
+    {
+      "bytes": 2985,
+      "path": "ops/verify_external_test_grade.py",
+      "sha256": "5d2c1d18c902696c575114c24c1cede6305fa5b19a8aadd975e70fc61497a95b"
+    },
+    {
+      "bytes": 1492,
+      "path": "tests/test_copula.py",
+      "sha256": "d74c72fc61d1fe75f7ab2fd847d703811f24eb1fa273de8f98432efccba43bcd"
+    },
+    {
+      "bytes": 837,
+      "path": "tests/test_ctmc.py",
+      "sha256": "e1c036b0e966925f6bbbe4b0e3948cf8b9da56dfaa7087fa84f7abc19db60efc"
+    },
+    {
+      "bytes": 1450,
+      "path": "tests/test_distributions.py",
+      "sha256": "1b481dd1457820702c5c7f12885b1c5c0b89de80bdb3137929e7e317938918d0"
+    },
+    {
+      "bytes": 1076,
+      "path": "tests/test_dynamic_priors.py",
+      "sha256": "69747ef26305d900f62ede0bb1b5038fc3c8b59669adbed37115dc9a2b962b17"
+    },
+    {
+      "bytes": 2225,
+      "path": "tests/test_features.py",
+      "sha256": "ce993adc18af651b42381eb0785a9cd18eb606d653cb1d51ed5c7c93b864b007"
+    },
+    {
+      "bytes": 886,
+      "path": "tests/test_live.py",
+      "sha256": "ac9e690cc6c26e00453e8aad81588e57d7d063f59a6146a78f144546b93b170c"
+    },
+    {
+      "bytes": 370,
+      "path": "tests/test_pricing.py",
+      "sha256": "a319af8b6e74f930e84dab084744a6c2b4c4373b370ef4fd9f5ae321b3df8e56"
+    },
+    {
+      "bytes": 3066,
+      "path": "tests/test_production_live.py",
+      "sha256": "666011074ec357dbae7b2cd873bd7ac7c802caf50fdfb2754848f631ad0f99b8"
+    },
+    {
+      "bytes": 681,
+      "path": "configs/model.yaml",
+      "sha256": "12afbb1df6a62f8121319e587f65ebb1403d7a59dd721eadefdc209d2efe9140"
+    },
+    {
+      "bytes": 858,
+      "path": "pyproject.toml",
+      "sha256": "1156a3698f54087368d3f82dba23dae8d30196da60db64d2eb9ad7c77b0f92f8"
+    },
+    {
+      "bytes": 2727,
+      "path": "models/combo_dependence_policy.json",
+      "sha256": "37dba3b7ff1c27d8cced09c6d8655c9c8ee7afc295427163a08846b0ccddf735"
+    },
+    {
+      "bytes": 2472,
+      "path": "models/dynamic_params.full_2001_2025.json",
+      "sha256": "b8951cf375fcd7b5b624823f5dfb7f0c0d5338453c35e2cbb363d963b57302ee"
+    },
+    {
+      "bytes": 2472,
+      "path": "models/dynamic_params.json",
+      "sha256": "b8951cf375fcd7b5b624823f5dfb7f0c0d5338453c35e2cbb363d963b57302ee"
+    },
+    {
+      "bytes": 2498,
+      "path": "models/dynamic_params.sample_original.json",
+      "sha256": "85e28f1f08542ed358b9ccaf3edd14b4f0119bed59096fc511c616753a99e95e"
+    },
+    {
+      "bytes": 2495,
+      "path": "models/dynamic_params.sample_qwide.json",
+      "sha256": "647746a2c6e876a85bf79ff13977227e62a6d322e85029e2807d2812bb3d23d8"
+    },
+    {
+      "bytes": 2494,
+      "path": "models/dynamic_params.sample_wide.json",
+      "sha256": "407348c2310211085d6b2696fb946bd1a6fd2daf7b25adc454818bd2f2e826ed"
+    },
+    {
+      "bytes": 2509,
+      "path": "models/ensemble_weights.json",
+      "sha256": "5735dd758ab4af7fb50d73cfccac629227f4d785c6264c3c5e52346ee42ce80c"
+    },
+    {
+      "bytes": 20176,
+      "path": "models/marginal_selection.json",
+      "sha256": "5516f941bdb9d8d723650f46d90afb6f1a7d39de777f0dd95bb7060a6bfe84e3"
+    },
+    {
+      "bytes": 1249,
+      "path": "models/market_probability_calibration.json",
+      "sha256": "330d8e30c6b641f6beb5b541a5df14b5a8be25d8ce48e5114a460bed8f793655"
+    },
+    {
+      "bytes": 4164,
+      "path": "models/market_probability_calibration_policy.json",
+      "sha256": "484656bbc50ff111bb7990ccef75260a8f47b568c3f8a08816c82f65ab10f7a8"
+    },
+    {
+      "bytes": 3798,
+      "path": "models/mean_model_selection.json",
+      "sha256": "d8961f7156514a7b5b92cde943c181566796254e46cea03f96bf6e7f7abbe438"
+    },
+    {
+      "bytes": 1476775,
+      "path": "models/frozen_manifests/LATEST.json",
+      "sha256": "7c70a1a82145ef0ea1ef69806a5edc363704a285df638796212b23810d8e6823"
+    },
+    {
+      "bytes": 1475161,
+      "path": "models/frozen_manifests/nba_prop_quant_20260818T202318Z.json",
+      "sha256": "9d1d1cd61319cf9838c8d6e1c31ea205e0583e637bb85c6f102e9c2ea895c2c0"
+    },
+    {
+      "bytes": 1476775,
+      "path": "models/frozen_manifests/nba_prop_quant_20260818T205213Z.json",
+      "sha256": "7c70a1a82145ef0ea1ef69806a5edc363704a285df638796212b23810d8e6823"
+    },
+    {
+      "bytes": 7514,
+      "path": "models/frozen_manifests/LATEST.md",
+      "sha256": "ca7583b9190fb03fc95c3456c8b3d9bb8b36a0d3f57a5b8e930a179f34fa0e31"
+    },
+    {
+      "bytes": 6772,
+      "path": "models/frozen_manifests/nba_prop_quant_20260818T202318Z.md",
+      "sha256": "4b5cb6db48c02435f9602de04c58d12fcadc864b8ca15c57716554c4a95825ae"
+    },
+    {
+      "bytes": 7514,
+      "path": "models/frozen_manifests/nba_prop_quant_20260818T205213Z.md",
+      "sha256": "ca7583b9190fb03fc95c3456c8b3d9bb8b36a0d3f57a5b8e930a179f34fa0e31"
+    },
+    {
+      "bytes": 909,
+      "path": "models/frozen_manifests/nba_prop_quant_20260818T202318Z_pip_freeze.txt",
+      "sha256": "d3e569cc093b2607dbd026315de1cc9001d27daf4a2ef7bc8d208c64ff8b12f1"
+    },
+    {
+      "bytes": 909,
+      "path": "models/frozen_manifests/nba_prop_quant_20260818T205213Z_pip_freeze.txt",
+      "sha256": "d3e569cc093b2607dbd026315de1cc9001d27daf4a2ef7bc8d208c64ff8b12f1"
+    },
+    {
+      "bytes": 2862,
+      "path": "review/SENIOR_QUANT_REVIEW_ATTACK_CHECKLIST.md",
+      "sha256": "1eceba40cd2ac7c1e30ed707013b6be39a6098105926ac4afd5c9b8b774d3405"
+    },
+    {
+      "bytes": 14868,
+      "path": "review/SENIOR_QUANT_REVIEW_DOSSIER.md",
+      "sha256": "9716a1f825bc208b387c31a81a7df4a72f1f1557209a4db2a03c3ac73b3bdd20"
+    },
+    {
+      "bytes": 3293,
+      "path": "review/SENIOR_QUANT_REVIEW_ARTIFACT_INDEX.json",
+      "sha256": "b0077474a76079bfcce9769717e7e7155236e000b5d0c69b8c07634ffb4eb87a"
+    },
+    {
+      "bytes": 49754,
+      "path": "review/workpapers/NBA_Player_Prop_Model_Workpaper_2026_08_19.docx",
+      "sha256": "956005bf41f0fdb7f19c92067e8d46b83051722c2c650e31657d474829dac786"
+    },
+    {
+      "bytes": 1082,
+      "path": "data/validation/grading_replay_2025/date=2026-02-11/20260818T223348Z/real_2025_grading_replay_report.json",
+      "sha256": "0f82d29a4f72de1703c8dbcb46a4e0e0be05e74a5b57bc43cf95663a10b0c4c3"
+    },
+    {
+      "bytes": 715,
+      "path": "data/validation/grading_synthetic/20260818T223347Z/synthetic_grading_integration_report.json",
+      "sha256": "9bd84a74a010c26003ba6a497dbede098e3e47263aa220cfece8cf860341a324"
+    },
+    {
+      "bytes": 3416886,
+      "path": "data/validation/model_constant_inventory/FULL_CONSTANT_INVENTORY.json",
+      "sha256": "cd26e5c2db109d2c653bf22a713ff53ac6b1a0ee0f5ea65b41a9996f9a912b61"
+    },
+    {
+      "bytes": 1535,
+      "path": "data/validation/pricing_grading_contract/pricing_grading_contract_audit.json",
+      "sha256": "5343d00c6b034c3b885df5f70c5fa07221ecf3ea8a987b6334eed31651562bef"
+    },
+    {
+      "bytes": 5239,
+      "path": "data/validation/senior_quant_handoff/dossier_clarity_audit.json",
+      "sha256": "3de5ffaf825a7e0740a6fc55293b2e21a383fb5e56cd3c3a4b36c720fe7cbbf7"
+    },
+    {
+      "bytes": 4496,
+      "path": "data/validation/model_constant_inventory/CONSTANT_INVENTORY_SUMMARY.md",
+      "sha256": "bc794fccb8dbc57a8ac914424fac0fe4c5bec1c6f4e20bf09b63612d3ac4c3e2"
+    },
+    {
+      "bytes": 1030,
+      "path": "data/validation/pricing_grading_contract/pricing_grading_contract_audit.md",
+      "sha256": "a859f9509483210ae85a56a7a1c1840ed0c07cb941870b15a48fb9979d207f35"
+    },
+    {
+      "bytes": 968,
+      "path": "data/validation/senior_quant_handoff/dossier_clarity_audit.md",
+      "sha256": "2b958e88fb56071183dab3264a6dab633c7288b60519a30efd4d23cfda91e5e7"
+    },
+    {
+      "bytes": 82256,
+      "path": "data/validation/model_constant_inventory/CONFIG_CONSTANTS.csv",
+      "sha256": "b46c7537deb3dbcf1605c2191efd3a25b66412854b5d80e5a784f4c4f6e355a2"
+    },
+    {
+      "bytes": 1225888,
+      "path": "data/validation/model_constant_inventory/FULL_CONSTANT_INVENTORY.csv",
+      "sha256": "2180a5ec18932bec9c634516c8f8fe5b5092e48714330b3f8c2d6bc2cf2fb914"
+    },
+    {
+      "bytes": 83475,
+      "path": "data/validation/model_constant_inventory/NAMED_CONSTANTS.csv",
+      "sha256": "a3d1df5525baaf237e79f5d853e6f660b43bfb379df0307de368990919080dbe"
+    },
+    {
+      "bytes": 16007,
+      "path": "data/validation/model_constant_inventory/SHELL_CONSTANTS.csv",
+      "sha256": "4fa8dec2733e760bb929086133a1ef7a565a24641ee2f0e6509f945b13e4b3e0"
+    },
+    {
+      "bytes": 1410,
+      "path": "scripts/github_publish_preflight.sh",
+      "sha256": "4188e8c0b0680491029c2500167990a5332e6925bf0ce0f079ad2466f120a3dc"
+    }
+  ],
+  "frozen_release_tag": "nba_prop_quant_20260818T205213Z",
+  "purpose": "Clean ordinary-Git source/document snapshot; excludes binary model package and raw data.",
+  "schema_version": 1,
+  "source_project": "/Users/josephshackelford/Downloads/BET365/NBA box-score projection system/nba_prop_quant_blueprint"
+}

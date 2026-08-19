@@ -1,0 +1,92 @@
+{
+  "artifacts": [
+    {
+      "bytes": 1476775,
+      "path": "models/frozen_manifests/LATEST.json",
+      "sha256": "7c70a1a82145ef0ea1ef69806a5edc363704a285df638796212b23810d8e6823"
+    },
+    {
+      "bytes": 3798,
+      "path": "models/mean_model_selection.json",
+      "sha256": "d8961f7156514a7b5b92cde943c181566796254e46cea03f96bf6e7f7abbe438"
+    },
+    {
+      "bytes": 20176,
+      "path": "models/marginal_selection.json",
+      "sha256": "5516f941bdb9d8d723650f46d90afb6f1a7d39de777f0dd95bb7060a6bfe84e3"
+    },
+    {
+      "bytes": 2727,
+      "path": "models/combo_dependence_policy.json",
+      "sha256": "37dba3b7ff1c27d8cced09c6d8655c9c8ee7afc295427163a08846b0ccddf735"
+    },
+    {
+      "bytes": 4164,
+      "path": "models/market_probability_calibration_policy.json",
+      "sha256": "484656bbc50ff111bb7990ccef75260a8f47b568c3f8a08816c82f65ab10f7a8"
+    },
+    {
+      "bytes": 1542,
+      "path": "data/processed/market_backtest/calibrated_oof/event_scoring_summary.csv",
+      "sha256": "ed57cd1d10ae7b892dd936ff4de1ed724673a969c1880c4e54856396917a11eb"
+    },
+    {
+      "bytes": 3475,
+      "path": "data/processed/market_backtest/calibrated_oof/event_game_cluster_bootstrap.csv",
+      "sha256": "79f90df6acd118ed7ce8aa6378d4d591cbc83225926972f52c1869d749a9e993"
+    },
+    {
+      "bytes": 237376811,
+      "path": "data/processed/oof_selected_means.parquet",
+      "sha256": "c64af789d3d8ec8232ed006afb5d00bd6e7731503cb85adb675a35d1d6dfff03"
+    },
+    {
+      "bytes": 3874,
+      "path": "models/marginals.joblib",
+      "sha256": "e9d5ab0bcdb6635225a01526f3b682fecadb3d87d364bc93343f27f482cdc42f"
+    },
+    {
+      "bytes": 306557,
+      "path": "models/copula.joblib",
+      "sha256": "4149fa702a7f31883786c966b245c711527f5b147f438e7112990a87a914bd39"
+    },
+    {
+      "bytes": 11661,
+      "path": "scripts/10_predict_slate.py",
+      "sha256": "1d63c46b0cfc08ae117ec5bdddc6ef68e6c5c1b4eabeafc13889934f8875ed73"
+    },
+    {
+      "bytes": 18580,
+      "path": "scripts/15_price_markets.py",
+      "sha256": "270e62c263a0d9ccc6e4f75762903d9fedecbb31c5f117ac99218c9af8d25778"
+    },
+    {
+      "bytes": 25841,
+      "path": "ops/capture_external_test_day.py",
+      "sha256": "a7ca11b5d921dcfb231efa551e85951391f726ed203f13c9210cd61815dff279"
+    },
+    {
+      "bytes": 37224,
+      "path": "ops/grade_external_test_capture.py",
+      "sha256": "2cd60d418e920291af3091d7d5135166f744d642194e13549be08de5e68d2bf5"
+    },
+    {
+      "bytes": 715,
+      "path": "data/validation/grading_synthetic/20260818T223347Z/synthetic_grading_integration_report.json",
+      "sha256": "9bd84a74a010c26003ba6a497dbede098e3e47263aa220cfece8cf860341a324"
+    },
+    {
+      "bytes": 1082,
+      "path": "data/validation/grading_replay_2025/date=2026-02-11/20260818T223348Z/real_2025_grading_replay_report.json",
+      "sha256": "0f82d29a4f72de1703c8dbcb46a4e0e0be05e74a5b57bc43cf95663a10b0c4c3"
+    },
+    {
+      "bytes": 1535,
+      "path": "data/validation/pricing_grading_contract/pricing_grading_contract_audit.json",
+      "sha256": "5343d00c6b034c3b885df5f70c5fa07221ecf3ea8a987b6334eed31651562bef"
+    }
+  ],
+  "freeze_id": "nba_prop_quant_20260818T205213Z",
+  "freeze_stage": "external_test_deployment",
+  "generated_at_utc": "2026-08-18T22:33:53.428259+00:00"
+}

@@ -1,0 +1,39 @@
+history_start_season: 2001
+advanced_start_season: 2015
+play_by_play_start_season: 2025
+production_train_end_season: 2025
+targets:
+- pts
+- reb
+- ast
+- stl
+- blk
+- fg3m
+distribution:
+  auto_zinb: true
+  default_zinb_targets:
+  - stl
+  - blk
+  calibration_fraction: 0.15
+  simulations: 20000
+dynamic_priors:
+  beta_bounds:
+  - 0.9
+  - 0.99999
+  prior_strength: 8.0
+  kalman_team_change_variance_multiplier: 2.0
+model:
+  n_estimators: 700
+  max_depth: 5
+  learning_rate: 0.03
+  subsample: 0.85
+  colsample_bytree: 0.85
+  reg_lambda: 4.0
+  min_child_weight: 8.0
+  random_state: 73
+  n_jobs: 2
+live:
+  poll_seconds: 10
+  ingarch_bin_seconds: 60
+  default_alpha: 0.1
+  default_beta: 0.75

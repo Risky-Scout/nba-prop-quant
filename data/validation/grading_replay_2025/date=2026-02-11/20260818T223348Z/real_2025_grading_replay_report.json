@@ -1,0 +1,36 @@
+{
+  "capture_immutability_check": true,
+  "date": "2026-02-11",
+  "games": 14,
+  "grade_checksum_verification": true,
+  "max_abs_actual_difference": 0.0,
+  "max_abs_profit_difference": 0.0,
+  "players": 226,
+  "prop_types": [
+    "assists",
+    "blocks",
+    "points",
+    "points_assists",
+    "points_rebounds",
+    "points_rebounds_assists",
+    "rebounds",
+    "rebounds_assists",
+    "steals",
+    "threes"
+  ],
+  "purpose": "Real 2025 development-data realism/schema replay. Not a new external performance test.",
+  "raw_brier_direct": 0.25827266264043675,
+  "raw_brier_grader": 0.25827266264043675,
+  "real_external_test_ledger_touched": false,
+  "rows": 5000,
+  "run_id": "20260818T223348Z",
+  "settlement_counts": {
+    "over": 2216,
+    "under": 2784
+  },
+  "source_games_sha256": "230d8ccbfe21f8e56d9dbfe72ac9040c6c55eadf6a3c9d4d636b9c8b359638f9",
+  "source_priced_sha256": "b7ec5219dcdc51a2a04f0d5ca0e733da52fd8dca770395d25e79e362460f3976",
+  "source_stats_sha256": "f2ae36e886c84772a0e5b3ba56340864487b8e0d3b60e6ed630bb672bbcc76cf",
+  "status": "PASS",
+  "vendors": 8
+}

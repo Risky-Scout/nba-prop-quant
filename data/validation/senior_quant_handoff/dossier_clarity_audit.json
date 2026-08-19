@@ -1,0 +1,186 @@
+{
+  "artifact_index": "review/SENIOR_QUANT_REVIEW_ARTIFACT_INDEX.json",
+  "artifact_index_sha256": "b0077474a76079bfcce9769717e7e7155236e000b5d0c69b8c07634ffb4eb87a",
+  "checks": [
+    {
+      "check": "heading::## 1. Review posture",
+      "detail": "present",
+      "passed": true
+    },
+    {
+      "check": "heading::## 2. Data and information-set design",
+      "detail": "present",
+      "passed": true
+    },
+    {
+      "check": "heading::## 3. Mean-model selection",
+      "detail": "present",
+      "passed": true
+    },
+    {
+      "check": "heading::## 4. Marginal distributions",
+      "detail": "present",
+      "passed": true
+    },
+    {
+      "check": "heading::## 5. Combination-prop dependence",
+      "detail": "present",
+      "passed": true
+    },
+    {
+      "check": "heading::## 6. Probability calibration and market benchmark",
+      "detail": "present",
+      "passed": true
+    },
+    {
+      "check": "heading::## 7. Development betting diagnostics",
+      "detail": "present",
+      "passed": true
+    },
+    {
+      "check": "heading::## 8. Production architecture and governance",
+      "detail": "present",
+      "passed": true
+    },
+    {
+      "check": "heading::## 9. Grading/settlement QA before external testing",
+      "detail": "present",
+      "passed": true
+    },
+    {
+      "check": "heading::## 10. Known limitations a senior reviewer should attack",
+      "detail": "present",
+      "passed": true
+    },
+    {
+      "check": "heading::## 11. Claims permitted vs. not permitted",
+      "detail": "present",
+      "passed": true
+    },
+    {
+      "check": "heading::## 12. Suggested senior-quant review agenda",
+      "detail": "present",
+      "passed": true
+    },
+    {
+      "check": "heading::## 13. Reproducibility commands",
+      "detail": "present",
+      "passed": true
+    },
+    {
+      "check": "heading::## 14. Artifact index",
+      "detail": "present",
+      "passed": true
+    },
+    {
+      "check": "heading::## 15. Reviewer sign-off",
+      "detail": "present",
+      "passed": true
+    },
+    {
+      "check": "phrase::It is not presented as having a proven broad sport",
+      "detail": "present",
+      "passed": true
+    },
+    {
+      "check": "phrase::The 2025 sportsbook sample is development/model-se",
+      "detail": "present",
+      "passed": true
+    },
+    {
+      "check": "phrase::Automatic betting threshold: **none**",
+      "detail": "present",
+      "passed": true
+    },
+    {
+      "check": "phrase::Synthetic QA is software evidence only.",
+      "detail": "present",
+      "passed": true
+    },
+    {
+      "check": "phrase::The real 2025 replay is schema/settlement realism ",
+      "detail": "present",
+      "passed": true
+    },
+    {
+      "check": "phrase::A proven broad sportsbook edge.",
+      "detail": "present",
+      "passed": true
+    },
+    {
+      "check": "unresolved_marker::PENDING",
+      "detail": "absent",
+      "passed": true
+    },
+    {
+      "check": "unresolved_marker::UNKNOWN",
+      "detail": "absent",
+      "passed": true
+    },
+    {
+      "check": "unresolved_marker::TODO",
+      "detail": "absent",
+      "passed": true
+    },
+    {
+      "check": "unresolved_marker::TBD",
+      "detail": "absent",
+      "passed": true
+    },
+    {
+      "check": "unresolved_marker::_Not available from the current local artifact schema._",
+      "detail": "absent",
+      "passed": true
+    },
+    {
+      "check": "qa_status::Synthetic controlled integration test",
+      "detail": "expected=PASS, actual=PASS",
+      "passed": true
+    },
+    {
+      "check": "qa_status::Real 2025 development-data grading replay",
+      "detail": "expected=PASS, actual=PASS",
+      "passed": true
+    },
+    {
+      "check": "qa_status::Pricing \u2194 grading source-contract audit",
+      "detail": "expected=PASS_WITH_RUNTIME_CONFIRMATION, actual=PASS_WITH_RUNTIME_CONFIRMATION",
+      "passed": true
+    },
+    {
+      "check": "freeze_id_consistency",
+      "detail": "dossier=nba_prop_quant_20260818T205213Z, manifest=nba_prop_quant_20260818T205213Z, index=nba_prop_quant_20260818T205213Z",
+      "passed": true
+    },
+    {
+      "check": "freeze_stage_consistency",
+      "detail": "dossier=external_test_deployment, manifest=external_test_deployment, index=external_test_deployment",
+      "passed": true
+    },
+    {
+      "check": "artifact_index_nonempty",
+      "detail": "17 artifact records",
+      "passed": true
+    },
+    {
+      "check": "artifact_index_files_present",
+      "detail": "all present",
+      "passed": true
+    },
+    {
+      "check": "artifact_index_hashes_match",
+      "detail": "all match",
+      "passed": true
+    }
+  ],
+  "dossier": "review/SENIOR_QUANT_REVIEW_DOSSIER.md",
+  "dossier_sha256": "9716a1f825bc208b387c31a81a7df4a72f1f1557209a4db2a03c3ac73b3bdd20",
+  "failures": [],
+  "freeze_id": "nba_prop_quant_20260818T205213Z",
+  "freeze_stage": "external_test_deployment",
+  "generated_at_utc": "2026-08-18T23:58:17.970569+00:00",
+  "status": "PASS",
+  "warnings": [
+    "Pricing\u2194grading contract remains explicitly pending first-real-file runtime field-name confirmation for side/edge/EV. This is correctly presented as an operational schema item, not a model-performance failure."
+  ]
+}

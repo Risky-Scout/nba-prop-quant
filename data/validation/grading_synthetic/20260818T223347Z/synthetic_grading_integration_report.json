@@ -1,0 +1,21 @@
+{
+  "all_expected_settlements_matched": true,
+  "capture_immutability_check": true,
+  "grade_archive_checksum_verification": true,
+  "grader_sha256": "2cd60d418e920291af3091d7d5135166f744d642194e13549be08de5e68d2bf5",
+  "purpose": "Controlled software validation only. No model-performance evidence.",
+  "push_excluded_from_binary_scoring": true,
+  "real_external_test_ledger_touched": false,
+  "run_id": "20260818T223347Z",
+  "settlement_status_counts": {
+    "dnp_void_candidate": 1,
+    "over": 5,
+    "player_missing_final_game_void_candidate": 1,
+    "push": 2,
+    "under": 3
+  },
+  "shadow_external_test_ledger_only": true,
+  "status": "PASS",
+  "synthetic_cases": 12,
+  "win_loss_push_profit_checks": true
+}

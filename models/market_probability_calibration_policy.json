@@ -1,0 +1,117 @@
+{
+  "gates": {
+    "min_brier_fold_wins_vs_raw": 2,
+    "min_brier_improvement_vs_raw_pct": 0.0,
+    "min_logloss_fold_wins_vs_raw": 3,
+    "min_logloss_improvement_vs_raw_pct": 0.1,
+    "min_prop_logloss_fold_wins_vs_global": 2,
+    "min_prop_logloss_improvement_vs_global_pct": 0.05
+  },
+  "props": {
+    "assists": {
+      "market_benchmark_brier": 0.2431073455195798,
+      "market_benchmark_logloss": 0.6792391653713042,
+      "pooled_event_brier": 0.2467243990837249,
+      "pooled_event_logloss": 0.6866686245833546,
+      "production_parameters": {
+        "intercept": -0.05778247226580689,
+        "slope": 0.386794430076103
+      },
+      "selected_method": "prop"
+    },
+    "blocks": {
+      "market_benchmark_brier": 0.2017454265474183,
+      "market_benchmark_logloss": 0.5897327558308876,
+      "pooled_event_brier": 0.2024447274829739,
+      "pooled_event_logloss": 0.5908447508126652,
+      "production_parameters": null,
+      "selected_method": "raw"
+    },
+    "points": {
+      "market_benchmark_brier": 0.249346844648092,
+      "market_benchmark_logloss": 0.6918364318533957,
+      "pooled_event_brier": 0.2501649205560985,
+      "pooled_event_logloss": 0.6934899240786534,
+      "production_parameters": {
+        "intercept": -0.004940413013824057,
+        "slope": 0.14071147064173672
+      },
+      "selected_method": "prop"
+    },
+    "points_assists": {
+      "market_benchmark_brier": 0.2501033992545717,
+      "market_benchmark_logloss": 0.693354825497049,
+      "pooled_event_brier": 0.2500842267266013,
+      "pooled_event_logloss": 0.6933298351185053,
+      "production_parameters": {
+        "intercept": -0.025098708353012162,
+        "slope": 0.12836421939220577
+      },
+      "selected_method": "prop"
+    },
+    "points_rebounds": {
+      "market_benchmark_brier": 0.2496281317153207,
+      "market_benchmark_logloss": 0.6924027059595806,
+      "pooled_event_brier": 0.2498675463090602,
+      "pooled_event_logloss": 0.6928774951017683,
+      "production_parameters": {
+        "intercept": -0.0003783931485257711,
+        "slope": 0.17856191950632316
+      },
+      "selected_method": "prop"
+    },
+    "points_rebounds_assists": {
+      "market_benchmark_brier": 0.2494393068235163,
+      "market_benchmark_logloss": 0.6920250604296684,
+      "pooled_event_brier": 0.2496108320311315,
+      "pooled_event_logloss": 0.6923692176367814,
+      "production_parameters": {
+        "intercept": -0.04455559580350249,
+        "slope": 0.11164023664343037
+      },
+      "selected_method": "prop"
+    },
+    "rebounds": {
+      "market_benchmark_brier": 0.2462334057395521,
+      "market_benchmark_logloss": 0.6855005125240424,
+      "pooled_event_brier": 0.2467928796324351,
+      "pooled_event_logloss": 0.6866414000430231,
+      "production_parameters": {
+        "intercept": -0.087219300019484,
+        "slope": 0.38038730885482136
+      },
+      "selected_method": "prop"
+    },
+    "rebounds_assists": {
+      "market_benchmark_brier": 0.2485769380258234,
+      "market_benchmark_logloss": 0.6902951104745509,
+      "pooled_event_brier": 0.2485992379090908,
+      "pooled_event_logloss": 0.6903398513568708,
+      "production_parameters": {
+        "intercept": -0.06843249743782161,
+        "slope": 0.23786321153589302
+      },
+      "selected_method": "prop"
+    },
+    "steals": {
+      "market_benchmark_brier": 0.2422514115185851,
+      "market_benchmark_logloss": 0.6775443004669081,
+      "pooled_event_brier": 0.2391251920372096,
+      "pooled_event_logloss": 0.6715353247809541,
+      "production_parameters": null,
+      "selected_method": "raw"
+    },
+    "threes": {
+      "market_benchmark_brier": 0.2370220610389221,
+      "market_benchmark_logloss": 0.6660823819912741,
+      "pooled_event_brier": 0.2395439328706484,
+      "pooled_event_logloss": 0.6714510404777231,
+      "production_parameters": {
+        "intercept": -0.07486770480831707,
+        "slope": 0.6886247681116154
+      },
+      "selected_method": "prop"
+    }
+  },
+  "selection_basis": "2025 strict-date walk-forward event-level proper scoring; market benchmark is reported but not used to choose among raw/global/prop model calibrators."
+}
