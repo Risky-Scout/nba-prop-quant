@@ -1,0 +1,44 @@
+{
+  "protocol_version": "1.0",
+  "model_freeze_id": "nba_prop_quant_20260818T205213Z",
+  "research_base_commit": "eb1d49153c94e52714010e302df9c1f58221b5c6",
+  "evaluation_only": true,
+  "model_tuning_permitted": false,
+  "intrinsic_oof_seasons": [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025],
+  "market_comparison_seasons": [2025],
+  "binary_push_policy": "exclude_pushes_and_score_nonpush_q",
+  "probability_clip_for_log_only": 1e-6,
+  "reliability_primary": "predicted_probability_deciles",
+  "confidence_buckets": [
+    [0.5, 0.525],
+    [0.525, 0.55],
+    [0.55, 0.6],
+    [0.6, 0.65],
+    [0.65, 0.7],
+    [0.7, 1.0]
+  ],
+  "bootstrap_unit": "game",
+  "bootstrap_repetitions": 5000,
+  "bootstrap_seed": 20260823,
+  "bootstrap_ci": 0.95,
+  "minimum_inferential_contracts": 250,
+  "minimum_inferential_games": 30,
+  "primary_metrics": [
+    "brier",
+    "log_loss",
+    "calibration_intercept",
+    "calibration_slope",
+    "ece",
+    "sharpness",
+    "resolution"
+  ],
+  "required_strata": [
+    "overall",
+    "season",
+    "prop",
+    "season_x_prop"
+  ],
+  "market_delta_definition": "model_minus_market",
+  "full_distribution_test": "randomized_pit_if_frozen_inputs_available",
+  "prospective_2026_27_claim_permitted": false
+}
