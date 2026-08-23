@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NBA Fair Price v1 canonical record",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at_utc",
+    "freeze_id",
+    "game_id",
+    "player_id",
+    "prop_type",
+    "line_value",
+    "selected_p_over",
+    "selected_p_under",
+    "selected_p_push",
+    "selected_q_over_nonpush",
+    "selected_q_under_nonpush",
+    "fair_over_american",
+    "fair_under_american",
+    "fair_over_decimal",
+    "fair_under_decimal",
+    "market_independent",
+    "auto_bet"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "nba_fair_price_v1"
+    },
+    "freeze_id": {
+      "type": "string"
+    },
+    "game_id": {
+      "type": "integer"
+    },
+    "player_id": {
+      "type": "integer"
+    },
+    "prop_type": {
+      "type": "string"
+    },
+    "line_value": {
+      "type": "number"
+    },
+    "selected_p_over": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "selected_p_under": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "selected_p_push": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "selected_q_over_nonpush": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "selected_q_under_nonpush": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "fair_over_american": {
+      "type": "integer"
+    },
+    "fair_under_american": {
+      "type": "integer"
+    },
+    "fair_over_decimal": {
+      "type": "number",
+      "exclusiveMinimum": 1
+    },
+    "fair_under_decimal": {
+      "type": "number",
+      "exclusiveMinimum": 1
+    },
+    "market_independent": {
+      "const": true
+    },
+    "auto_bet": {
+      "const": false
+    }
+  }
+}

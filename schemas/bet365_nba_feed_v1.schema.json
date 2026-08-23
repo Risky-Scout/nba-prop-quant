@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Bet365 NBA fair-price handoff v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "transport_contract",
+    "generated_at_utc",
+    "model_freeze_id",
+    "records"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "bet365_nba_feed_v1"
+    },
+    "transport_contract": {
+      "const": "authorized_api_unbound"
+    },
+    "generated_at_utc": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "model_freeze_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WizardOfOdds NBA fair-price feed v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at_utc",
+    "model_freeze_id",
+    "records"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "wizardofodds_nba_feed_v1"
+    },
+    "generated_at_utc": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "model_freeze_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  }
+}
