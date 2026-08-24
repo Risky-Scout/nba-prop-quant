@@ -1,0 +1,55 @@
+{
+  "bootstrap_repetitions": 5000,
+  "bootstrap_seed": 20260823,
+  "branch": "research/probability-quality-cert-v1",
+  "brier_probability_clipping": false,
+  "inputs": [
+    {
+      "bytes": 8593241,
+      "path": "/Users/josephshackelford/Downloads/BET365/NBA box-score projection system/nba_prop_quant_blueprint/data/processed/market_backtest/calibrated_oof/selected_oof_contracts.parquet",
+      "sha256": "3e4f8202151ce86962fd13ba37e16cbd2d9bd20d5bb4081e06f80ec3b150c103"
+    },
+    {
+      "bytes": 47432795,
+      "path": "/Users/josephshackelford/Downloads/BET365/NBA box-score projection system/nba_prop_quant_blueprint/data/processed/market_backtest/calibrated_oof/selected_oof_quote_rows.parquet",
+      "sha256": "ad3bbc6de3b4cee56c064bee9230f165c2f848371c9766416eddfd7171bb2a87"
+    },
+    {
+      "bytes": 198916327,
+      "path": "/Users/josephshackelford/Downloads/BET365/NBA box-score projection system/nba_prop_quant_blueprint/data/processed/selected_means_distribution_split.parquet",
+      "sha256": "45b39ef4caaaa059680861bbe529b8efceed52349f07b3c51d153e6afb146916"
+    },
+    {
+      "bytes": 3874,
+      "path": "/Users/josephshackelford/Downloads/BET365/NBA box-score projection system/nba_prop_quant_blueprint/models/marginals_pre2025.joblib",
+      "sha256": "dcfe44c9ab0edd1b1fe86451934d8a1b65e9fcac2db877ae899f749ca1cb53ff"
+    },
+    {
+      "bytes": 1476775,
+      "path": "/Users/josephshackelford/Downloads/BET365/NBA box-score projection system/nba_prop_quant_blueprint/models/frozen_manifests/nba_prop_quant_20260818T205213Z.json",
+      "sha256": "7c70a1a82145ef0ea1ef69806a5edc363704a285df638796212b23810d8e6823"
+    },
+    {
+      "bytes": 6876,
+      "path": "/Users/josephshackelford/Downloads/BET365/NBA box-score projection system/nba_prop_quant_blueprint/dist/research_worktrees/probability-quality-cert-v1/research/PROBABILITY_QUALITY_CERTIFICATION_PROTOCOL_V1.md",
+      "sha256": "316dae17cca2af1477234470319d9f96f4381e530a4473042cd2bbd67176f2b0"
+    },
+    {
+      "bytes": 1238,
+      "path": "/Users/josephshackelford/Downloads/BET365/NBA box-score projection system/nba_prop_quant_blueprint/dist/research_worktrees/probability-quality-cert-v1/research/probability_quality_certification_v1.json",
+      "sha256": "f0574c9eb26fea91d96f36e161d7444ad2026f24f672c80bef4a0b8e2f0fc354"
+    },
+    {
+      "bytes": 2948,
+      "path": "/Users/josephshackelford/Downloads/BET365/NBA box-score projection system/nba_prop_quant_blueprint/dist/research_worktrees/probability-quality-cert-v1/research/PROBABILITY_QUALITY_ARTIFACT_COVERAGE_V1.md",
+      "sha256": "d198009f2c56d0c8cbf1d3c93ce57ee345c7b62b5197a6461dfb409bf1ff2981"
+    }
+  ],
+  "log_clip_epsilon": 1e-06,
+  "model_freeze_id": "nba_prop_quant_20260818T205213Z",
+  "model_tuning_performed": false,
+  "pre_analysis_provenance_commit": "5594625fb1fe00fda8c2eb13891b34b416de9203",
+  "preregistration_commit": "5aacd0e81b578e2edbc0255f6f3afb39fcebbecb",
+  "preregistration_tag": "nba_prop_quant_20260818T205213Z_probability_quality_prereg_v1",
+  "schema_version": 1
+}

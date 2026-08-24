@@ -1,0 +1,9 @@
+{
+  "actual_push_rate": 0.0,
+  "collapsed_contracts": 56051,
+  "quote_rows": 120156,
+  "raw_probability_sum_max_abs_error": 2.220446049250313e-16,
+  "raw_probability_sum_within_1e_10": true,
+  "selected_probability_sum_max_abs_error": 2.220446049250313e-16,
+  "selected_probability_sum_within_1e_10": true
+}

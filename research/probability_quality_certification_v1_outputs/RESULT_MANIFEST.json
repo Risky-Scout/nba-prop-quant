@@ -1,0 +1,84 @@
+{
+  "certification": "probability_quality_certification_v1",
+  "coverage": {
+    "2018_2024_line_level_probability_certification": "NOT_AVAILABLE_FROM_FROZEN_ARTIFACTS",
+    "binary_line_level_probability_certification": "2025_only",
+    "randomized_pit": "SUPPORTED_FOR_2025_HOLDOUT"
+  },
+  "evaluation_only": true,
+  "files": [
+    {
+      "bytes": 3062,
+      "name": "INPUT_MANIFEST.json",
+      "sha256": "c4ead8d53e9ee669a1161b9fcb399d4a8a151bac66c4adcc2da681fd55af4ff3"
+    },
+    {
+      "bytes": 3141,
+      "name": "bootstrap_model_vs_market.csv",
+      "sha256": "54f91cc521879b66065c23eec9cff9ac8c6612d2599060e749b1381544ff872c"
+    },
+    {
+      "bytes": 4375,
+      "name": "bootstrap_score_intervals.csv",
+      "sha256": "4c4d5c2ef103a5d8d5b4032344053c04f8b4c24a1ae576455089ae134a2c2b08"
+    },
+    {
+      "bytes": 9612,
+      "name": "confidence_buckets.csv",
+      "sha256": "28ca12992e6f78a7776a6de1f45d3e2f841e3a79a4bdbdebe33ef7aaaf593e11"
+    },
+    {
+      "bytes": 1148,
+      "name": "overall_metrics.csv",
+      "sha256": "1c38b2b591e6ff1a33d6ff3f1356aee5c7d426f13b4d8238a5ae24d3ab8f610e"
+    },
+    {
+      "bytes": 6234,
+      "name": "prop_metrics.csv",
+      "sha256": "0bb6fbbf72802c6e8e1cf3dcbc04df77c6123ee0eba9afaa1750ed188c7668da"
+    },
+    {
+      "bytes": 308,
+      "name": "push_integrity.json",
+      "sha256": "a1c0d3fb2002c419fe53819a661204976d82f686e3e5df1097e5ba3c8fd74945"
+    },
+    {
+      "bytes": 3198,
+      "name": "randomized_pit_histogram.csv",
+      "sha256": "e639887cfa2221cd94e10dddd9cedf11bff46c0fd8400b5180c91a20d17280f1"
+    },
+    {
+      "bytes": 2319,
+      "name": "randomized_pit_summary.csv",
+      "sha256": "988795a3c3c6af76d345b3087c56d1c4d1cead0ef34434b02255e3a076939d60"
+    },
+    {
+      "bytes": 10877,
+      "name": "reliability_deciles.csv",
+      "sha256": "0634d1084d8e6485cb81520d256495d02160a5f5423b1be805b12a1f196403cc"
+    },
+    {
+      "bytes": 6660,
+      "name": "reliability_fixed_width.csv",
+      "sha256": "a59651dcb9599855b7f6153bb4431704400ddb91d26cd6c452d5b3de2d5aa094"
+    },
+    {
+      "bytes": 1148,
+      "name": "season_metrics.csv",
+      "sha256": "4b3d3e02dba6d67432f39cc092244142f1d3ef0fed8a1002c83483e8c5250afb"
+    },
+    {
+      "bytes": 6384,
+      "name": "season_prop_metrics.csv",
+      "sha256": "051502f7e3f8741f0fe8742c1ac42659e4e6e2a001a96956560d907472e411f3"
+    },
+    {
+      "bytes": 834,
+      "name": "three_outcome_metrics.csv",
+      "sha256": "5faa43fc6b2b63e20fcb06099ed8472dde46f43381758f4077b517cc62e88e57"
+    }
+  ],
+  "model_freeze_id": "nba_prop_quant_20260818T205213Z",
+  "model_tuning_performed": false,
+  "schema_version": 1
+}
