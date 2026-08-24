@@ -1,0 +1,13 @@
+{
+  "handoff": "elite_quant_reviewer_docs_v2",
+  "integration_commit": "f92eaf8a8a94be840cdc82b107c5e9c3b7cf3b3b",
+  "integration_tag": "nba_prop_quant_20260818T205213Z_fair_price_feeds_v1",
+  "model_commit": "746f47ef029b8f07670e691365a66ed2694bf06b",
+  "model_freeze_id": "nba_prop_quant_20260818T205213Z",
+  "model_tuning_after_probability_certification": false,
+  "probability_preregistration_commit": "5aacd0e81b578e2edbc0255f6f3afb39fcebbecb",
+  "probability_results_commit": "f1b4fe4400a2313226b9e83bae99be17302f7491",
+  "runtime_commit": "3a5e035ebfc428e187933f84744fb1dec37dd7e3",
+  "runtime_tag": "nba_prop_quant_20260818T205213Z_runtime_bundle_v1",
+  "schema_version": 1
+}
