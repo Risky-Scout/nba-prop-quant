@@ -116,9 +116,30 @@ These probabilities will not be reconstructed, refit, or regenerated after prere
 
 ## Randomized PIT
 
-NOT_YET_CONFIRMED
+SUPPORTED_FOR_2025_HOLDOUT
 
-Randomized PIT will be attempted only if exact frozen row-level distribution parameters can be located without refitting.
+The frozen artifact:
+
+models/marginals_pre2025.joblib
+
+was verified against the frozen production manifest by SHA-256.
+
+Source-level provenance establishes that this artifact was fit on seasons 2018-2024 and that season 2025 was held out.
+
+The serialized artifact contains FittedMarginal objects for:
+
+ast
+blk
+fg3m
+pts
+reb
+stl
+
+Each FittedMarginal exposes frozen pmf(), cdf(), ppf(), and over_under_push() methods.
+
+Therefore discrete randomized-PIT diagnostics may be performed on the 2025 holdout without refitting or changing the frozen statistical model.
+
+Randomized PIT is not claimed for 2018-2024 as an independently held-out line-level probability certification.
 
 ## Interpretation
 
