@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 from rich.console import Console
 
 from nba_prop_quant.api import BDLClient
 from nba_prop_quant.settings import get_settings
+from nba_prop_quant.snapshot_schedule import due_windows
 from nba_prop_quant.storage import timestamped_jsonl_append
 
 console = Console()
@@ -14,14 +17,83 @@ console = Console()
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--date", required=True, help="YYYY-MM-DD")
+    parser.add_argument(
+        "--date",
+        required=True,
+        help="YYYY-MM-DD",
+    )
+    parser.add_argument(
+        "--scheduled",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--now-utc",
+    )
+    parser.add_argument(
+        "--grace-minutes",
+        type=int,
+        default=5,
+    )
     return parser.parse_args()
+
+
+def parse_now_utc(raw: str | None) -> datetime:
+    if raw is None:
+        return datetime.now(timezone.utc)
+
+    text = raw
+
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+
+    value = datetime.fromisoformat(text)
+
+    if value.tzinfo is None:
+        raise ValueError(
+            "--now-utc must include timezone information"
+        )
+
+    return value.astimezone(timezone.utc)
+
+
+def completed_window_ids(
+    capture_run_path: Path,
+) -> set[str]:
+    if not capture_run_path.exists():
+        return set()
+
+    completed: set[str] = set()
+
+    for line in capture_run_path.read_text(
+        encoding="utf-8",
+    ).splitlines():
+        if not line.strip():
+            continue
+
+        row = json.loads(line)
+
+        if row.get("snapshot_type") != "capture_run":
+            continue
+
+        payload = row.get("payload") or {}
+
+        for window_id in payload.get(
+            "window_ids",
+            [],
+        ):
+            completed.add(
+                str(window_id)
+            )
+
+    return completed
 
 
 def main() -> None:
     args = parse_args()
     settings = get_settings()
-    captured_at = datetime.now(timezone.utc).isoformat()
+    now_utc = parse_now_utc(
+        args.now_utc
+    )
 
     errors: list[dict[str, object]] = []
 
@@ -30,7 +102,67 @@ def main() -> None:
         base_url=settings.bdl_base_url,
         requests_per_minute=settings.bdl_requests_per_minute,
     ) as client:
-        games = list(client.games(dates=[args.date]))
+        games = list(
+            client.games(
+                dates=[args.date]
+            )
+        )
+
+        window_ids: list[str] = []
+        due_game_ids: list[int] = []
+
+        if args.scheduled:
+            due = due_windows(
+                games,
+                now_utc,
+                grace_minutes=args.grace_minutes,
+            )
+
+            capture_run_path = (
+                settings.snapshot_dir
+                / "capture_runs"
+                / f"{args.date}.jsonl"
+            )
+
+            completed = completed_window_ids(
+                capture_run_path
+            )
+
+            unseen = [
+                row
+                for row in due
+                if row["window_id"]
+                not in completed
+            ]
+
+            if not unseen:
+                console.print(
+                    "[cyan]No unseen scheduled "
+                    "capture windows due[/cyan]"
+                )
+                return
+
+            window_ids = sorted(
+                {
+                    str(
+                        row["window_id"]
+                    )
+                    for row in unseen
+                }
+            )
+
+            due_game_ids = sorted(
+                {
+                    int(
+                        row["game_id"]
+                    )
+                    for row in unseen
+                }
+            )
+
+        captured_at = (
+            now_utc.isoformat()
+        )
 
         game_ids = sorted(
             int(game["id"])
@@ -43,65 +175,97 @@ def main() -> None:
                 int(team["id"])
                 for game in games
                 for team in (
-                    game.get("home_team", {}),
-                    game.get("visitor_team", {}),
+                    game.get(
+                        "home_team",
+                        {},
+                    ),
+                    game.get(
+                        "visitor_team",
+                        {},
+                    ),
                 )
-                if team and team.get("id") is not None
+                if team
+                and team.get("id")
+                is not None
             }
         )
 
         if games:
             timestamped_jsonl_append(
                 games,
-                settings.snapshot_dir / "games" / f"{args.date}.jsonl",
+                settings.snapshot_dir
+                / "games"
+                / f"{args.date}.jsonl",
                 snapshot_type="game",
                 captured_at=captured_at,
             )
 
         try:
-            injuries = list(
-                client.injuries(team_ids=team_ids)
-            ) if team_ids else []
+            injuries = (
+                list(
+                    client.injuries(
+                        team_ids=team_ids
+                    )
+                )
+                if team_ids
+                else []
+            )
         except RuntimeError as exc:
             injuries = []
+
             errors.append(
                 {
                     "component": "injuries",
                     "error": str(exc),
                 }
             )
+
             console.print(
-                f"[yellow]Injury capture unavailable[/yellow]: {exc}"
+                "[yellow]Injury capture "
+                f"unavailable[/yellow]: {exc}"
             )
 
         if injuries:
             timestamped_jsonl_append(
                 injuries,
-                settings.snapshot_dir / "injuries" / f"{args.date}.jsonl",
+                settings.snapshot_dir
+                / "injuries"
+                / f"{args.date}.jsonl",
                 snapshot_type="injury",
                 captured_at=captured_at,
             )
 
         try:
-            lineups = list(
-                client.lineups(game_ids)
-            ) if game_ids else []
+            lineups = (
+                list(
+                    client.lineups(
+                        game_ids
+                    )
+                )
+                if game_ids
+                else []
+            )
         except RuntimeError as exc:
             lineups = []
+
             errors.append(
                 {
                     "component": "lineups",
                     "error": str(exc),
                 }
             )
+
             console.print(
-                f"[yellow]Lineup capture unavailable[/yellow]: {exc}"
+                "[yellow]Lineup capture "
+                f"unavailable[/yellow]: {exc}"
             )
 
         if lineups:
             timestamped_jsonl_append(
                 lineups,
-                settings.snapshot_dir / "lineups" / f"{args.date}.jsonl",
+                settings.snapshot_dir
+                / "lineups"
+                / f"{args.date}.jsonl",
                 snapshot_type="lineup",
                 captured_at=captured_at,
             )
@@ -109,12 +273,19 @@ def main() -> None:
         props_count = 0
 
         for game in games:
-            game_id = int(game["id"])
+            game_id = int(
+                game["id"]
+            )
 
             try:
-                props = client.live_player_props(game_id)
+                props = (
+                    client.live_player_props(
+                        game_id
+                    )
+                )
             except RuntimeError as exc:
                 props = []
+
                 errors.append(
                     {
                         "component": "player_props",
@@ -124,7 +295,9 @@ def main() -> None:
                 )
 
             if props:
-                props_count += len(props)
+                props_count += len(
+                    props
+                )
 
                 timestamped_jsonl_append(
                     props,
@@ -137,13 +310,35 @@ def main() -> None:
 
         capture_run = {
             "date": args.date,
-            "games_count": len(games),
+            "capture_reason": (
+                "scheduled"
+                if args.scheduled
+                else "manual"
+            ),
+            "window_ids": window_ids,
+            "due_game_ids": due_game_ids,
+            "grace_minutes": (
+                args.grace_minutes
+                if args.scheduled
+                else None
+            ),
+            "games_count": len(
+                games
+            ),
             "game_ids": game_ids,
             "team_ids": team_ids,
-            "injuries_count": len(injuries),
-            "lineups_count": len(lineups),
-            "player_props_count": props_count,
-            "error_count": len(errors),
+            "injuries_count": len(
+                injuries
+            ),
+            "lineups_count": len(
+                lineups
+            ),
+            "player_props_count": (
+                props_count
+            ),
+            "error_count": len(
+                errors
+            ),
             "errors": errors,
         }
 
@@ -157,12 +352,14 @@ def main() -> None:
         )
 
         console.print(
-            "[green]Captured point-in-time snapshot[/green]: "
+            "[green]Captured point-in-time "
+            "snapshot[/green]: "
             f"{len(games)} games, "
             f"{len(injuries)} injuries, "
             f"{len(lineups)} lineups, "
             f"{props_count} player props, "
-            f"{len(errors)} errors"
+            f"{len(errors)} errors, "
+            f"{len(window_ids)} scheduled windows"
         )
 
 
