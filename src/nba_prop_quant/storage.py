@@ -49,9 +49,12 @@ def timestamped_jsonl_append(
     records: list[dict[str, Any]],
     path: Path,
     snapshot_type: str,
+    *,
+    captured_at: str | None = None,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    captured_at = datetime.now(timezone.utc).isoformat()
+    if captured_at is None:
+        captured_at = datetime.now(timezone.utc).isoformat()
     with path.open("a", encoding="utf-8") as handle:
         for record in records:
             envelope = {
