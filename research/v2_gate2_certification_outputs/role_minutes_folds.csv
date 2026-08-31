@@ -1,0 +1,6 @@
+stage,fold,train_games,test_games,train_rows,test_rows
+role_minutes,1,222,220,4878,4710
+role_minutes,2,442,220,9588,4753
+role_minutes,3,662,220,14341,4730
+role_minutes,4,882,220,19071,4735
+role_minutes,5,1102,220,23806,4823

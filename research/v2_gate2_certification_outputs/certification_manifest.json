@@ -1,0 +1,68 @@
+{
+  "bootstrap_base_seed": 20260830,
+  "bootstrap_resamples": 5000,
+  "branch": "development/v2-targeted-projection-repair",
+  "certification": "nba_prop_quant_v2_gate2",
+  "changed_candidates": [
+    "assists",
+    "points_assists",
+    "points_rebounds"
+  ],
+  "contract_rows_by_prop": {
+    "assists": 4123,
+    "blocks": 4375,
+    "points": 8359,
+    "points_assists": 3846,
+    "points_rebounds": 4642,
+    "points_rebounds_assists": 7126,
+    "rebounds": 6404,
+    "rebounds_assists": 4412,
+    "steals": 4468,
+    "threes": 4685
+  },
+  "development_only": true,
+  "games_by_prop": {
+    "assists": 236,
+    "blocks": 296,
+    "points": 297,
+    "points_assists": 236,
+    "points_rebounds": 236,
+    "points_rebounds_assists": 297,
+    "rebounds": 297,
+    "rebounds_assists": 297,
+    "steals": 296,
+    "threes": 297
+  },
+  "gate1_lock_commit": "bd6879f1e5fa8d95707d7d99aec4e72f75a5e3a0",
+  "gate1_source_commit": "adcc924c2b2d882c41a00cc21f56193e5d79e595",
+  "generated_at_utc": "2026-08-31T16:07:37.617931+00:00",
+  "historical_lineup_warning": "2025 historical lineup records are development-only because original announcement timestamps are unavailable.",
+  "input_sha256": {
+    "data/processed/market_backtest/calibrated_oof/selected_oof_quote_rows.parquet": "ad3bbc6de3b4cee56c064bee9230f165c2f848371c9766416eddfd7171bb2a87",
+    "data/processed/selected_means_distribution_split.parquet": "45b39ef4caaaa059680861bbe529b8efceed52349f07b3c51d153e6afb146916",
+    "models/marginals_pre2025.joblib": "dcfe44c9ab0edd1b1fe86451934d8a1b65e9fcac2db877ae899f749ca1cb53ff",
+    "research/v2_gate1_lock/CANDIDATE_POLICY.json": "27934ba0305457953fa9eb889abd69957b88fc8f9db8a9eeaa5b5d26767e9085",
+    "research/v2_gate1_lock/GATE2_CERTIFICATION_PREREGISTRATION.md": "17e9a174fe591d34de7715c305bfba4dc57b3762d62154eaf86f9c709ee8f496",
+    "research/v2_lineup_backfill_2025/lineups_normalized.parquet": "6ecd82e14074cc2698d6427328e22a4abaf23c4d8f6edfd3648072a561e40b77"
+  },
+  "predefined_subgroups": [
+    "calendar month",
+    "line quintile",
+    "frozen probability confidence band",
+    "starter/bench status"
+  ],
+  "prospective_claim_allowed": false,
+  "runner_commit": "b3b0f008c245db921cf1afc26050ba8713eb6a8b",
+  "supported_props": [
+    "points",
+    "rebounds",
+    "assists",
+    "steals",
+    "blocks",
+    "threes",
+    "points_assists",
+    "points_rebounds",
+    "rebounds_assists",
+    "points_rebounds_assists"
+  ]
+}

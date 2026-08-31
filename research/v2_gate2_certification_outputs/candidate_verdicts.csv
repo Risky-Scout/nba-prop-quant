@@ -1,0 +1,11 @@
+prop_type,locked_candidate,gate2_candidate_type,gate2_survives,gate3_candidate,brier_point_better_than_frozen,logloss_point_better_than_frozen,brier_p_better_ge_095,logloss_p_better_ge_095,at_least_one_ci_excludes_zero_favorable,ece_gate,calibration_slope_gate,auc_gate,subgroup_gate,development_market_superior
+points,frozen_selected_v1,retained_frozen,True,frozen_selected_v1,True,True,True,True,True,True,True,True,True,False
+rebounds,frozen_selected_v1,retained_frozen,True,frozen_selected_v1,True,True,True,True,True,True,True,True,True,False
+assists,v2_role_shock_calibrated,changed_candidate,True,v2_role_shock_calibrated,True,True,True,True,True,True,True,True,True,False
+steals,frozen_selected_v1,retained_frozen,True,frozen_selected_v1,True,True,True,True,True,True,True,True,True,True
+blocks,frozen_selected_v1,retained_frozen,True,frozen_selected_v1,True,True,True,True,True,True,True,True,True,False
+threes,frozen_selected_v1,retained_frozen,True,frozen_selected_v1,True,True,True,True,True,True,True,True,True,False
+points_assists,v2_role_increment,changed_candidate,True,v2_role_increment,True,True,True,True,True,True,True,True,True,True
+points_rebounds,v2_role_increment,changed_candidate,True,v2_role_increment,True,True,True,True,True,True,True,True,True,False
+rebounds_assists,frozen_selected_v1,retained_frozen,True,frozen_selected_v1,True,True,True,True,True,True,True,True,True,False
+points_rebounds_assists,frozen_selected_v1,retained_frozen,True,frozen_selected_v1,True,True,True,True,True,True,True,True,True,False

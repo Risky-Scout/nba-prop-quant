@@ -1,0 +1,17 @@
+{
+  "development_only": true,
+  "gate3_policy": {
+    "assists": "v2_role_shock_calibrated",
+    "blocks": "frozen_selected_v1",
+    "points": "frozen_selected_v1",
+    "points_assists": "v2_role_increment",
+    "points_rebounds": "v2_role_increment",
+    "points_rebounds_assists": "frozen_selected_v1",
+    "rebounds": "frozen_selected_v1",
+    "rebounds_assists": "frozen_selected_v1",
+    "steals": "frozen_selected_v1",
+    "threes": "frozen_selected_v1"
+  },
+  "generated_by_gate2": true,
+  "warning": "This policy is based on retrospective 2025 development evidence. Prospective market-superiority claims require Gate 3."
+}
