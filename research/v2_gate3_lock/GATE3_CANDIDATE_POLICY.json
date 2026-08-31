@@ -1,0 +1,34 @@
+{
+  "development_market_superior": [
+    "steals",
+    "points_assists"
+  ],
+  "gate3_policy": {
+    "assists": "v2_role_shock_calibrated",
+    "blocks": "frozen_selected_v1",
+    "points": "frozen_selected_v1",
+    "points_assists": "v2_role_increment",
+    "points_rebounds": "v2_role_increment",
+    "points_rebounds_assists": "frozen_selected_v1",
+    "rebounds": "frozen_selected_v1",
+    "rebounds_assists": "frozen_selected_v1",
+    "steals": "frozen_selected_v1",
+    "threes": "frozen_selected_v1"
+  },
+  "important_note": "2025 lineup evidence was retrospective development-only. Gate 3 prospective evidence is required before claiming market superiority for the frozen v2 candidate.",
+  "lock_creation_parent_commit": "cf09144f151e3c5a0c91bdb07e8449e69028504c",
+  "locked_at_utc": "2026-08-31T17:03:19.275536+00:00",
+  "policy_name": "nba_prop_quant_v2_gate3_candidate_lock",
+  "policy_version": 1,
+  "prospective_market_superiority_claim": false,
+  "prospective_requirements": {
+    "grading_occurs_only_after_game_completion": true,
+    "market_comparison_must_use_same_asof_snapshot": true,
+    "model_policy_must_remain_frozen": true,
+    "no_retuning_from_gate3_results": true,
+    "predictions_must_be_generated_before_tip": true,
+    "pregame_inputs_must_be_timestamped": true
+  },
+  "prospective_test_season": "2026-27",
+  "source_gate2_evidence_commit": "cf09144f151e3c5a0c91bdb07e8449e69028504c"
+}
