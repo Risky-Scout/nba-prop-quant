@@ -1,0 +1,33 @@
+{
+  "assists": {
+    "development_brier": 0.24507697820398952,
+    "development_logloss": 0.6833554532185796,
+    "fit_games": 297,
+    "fit_rows": 5260,
+    "intercept": -0.0301882078501824,
+    "method": "platt_on_role_adjusted_raw",
+    "slope": 0.4637983480763452
+  },
+  "development_fit_only": true,
+  "points_assists": {
+    "development_brier": 0.24746254448259347,
+    "development_logloss": 0.6880348378738707,
+    "fit_games": 297,
+    "fit_rows": 4947,
+    "gamma": 0.21915353845805985,
+    "method": "logit_role_increment",
+    "standardization_mean": 0.032563125065057014,
+    "standardization_std": 1.6724505947645023
+  },
+  "points_rebounds": {
+    "development_brier": 0.2465457854335737,
+    "development_logloss": 0.6862500611043864,
+    "fit_games": 297,
+    "fit_rows": 6015,
+    "gamma": 0.2403510220146934,
+    "method": "logit_role_increment",
+    "standardization_mean": 0.0502208068190096,
+    "standardization_std": 1.805905774244825
+  },
+  "policy_version": 1
+}

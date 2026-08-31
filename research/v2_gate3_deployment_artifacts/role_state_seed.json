@@ -1,0 +1,10457 @@
+{
+  "development_only_source": true,
+  "player_count": 580,
+  "players": {
+    "100": {
+      "last_date": "2026-06-13",
+      "last_game_id": 21716138,
+      "last_starter": 0,
+      "last_team_id": 20,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "101": {
+      "last_date": "2026-04-15",
+      "last_game_id": 21681584,
+      "last_starter": 0,
+      "last_team_id": 13,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        1,
+        0,
+        1,
+        0
+      ]
+    },
+    "1016384149": {
+      "last_date": "2026-04-01",
+      "last_game_id": 18447923,
+      "last_starter": 1,
+      "last_team_id": 30,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "102": {
+      "last_date": "2025-12-27",
+      "last_game_id": 18447251,
+      "last_starter": 0,
+      "last_team_id": 5,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028025177": {
+      "last_date": "2026-04-10",
+      "last_game_id": 18447995,
+      "last_starter": 1,
+      "last_team_id": 5,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1028025235": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448005,
+      "last_starter": 1,
+      "last_team_id": 30,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1028025242": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448018,
+      "last_starter": 1,
+      "last_team_id": 26,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1028025261": {
+      "last_date": "2026-06-13",
+      "last_game_id": 21716138,
+      "last_starter": 1,
+      "last_team_id": 27,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1028025344": {
+      "last_date": "2026-04-28",
+      "last_game_id": 21681989,
+      "last_starter": 1,
+      "last_team_id": 25,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1028025362": {
+      "last_date": "2026-03-18",
+      "last_game_id": 18447822,
+      "last_starter": 1,
+      "last_team_id": 29,
+      "starter_history": [
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        1
+      ]
+    },
+    "1028025497": {
+      "last_date": "2026-05-03",
+      "last_game_id": 21684819,
+      "last_starter": 0,
+      "last_team_id": 22,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028025498": {
+      "last_date": "2026-05-25",
+      "last_game_id": 21713901,
+      "last_starter": 0,
+      "last_team_id": 20,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028025639": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448011,
+      "last_starter": 0,
+      "last_team_id": 5,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028025723": {
+      "last_date": "2026-04-27",
+      "last_game_id": 21684902,
+      "last_starter": 0,
+      "last_team_id": 24,
+      "starter_history": [
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028025754": {
+      "last_date": "2025-12-07",
+      "last_game_id": 18447169,
+      "last_starter": 1,
+      "last_team_id": 15,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1028026060": {
+      "last_date": "2026-03-02",
+      "last_game_id": 18447697,
+      "last_starter": 1,
+      "last_team_id": 30,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1028026508": {
+      "last_date": "2026-05-17",
+      "last_game_id": 21709241,
+      "last_starter": 0,
+      "last_team_id": 9,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028026514": {
+      "last_date": "2026-04-25",
+      "last_game_id": 21681983,
+      "last_starter": 0,
+      "last_team_id": 8,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028026717": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448011,
+      "last_starter": 0,
+      "last_team_id": 7,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028026812": {
+      "last_date": "2026-05-23",
+      "last_game_id": 21713899,
+      "last_starter": 0,
+      "last_team_id": 20,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028026974": {
+      "last_date": "2026-05-09",
+      "last_game_id": 21708303,
+      "last_starter": 0,
+      "last_team_id": 14,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028027372": {
+      "last_date": "2026-05-30",
+      "last_game_id": 21713534,
+      "last_starter": 0,
+      "last_team_id": 21,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0
+      ]
+    },
+    "1028027567": {
+      "last_date": "2026-04-05",
+      "last_game_id": 18447956,
+      "last_starter": 1,
+      "last_team_id": 19,
+      "starter_history": [
+        0,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        1,
+        1
+      ]
+    },
+    "1028028244": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681992,
+      "last_starter": 0,
+      "last_team_id": 1,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028028379": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682706,
+      "last_starter": 0,
+      "last_team_id": 4,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028028405": {
+      "last_date": "2026-03-27",
+      "last_game_id": 18447891,
+      "last_starter": 1,
+      "last_team_id": 30,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1028028434": {
+      "last_date": "2026-05-02",
+      "last_game_id": 21682743,
+      "last_starter": 1,
+      "last_team_id": 2,
+      "starter_history": [
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "1028028501": {
+      "last_date": "2026-05-15",
+      "last_game_id": 21707977,
+      "last_starter": 0,
+      "last_team_id": 18,
+      "starter_history": [
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028028519": {
+      "last_date": "2026-05-01",
+      "last_game_id": 21681996,
+      "last_starter": 1,
+      "last_team_id": 11,
+      "starter_history": [
+        1,
+        0,
+        0,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1028028932": {
+      "last_date": "2026-05-28",
+      "last_game_id": 21713533,
+      "last_starter": 0,
+      "last_team_id": 21,
+      "starter_history": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028028993": {
+      "last_date": "2026-05-25",
+      "last_game_id": 21713901,
+      "last_starter": 0,
+      "last_team_id": 6,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028029111": {
+      "last_date": "2026-05-03",
+      "last_game_id": 21682000,
+      "last_starter": 1,
+      "last_team_id": 28,
+      "starter_history": [
+        0,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1028029127": {
+      "last_date": "2026-04-14",
+      "last_game_id": 21681576,
+      "last_starter": 1,
+      "last_team_id": 16,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1
+      ]
+    },
+    "1028029291": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448016,
+      "last_starter": 1,
+      "last_team_id": 29,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1028034846": {
+      "last_date": "2026-05-10",
+      "last_game_id": 21708680,
+      "last_starter": 0,
+      "last_team_id": 23,
+      "starter_history": [
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028035215": {
+      "last_date": "2026-04-10",
+      "last_game_id": 18448001,
+      "last_starter": 0,
+      "last_team_id": 13,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028035794": {
+      "last_date": "2026-04-07",
+      "last_game_id": 18447971,
+      "last_starter": 1,
+      "last_team_id": 29,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1028035897": {
+      "last_date": "2026-02-08",
+      "last_game_id": 18447577,
+      "last_starter": 1,
+      "last_team_id": 12,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1028036515": {
+      "last_date": "2026-04-27",
+      "last_game_id": 21684902,
+      "last_starter": 1,
+      "last_team_id": 24,
+      "starter_history": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1028036878": {
+      "last_date": "2026-03-26",
+      "last_game_id": 18447882,
+      "last_starter": 0,
+      "last_team_id": 9,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028036898": {
+      "last_date": "2026-05-25",
+      "last_game_id": 21713901,
+      "last_starter": 0,
+      "last_team_id": 20,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028036986": {
+      "last_date": "2026-04-14",
+      "last_game_id": 21681576,
+      "last_starter": 0,
+      "last_team_id": 16,
+      "starter_history": [
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0
+      ]
+    },
+    "1028037477": {
+      "last_date": "2026-05-22",
+      "last_game_id": 21713530,
+      "last_starter": 1,
+      "last_team_id": 21,
+      "starter_history": [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        1
+      ]
+    },
+    "1028037494": {
+      "last_date": "2026-05-03",
+      "last_game_id": 21682000,
+      "last_starter": 0,
+      "last_team_id": 28,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028038100": {
+      "last_date": "2026-03-31",
+      "last_game_id": 18447918,
+      "last_starter": 0,
+      "last_team_id": 4,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028038426": {
+      "last_date": "2026-05-03",
+      "last_game_id": 21682000,
+      "last_starter": 1,
+      "last_team_id": 28,
+      "starter_history": [
+        0,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1
+      ]
+    },
+    "1028038474": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681994,
+      "last_starter": 0,
+      "last_team_id": 8,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028038570": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448011,
+      "last_starter": 0,
+      "last_team_id": 7,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028039105": {
+      "last_date": "2026-03-23",
+      "last_game_id": 18447855,
+      "last_starter": 1,
+      "last_team_id": 15,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1028045812": {
+      "last_date": "2026-05-15",
+      "last_game_id": 21707977,
+      "last_starter": 0,
+      "last_team_id": 18,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028046422": {
+      "last_date": "2026-06-13",
+      "last_game_id": 21716138,
+      "last_starter": 0,
+      "last_team_id": 20,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028046464": {
+      "last_date": "2026-05-22",
+      "last_game_id": 21713530,
+      "last_starter": 0,
+      "last_team_id": 27,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028046517": {
+      "last_date": "2026-05-09",
+      "last_game_id": 21708303,
+      "last_starter": 0,
+      "last_team_id": 14,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028047255": {
+      "last_date": "2026-05-23",
+      "last_game_id": 21713899,
+      "last_starter": 0,
+      "last_team_id": 20,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028047609": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448012,
+      "last_starter": 0,
+      "last_team_id": 11,
+      "starter_history": [
+        0
+      ]
+    },
+    "1028047928": {
+      "last_date": "2026-03-29",
+      "last_game_id": 18447908,
+      "last_starter": 0,
+      "last_team_id": 10,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0
+      ]
+    },
+    "1028048549": {
+      "last_date": "2026-04-06",
+      "last_game_id": 18447963,
+      "last_starter": 1,
+      "last_team_id": 15,
+      "starter_history": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1
+      ]
+    },
+    "1028112004": {
+      "last_date": "2026-05-15",
+      "last_game_id": 21707977,
+      "last_starter": 0,
+      "last_team_id": 18,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028125584": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448007,
+      "last_starter": 0,
+      "last_team_id": 16,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028203085": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448013,
+      "last_starter": 0,
+      "last_team_id": 19,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028203948": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448012,
+      "last_starter": 0,
+      "last_team_id": 11,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028205331": {
+      "last_date": "2026-05-11",
+      "last_game_id": 21709231,
+      "last_starter": 0,
+      "last_team_id": 9,
+      "starter_history": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028214238": {
+      "last_date": "2026-05-10",
+      "last_game_id": 21708680,
+      "last_starter": 0,
+      "last_team_id": 23,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028214958": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448016,
+      "last_starter": 1,
+      "last_team_id": 29,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1
+      ]
+    },
+    "1028218679": {
+      "last_date": "2026-05-22",
+      "last_game_id": 21713530,
+      "last_starter": 0,
+      "last_team_id": 21,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028240128": {
+      "last_date": "2026-05-17",
+      "last_game_id": 21709241,
+      "last_starter": 1,
+      "last_team_id": 9,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1
+      ]
+    },
+    "1028242168": {
+      "last_date": "2026-02-11",
+      "last_game_id": 18447604,
+      "last_starter": 0,
+      "last_team_id": 26,
+      "starter_history": [
+        0,
+        0,
+        0
+      ]
+    },
+    "1028243201": {
+      "last_date": "2026-05-03",
+      "last_game_id": 21682000,
+      "last_starter": 0,
+      "last_team_id": 28,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028243921": {
+      "last_date": "2025-11-08",
+      "last_game_id": 18446953,
+      "last_starter": 0,
+      "last_team_id": 1,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028244219": {
+      "last_date": "2026-05-23",
+      "last_game_id": 21713899,
+      "last_starter": 0,
+      "last_team_id": 6,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028244692": {
+      "last_date": "2026-02-22",
+      "last_game_id": 18447640,
+      "last_starter": 0,
+      "last_team_id": 4,
+      "starter_history": [
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028245237": {
+      "last_date": "2026-05-22",
+      "last_game_id": 21713530,
+      "last_starter": 0,
+      "last_team_id": 27,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028245777": {
+      "last_date": "2026-03-29",
+      "last_game_id": 18447906,
+      "last_starter": 0,
+      "last_team_id": 19,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028245974": {
+      "last_date": "2026-05-22",
+      "last_game_id": 21713530,
+      "last_starter": 0,
+      "last_team_id": 27,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028245994": {
+      "last_date": "2026-05-23",
+      "last_game_id": 21713899,
+      "last_starter": 0,
+      "last_team_id": 6,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028246478": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448018,
+      "last_starter": 1,
+      "last_team_id": 26,
+      "starter_history": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1
+      ]
+    },
+    "1028254340": {
+      "last_date": "2026-01-14",
+      "last_game_id": 18447387,
+      "last_starter": 0,
+      "last_team_id": 5,
+      "starter_history": [
+        0,
+        0,
+        0
+      ]
+    },
+    "1028255289": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681994,
+      "last_starter": 1,
+      "last_team_id": 8,
+      "starter_history": [
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        1
+      ]
+    },
+    "1028257937": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448007,
+      "last_starter": 0,
+      "last_team_id": 16,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028264794": {
+      "last_date": "2026-03-28",
+      "last_game_id": 18447899,
+      "last_starter": 1,
+      "last_team_id": 29,
+      "starter_history": [
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1028265377": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448011,
+      "last_starter": 0,
+      "last_team_id": 5,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028265620": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448017,
+      "last_starter": 0,
+      "last_team_id": 10,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028266882": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448009,
+      "last_starter": 1,
+      "last_team_id": 17,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1
+      ]
+    },
+    "1028267166": {
+      "last_date": "2026-05-17",
+      "last_game_id": 21709241,
+      "last_starter": 0,
+      "last_team_id": 9,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028267470": {
+      "last_date": "2025-12-19",
+      "last_game_id": 18447193,
+      "last_starter": 0,
+      "last_team_id": 6,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028268560": {
+      "last_date": "2026-02-24",
+      "last_game_id": 18447653,
+      "last_starter": 0,
+      "last_team_id": 6,
+      "starter_history": [
+        0
+      ]
+    },
+    "1028271147": {
+      "last_date": "2026-04-10",
+      "last_game_id": 18447995,
+      "last_starter": 0,
+      "last_team_id": 22,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1028274126": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681992,
+      "last_starter": 0,
+      "last_team_id": 1,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "104": {
+      "last_date": "2026-05-15",
+      "last_game_id": 21707977,
+      "last_starter": 0,
+      "last_team_id": 18,
+      "starter_history": [
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0
+      ]
+    },
+    "1042560902": {
+      "last_date": "2026-05-25",
+      "last_game_id": 21713901,
+      "last_starter": 0,
+      "last_team_id": 6,
+      "starter_history": [
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1043947937": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448010,
+      "last_starter": 0,
+      "last_team_id": 3,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0
+      ]
+    },
+    "1046672580": {
+      "last_date": "2026-05-11",
+      "last_game_id": 21708305,
+      "last_starter": 0,
+      "last_team_id": 14,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "105": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682706,
+      "last_starter": 0,
+      "last_team_id": 4,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057260888": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448016,
+      "last_starter": 1,
+      "last_team_id": 29,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1057261935": {
+      "last_date": "2026-05-10",
+      "last_game_id": 21708680,
+      "last_starter": 1,
+      "last_team_id": 23,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1057262088": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448011,
+      "last_starter": 1,
+      "last_team_id": 7,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1057262518": {
+      "last_date": "2026-06-13",
+      "last_game_id": 21716138,
+      "last_starter": 0,
+      "last_team_id": 27,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057262985": {
+      "last_date": "2026-04-04",
+      "last_game_id": 18447947,
+      "last_starter": 1,
+      "last_team_id": 30,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1057263194": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682706,
+      "last_starter": 1,
+      "last_team_id": 4,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1057266649": {
+      "last_date": "2026-04-08",
+      "last_game_id": 18447980,
+      "last_starter": 1,
+      "last_team_id": 15,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1057266813": {
+      "last_date": "2026-02-27",
+      "last_game_id": 18447677,
+      "last_starter": 1,
+      "last_team_id": 3,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1057267077": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448013,
+      "last_starter": 1,
+      "last_team_id": 19,
+      "starter_history": [
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1057268513": {
+      "last_date": "2026-04-27",
+      "last_game_id": 21684902,
+      "last_starter": 0,
+      "last_team_id": 24,
+      "starter_history": [
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057268940": {
+      "last_date": "2026-05-03",
+      "last_game_id": 21682000,
+      "last_starter": 0,
+      "last_team_id": 28,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057271099": {
+      "last_date": "2026-05-15",
+      "last_game_id": 21707977,
+      "last_starter": 0,
+      "last_team_id": 18,
+      "starter_history": [
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057271360": {
+      "last_date": "2026-06-13",
+      "last_game_id": 21716138,
+      "last_starter": 0,
+      "last_team_id": 27,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057271583": {
+      "last_date": "2026-04-08",
+      "last_game_id": 18447980,
+      "last_starter": 1,
+      "last_team_id": 15,
+      "starter_history": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1
+      ]
+    },
+    "1057272081": {
+      "last_date": "2025-11-24",
+      "last_game_id": 18447075,
+      "last_starter": 0,
+      "last_team_id": 5,
+      "starter_history": [
+        0,
+        0
+      ]
+    },
+    "1057272939": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448007,
+      "last_starter": 0,
+      "last_team_id": 16,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0
+      ]
+    },
+    "1057274415": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448013,
+      "last_starter": 1,
+      "last_team_id": 19,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1
+      ]
+    },
+    "1057275262": {
+      "last_date": "2026-04-10",
+      "last_game_id": 18447997,
+      "last_starter": 0,
+      "last_team_id": 3,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0
+      ]
+    },
+    "1057275769": {
+      "last_date": "2026-04-28",
+      "last_game_id": 21681989,
+      "last_starter": 0,
+      "last_team_id": 25,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057276634": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448018,
+      "last_starter": 1,
+      "last_team_id": 26,
+      "starter_history": [
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1057277425": {
+      "last_date": "2026-05-02",
+      "last_game_id": 21682743,
+      "last_starter": 0,
+      "last_team_id": 2,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057278805": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682706,
+      "last_starter": 0,
+      "last_team_id": 4,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057279093": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681992,
+      "last_starter": 0,
+      "last_team_id": 1,
+      "starter_history": [
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    "1057279105": {
+      "last_date": "2026-03-04",
+      "last_game_id": 18447716,
+      "last_starter": 0,
+      "last_team_id": 13,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057279425": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448010,
+      "last_starter": 1,
+      "last_team_id": 3,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1
+      ]
+    },
+    "1057279571": {
+      "last_date": "2026-04-22",
+      "last_game_id": 21684786,
+      "last_starter": 0,
+      "last_team_id": 22,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057279594": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448005,
+      "last_starter": 1,
+      "last_team_id": 30,
+      "starter_history": [
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        0,
+        1,
+        0,
+        1
+      ]
+    },
+    "1057279760": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448010,
+      "last_starter": 1,
+      "last_team_id": 3,
+      "starter_history": [
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1057280779": {
+      "last_date": "2026-03-22",
+      "last_game_id": 18447851,
+      "last_starter": 1,
+      "last_team_id": 3,
+      "starter_history": [
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1057382509": {
+      "last_date": "2026-05-10",
+      "last_game_id": 21708680,
+      "last_starter": 0,
+      "last_team_id": 23,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057383369": {
+      "last_date": "2026-04-27",
+      "last_game_id": 21684902,
+      "last_starter": 0,
+      "last_team_id": 24,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057384156": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682706,
+      "last_starter": 0,
+      "last_team_id": 4,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057384362": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682706,
+      "last_starter": 0,
+      "last_team_id": 4,
+      "starter_history": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057385481": {
+      "last_date": "2026-04-22",
+      "last_game_id": 21684786,
+      "last_starter": 0,
+      "last_team_id": 22,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057386376": {
+      "last_date": "2026-05-11",
+      "last_game_id": 21708305,
+      "last_starter": 0,
+      "last_team_id": 14,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057387526": {
+      "last_date": "2026-04-25",
+      "last_game_id": 21684895,
+      "last_starter": 0,
+      "last_team_id": 24,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057389374": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448006,
+      "last_starter": 0,
+      "last_team_id": 12,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057389625": {
+      "last_date": "2026-05-17",
+      "last_game_id": 21709241,
+      "last_starter": 0,
+      "last_team_id": 9,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057389862": {
+      "last_date": "2026-04-10",
+      "last_game_id": 18447994,
+      "last_starter": 0,
+      "last_team_id": 28,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057390538": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448013,
+      "last_starter": 1,
+      "last_team_id": 19,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1
+      ]
+    },
+    "1057390745": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448018,
+      "last_starter": 1,
+      "last_team_id": 26,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1057391756": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448005,
+      "last_starter": 1,
+      "last_team_id": 30,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "1057392335": {
+      "last_date": "2026-05-22",
+      "last_game_id": 21713530,
+      "last_starter": 0,
+      "last_team_id": 21,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057393207": {
+      "last_date": "2026-05-25",
+      "last_game_id": 21713901,
+      "last_starter": 0,
+      "last_team_id": 20,
+      "starter_history": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057394959": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448012,
+      "last_starter": 1,
+      "last_team_id": 15,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1
+      ]
+    },
+    "1057395493": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448011,
+      "last_starter": 1,
+      "last_team_id": 5,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1
+      ]
+    },
+    "1057395638": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448006,
+      "last_starter": 0,
+      "last_team_id": 12,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057395754": {
+      "last_date": "2026-05-25",
+      "last_game_id": 21713901,
+      "last_starter": 0,
+      "last_team_id": 6,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057395872": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682793,
+      "last_starter": 0,
+      "last_team_id": 10,
+      "starter_history": [
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057396055": {
+      "last_date": "2026-04-15",
+      "last_game_id": 21681584,
+      "last_starter": 0,
+      "last_team_id": 13,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057396191": {
+      "last_date": "2026-04-26",
+      "last_game_id": 21682727,
+      "last_starter": 0,
+      "last_team_id": 2,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    "1057396260": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448012,
+      "last_starter": 0,
+      "last_team_id": 15,
+      "starter_history": [
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    "1057396603": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21682737,
+      "last_starter": 0,
+      "last_team_id": 2,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057396966": {
+      "last_date": "2026-04-28",
+      "last_game_id": 21682732,
+      "last_starter": 0,
+      "last_team_id": 2,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057397172": {
+      "last_date": "2026-05-15",
+      "last_game_id": 21707977,
+      "last_starter": 0,
+      "last_team_id": 18,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057845216": {
+      "last_date": "2026-04-01",
+      "last_game_id": 18447821,
+      "last_starter": 0,
+      "last_team_id": 15,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057845274": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448018,
+      "last_starter": 0,
+      "last_team_id": 26,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057845382": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448011,
+      "last_starter": 0,
+      "last_team_id": 7,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057845705": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448013,
+      "last_starter": 0,
+      "last_team_id": 19,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057846109": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448007,
+      "last_starter": 0,
+      "last_team_id": 16,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057846172": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681992,
+      "last_starter": 0,
+      "last_team_id": 1,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057846206": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448007,
+      "last_starter": 0,
+      "last_team_id": 16,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057846535": {
+      "last_date": "2025-12-09",
+      "last_game_id": 20054034,
+      "last_starter": 0,
+      "last_team_id": 28,
+      "starter_history": [
+        0,
+        0
+      ]
+    },
+    "1057846700": {
+      "last_date": "2026-04-25",
+      "last_game_id": 21684895,
+      "last_starter": 0,
+      "last_team_id": 24,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057846840": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448010,
+      "last_starter": 0,
+      "last_team_id": 3,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    "1057846921": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681994,
+      "last_starter": 0,
+      "last_team_id": 8,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057847026": {
+      "last_date": "2026-02-27",
+      "last_game_id": 18447679,
+      "last_starter": 0,
+      "last_team_id": 7,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057847330": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448018,
+      "last_starter": 0,
+      "last_team_id": 25,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057847334": {
+      "last_date": "2026-02-20",
+      "last_game_id": 18447622,
+      "last_starter": 1,
+      "last_team_id": 15,
+      "starter_history": [
+        0,
+        1
+      ]
+    },
+    "1057847504": {
+      "last_date": "2026-05-11",
+      "last_game_id": 21708305,
+      "last_starter": 0,
+      "last_team_id": 14,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057847894": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448011,
+      "last_starter": 1,
+      "last_team_id": 7,
+      "starter_history": [
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1
+      ]
+    },
+    "1057848025": {
+      "last_date": "2026-04-10",
+      "last_game_id": 18448001,
+      "last_starter": 0,
+      "last_team_id": 13,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057848244": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448011,
+      "last_starter": 0,
+      "last_team_id": 7,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057848561": {
+      "last_date": "2025-12-23",
+      "last_game_id": 18447219,
+      "last_starter": 0,
+      "last_team_id": 23,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057848654": {
+      "last_date": "2025-11-24",
+      "last_game_id": 18447074,
+      "last_starter": 0,
+      "last_team_id": 17,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057849029": {
+      "last_date": "2025-12-03",
+      "last_game_id": 18447136,
+      "last_starter": 0,
+      "last_team_id": 13,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057849685": {
+      "last_date": "2026-04-10",
+      "last_game_id": 18448001,
+      "last_starter": 0,
+      "last_team_id": 25,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1057968644": {
+      "last_date": "2026-04-09",
+      "last_game_id": 18447988,
+      "last_starter": 0,
+      "last_team_id": 10,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    "1058091815": {
+      "last_date": "2026-03-01",
+      "last_game_id": 18447691,
+      "last_starter": 0,
+      "last_team_id": 25,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1058921044": {
+      "last_date": "2026-04-10",
+      "last_game_id": 18448001,
+      "last_starter": 0,
+      "last_team_id": 13,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1059059437": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448013,
+      "last_starter": 1,
+      "last_team_id": 19,
+      "starter_history": [
+        0,
+        0,
+        1
+      ]
+    },
+    "1059542426": {
+      "last_date": "2026-02-20",
+      "last_game_id": 18447621,
+      "last_starter": 0,
+      "last_team_id": 30,
+      "starter_history": [
+        0,
+        0,
+        0
+      ]
+    },
+    "1059635020": {
+      "last_date": "2026-05-22",
+      "last_game_id": 21713530,
+      "last_starter": 0,
+      "last_team_id": 21,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1059753274": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448010,
+      "last_starter": 1,
+      "last_team_id": 3,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "1059875475": {
+      "last_date": "2026-03-05",
+      "last_game_id": 18447719,
+      "last_starter": 0,
+      "last_team_id": 3,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1059992972": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448016,
+      "last_starter": 1,
+      "last_team_id": 29,
+      "starter_history": [
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1
+      ]
+    },
+    "1060010671": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448009,
+      "last_starter": 0,
+      "last_team_id": 17,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1060015883": {
+      "last_date": "2026-04-10",
+      "last_game_id": 18447999,
+      "last_starter": 1,
+      "last_team_id": 15,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "1060111739": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448005,
+      "last_starter": 0,
+      "last_team_id": 30,
+      "starter_history": [
+        0,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    "1076658911": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448018,
+      "last_starter": 0,
+      "last_team_id": 25,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1077620166": {
+      "last_date": "2026-03-19",
+      "last_game_id": 18447832,
+      "last_starter": 1,
+      "last_team_id": 29,
+      "starter_history": [
+        0,
+        0,
+        1,
+        0,
+        1
+      ]
+    },
+    "1080034288": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448012,
+      "last_starter": 0,
+      "last_team_id": 15,
+      "starter_history": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        0
+      ]
+    },
+    "1080278663": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448012,
+      "last_starter": 1,
+      "last_team_id": 15,
+      "starter_history": [
+        1,
+        0,
+        1,
+        1,
+        1
+      ]
+    },
+    "1081266162": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448016,
+      "last_starter": 0,
+      "last_team_id": 29,
+      "starter_history": [
+        0
+      ]
+    },
+    "114": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682793,
+      "last_starter": 0,
+      "last_team_id": 10,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "115": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682793,
+      "last_starter": 1,
+      "last_team_id": 10,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "117": {
+      "last_date": "2026-01-08",
+      "last_game_id": 18447345,
+      "last_starter": 1,
+      "last_team_id": 7,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "11891374": {
+      "last_date": "2026-04-15",
+      "last_game_id": 21681584,
+      "last_starter": 0,
+      "last_team_id": 10,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "12": {
+      "last_date": "2026-05-15",
+      "last_game_id": 21707977,
+      "last_starter": 0,
+      "last_team_id": 18,
+      "starter_history": [
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "125": {
+      "last_date": "2026-04-05",
+      "last_game_id": 18447959,
+      "last_starter": 1,
+      "last_team_id": 26,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "131": {
+      "last_date": "2026-04-25",
+      "last_game_id": 21681983,
+      "last_starter": 1,
+      "last_team_id": 18,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "132": {
+      "last_date": "2026-04-02",
+      "last_game_id": 18447934,
+      "last_starter": 1,
+      "last_team_id": 14,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "137": {
+      "last_date": "2026-05-10",
+      "last_game_id": 21708680,
+      "last_starter": 0,
+      "last_team_id": 23,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    "139": {
+      "last_date": "2026-04-15",
+      "last_game_id": 21681584,
+      "last_starter": 1,
+      "last_team_id": 13,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "140": {
+      "last_date": "2026-04-21",
+      "last_game_id": 21681976,
+      "last_starter": 1,
+      "last_team_id": 11,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "145": {
+      "last_date": "2026-05-10",
+      "last_game_id": 21708680,
+      "last_starter": 1,
+      "last_team_id": 23,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "147": {
+      "last_date": "2026-03-11",
+      "last_game_id": 18447769,
+      "last_starter": 0,
+      "last_team_id": 26,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "15": {
+      "last_date": "2026-03-15",
+      "last_game_id": 18447797,
+      "last_starter": 1,
+      "last_team_id": 17,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "158": {
+      "last_date": "2026-05-01",
+      "last_game_id": 21681996,
+      "last_starter": 0,
+      "last_team_id": 11,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "1603383": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681992,
+      "last_starter": 0,
+      "last_team_id": 1,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "161": {
+      "last_date": "2026-06-13",
+      "last_game_id": 21716138,
+      "last_starter": 1,
+      "last_team_id": 27,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "165": {
+      "last_date": "2026-03-31",
+      "last_game_id": 18447919,
+      "last_starter": 0,
+      "last_team_id": 28,
+      "starter_history": [
+        0,
+        0,
+        0
+      ]
+    },
+    "172": {
+      "last_date": "2026-05-10",
+      "last_game_id": 21708680,
+      "last_starter": 1,
+      "last_team_id": 23,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "173": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448012,
+      "last_starter": 1,
+      "last_team_id": 15,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "175": {
+      "last_date": "2026-05-30",
+      "last_game_id": 21713534,
+      "last_starter": 1,
+      "last_team_id": 21,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "17553967": {
+      "last_date": "2026-05-02",
+      "last_game_id": 21682743,
+      "last_starter": 0,
+      "last_team_id": 2,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    "17553979": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681992,
+      "last_starter": 0,
+      "last_team_id": 1,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "17553992": {
+      "last_date": "2026-03-23",
+      "last_game_id": 18447862,
+      "last_starter": 1,
+      "last_team_id": 10,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "17553994": {
+      "last_date": "2026-04-14",
+      "last_game_id": 21681576,
+      "last_starter": 1,
+      "last_team_id": 16,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "17553995": {
+      "last_date": "2026-05-11",
+      "last_game_id": 21708305,
+      "last_starter": 1,
+      "last_team_id": 14,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "17554002": {
+      "last_date": "2026-04-01",
+      "last_game_id": 18447821,
+      "last_starter": 0,
+      "last_team_id": 15,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "17554004": {
+      "last_date": "2026-05-03",
+      "last_game_id": 21682000,
+      "last_starter": 0,
+      "last_team_id": 28,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "17554005": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448011,
+      "last_starter": 0,
+      "last_team_id": 5,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "176": {
+      "last_date": "2026-05-15",
+      "last_game_id": 21707977,
+      "last_starter": 1,
+      "last_team_id": 18,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "177": {
+      "last_date": "2026-04-25",
+      "last_game_id": 21681983,
+      "last_starter": 1,
+      "last_team_id": 8,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "178": {
+      "last_date": "2025-12-23",
+      "last_game_id": 18447219,
+      "last_starter": 0,
+      "last_team_id": 23,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "17895854": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682793,
+      "last_starter": 0,
+      "last_team_id": 10,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "17895858": {
+      "last_date": "2026-05-10",
+      "last_game_id": 21708680,
+      "last_starter": 0,
+      "last_team_id": 23,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "17895966": {
+      "last_date": "2026-04-27",
+      "last_game_id": 21684902,
+      "last_starter": 1,
+      "last_team_id": 24,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "17895983": {
+      "last_date": "2026-05-15",
+      "last_game_id": 21707977,
+      "last_starter": 1,
+      "last_team_id": 18,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1
+      ]
+    },
+    "17896021": {
+      "last_date": "2026-01-24",
+      "last_game_id": 18447466,
+      "last_starter": 0,
+      "last_team_id": 7,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "17896024": {
+      "last_date": "2026-04-05",
+      "last_game_id": 18447956,
+      "last_starter": 1,
+      "last_team_id": 19,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "17896026": {
+      "last_date": "2026-04-27",
+      "last_game_id": 21684800,
+      "last_starter": 1,
+      "last_team_id": 22,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "17896027": {
+      "last_date": "2026-04-03",
+      "last_game_id": 18447940,
+      "last_starter": 0,
+      "last_team_id": 3,
+      "starter_history": [
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    "17896029": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448005,
+      "last_starter": 0,
+      "last_team_id": 30,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "17896031": {
+      "last_date": "2026-05-15",
+      "last_game_id": 21707977,
+      "last_starter": 0,
+      "last_team_id": 18,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "17896033": {
+      "last_date": "2026-06-13",
+      "last_game_id": 21716138,
+      "last_starter": 0,
+      "last_team_id": 20,
+      "starter_history": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "17896035": {
+      "last_date": "2026-03-27",
+      "last_game_id": 18447884,
+      "last_starter": 0,
+      "last_team_id": 13,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "17896036": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682706,
+      "last_starter": 0,
+      "last_team_id": 4,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "17896038": {
+      "last_date": "2026-03-09",
+      "last_game_id": 18447750,
+      "last_starter": 0,
+      "last_team_id": 3,
+      "starter_history": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "17896039": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448005,
+      "last_starter": 1,
+      "last_team_id": 30,
+      "starter_history": [
+        1,
+        1,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "17896040": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681992,
+      "last_starter": 1,
+      "last_team_id": 1,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "17896045": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681992,
+      "last_starter": 0,
+      "last_team_id": 1,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "17896048": {
+      "last_date": "2026-03-21",
+      "last_game_id": 18447849,
+      "last_starter": 0,
+      "last_team_id": 17,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "17896055": {
+      "last_date": "2026-05-03",
+      "last_game_id": 21682000,
+      "last_starter": 1,
+      "last_team_id": 28,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "17896056": {
+      "last_date": "2026-05-02",
+      "last_game_id": 21682743,
+      "last_starter": 1,
+      "last_team_id": 2,
+      "starter_history": [
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "17896058": {
+      "last_date": "2026-05-10",
+      "last_game_id": 21708680,
+      "last_starter": 0,
+      "last_team_id": 23,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "17896059": {
+      "last_date": "2026-05-03",
+      "last_game_id": 21682000,
+      "last_starter": 0,
+      "last_team_id": 28,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "17896060": {
+      "last_date": "2026-05-02",
+      "last_game_id": 21682743,
+      "last_starter": 0,
+      "last_team_id": 2,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    "17896062": {
+      "last_date": "2026-05-01",
+      "last_game_id": 21681996,
+      "last_starter": 1,
+      "last_team_id": 11,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "17896063": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448009,
+      "last_starter": 1,
+      "last_team_id": 17,
+      "starter_history": [
+        0,
+        1,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        0,
+        1
+      ]
+    },
+    "17896065": {
+      "last_date": "2026-04-03",
+      "last_game_id": 18447941,
+      "last_starter": 1,
+      "last_team_id": 5,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "17896067": {
+      "last_date": "2026-02-04",
+      "last_game_id": 18447549,
+      "last_starter": 1,
+      "last_team_id": 15,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1
+      ]
+    },
+    "17896071": {
+      "last_date": "2026-04-25",
+      "last_game_id": 21684895,
+      "last_starter": 0,
+      "last_team_id": 24,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "17896073": {
+      "last_date": "2026-05-03",
+      "last_game_id": 21684819,
+      "last_starter": 1,
+      "last_team_id": 22,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "17896075": {
+      "last_date": "2026-05-17",
+      "last_game_id": 21709241,
+      "last_starter": 1,
+      "last_team_id": 9,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "17896076": {
+      "last_date": "2026-05-25",
+      "last_game_id": 21713901,
+      "last_starter": 1,
+      "last_team_id": 6,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "17896078": {
+      "last_date": "2026-05-28",
+      "last_game_id": 21713533,
+      "last_starter": 0,
+      "last_team_id": 21,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "17896094": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21682737,
+      "last_starter": 0,
+      "last_team_id": 2,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "17896097": {
+      "last_date": "2026-06-13",
+      "last_game_id": 21716138,
+      "last_starter": 0,
+      "last_team_id": 20,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "17896103": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448006,
+      "last_starter": 0,
+      "last_team_id": 12,
+      "starter_history": [
+        1,
+        1,
+        0,
+        1,
+        1,
+        0,
+        1,
+        0,
+        0,
+        0
+      ]
+    },
+    "17896117": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448006,
+      "last_starter": 1,
+      "last_team_id": 12,
+      "starter_history": [
+        0,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "18": {
+      "last_date": "2026-06-13",
+      "last_game_id": 21716138,
+      "last_starter": 1,
+      "last_team_id": 20,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "182": {
+      "last_date": "2026-04-28",
+      "last_game_id": 21681989,
+      "last_starter": 0,
+      "last_team_id": 25,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "185": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682793,
+      "last_starter": 1,
+      "last_team_id": 10,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "18677986": {
+      "last_date": "2026-04-03",
+      "last_game_id": 18447946,
+      "last_starter": 1,
+      "last_team_id": 19,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "18678058": {
+      "last_date": "2026-04-19",
+      "last_game_id": 21684877,
+      "last_starter": 1,
+      "last_team_id": 24,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "188": {
+      "last_date": "2026-04-26",
+      "last_game_id": 21681986,
+      "last_starter": 0,
+      "last_team_id": 11,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "191": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681994,
+      "last_starter": 0,
+      "last_team_id": 8,
+      "starter_history": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "192": {
+      "last_date": "2026-05-25",
+      "last_game_id": 21713901,
+      "last_starter": 1,
+      "last_team_id": 6,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "19465326": {
+      "last_date": "2026-04-01",
+      "last_game_id": 18447925,
+      "last_starter": 0,
+      "last_team_id": 1,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0
+      ]
+    },
+    "19465584": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448006,
+      "last_starter": 1,
+      "last_team_id": 12,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        1
+      ]
+    },
+    "19465585": {
+      "last_date": "2026-04-04",
+      "last_game_id": 18447947,
+      "last_starter": 0,
+      "last_team_id": 16,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "196": {
+      "last_date": "2026-04-08",
+      "last_game_id": 18447978,
+      "last_starter": 0,
+      "last_team_id": 17,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "200": {
+      "last_date": "2026-05-17",
+      "last_game_id": 21709241,
+      "last_starter": 1,
+      "last_team_id": 9,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "201": {
+      "last_date": "2026-05-30",
+      "last_game_id": 21713534,
+      "last_starter": 1,
+      "last_team_id": 21,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "202": {
+      "last_date": "2026-06-13",
+      "last_game_id": 21716138,
+      "last_starter": 1,
+      "last_team_id": 20,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "210": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681992,
+      "last_starter": 0,
+      "last_team_id": 1,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "213": {
+      "last_date": "2026-05-01",
+      "last_game_id": 21681996,
+      "last_starter": 0,
+      "last_team_id": 11,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "214": {
+      "last_date": "2026-04-28",
+      "last_game_id": 21681989,
+      "last_starter": 1,
+      "last_team_id": 25,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "2148": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448009,
+      "last_starter": 0,
+      "last_team_id": 17,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "2189": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682793,
+      "last_starter": 0,
+      "last_team_id": 10,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "219": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682793,
+      "last_starter": 0,
+      "last_team_id": 10,
+      "starter_history": [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    "22": {
+      "last_date": "2026-05-11",
+      "last_game_id": 21708305,
+      "last_starter": 1,
+      "last_team_id": 14,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "221": {
+      "last_date": "2026-05-13",
+      "last_game_id": 21709235,
+      "last_starter": 0,
+      "last_team_id": 9,
+      "starter_history": [
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "2221": {
+      "last_date": "2026-01-30",
+      "last_game_id": 18447511,
+      "last_starter": 0,
+      "last_team_id": 24,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "226": {
+      "last_date": "2026-05-06",
+      "last_game_id": 21707973,
+      "last_starter": 0,
+      "last_team_id": 18,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0
+      ]
+    },
+    "227": {
+      "last_date": "2026-04-29",
+      "last_game_id": 21681990,
+      "last_starter": 1,
+      "last_team_id": 28,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "229": {
+      "last_date": "2026-03-12",
+      "last_game_id": 18447773,
+      "last_starter": 0,
+      "last_team_id": 22,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "231": {
+      "last_date": "2026-02-11",
+      "last_game_id": 18447604,
+      "last_starter": 1,
+      "last_team_id": 29,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "237": {
+      "last_date": "2026-05-11",
+      "last_game_id": 21708305,
+      "last_starter": 1,
+      "last_team_id": 14,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "24": {
+      "last_date": "2026-04-10",
+      "last_game_id": 18447998,
+      "last_starter": 1,
+      "last_team_id": 7,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1
+      ]
+    },
+    "24102396": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448010,
+      "last_starter": 1,
+      "last_team_id": 3,
+      "starter_history": [
+        0,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "24489167": {
+      "last_date": "2026-04-05",
+      "last_game_id": 18447958,
+      "last_starter": 0,
+      "last_team_id": 7,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "24572055": {
+      "last_date": "2026-05-23",
+      "last_game_id": 21713899,
+      "last_starter": 0,
+      "last_team_id": 6,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "246": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681994,
+      "last_starter": 1,
+      "last_team_id": 8,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "247": {
+      "last_date": "2026-04-15",
+      "last_game_id": 21681584,
+      "last_starter": 1,
+      "last_team_id": 13,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "249": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681994,
+      "last_starter": 0,
+      "last_team_id": 8,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0
+      ]
+    },
+    "250": {
+      "last_date": "2026-03-27",
+      "last_game_id": 18447889,
+      "last_starter": 0,
+      "last_team_id": 19,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        0
+      ]
+    },
+    "254": {
+      "last_date": "2026-05-11",
+      "last_game_id": 21708305,
+      "last_starter": 0,
+      "last_team_id": 14,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "257": {
+      "last_date": "2026-05-11",
+      "last_game_id": 21708305,
+      "last_starter": 0,
+      "last_team_id": 14,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "261": {
+      "last_date": "2026-06-13",
+      "last_game_id": 21716138,
+      "last_starter": 0,
+      "last_team_id": 27,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "265": {
+      "last_date": "2026-04-10",
+      "last_game_id": 18447997,
+      "last_starter": 0,
+      "last_team_id": 17,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    "266": {
+      "last_date": "2026-02-03",
+      "last_game_id": 18447536,
+      "last_starter": 0,
+      "last_team_id": 30,
+      "starter_history": [
+        0,
+        0,
+        0
+      ]
+    },
+    "268": {
+      "last_date": "2026-02-06",
+      "last_game_id": 18447564,
+      "last_starter": 1,
+      "last_team_id": 26,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "27": {
+      "last_date": "2026-02-01",
+      "last_game_id": 18447528,
+      "last_starter": 0,
+      "last_team_id": 6,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "274": {
+      "last_date": "2026-04-15",
+      "last_game_id": 21681584,
+      "last_starter": 1,
+      "last_team_id": 13,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "277": {
+      "last_date": "2026-05-17",
+      "last_game_id": 21709241,
+      "last_starter": 0,
+      "last_team_id": 9,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "27924547": {
+      "last_date": "2026-05-28",
+      "last_game_id": 21713533,
+      "last_starter": 0,
+      "last_team_id": 27,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "28": {
+      "last_date": "2026-03-15",
+      "last_game_id": 18447800,
+      "last_starter": 0,
+      "last_team_id": 29,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "282": {
+      "last_date": "2026-04-10",
+      "last_game_id": 18447992,
+      "last_starter": 1,
+      "last_team_id": 19,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1
+      ]
+    },
+    "283": {
+      "last_date": "2026-04-15",
+      "last_game_id": 21681584,
+      "last_starter": 1,
+      "last_team_id": 13,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "285": {
+      "last_date": "2026-03-18",
+      "last_game_id": 18447822,
+      "last_starter": 0,
+      "last_team_id": 29,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "286": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21682737,
+      "last_starter": 0,
+      "last_team_id": 23,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "297": {
+      "last_date": "2026-02-23",
+      "last_game_id": 18447648,
+      "last_starter": 1,
+      "last_team_id": 29,
+      "starter_history": [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "3": {
+      "last_date": "2026-01-18",
+      "last_game_id": 18447418,
+      "last_starter": 1,
+      "last_team_id": 11,
+      "starter_history": [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "30": {
+      "last_date": "2026-06-05",
+      "last_game_id": 21716135,
+      "last_starter": 0,
+      "last_team_id": 27,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "303": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681992,
+      "last_starter": 1,
+      "last_team_id": 1,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "304": {
+      "last_date": "2026-03-29",
+      "last_game_id": 18447901,
+      "last_starter": 0,
+      "last_team_id": 12,
+      "starter_history": [
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "305": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448018,
+      "last_starter": 0,
+      "last_team_id": 26,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "3089": {
+      "last_date": "2026-04-08",
+      "last_game_id": 18447978,
+      "last_starter": 0,
+      "last_team_id": 17,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    "3092": {
+      "last_date": "2026-04-25",
+      "last_game_id": 21684895,
+      "last_starter": 0,
+      "last_team_id": 24,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "313": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682793,
+      "last_starter": 0,
+      "last_team_id": 10,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    "315": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448011,
+      "last_starter": 1,
+      "last_team_id": 7,
+      "starter_history": [
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "322": {
+      "last_date": "2026-05-25",
+      "last_game_id": 21713901,
+      "last_starter": 1,
+      "last_team_id": 6,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "324": {
+      "last_date": "2026-04-10",
+      "last_game_id": 18448002,
+      "last_starter": 0,
+      "last_team_id": 26,
+      "starter_history": [
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "33": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448017,
+      "last_starter": 0,
+      "last_team_id": 13,
+      "starter_history": [
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "334": {
+      "last_date": "2026-04-02",
+      "last_game_id": 18447936,
+      "last_starter": 1,
+      "last_team_id": 19,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "335": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681994,
+      "last_starter": 1,
+      "last_team_id": 8,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "338": {
+      "last_date": "2026-04-05",
+      "last_game_id": 18447957,
+      "last_starter": 0,
+      "last_team_id": 29,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "340": {
+      "last_date": "2026-04-23",
+      "last_game_id": 21681978,
+      "last_starter": 0,
+      "last_team_id": 6,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    "344": {
+      "last_date": "2026-01-20",
+      "last_game_id": 18447434,
+      "last_starter": 0,
+      "last_team_id": 29,
+      "starter_history": [
+        0
+      ]
+    },
+    "349": {
+      "last_date": "2026-02-11",
+      "last_game_id": 18447604,
+      "last_starter": 1,
+      "last_team_id": 29,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "351": {
+      "last_date": "2026-04-27",
+      "last_game_id": 21684902,
+      "last_starter": 0,
+      "last_team_id": 24,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "3547238": {
+      "last_date": "2026-05-15",
+      "last_game_id": 21707977,
+      "last_starter": 1,
+      "last_team_id": 18,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "3547239": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682706,
+      "last_starter": 1,
+      "last_team_id": 4,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "3547240": {
+      "last_date": "2025-12-23",
+      "last_game_id": 18447222,
+      "last_starter": 0,
+      "last_team_id": 12,
+      "starter_history": [
+        1,
+        0,
+        0,
+        0
+      ]
+    },
+    "3547241": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448018,
+      "last_starter": 0,
+      "last_team_id": 26,
+      "starter_history": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "3547242": {
+      "last_date": "2026-04-28",
+      "last_game_id": 21681989,
+      "last_starter": 1,
+      "last_team_id": 25,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "3547243": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448006,
+      "last_starter": 0,
+      "last_team_id": 12,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "3547244": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681992,
+      "last_starter": 1,
+      "last_team_id": 1,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "3547246": {
+      "last_date": "2026-06-13",
+      "last_game_id": 21716138,
+      "last_starter": 1,
+      "last_team_id": 27,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "3547247": {
+      "last_date": "2026-04-07",
+      "last_game_id": 18447966,
+      "last_starter": 1,
+      "last_team_id": 5,
+      "starter_history": [
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "3547248": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448011,
+      "last_starter": 1,
+      "last_team_id": 5,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1
+      ]
+    },
+    "3547249": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448018,
+      "last_starter": 1,
+      "last_team_id": 26,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "3547250": {
+      "last_date": "2026-03-27",
+      "last_game_id": 18447884,
+      "last_starter": 1,
+      "last_team_id": 12,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "3547251": {
+      "last_date": "2026-02-03",
+      "last_game_id": 18447540,
+      "last_starter": 0,
+      "last_team_id": 17,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "3547254": {
+      "last_date": "2026-05-10",
+      "last_game_id": 21708680,
+      "last_starter": 1,
+      "last_team_id": 23,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "3547256": {
+      "last_date": "2026-04-05",
+      "last_game_id": 18447956,
+      "last_starter": 1,
+      "last_team_id": 19,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "3547258": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682706,
+      "last_starter": 0,
+      "last_team_id": 4,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "3547259": {
+      "last_date": "2026-05-15",
+      "last_game_id": 21707977,
+      "last_starter": 1,
+      "last_team_id": 18,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "3547264": {
+      "last_date": "2026-03-25",
+      "last_game_id": 18447871,
+      "last_starter": 1,
+      "last_team_id": 5,
+      "starter_history": [
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "3547267": {
+      "last_date": "2026-05-17",
+      "last_game_id": 21709241,
+      "last_starter": 0,
+      "last_team_id": 9,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "3547268": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681994,
+      "last_starter": 0,
+      "last_team_id": 8,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    "3547269": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448010,
+      "last_starter": 1,
+      "last_team_id": 28,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "3547270": {
+      "last_date": "2026-05-17",
+      "last_game_id": 21709241,
+      "last_starter": 0,
+      "last_team_id": 9,
+      "starter_history": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "3547272": {
+      "last_date": "2026-05-28",
+      "last_game_id": 21713533,
+      "last_starter": 0,
+      "last_team_id": 21,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "3547274": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448011,
+      "last_starter": 1,
+      "last_team_id": 5,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "3547276": {
+      "last_date": "2026-05-02",
+      "last_game_id": 21682743,
+      "last_starter": 0,
+      "last_team_id": 2,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "3547282": {
+      "last_date": "2026-03-25",
+      "last_game_id": 18447871,
+      "last_starter": 1,
+      "last_team_id": 5,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1
+      ]
+    },
+    "3547285": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682706,
+      "last_starter": 0,
+      "last_team_id": 4,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "3547287": {
+      "last_date": "2026-05-03",
+      "last_game_id": 21684819,
+      "last_starter": 1,
+      "last_team_id": 22,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "3547293": {
+      "last_date": "2026-04-07",
+      "last_game_id": 18447974,
+      "last_starter": 1,
+      "last_team_id": 7,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "3547299": {
+      "last_date": "2026-05-25",
+      "last_game_id": 21713901,
+      "last_starter": 0,
+      "last_team_id": 6,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "3547301": {
+      "last_date": "2026-05-01",
+      "last_game_id": 21681996,
+      "last_starter": 0,
+      "last_team_id": 11,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "3547302": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448005,
+      "last_starter": 1,
+      "last_team_id": 30,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "356": {
+      "last_date": "2026-05-01",
+      "last_game_id": 21681996,
+      "last_starter": 0,
+      "last_team_id": 11,
+      "starter_history": [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "358": {
+      "last_date": "2026-05-28",
+      "last_game_id": 21713533,
+      "last_starter": 0,
+      "last_team_id": 27,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "360": {
+      "last_date": "2026-05-10",
+      "last_game_id": 21708680,
+      "last_starter": 1,
+      "last_team_id": 23,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "367": {
+      "last_date": "2025-12-01",
+      "last_game_id": 18447122,
+      "last_starter": 0,
+      "last_team_id": 13,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "368": {
+      "last_date": "2026-04-04",
+      "last_game_id": 18447949,
+      "last_starter": 0,
+      "last_team_id": 23,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "37": {
+      "last_date": "2026-01-12",
+      "last_game_id": 18447377,
+      "last_starter": 0,
+      "last_team_id": 13,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    "371": {
+      "last_date": "2026-05-28",
+      "last_game_id": 21713533,
+      "last_starter": 0,
+      "last_team_id": 27,
+      "starter_history": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "373": {
+      "last_date": "2026-05-03",
+      "last_game_id": 21682000,
+      "last_starter": 1,
+      "last_team_id": 28,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "375": {
+      "last_date": "2026-03-10",
+      "last_game_id": 18447755,
+      "last_starter": 1,
+      "last_team_id": 3,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "377": {
+      "last_date": "2026-03-23",
+      "last_game_id": 18447864,
+      "last_starter": 0,
+      "last_team_id": 17,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "377705601": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448011,
+      "last_starter": 0,
+      "last_team_id": 5,
+      "starter_history": [
+        0,
+        0
+      ]
+    },
+    "378": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682793,
+      "last_starter": 1,
+      "last_team_id": 10,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "379": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448011,
+      "last_starter": 1,
+      "last_team_id": 7,
+      "starter_history": [
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        1
+      ]
+    },
+    "380": {
+      "last_date": "2026-04-14",
+      "last_game_id": 21681576,
+      "last_starter": 0,
+      "last_team_id": 16,
+      "starter_history": [
+        0,
+        1,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017507": {
+      "last_date": "2026-03-29",
+      "last_game_id": 18447901,
+      "last_starter": 1,
+      "last_team_id": 12,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "38017620": {
+      "last_date": "2026-04-05",
+      "last_game_id": 18447951,
+      "last_starter": 0,
+      "last_team_id": 3,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017630": {
+      "last_date": "2026-02-06",
+      "last_game_id": 18447562,
+      "last_starter": 0,
+      "last_team_id": 18,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017649": {
+      "last_date": "2026-06-13",
+      "last_game_id": 21716138,
+      "last_starter": 1,
+      "last_team_id": 27,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "38017656": {
+      "last_date": "2026-03-07",
+      "last_game_id": 18447736,
+      "last_starter": 1,
+      "last_team_id": 15,
+      "starter_history": [
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "38017663": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448010,
+      "last_starter": 1,
+      "last_team_id": 3,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "38017676": {
+      "last_date": "2026-05-10",
+      "last_game_id": 21708680,
+      "last_starter": 0,
+      "last_team_id": 23,
+      "starter_history": [
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017677": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681992,
+      "last_starter": 1,
+      "last_team_id": 1,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "38017679": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448005,
+      "last_starter": 0,
+      "last_team_id": 30,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017682": {
+      "last_date": "2026-02-11",
+      "last_game_id": 18447596,
+      "last_starter": 0,
+      "last_team_id": 5,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    "38017683": {
+      "last_date": "2026-05-03",
+      "last_game_id": 21684819,
+      "last_starter": 1,
+      "last_team_id": 22,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "38017684": {
+      "last_date": "2026-05-01",
+      "last_game_id": 21681996,
+      "last_starter": 1,
+      "last_team_id": 11,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "38017685": {
+      "last_date": "2026-05-30",
+      "last_game_id": 21713534,
+      "last_starter": 1,
+      "last_team_id": 21,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "38017686": {
+      "last_date": "2026-04-15",
+      "last_game_id": 21681584,
+      "last_starter": 0,
+      "last_team_id": 13,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017688": {
+      "last_date": "2026-02-25",
+      "last_game_id": 18447663,
+      "last_starter": 1,
+      "last_team_id": 26,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "38017690": {
+      "last_date": "2026-04-28",
+      "last_game_id": 21681989,
+      "last_starter": 0,
+      "last_team_id": 25,
+      "starter_history": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017691": {
+      "last_date": "2026-04-10",
+      "last_game_id": 18448001,
+      "last_starter": 0,
+      "last_team_id": 13,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017692": {
+      "last_date": "2026-02-09",
+      "last_game_id": 18447579,
+      "last_starter": 0,
+      "last_team_id": 4,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017693": {
+      "last_date": "2026-04-28",
+      "last_game_id": 21681989,
+      "last_starter": 0,
+      "last_team_id": 25,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017694": {
+      "last_date": "2026-05-17",
+      "last_game_id": 21709241,
+      "last_starter": 1,
+      "last_team_id": 9,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "38017695": {
+      "last_date": "2026-05-01",
+      "last_game_id": 21681996,
+      "last_starter": 1,
+      "last_team_id": 11,
+      "starter_history": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "38017696": {
+      "last_date": "2026-04-04",
+      "last_game_id": 18447947,
+      "last_starter": 0,
+      "last_team_id": 16,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017697": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448011,
+      "last_starter": 1,
+      "last_team_id": 7,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "38017698": {
+      "last_date": "2026-04-14",
+      "last_game_id": 21681582,
+      "last_starter": 1,
+      "last_team_id": 24,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "38017699": {
+      "last_date": "2026-06-13",
+      "last_game_id": 21716138,
+      "last_starter": 0,
+      "last_team_id": 20,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017700": {
+      "last_date": "2026-05-11",
+      "last_game_id": 21709231,
+      "last_starter": 0,
+      "last_team_id": 9,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017702": {
+      "last_date": "2026-04-10",
+      "last_game_id": 18447999,
+      "last_starter": 1,
+      "last_team_id": 29,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "38017703": {
+      "last_date": "2026-05-28",
+      "last_game_id": 21713533,
+      "last_starter": 0,
+      "last_team_id": 21,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    "38017704": {
+      "last_date": "2026-03-24",
+      "last_game_id": 18447865,
+      "last_starter": 1,
+      "last_team_id": 26,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "38017705": {
+      "last_date": "2026-01-20",
+      "last_game_id": 18447434,
+      "last_starter": 0,
+      "last_team_id": 29,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    "38017706": {
+      "last_date": "2026-05-30",
+      "last_game_id": 21713534,
+      "last_starter": 0,
+      "last_team_id": 21,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017707": {
+      "last_date": "2026-05-01",
+      "last_game_id": 21681996,
+      "last_starter": 0,
+      "last_team_id": 11,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017708": {
+      "last_date": "2026-03-08",
+      "last_game_id": 18447743,
+      "last_starter": 0,
+      "last_team_id": 19,
+      "starter_history": [
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017709": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681994,
+      "last_starter": 1,
+      "last_team_id": 8,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "38017710": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681992,
+      "last_starter": 0,
+      "last_team_id": 1,
+      "starter_history": [
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017711": {
+      "last_date": "2026-05-10",
+      "last_game_id": 21708680,
+      "last_starter": 0,
+      "last_team_id": 23,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017712": {
+      "last_date": "2026-04-08",
+      "last_game_id": 18447978,
+      "last_starter": 1,
+      "last_team_id": 17,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "38017714": {
+      "last_date": "2026-05-25",
+      "last_game_id": 21713901,
+      "last_starter": 0,
+      "last_team_id": 6,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017715": {
+      "last_date": "2026-04-05",
+      "last_game_id": 18447951,
+      "last_starter": 0,
+      "last_team_id": 3,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017716": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448009,
+      "last_starter": 1,
+      "last_team_id": 17,
+      "starter_history": [
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "38017717": {
+      "last_date": "2026-05-02",
+      "last_game_id": 21682743,
+      "last_starter": 1,
+      "last_team_id": 2,
+      "starter_history": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "38017718": {
+      "last_date": "2026-02-25",
+      "last_game_id": 18447660,
+      "last_starter": 0,
+      "last_team_id": 21,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017719": {
+      "last_date": "2026-05-10",
+      "last_game_id": 21708680,
+      "last_starter": 0,
+      "last_team_id": 23,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017720": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448007,
+      "last_starter": 0,
+      "last_team_id": 16,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017721": {
+      "last_date": "2026-04-01",
+      "last_game_id": 18447930,
+      "last_starter": 0,
+      "last_team_id": 8,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        0
+      ]
+    },
+    "38017722": {
+      "last_date": "2026-05-10",
+      "last_game_id": 21708680,
+      "last_starter": 0,
+      "last_team_id": 23,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017723": {
+      "last_date": "2026-02-24",
+      "last_game_id": 18447650,
+      "last_starter": 0,
+      "last_team_id": 30,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017724": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681992,
+      "last_starter": 0,
+      "last_team_id": 1,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017725": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682706,
+      "last_starter": 1,
+      "last_team_id": 4,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "38017727": {
+      "last_date": "2026-04-27",
+      "last_game_id": 21684902,
+      "last_starter": 1,
+      "last_team_id": 24,
+      "starter_history": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1
+      ]
+    },
+    "38017728": {
+      "last_date": "2026-05-07",
+      "last_game_id": 21708301,
+      "last_starter": 0,
+      "last_team_id": 14,
+      "starter_history": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017729": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681994,
+      "last_starter": 0,
+      "last_team_id": 8,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017730": {
+      "last_date": "2026-05-10",
+      "last_game_id": 21708680,
+      "last_starter": 0,
+      "last_team_id": 23,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017731": {
+      "last_date": "2026-02-23",
+      "last_game_id": 18447648,
+      "last_starter": 0,
+      "last_team_id": 29,
+      "starter_history": [
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "38017733": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448009,
+      "last_starter": 1,
+      "last_team_id": 17,
+      "starter_history": [
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "38017734": {
+      "last_date": "2026-05-03",
+      "last_game_id": 21684819,
+      "last_starter": 1,
+      "last_team_id": 22,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1
+      ]
+    },
+    "38017739": {
+      "last_date": "2026-04-14",
+      "last_game_id": 21681576,
+      "last_starter": 0,
+      "last_team_id": 16,
+      "starter_history": [
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0
+      ]
+    },
+    "383": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448009,
+      "last_starter": 1,
+      "last_team_id": 17,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "387": {
+      "last_date": "2026-05-15",
+      "last_game_id": 21707977,
+      "last_starter": 1,
+      "last_team_id": 18,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "39398582": {
+      "last_date": "2025-12-26",
+      "last_game_id": 18447238,
+      "last_starter": 0,
+      "last_team_id": 22,
+      "starter_history": [
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    "397": {
+      "last_date": "2026-05-17",
+      "last_game_id": 21709241,
+      "last_starter": 0,
+      "last_team_id": 9,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0
+      ]
+    },
+    "399": {
+      "last_date": "2026-06-13",
+      "last_game_id": 21716138,
+      "last_starter": 0,
+      "last_team_id": 20,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "4": {
+      "last_date": "2026-04-14",
+      "last_game_id": 21681576,
+      "last_starter": 1,
+      "last_team_id": 16,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "405": {
+      "last_date": "2026-01-10",
+      "last_game_id": 18447360,
+      "last_starter": 0,
+      "last_team_id": 7,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "406": {
+      "last_date": "2026-02-04",
+      "last_game_id": 18447549,
+      "last_starter": 1,
+      "last_team_id": 26,
+      "starter_history": [
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "407": {
+      "last_date": "2026-02-09",
+      "last_game_id": 18447579,
+      "last_starter": 0,
+      "last_team_id": 9,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "409": {
+      "last_date": "2026-05-23",
+      "last_game_id": 21713899,
+      "last_starter": 0,
+      "last_team_id": 6,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "413": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448011,
+      "last_starter": 1,
+      "last_team_id": 5,
+      "starter_history": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "414": {
+      "last_date": "2026-06-13",
+      "last_game_id": 21716138,
+      "last_starter": 0,
+      "last_team_id": 20,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "416": {
+      "last_date": "2026-04-03",
+      "last_game_id": 18447938,
+      "last_starter": 1,
+      "last_team_id": 12,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "419": {
+      "last_date": "2026-02-21",
+      "last_game_id": 18447632,
+      "last_starter": 0,
+      "last_team_id": 5,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    "4197387": {
+      "last_date": "2026-04-28",
+      "last_game_id": 21681989,
+      "last_starter": 0,
+      "last_team_id": 25,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "420": {
+      "last_date": "2026-05-11",
+      "last_game_id": 21708305,
+      "last_starter": 1,
+      "last_team_id": 14,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "434": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21682737,
+      "last_starter": 1,
+      "last_team_id": 2,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "436": {
+      "last_date": "2026-05-03",
+      "last_game_id": 21682000,
+      "last_starter": 0,
+      "last_team_id": 28,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "443": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448011,
+      "last_starter": 0,
+      "last_team_id": 7,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "44477024": {
+      "last_date": "2026-02-21",
+      "last_game_id": 18447633,
+      "last_starter": 0,
+      "last_team_id": 27,
+      "starter_history": [
+        0,
+        0
+      ]
+    },
+    "44477062": {
+      "last_date": "2026-04-27",
+      "last_game_id": 21684902,
+      "last_starter": 0,
+      "last_team_id": 24,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "44477085": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448006,
+      "last_starter": 1,
+      "last_team_id": 12,
+      "starter_history": [
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "447": {
+      "last_date": "2026-06-13",
+      "last_game_id": 21716138,
+      "last_starter": 1,
+      "last_team_id": 20,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "45088184": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681992,
+      "last_starter": 0,
+      "last_team_id": 1,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0
+      ]
+    },
+    "452": {
+      "last_date": "2026-04-10",
+      "last_game_id": 18447997,
+      "last_starter": 1,
+      "last_team_id": 17,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "455": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681994,
+      "last_starter": 0,
+      "last_team_id": 8,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "457": {
+      "last_date": "2026-05-11",
+      "last_game_id": 21708305,
+      "last_starter": 0,
+      "last_team_id": 14,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "460": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21682737,
+      "last_starter": 0,
+      "last_team_id": 2,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "462": {
+      "last_date": "2026-05-03",
+      "last_game_id": 21684819,
+      "last_starter": 0,
+      "last_team_id": 22,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "472": {
+      "last_date": "2026-03-19",
+      "last_game_id": 18447833,
+      "last_starter": 1,
+      "last_team_id": 26,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "473": {
+      "last_date": "2026-05-02",
+      "last_game_id": 21682743,
+      "last_starter": 1,
+      "last_team_id": 2,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "475": {
+      "last_date": "2026-04-14",
+      "last_game_id": 21681576,
+      "last_starter": 1,
+      "last_team_id": 16,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "476": {
+      "last_date": "2026-04-28",
+      "last_game_id": 21681989,
+      "last_starter": 0,
+      "last_team_id": 25,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "48": {
+      "last_date": "2026-05-28",
+      "last_game_id": 21713533,
+      "last_starter": 0,
+      "last_team_id": 27,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "480": {
+      "last_date": "2026-05-30",
+      "last_game_id": 21713534,
+      "last_starter": 0,
+      "last_team_id": 21,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "488": {
+      "last_date": "2026-04-09",
+      "last_game_id": 18447984,
+      "last_starter": 1,
+      "last_team_id": 5,
+      "starter_history": [
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "490": {
+      "last_date": "2026-03-16",
+      "last_game_id": 18447802,
+      "last_starter": 1,
+      "last_team_id": 30,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "493": {
+      "last_date": "2026-03-18",
+      "last_game_id": 18447819,
+      "last_starter": 1,
+      "last_team_id": 12,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "53": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448017,
+      "last_starter": 0,
+      "last_team_id": 13,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "56677582": {
+      "last_date": "2026-04-25",
+      "last_game_id": 21681983,
+      "last_starter": 0,
+      "last_team_id": 8,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "56677722": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448010,
+      "last_starter": 0,
+      "last_team_id": 3,
+      "starter_history": [
+        0,
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "56677738": {
+      "last_date": "2026-04-10",
+      "last_game_id": 18447995,
+      "last_starter": 0,
+      "last_team_id": 22,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "56677747": {
+      "last_date": "2026-04-28",
+      "last_game_id": 21681989,
+      "last_starter": 1,
+      "last_team_id": 25,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "56677776": {
+      "last_date": "2026-04-27",
+      "last_game_id": 21681987,
+      "last_starter": 0,
+      "last_team_id": 8,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0
+      ]
+    },
+    "56677778": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448016,
+      "last_starter": 1,
+      "last_team_id": 29,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "56677782": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448011,
+      "last_starter": 1,
+      "last_team_id": 5,
+      "starter_history": [
+        0,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "56677785": {
+      "last_date": "2026-04-14",
+      "last_game_id": 21681576,
+      "last_starter": 0,
+      "last_team_id": 16,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "56677791": {
+      "last_date": "2026-04-28",
+      "last_game_id": 21681989,
+      "last_starter": 0,
+      "last_team_id": 25,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "56677792": {
+      "last_date": "2026-05-17",
+      "last_game_id": 21709241,
+      "last_starter": 0,
+      "last_team_id": 9,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "56677795": {
+      "last_date": "2025-11-25",
+      "last_game_id": 18447079,
+      "last_starter": 0,
+      "last_team_id": 1,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "56677799": {
+      "last_date": "2026-05-03",
+      "last_game_id": 21682000,
+      "last_starter": 0,
+      "last_team_id": 28,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "56677806": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681992,
+      "last_starter": 0,
+      "last_team_id": 1,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "56677817": {
+      "last_date": "2026-04-28",
+      "last_game_id": 21681989,
+      "last_starter": 0,
+      "last_team_id": 25,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "56677822": {
+      "last_date": "2026-06-13",
+      "last_game_id": 21716138,
+      "last_starter": 1,
+      "last_team_id": 27,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "56677823": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682706,
+      "last_starter": 1,
+      "last_team_id": 4,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "56677824": {
+      "last_date": "2026-04-08",
+      "last_game_id": 18447980,
+      "last_starter": 1,
+      "last_team_id": 15,
+      "starter_history": [
+        0,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "56677825": {
+      "last_date": "2026-05-01",
+      "last_game_id": 21681996,
+      "last_starter": 1,
+      "last_team_id": 11,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "56677826": {
+      "last_date": "2026-05-17",
+      "last_game_id": 21709241,
+      "last_starter": 1,
+      "last_team_id": 9,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "56677827": {
+      "last_date": "2026-05-03",
+      "last_game_id": 21684819,
+      "last_starter": 0,
+      "last_team_id": 22,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "56677828": {
+      "last_date": "2026-05-03",
+      "last_game_id": 21682000,
+      "last_starter": 0,
+      "last_team_id": 28,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "56677829": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448012,
+      "last_starter": 1,
+      "last_team_id": 15,
+      "starter_history": [
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1
+      ]
+    },
+    "56677830": {
+      "last_date": "2026-04-06",
+      "last_game_id": 18447963,
+      "last_starter": 1,
+      "last_team_id": 15,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "56677831": {
+      "last_date": "2025-12-04",
+      "last_game_id": 18447143,
+      "last_starter": 0,
+      "last_team_id": 30,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "56677832": {
+      "last_date": "2026-04-10",
+      "last_game_id": 18447993,
+      "last_starter": 1,
+      "last_team_id": 12,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "56677833": {
+      "last_date": "2026-05-30",
+      "last_game_id": 21713534,
+      "last_starter": 1,
+      "last_team_id": 21,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        1
+      ]
+    },
+    "56677834": {
+      "last_date": "2026-03-11",
+      "last_game_id": 18447767,
+      "last_starter": 1,
+      "last_team_id": 29,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "56677837": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448013,
+      "last_starter": 1,
+      "last_team_id": 19,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "56677838": {
+      "last_date": "2026-04-09",
+      "last_game_id": 18447988,
+      "last_starter": 0,
+      "last_team_id": 14,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "56677839": {
+      "last_date": "2026-04-22",
+      "last_game_id": 21684786,
+      "last_starter": 0,
+      "last_team_id": 22,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "56677840": {
+      "last_date": "2025-11-21",
+      "last_game_id": 18447049,
+      "last_starter": 0,
+      "last_team_id": 7,
+      "starter_history": [
+        1,
+        1,
+        1,
+        0,
+        0,
+        1,
+        0
+      ]
+    },
+    "56677841": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448012,
+      "last_starter": 1,
+      "last_team_id": 15,
+      "starter_history": [
+        0,
+        0,
+        0,
+        1,
+        1
+      ]
+    },
+    "56677842": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448016,
+      "last_starter": 0,
+      "last_team_id": 29,
+      "starter_history": [
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    "56677843": {
+      "last_date": "2026-04-03",
+      "last_game_id": 18447940,
+      "last_starter": 1,
+      "last_team_id": 3,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "56677844": {
+      "last_date": "2026-04-10",
+      "last_game_id": 18447990,
+      "last_starter": 1,
+      "last_team_id": 30,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "56677845": {
+      "last_date": "2025-10-27",
+      "last_game_id": 18446861,
+      "last_starter": 0,
+      "last_team_id": 9,
+      "starter_history": [
+        0
+      ]
+    },
+    "56677846": {
+      "last_date": "2026-05-09",
+      "last_game_id": 21708303,
+      "last_starter": 0,
+      "last_team_id": 14,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "56677849": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448006,
+      "last_starter": 1,
+      "last_team_id": 12,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "56677850": {
+      "last_date": "2026-04-28",
+      "last_game_id": 21681989,
+      "last_starter": 1,
+      "last_team_id": 25,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "56677851": {
+      "last_date": "2026-05-15",
+      "last_game_id": 21707977,
+      "last_starter": 0,
+      "last_team_id": 18,
+      "starter_history": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "56677852": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448009,
+      "last_starter": 0,
+      "last_team_id": 17,
+      "starter_history": [
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "56677854": {
+      "last_date": "2025-12-05",
+      "last_game_id": 18447150,
+      "last_starter": 0,
+      "last_team_id": 6,
+      "starter_history": [
+        0,
+        0,
+        0
+      ]
+    },
+    "56677856": {
+      "last_date": "2026-04-15",
+      "last_game_id": 21681584,
+      "last_starter": 0,
+      "last_team_id": 13,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "56677857": {
+      "last_date": "2026-05-15",
+      "last_game_id": 21707977,
+      "last_starter": 0,
+      "last_team_id": 18,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "56677858": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682793,
+      "last_starter": 1,
+      "last_team_id": 10,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "56677859": {
+      "last_date": "2026-04-06",
+      "last_game_id": 18447963,
+      "last_starter": 1,
+      "last_team_id": 15,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "56677861": {
+      "last_date": "2026-04-03",
+      "last_game_id": 18447938,
+      "last_starter": 1,
+      "last_team_id": 12,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "56677862": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448006,
+      "last_starter": 1,
+      "last_team_id": 12,
+      "starter_history": [
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1
+      ]
+    },
+    "56677864": {
+      "last_date": "2026-05-02",
+      "last_game_id": 21682743,
+      "last_starter": 0,
+      "last_team_id": 2,
+      "starter_history": [
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "56677866": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448005,
+      "last_starter": 0,
+      "last_team_id": 30,
+      "starter_history": [
+        0,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    "56677871": {
+      "last_date": "2026-02-09",
+      "last_game_id": 18447580,
+      "last_starter": 0,
+      "last_team_id": 3,
+      "starter_history": [
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "56677872": {
+      "last_date": "2026-05-25",
+      "last_game_id": 21713901,
+      "last_starter": 0,
+      "last_team_id": 6,
+      "starter_history": [
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "56783340": {
+      "last_date": "2026-01-18",
+      "last_game_id": 18447420,
+      "last_starter": 0,
+      "last_team_id": 25,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "57": {
+      "last_date": "2026-04-27",
+      "last_game_id": 21684902,
+      "last_starter": 1,
+      "last_team_id": 24,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "57875092": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682793,
+      "last_starter": 1,
+      "last_team_id": 10,
+      "starter_history": [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1
+      ]
+    },
+    "58": {
+      "last_date": "2026-01-30",
+      "last_game_id": 18447507,
+      "last_starter": 0,
+      "last_team_id": 2,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "60": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681992,
+      "last_starter": 0,
+      "last_team_id": 1,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "61": {
+      "last_date": "2026-06-13",
+      "last_game_id": 21716138,
+      "last_starter": 1,
+      "last_team_id": 20,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "62": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682706,
+      "last_starter": 1,
+      "last_team_id": 4,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "64268165": {
+      "last_date": "2025-12-23",
+      "last_game_id": 18447225,
+      "last_starter": 0,
+      "last_team_id": 20,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "64269023": {
+      "last_date": "2026-05-23",
+      "last_game_id": 21713899,
+      "last_starter": 0,
+      "last_team_id": 20,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "64270026": {
+      "last_date": "2026-04-08",
+      "last_game_id": 18447978,
+      "last_starter": 0,
+      "last_team_id": 17,
+      "starter_history": [
+        0,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0,
+        1,
+        0
+      ]
+    },
+    "64270311": {
+      "last_date": "2025-12-14",
+      "last_game_id": 20054971,
+      "last_starter": 0,
+      "last_team_id": 4,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "66": {
+      "last_date": "2026-04-27",
+      "last_game_id": 21684902,
+      "last_starter": 1,
+      "last_team_id": 24,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "666400": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681992,
+      "last_starter": 1,
+      "last_team_id": 1,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "666423": {
+      "last_date": "2026-05-03",
+      "last_game_id": 21682000,
+      "last_starter": 1,
+      "last_team_id": 28,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "666442": {
+      "last_date": "2026-05-01",
+      "last_game_id": 21684812,
+      "last_starter": 0,
+      "last_team_id": 22,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "666505": {
+      "last_date": "2025-12-20",
+      "last_game_id": 18447200,
+      "last_starter": 1,
+      "last_team_id": 15,
+      "starter_history": [
+        1,
+        1
+      ]
+    },
+    "666508": {
+      "last_date": "2026-04-03",
+      "last_game_id": 18447940,
+      "last_starter": 1,
+      "last_team_id": 3,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "666511": {
+      "last_date": "2026-04-27",
+      "last_game_id": 21684902,
+      "last_starter": 0,
+      "last_team_id": 24,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "666541": {
+      "last_date": "2026-05-30",
+      "last_game_id": 21713534,
+      "last_starter": 1,
+      "last_team_id": 21,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "666577": {
+      "last_date": "2026-04-05",
+      "last_game_id": 18447958,
+      "last_starter": 1,
+      "last_team_id": 7,
+      "starter_history": [
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "666581": {
+      "last_date": "2026-04-15",
+      "last_game_id": 21681584,
+      "last_starter": 1,
+      "last_team_id": 13,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "666604": {
+      "last_date": "2026-05-11",
+      "last_game_id": 21709231,
+      "last_starter": 0,
+      "last_team_id": 9,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "666609": {
+      "last_date": "2026-05-11",
+      "last_game_id": 21708305,
+      "last_starter": 1,
+      "last_team_id": 14,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "666626": {
+      "last_date": "2026-05-11",
+      "last_game_id": 21708305,
+      "last_starter": 0,
+      "last_team_id": 14,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "666633": {
+      "last_date": "2026-04-14",
+      "last_game_id": 21681576,
+      "last_starter": 1,
+      "last_team_id": 16,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "666656": {
+      "last_date": "2026-02-06",
+      "last_game_id": 18447564,
+      "last_starter": 1,
+      "last_team_id": 26,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1
+      ]
+    },
+    "666675": {
+      "last_date": "2026-04-05",
+      "last_game_id": 18447959,
+      "last_starter": 0,
+      "last_team_id": 26,
+      "starter_history": [
+        0,
+        0
+      ]
+    },
+    "666676": {
+      "last_date": "2026-03-23",
+      "last_game_id": 18447855,
+      "last_starter": 1,
+      "last_team_id": 15,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "666679": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681994,
+      "last_starter": 1,
+      "last_team_id": 8,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "666682": {
+      "last_date": "2026-06-13",
+      "last_game_id": 21716138,
+      "last_starter": 0,
+      "last_team_id": 27,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "666703": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448016,
+      "last_starter": 0,
+      "last_team_id": 29,
+      "starter_history": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "666743": {
+      "last_date": "2026-04-03",
+      "last_game_id": 18447940,
+      "last_starter": 1,
+      "last_team_id": 3,
+      "starter_history": [
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1,
+        0,
+        1,
+        1
+      ]
+    },
+    "666747": {
+      "last_date": "2026-03-15",
+      "last_game_id": 18447795,
+      "last_starter": 0,
+      "last_team_id": 7,
+      "starter_history": [
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "666754": {
+      "last_date": "2025-12-23",
+      "last_game_id": 18447222,
+      "last_starter": 0,
+      "last_team_id": 12,
+      "starter_history": [
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "666767": {
+      "last_date": "2026-05-28",
+      "last_game_id": 21713533,
+      "last_starter": 0,
+      "last_team_id": 27,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "666786": {
+      "last_date": "2026-01-21",
+      "last_game_id": 18447441,
+      "last_starter": 1,
+      "last_team_id": 15,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "666848": {
+      "last_date": "2026-04-10",
+      "last_game_id": 18447992,
+      "last_starter": 1,
+      "last_team_id": 19,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1
+      ]
+    },
+    "666849": {
+      "last_date": "2026-03-17",
+      "last_game_id": 18447813,
+      "last_starter": 1,
+      "last_team_id": 17,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "666908": {
+      "last_date": "2026-05-25",
+      "last_game_id": 21713901,
+      "last_starter": 1,
+      "last_team_id": 6,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "666923": {
+      "last_date": "2026-04-28",
+      "last_game_id": 21681989,
+      "last_starter": 0,
+      "last_team_id": 25,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "666940": {
+      "last_date": "2026-05-25",
+      "last_game_id": 21713901,
+      "last_starter": 0,
+      "last_team_id": 6,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    "666950": {
+      "last_date": "2026-04-05",
+      "last_game_id": 18447958,
+      "last_starter": 1,
+      "last_team_id": 7,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "666956": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682706,
+      "last_starter": 0,
+      "last_team_id": 4,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "666965": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682706,
+      "last_starter": 0,
+      "last_team_id": 4,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "666969": {
+      "last_date": "2026-04-05",
+      "last_game_id": 18447956,
+      "last_starter": 1,
+      "last_team_id": 19,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "667378": {
+      "last_date": "2026-05-15",
+      "last_game_id": 21707977,
+      "last_starter": 0,
+      "last_team_id": 18,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "69": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681994,
+      "last_starter": 0,
+      "last_team_id": 8,
+      "starter_history": [
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "70": {
+      "last_date": "2026-05-02",
+      "last_game_id": 21682743,
+      "last_starter": 1,
+      "last_team_id": 2,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "73": {
+      "last_date": "2026-06-13",
+      "last_game_id": 21716138,
+      "last_starter": 1,
+      "last_team_id": 20,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "74": {
+      "last_date": "2026-05-25",
+      "last_game_id": 21713901,
+      "last_starter": 0,
+      "last_team_id": 6,
+      "starter_history": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "79": {
+      "last_date": "2026-01-19",
+      "last_game_id": 18447430,
+      "last_starter": 1,
+      "last_team_id": 10,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1
+      ]
+    },
+    "795959473": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682793,
+      "last_starter": 0,
+      "last_team_id": 10,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0
+      ]
+    },
+    "8": {
+      "last_date": "2026-04-27",
+      "last_game_id": 21684902,
+      "last_starter": 0,
+      "last_team_id": 24,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    "81": {
+      "last_date": "2026-02-11",
+      "last_game_id": 18447605,
+      "last_starter": 0,
+      "last_team_id": 15,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    "83": {
+      "last_date": "2026-05-01",
+      "last_game_id": 21681996,
+      "last_starter": 0,
+      "last_team_id": 11,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "85": {
+      "last_date": "2026-05-03",
+      "last_game_id": 21684819,
+      "last_starter": 1,
+      "last_team_id": 22,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "87": {
+      "last_date": "2026-05-03",
+      "last_game_id": 21684819,
+      "last_starter": 0,
+      "last_team_id": 22,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "89": {
+      "last_date": "2026-05-30",
+      "last_game_id": 21713534,
+      "last_starter": 0,
+      "last_team_id": 21,
+      "starter_history": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "9": {
+      "last_date": "2026-05-25",
+      "last_game_id": 21713901,
+      "last_starter": 1,
+      "last_team_id": 6,
+      "starter_history": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    }
+  },
+  "season": 2025,
+  "team_count": 30,
+  "teams": {
+    "1": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681992,
+      "last_starters": [
+        303,
+        666400,
+        3547244,
+        17896040,
+        38017677
+      ]
+    },
+    "10": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682793,
+      "last_starters": [
+        115,
+        185,
+        378,
+        56677858,
+        57875092
+      ]
+    },
+    "11": {
+      "last_date": "2026-05-01",
+      "last_game_id": 21681996,
+      "last_starters": [
+        17896062,
+        38017684,
+        38017695,
+        56677825,
+        1028028519
+      ]
+    },
+    "12": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448006,
+      "last_starters": [
+        17896117,
+        19465584,
+        44477085,
+        56677849,
+        56677862
+      ]
+    },
+    "13": {
+      "last_date": "2026-04-15",
+      "last_game_id": 21681584,
+      "last_starters": [
+        139,
+        247,
+        274,
+        283,
+        666581
+      ]
+    },
+    "14": {
+      "last_date": "2026-05-11",
+      "last_game_id": 21708305,
+      "last_starters": [
+        22,
+        237,
+        420,
+        666609,
+        17553995
+      ]
+    },
+    "15": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448012,
+      "last_starters": [
+        173,
+        56677829,
+        56677841,
+        1057394959,
+        1080278663
+      ]
+    },
+    "16": {
+      "last_date": "2026-04-14",
+      "last_game_id": 21681576,
+      "last_starters": [
+        4,
+        475,
+        666633,
+        17553994,
+        1028029127
+      ]
+    },
+    "17": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448009,
+      "last_starters": [
+        383,
+        17896063,
+        38017716,
+        38017733,
+        1028266882
+      ]
+    },
+    "18": {
+      "last_date": "2026-05-15",
+      "last_game_id": 21707977,
+      "last_starters": [
+        176,
+        387,
+        3547238,
+        3547259,
+        17895983
+      ]
+    },
+    "19": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448013,
+      "last_starters": [
+        56677837,
+        1057267077,
+        1057274415,
+        1057390538,
+        1059059437
+      ]
+    },
+    "2": {
+      "last_date": "2026-05-02",
+      "last_game_id": 21682743,
+      "last_starters": [
+        70,
+        473,
+        17896056,
+        38017717,
+        1028028434
+      ]
+    },
+    "20": {
+      "last_date": "2026-06-13",
+      "last_game_id": 21716138,
+      "last_starters": [
+        18,
+        61,
+        73,
+        202,
+        447
+      ]
+    },
+    "21": {
+      "last_date": "2026-05-30",
+      "last_game_id": 21713534,
+      "last_starters": [
+        175,
+        201,
+        666541,
+        38017685,
+        56677833
+      ]
+    },
+    "22": {
+      "last_date": "2026-05-03",
+      "last_game_id": 21684819,
+      "last_starters": [
+        85,
+        3547287,
+        17896073,
+        38017683,
+        38017734
+      ]
+    },
+    "23": {
+      "last_date": "2026-05-10",
+      "last_game_id": 21708680,
+      "last_starters": [
+        145,
+        172,
+        360,
+        3547254,
+        1057261935
+      ]
+    },
+    "24": {
+      "last_date": "2026-04-27",
+      "last_game_id": 21684902,
+      "last_starters": [
+        57,
+        66,
+        17895966,
+        38017727,
+        1028036515
+      ]
+    },
+    "25": {
+      "last_date": "2026-04-28",
+      "last_game_id": 21681989,
+      "last_starters": [
+        214,
+        3547242,
+        56677747,
+        56677850,
+        1028025344
+      ]
+    },
+    "26": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448018,
+      "last_starters": [
+        3547249,
+        1028025242,
+        1028246478,
+        1057276634,
+        1057390745
+      ]
+    },
+    "27": {
+      "last_date": "2026-06-13",
+      "last_game_id": 21716138,
+      "last_starters": [
+        161,
+        3547246,
+        38017649,
+        56677822,
+        1028025261
+      ]
+    },
+    "28": {
+      "last_date": "2026-05-03",
+      "last_game_id": 21682000,
+      "last_starters": [
+        373,
+        666423,
+        17896055,
+        1028029111,
+        1028038426
+      ]
+    },
+    "29": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448016,
+      "last_starters": [
+        56677778,
+        1028029291,
+        1028214958,
+        1057260888,
+        1059992972
+      ]
+    },
+    "3": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448010,
+      "last_starters": [
+        24102396,
+        38017663,
+        1057279425,
+        1057279760,
+        1059753274
+      ]
+    },
+    "30": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448005,
+      "last_starters": [
+        3547302,
+        17896039,
+        1028025235,
+        1057279594,
+        1057391756
+      ]
+    },
+    "4": {
+      "last_date": "2026-04-17",
+      "last_game_id": 21682706,
+      "last_starters": [
+        62,
+        3547239,
+        38017725,
+        56677823,
+        1057263194
+      ]
+    },
+    "5": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448011,
+      "last_starters": [
+        413,
+        3547248,
+        3547274,
+        56677782,
+        1057395493
+      ]
+    },
+    "6": {
+      "last_date": "2026-05-25",
+      "last_game_id": 21713901,
+      "last_starters": [
+        9,
+        192,
+        322,
+        666908,
+        17896076
+      ]
+    },
+    "7": {
+      "last_date": "2026-04-12",
+      "last_game_id": 18448011,
+      "last_starters": [
+        315,
+        379,
+        38017697,
+        1057262088,
+        1057847894
+      ]
+    },
+    "8": {
+      "last_date": "2026-04-30",
+      "last_game_id": 21681994,
+      "last_starters": [
+        246,
+        335,
+        666679,
+        38017709,
+        1028255289
+      ]
+    },
+    "9": {
+      "last_date": "2026-05-17",
+      "last_game_id": 21709241,
+      "last_starters": [
+        200,
+        17896075,
+        38017694,
+        56677826,
+        1028240128
+      ]
+    }
+  }
+}
