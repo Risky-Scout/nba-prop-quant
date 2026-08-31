@@ -11,6 +11,10 @@ from nba_prop_quant.api import BDLClient
 from nba_prop_quant.settings import get_settings
 from nba_prop_quant.snapshot_schedule import due_windows
 from nba_prop_quant.storage import timestamped_jsonl_append
+from nba_prop_quant.prospective_snapshot import (
+    build_capture_id,
+    canonical_records_sha256,
+)
 
 console = Console()
 
@@ -190,6 +194,36 @@ def main() -> None:
             }
         )
 
+        active_player_method = getattr(
+            client,
+            "active_players",
+            None,
+        )
+
+        if active_player_method is None:
+            active_players = []
+        else:
+            try:
+                active_players = list(
+                    active_player_method(
+                        team_ids=team_ids
+                    )
+                )
+            except RuntimeError as exc:
+                active_players = []
+
+                errors.append(
+                    {
+                        "component": "active_players",
+                        "error": str(exc),
+                    }
+                )
+
+                console.print(
+                    "[yellow]Active-player capture "
+                    f"unavailable[/yellow]: {exc}"
+                )
+
         if games:
             timestamped_jsonl_append(
                 games,
@@ -199,6 +233,17 @@ def main() -> None:
                 snapshot_type="game",
                 captured_at=captured_at,
             )
+
+        if active_players:
+            timestamped_jsonl_append(
+                active_players,
+                settings.snapshot_dir
+                / "active_players"
+                / f"{args.date}.jsonl",
+                snapshot_type="active_player",
+                captured_at=captured_at,
+            )
+
 
         try:
             injuries = (
@@ -271,6 +316,7 @@ def main() -> None:
             )
 
         props_count = 0
+        all_props = []
 
         for game in games:
             game_id = int(
@@ -299,6 +345,10 @@ def main() -> None:
                     props
                 )
 
+                all_props.extend(
+                    props
+                )
+
                 timestamped_jsonl_append(
                     props,
                     settings.snapshot_dir
@@ -307,6 +357,31 @@ def main() -> None:
                     snapshot_type="live_player_prop",
                     captured_at=captured_at,
                 )
+
+        component_records = {
+            "games": games,
+            "active_players": active_players,
+            "injuries": injuries,
+            "lineups": lineups,
+            "player_props": all_props,
+        }
+
+        component_sha256 = {
+            name: canonical_records_sha256(
+                records
+            )
+            for name, records in (
+                component_records.items()
+            )
+        }
+
+        capture_id = build_capture_id(
+            date=args.date,
+            captured_at=captured_at,
+            window_ids=window_ids,
+            due_game_ids=due_game_ids,
+            component_sha256=component_sha256,
+        )
 
         capture_run = {
             "date": args.date,
@@ -325,6 +400,9 @@ def main() -> None:
             "games_count": len(
                 games
             ),
+            "active_players_count": len(
+                active_players
+            ),
             "game_ids": game_ids,
             "team_ids": team_ids,
             "injuries_count": len(
@@ -340,6 +418,8 @@ def main() -> None:
                 errors
             ),
             "errors": errors,
+            "component_sha256": component_sha256,
+            "capture_id": capture_id,
         }
 
         timestamped_jsonl_append(

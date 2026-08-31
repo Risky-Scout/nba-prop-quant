@@ -6,6 +6,9 @@ from nba_prop_quant.gate3_v2 import (
     resolve_gate3_snapshot_dir,
 )
 from nba_prop_quant.normalize import normalize_lineups
+from nba_prop_quant.prospective_snapshot import (
+    ProspectiveSnapshotClient,
+)
 
 import argparse
 from datetime import datetime, timezone
@@ -92,6 +95,25 @@ def parse_args() -> argparse.Namespace:
         ),
     )
 
+    parser.add_argument(
+        "--input-source",
+        choices=(
+            "snapshot",
+            "live",
+        ),
+        default="snapshot",
+        help=(
+            "Gate 3 production defaults to the "
+            "scheduled point-in-time snapshot."
+        ),
+    )
+
+    parser.add_argument(
+        "--snapshot-offset-minutes",
+        type=int,
+        default=20,
+    )
+
     return parser.parse_args()
 
 
@@ -114,13 +136,37 @@ def main() -> None:
         timezone.utc
     ).isoformat()
 
-    with BDLClient(
-        api_key=settings.bdl_api_key,
-        base_url=settings.bdl_base_url,
-        requests_per_minute=(
-            settings.bdl_requests_per_minute
-        ),
-    ) as client:
+    if args.input_source == "snapshot":
+        client_context = (
+            ProspectiveSnapshotClient(
+                snapshot_dir=(
+                    resolve_gate3_snapshot_dir(
+                        settings.snapshot_dir
+                    )
+                ),
+                target_date=args.date,
+                offset_minutes=(
+                    args.snapshot_offset_minutes
+                ),
+            )
+        )
+    else:
+        if not args.allow_predeployment:
+            raise RuntimeError(
+                "Direct live API projection input is "
+                "diagnostic/predeployment only. Gate 3 "
+                "external-test records require snapshots."
+            )
+
+        client_context = BDLClient(
+            api_key=settings.bdl_api_key,
+            base_url=settings.bdl_base_url,
+            requests_per_minute=(
+                settings.bdl_requests_per_minute
+            ),
+        )
+
+    with client_context as client:
         games = normalize_games(
             list(
                 client.games(
@@ -190,6 +236,9 @@ def main() -> None:
                 )
             )
         except RuntimeError as exc:
+            if args.input_source == "snapshot":
+                raise
+
             current_lineups = pd.DataFrame()
 
             console.print(
@@ -224,6 +273,30 @@ def main() -> None:
             "ERROR: upcoming slate feature builder "
             "returned zero player rows."
         )
+
+    if args.input_source == "snapshot":
+        lineage = client.lineage_frame()
+
+        if lineage.empty:
+            raise RuntimeError(
+                "No eligible T-20 prospective capture "
+                "lineage was available."
+            )
+
+        slate = slate.merge(
+            lineage,
+            on="game_id",
+            how="left",
+            validate="many_to_one",
+        )
+
+        if slate[
+            "gate3_capture_id"
+        ].isna().any():
+            raise RuntimeError(
+                "Projection rows missing prospective "
+                "capture lineage."
+            )
 
     experience_curves = joblib.load(
         settings.nba_prop_model_dir

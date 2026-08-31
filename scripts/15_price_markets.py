@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+from nba_prop_quant.prospective_snapshot import (
+    ProspectiveSnapshotClient,
+)
+
 from nba_prop_quant.gate3_v2 import (
+    resolve_gate3_snapshot_dir,
     GATE3_CHANGED_PROPS,
     load_gate3_runtime,
     prepare_gate3_candidate_probability_overrides,
@@ -78,6 +83,25 @@ def parse_args() -> argparse.Namespace:
         "--seed",
         type=int,
         default=73,
+    )
+
+    parser.add_argument(
+        "--input-source",
+        choices=(
+            "snapshot",
+            "live",
+        ),
+        default="snapshot",
+        help=(
+            "Gate 3 production defaults to the "
+            "scheduled point-in-time snapshot."
+        ),
+    )
+
+    parser.add_argument(
+        "--snapshot-offset-minutes",
+        type=int,
+        default=20,
     )
 
     return parser.parse_args()
@@ -455,13 +479,37 @@ def main() -> None:
 
     market_frames = []
 
-    with BDLClient(
-        api_key=settings.bdl_api_key,
-        base_url=settings.bdl_base_url,
-        requests_per_minute=(
-            settings.bdl_requests_per_minute
-        ),
-    ) as client:
+    if args.input_source == "snapshot":
+        client_context = (
+            ProspectiveSnapshotClient(
+                snapshot_dir=(
+                    resolve_gate3_snapshot_dir(
+                        settings.snapshot_dir
+                    )
+                ),
+                target_date=args.date,
+                offset_minutes=(
+                    args.snapshot_offset_minutes
+                ),
+            )
+        )
+    else:
+        if not args.allow_predeployment:
+            raise RuntimeError(
+                "Direct live API market input is "
+                "diagnostic/predeployment only. Gate 3 "
+                "external-test records require snapshots."
+            )
+
+        client_context = BDLClient(
+            api_key=settings.bdl_api_key,
+            base_url=settings.bdl_base_url,
+            requests_per_minute=(
+                settings.bdl_requests_per_minute
+            ),
+        )
+
+    with client_context as client:
         for game_id in sorted(
             projections[
                 "game_id"
@@ -474,10 +522,36 @@ def main() -> None:
             )
 
             if rows:
-                market_frames.append(
+                normalized_market = (
                     normalize_props(
                         rows
                     )
+                )
+
+                if (
+                    args.input_source
+                    == "snapshot"
+                ):
+                    lineage = (
+                        client.lineage_for_game(
+                            int(
+                                game_id
+                            )
+                        )
+                    )
+
+                    for key, value in (
+                        lineage.items()
+                    ):
+                        if key == "game_id":
+                            continue
+
+                        normalized_market[
+                            key
+                        ] = value
+
+                market_frames.append(
+                    normalized_market
                 )
 
     if not market_frames:
@@ -537,6 +611,66 @@ def main() -> None:
         ),
         validate="many_to_one",
     )
+
+    if args.input_source == "snapshot":
+        required_lineage = {
+            "gate3_capture_id",
+            "gate3_capture_id_market",
+            "gate3_capture_window_id",
+            "gate3_capture_window_id_market",
+            "gate3_captured_at_utc",
+            "gate3_captured_at_utc_market",
+        }
+
+        missing_lineage = (
+            required_lineage
+            - set(
+                merged.columns
+            )
+        )
+
+        if missing_lineage:
+            raise RuntimeError(
+                "Priced snapshot lineage missing columns: "
+                f"{sorted(missing_lineage)}"
+            )
+
+        capture_mismatch = (
+            merged[
+                "gate3_capture_id"
+            ].astype(str)
+            != merged[
+                "gate3_capture_id_market"
+            ].astype(str)
+        )
+
+        window_mismatch = (
+            merged[
+                "gate3_capture_window_id"
+            ].astype(str)
+            != merged[
+                "gate3_capture_window_id_market"
+            ].astype(str)
+        )
+
+        timestamp_mismatch = (
+            merged[
+                "gate3_captured_at_utc"
+            ].astype(str)
+            != merged[
+                "gate3_captured_at_utc_market"
+            ].astype(str)
+        )
+
+        if (
+            capture_mismatch.any()
+            or window_mismatch.any()
+            or timestamp_mismatch.any()
+        ):
+            raise RuntimeError(
+                "Projection and market pricing did not "
+                "use the identical prospective capture."
+            )
 
     if "availability_out" in merged.columns:
         out_mask = pd.to_numeric(
