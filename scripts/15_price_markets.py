@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from nba_prop_quant.gate3_v2 import (
+    GATE3_CHANGED_PROPS,
+    load_gate3_runtime,
+    prepare_gate3_candidate_probability_overrides,
+)
+
 import argparse
 import json
 from datetime import datetime, timezone
@@ -378,6 +384,39 @@ def main() -> None:
         / "market_probability_calibration_policy.json"
     )
 
+    gate3_runtime = load_gate3_runtime()
+
+    required_candidate_id = gate3_runtime[
+        "candidate_id"
+    ]
+
+    if (
+        "gate3_candidate_policy_id"
+        not in projections.columns
+    ):
+        raise RuntimeError(
+            "Projection file missing Gate 3 candidate identity"
+        )
+
+    projection_candidate_ids = set(
+        projections[
+            "gate3_candidate_policy_id"
+        ]
+        .dropna()
+        .astype(str)
+        .unique()
+    )
+
+    if projection_candidate_ids != {
+        required_candidate_id
+    }:
+        raise RuntimeError(
+            "Projection Gate 3 candidate ID mismatch. "
+            f"projection={projection_candidate_ids}, "
+            f"required={required_candidate_id}"
+        )
+
+
     frozen_prop_types = set(
         calibration_policy[
             "props"
@@ -534,6 +573,61 @@ def main() -> None:
                 ~out_mask
             ].copy()
 
+    if (
+        "gate3_role_ready"
+        not in merged.columns
+    ):
+        raise RuntimeError(
+            "Projection file missing gate3_role_ready"
+        )
+
+    gate3_role_ready = pd.to_numeric(
+        merged[
+            "gate3_role_ready"
+        ],
+        errors="coerce",
+    ).fillna(
+        0
+    ).astype(
+        int
+    ).eq(1)
+
+    changed_prop_mask = (
+        merged[
+            "prop_type"
+        ].isin(
+            GATE3_CHANGED_PROPS
+        )
+    )
+
+    gate3_unavailable = (
+        changed_prop_mask
+        & ~gate3_role_ready
+    )
+
+    if gate3_unavailable.any():
+        gate3_rejected = merged.loc[
+            gate3_unavailable
+        ].copy()
+
+        gate3_rejected[
+            "quote_filter_reason"
+        ] = (
+            "gate3_role_state_unavailable"
+        )
+
+        rejected = pd.concat(
+            [
+                rejected,
+                gate3_rejected,
+            ],
+            ignore_index=True,
+        )
+
+        merged = merged.loc[
+            ~gate3_unavailable
+        ].copy()
+
     if merged.empty:
         console.print(
             "[yellow]No eligible current markets "
@@ -564,9 +658,14 @@ def main() -> None:
                 marginal=marginals[
                     target
                 ],
-                mu_column=mu_columns[
-                    target
-                ],
+                mu_column=(
+                    "gate3_mu_ast"
+                    if prop_type
+                    == "assists"
+                    else mu_columns[
+                        target
+                    ]
+                ),
                 line_column="line_value",
             )
         )
@@ -732,6 +831,20 @@ def main() -> None:
         ignore_index=True,
     )
 
+    priced = (
+        prepare_gate3_candidate_probability_overrides(
+            priced,
+            calibration_policy=(
+                calibration_policy
+            ),
+            probability_parameters=(
+                gate3_runtime[
+                    "probability_parameters"
+                ]
+            ),
+        )
+    )
+
     probability_mass = (
         priced[
             "p_over"
@@ -796,7 +909,31 @@ def main() -> None:
 
     priced[
         "market_pricing_schema_version"
-    ] = 2
+    ] = 3
+
+    priced[
+        "gate3_candidate_policy_id"
+    ] = gate3_runtime[
+        "candidate_id"
+    ]
+
+    priced[
+        "gate3_policy_lock_commit"
+    ] = gate3_runtime[
+        "gate3_lock_commit"
+    ]
+
+    priced[
+        "gate3_deployment_manifest_sha256"
+    ] = gate3_runtime[
+        "deployment_manifest_sha256"
+    ]
+
+    priced[
+        "gate3_external_test_record"
+    ] = priced[
+        "external_test_record"
+    ]
 
     priced[
         "external_test_record"

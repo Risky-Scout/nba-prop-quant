@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+from nba_prop_quant.gate3_v2 import (
+    apply_gate3_role_state,
+    load_gate3_runtime,
+    resolve_gate3_snapshot_dir,
+)
+from nba_prop_quant.normalize import normalize_lineups
+
 import argparse
 from datetime import datetime, timezone
 from pathlib import Path
@@ -163,6 +170,32 @@ def main() -> None:
                 )
             )
         )
+
+        game_ids = sorted(
+            games[
+                "id"
+            ]
+            .dropna()
+            .astype(int)
+            .unique()
+            .tolist()
+        )
+
+        try:
+            current_lineups = normalize_lineups(
+                list(
+                    client.lineups(
+                        game_ids
+                    )
+                )
+            )
+        except RuntimeError as exc:
+            current_lineups = pd.DataFrame()
+
+            console.print(
+                "[yellow]Gate 3 current lineup "
+                f"capture unavailable[/yellow]: {exc}"
+            )
 
     history = load_history_box_stats(
         settings
@@ -340,6 +373,22 @@ def main() -> None:
         )
     )
 
+    gate3_runtime = load_gate3_runtime()
+
+    gate3_snapshot_dir = (
+        resolve_gate3_snapshot_dir(
+            settings.snapshot_dir
+        )
+    )
+
+    slate = apply_gate3_role_state(
+        slate,
+        current_lineups,
+        target_date=args.date,
+        snapshot_dir=gate3_snapshot_dir,
+        runtime=gate3_runtime,
+    )
+
     for target, missing in (
         missing_target_features.items()
     ):
@@ -467,7 +516,11 @@ def main() -> None:
 
     slate[
         "projection_schema_version"
-    ] = 2
+    ] = 3
+
+    slate[
+        "gate3_external_test_candidate"
+    ] = True
 
     history_dates = pd.to_datetime(
         history.get(
@@ -545,6 +598,11 @@ def main() -> None:
     console.print(
         f"Availability OUT: "
         f"{int(slate['availability_out'].sum()):,}"
+    )
+
+    console.print(
+        "Gate 3 role-ready players: "
+        f"{int(slate['gate3_role_ready'].sum()):,}"
     )
 
     console.print(

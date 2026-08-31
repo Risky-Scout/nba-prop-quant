@@ -852,6 +852,151 @@ def add_market_probability_layer(
             ] = slope
 
     out[
+        "base_calibrated_q_over_nonpush"
+    ] = out[
+        "calibrated_q_over_nonpush"
+    ]
+
+    out[
+        "base_calibration_method"
+    ] = out[
+        "calibration_method"
+    ]
+
+    out[
+        "base_calibration_intercept"
+    ] = out[
+        "calibration_intercept"
+    ]
+
+    out[
+        "base_calibration_slope"
+    ] = out[
+        "calibration_slope"
+    ]
+
+    out[
+        "gate3_candidate_applied"
+    ] = False
+
+    if (
+        "gate3_candidate_q_over_nonpush"
+        in out.columns
+    ):
+        candidate = pd.to_numeric(
+            out[
+                "gate3_candidate_q_over_nonpush"
+            ],
+            errors="coerce",
+        )
+
+        override = candidate.notna()
+
+        if override.any():
+            values = candidate.loc[
+                override
+            ]
+
+            if (
+                (values < 0.0).any()
+                or (values > 1.0).any()
+                or not np.isfinite(
+                    values.to_numpy(
+                        dtype=float
+                    )
+                ).all()
+            ):
+                raise RuntimeError(
+                    "Invalid Gate 3 candidate probability override"
+                )
+
+            out.loc[
+                override,
+                "calibrated_q_over_nonpush",
+            ] = values
+
+            out.loc[
+                override,
+                "gate3_candidate_applied",
+            ] = True
+
+            if (
+                "gate3_candidate_method"
+                in out.columns
+            ):
+                out.loc[
+                    override,
+                    "calibration_method",
+                ] = out.loc[
+                    override,
+                    "gate3_candidate_method",
+                ]
+
+            if (
+                "gate3_candidate_intercept"
+                in out.columns
+            ):
+                intercept_values = pd.to_numeric(
+                    out.loc[
+                        override,
+                        "gate3_candidate_intercept",
+                    ],
+                    errors="coerce",
+                )
+
+                valid = (
+                    intercept_values.notna()
+                )
+
+                if valid.any():
+                    target_index = (
+                        intercept_values.loc[
+                            valid
+                        ].index
+                    )
+
+                    out.loc[
+                        target_index,
+                        "calibration_intercept",
+                    ] = (
+                        intercept_values.loc[
+                            valid
+                        ]
+                    )
+
+            if (
+                "gate3_candidate_slope"
+                in out.columns
+            ):
+                slope_values = pd.to_numeric(
+                    out.loc[
+                        override,
+                        "gate3_candidate_slope",
+                    ],
+                    errors="coerce",
+                )
+
+                valid = (
+                    slope_values.notna()
+                )
+
+                if valid.any():
+                    target_index = (
+                        slope_values.loc[
+                            valid
+                        ].index
+                    )
+
+                    out.loc[
+                        target_index,
+                        "calibration_slope",
+                    ] = (
+                        slope_values.loc[
+                            valid
+                        ]
+                    )
+
+    out[
         "calibrated_q_under_nonpush"
     ] = (
         1.0
