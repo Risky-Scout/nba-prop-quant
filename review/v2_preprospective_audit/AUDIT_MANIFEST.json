@@ -1,0 +1,46 @@
+{
+  "created_at_utc": "2026-08-31T19:25:33.274360+00:00",
+  "development_market_superior_props": [
+    "steals",
+    "points_assists"
+  ],
+  "full_test_count_at_model_freeze": 43,
+  "gate3_policy": {
+    "assists": "v2_role_shock_calibrated",
+    "blocks": "frozen_selected_v1",
+    "points": "frozen_selected_v1",
+    "points_assists": "v2_role_increment",
+    "points_rebounds": "v2_role_increment",
+    "points_rebounds_assists": "frozen_selected_v1",
+    "rebounds": "frozen_selected_v1",
+    "rebounds_assists": "frozen_selected_v1",
+    "steals": "frozen_selected_v1",
+    "threes": "frozen_selected_v1"
+  },
+  "important_limits": [
+    "2025 is development evidence and has been repeatedly inspected.",
+    "Historical 2025 lineup records lack original announcement timestamps.",
+    "No untouched 2026-27 outcomes exist yet, so prospective market superiority is not claimed.",
+    "Gate 3 certification requires cryptographically verified scheduled T-20m snapshots.",
+    "No automatic betting threshold is enabled."
+  ],
+  "key_commits": {
+    "gate1_policy_lock": "bd6879f1e5fa8d95707d7d99aec4e72f75a5e3a0",
+    "gate2_certification_evidence": "cf09144f151e3c5a0c91bdb07e8449e69028504c",
+    "gate3_candidate_lock": "dd2d394",
+    "gate3_capture_protocol": "9a92514",
+    "gate3_deployment_artifacts": "1c49a37",
+    "gate3_production_candidate": "1bda231",
+    "model_source_and_lineage": "4def8ad33ccc56016fb19a97fceca6e027c9612a"
+  },
+  "model_source_commit": "4def8ad33ccc56016fb19a97fceca6e027c9612a",
+  "package": "nba_prop_quant_v2_preprospective_reviewer_audit",
+  "package_version": 1,
+  "primary_prospective_capture_window": "T-20m",
+  "prospective_market_superiority_claim": false,
+  "prospective_status": "pending_2026_27_outcomes",
+  "repository": "Risky-Scout/nba-prop-quant",
+  "review_branch_parent_commit": "4def8ad33ccc56016fb19a97fceca6e027c9612a",
+  "review_tag": "nba_prop_quant_v2_preprospective_review_20260831_4def8ad",
+  "runtime_file_count": 236
+}
