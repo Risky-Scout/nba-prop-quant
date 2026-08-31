@@ -1,0 +1,120 @@
+{
+  "assists_candidate": {
+    "calibration": "chronological prop-specific Platt",
+    "marginal": "frozen marginals_pre2025 ast",
+    "mean_adjustment": "mu_selected_ast * role_minutes / expected_minutes",
+    "minutes_source": "v2_role_shock_oof"
+  },
+  "branch": "development/v2-targeted-projection-repair",
+  "combo_candidate": {
+    "base_probability": "frozen q_selected",
+    "component_delta": "mu_component * (opportunity_ratio - 1)",
+    "eligible_props": [
+      "points_assists",
+      "points_rebounds"
+    ],
+    "gamma_penalty": 5.0,
+    "gamma_validation": "chronological_oof",
+    "opportunity_ratio": "role_minutes / expected_minutes",
+    "probability_rule": "logit(q_selected) + gamma * standardized_combo_delta"
+  },
+  "development_season": 2025,
+  "explicitly_rejected_gate1_variants": [
+    "points_minutes_mixture",
+    "points_starter_stack",
+    "points_conditional_dispersion_calibration",
+    "threes_3pa_role_calibration",
+    "rebounds_assists_role_increment",
+    "points_rebounds_assists_role_increment"
+  ],
+  "gate1_source_commit": "adcc924c2b2d882c41a00cc21f56193e5d79e595",
+  "historical_lineup_evidence": {
+    "certification_eligible_for_prospective_claims": false,
+    "development_only": true,
+    "manifest_path": "research/v2_lineup_backfill_2025/manifest.json",
+    "manifest_sha256": "39839d2671c9d017522993e859835d41fc4d34ac78a7b1df601a26f2f0b6d87f",
+    "normalized_lineup_path": "research/v2_lineup_backfill_2025/lineups_normalized.parquet",
+    "normalized_lineup_sha256": "6ecd82e14074cc2698d6427328e22a4abaf23c4d8f6edfd3648072a561e40b77",
+    "warning": "Historical lineup records lack original pregame announcement timestamps. They may be used for Gate 2 development certification but not Gate 3 prospective market-superiority claims."
+  },
+  "locked_at_utc": "2026-08-31T15:46:38.135589+00:00",
+  "locked_prop_policy": {
+    "assists": {
+      "candidate": "v2_role_shock_calibrated",
+      "decision": "gate2_candidate",
+      "historical_tuning_closed": true
+    },
+    "blocks": {
+      "candidate": "frozen_selected_v1",
+      "decision": "retain_and_protect",
+      "historical_tuning_closed": true
+    },
+    "points": {
+      "candidate": "frozen_selected_v1",
+      "decision": "retain",
+      "historical_tuning_closed": true
+    },
+    "points_assists": {
+      "candidate": "v2_role_increment",
+      "decision": "gate2_candidate",
+      "historical_tuning_closed": true
+    },
+    "points_rebounds": {
+      "candidate": "v2_role_increment",
+      "decision": "gate2_candidate",
+      "historical_tuning_closed": true
+    },
+    "points_rebounds_assists": {
+      "candidate": "frozen_selected_v1",
+      "decision": "retain",
+      "historical_tuning_closed": true
+    },
+    "rebounds": {
+      "candidate": "frozen_selected_v1",
+      "decision": "retain_and_protect",
+      "historical_tuning_closed": true
+    },
+    "rebounds_assists": {
+      "candidate": "frozen_selected_v1",
+      "decision": "retain",
+      "historical_tuning_closed": true
+    },
+    "steals": {
+      "candidate": "frozen_selected_v1",
+      "decision": "retain_and_protect",
+      "historical_tuning_closed": true
+    },
+    "threes": {
+      "candidate": "frozen_selected_v1",
+      "decision": "retain",
+      "historical_tuning_closed": true
+    }
+  },
+  "no_more_2025_tuning_before_gate2": true,
+  "policy_name": "nba_prop_quant_v2_gate1_candidate_lock",
+  "policy_version": 1,
+  "role_minutes_model": {
+    "estimator": "HistGradientBoostingRegressor",
+    "l2_regularization": 3.0,
+    "learning_rate": 0.05,
+    "max_iter": 300,
+    "max_leaf_nodes": 31,
+    "min_samples_leaf": 50,
+    "random_state": 20260830,
+    "target": "minutes - expected_minutes",
+    "validation": "chronological_game_oof"
+  },
+  "role_state_features": [
+    "starter",
+    "prev_starter",
+    "starter_rate5",
+    "starter_rate10",
+    "starter_surprise",
+    "promoted_to_starter",
+    "demoted_to_bench",
+    "team_starter_overlap",
+    "team_new_starters",
+    "team_lost_starters",
+    "team_lineup_rows"
+  ]
+}
