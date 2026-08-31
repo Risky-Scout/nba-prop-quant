@@ -1,0 +1,38 @@
+{
+  "eligibility_requirements": {
+    "capture_error_count": 0,
+    "capture_id_required": true,
+    "capture_reason": "scheduled",
+    "captured_before_tip": true,
+    "component_hash_verification_required": true,
+    "component_sha256_required": true,
+    "same_capture_required_for_projection_and_market": true
+  },
+  "grading_policy": "Primary prospective certification uses only T-20m records generated before tip from the frozen candidate.",
+  "locked_at_utc": "2026-08-31T19:14:27.961731+00:00",
+  "policy_name": "nba_prop_quant_v2_gate3_prospective_capture_policy",
+  "policy_version": 1,
+  "prediction_input_policy": "Gate 3 prospective production must consume the scheduled snapshot capture. Direct live API inputs are diagnostic/predeployment only.",
+  "primary_certification_window": {
+    "fallback_allowed": false,
+    "offset_minutes_before_tip": 20,
+    "window_label": "T-20m"
+  },
+  "prospective_market_superiority_claim": false,
+  "required_snapshot_components": [
+    "games",
+    "active_players",
+    "injuries",
+    "lineups",
+    "player_props"
+  ],
+  "retuning_from_prospective_results": false,
+  "secondary_monitoring_windows_minutes": [
+    1440,
+    480,
+    180,
+    90,
+    45,
+    5
+  ]
+}
