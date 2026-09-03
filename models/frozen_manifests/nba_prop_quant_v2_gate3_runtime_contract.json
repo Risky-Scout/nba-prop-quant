@@ -1,0 +1,289 @@
+{
+  "auto_bet": false,
+  "contract_name": "nba_prop_quant_v2_gate3_runtime_contract",
+  "contract_version": 1,
+  "description": "Declarative deployment-integrity contract for the already-frozen NBA Prop Quant v2 / Gate 3 model. This file lists which resources belong to the hosted production runtime; it does not define statistical behaviour and contains no hashes of binary model artifacts, which are distributed outside git and hashed by the bundle builder at build time.",
+  "excluded_development_resources": [
+    {
+      "path": "data/processed/oof_selected_means.parquet",
+      "reason": "Development out-of-fold mean predictions. Not read by scripts/10_predict_slate.py or scripts/15_price_markets.py."
+    },
+    {
+      "path": "data/processed/selected_means_distribution_split.parquet",
+      "reason": "Development distribution-fitting split. Only an input to historical fitting/certification, never to live inference."
+    },
+    {
+      "path": "data/processed/market_backtest/**",
+      "reason": "2025 retrospective market backtest evidence. Live pricing reads no backtest output."
+    },
+    {
+      "path": "research/v2_gate2_certification_outputs/**",
+      "reason": "Gate 2 certification evidence. Its SHA256SUMS group is verified at build time, but nothing under it is loaded at runtime."
+    },
+    {
+      "path": "data/raw/seasons/**/games.parquet",
+      "reason": "load_history_box_stats() globs stats.parquet only; upcoming games arrive from the prospective snapshot, not from historical raw games."
+    },
+    {
+      "path": "data/snapshots/**",
+      "reason": "Mutable append-only prospective capture stream. Runtime state, not a frozen model artifact."
+    },
+    {
+      "path": "data/processed/projections/**",
+      "reason": "Mutable per-slate output written by scripts/10_predict_slate.py."
+    },
+    {
+      "path": "data/processed/priced_markets/**",
+      "reason": "Mutable per-slate output written by scripts/15_price_markets.py."
+    },
+    {
+      "path": "data/validation/**",
+      "reason": "Development QA and audit evidence."
+    },
+    {
+      "path": "src/nba_prop_quant/ctmc.py",
+      "reason": "Not in the import closure of the production prediction/pricing entry points."
+    },
+    {
+      "path": "src/nba_prop_quant/ingest.py",
+      "reason": "Historical ingestion tooling; not in the runtime import closure."
+    },
+    {
+      "path": "src/nba_prop_quant/interpret.py",
+      "reason": "Explanation tooling used by scripts/16_explain_projection.py; not in the runtime import closure."
+    },
+    {
+      "path": "src/nba_prop_quant/live.py",
+      "reason": "In-game live tooling; not in the runtime import closure."
+    },
+    {
+      "path": "src/nba_prop_quant/market.py",
+      "reason": "Not in the runtime import closure."
+    },
+    {
+      "path": "src/nba_prop_quant/sequence.py",
+      "reason": "Optional torch sequence research module; not in the runtime import closure."
+    }
+  ],
+  "forbidden_content_patterns": [
+    "-----BEGIN [A-Z ]*PRIVATE KEY-----",
+    "(?im)^[ \\t]*(export[ \\t]+)?BDL_API_KEY[ \\t]*=",
+    "(?im)^[ \\t]*(export[ \\t]+)?FTP_PASSWORD[ \\t]*=",
+    "(?im)^[ \\t]*(export[ \\t]+)?GITHUB_TOKEN[ \\t]*=",
+    "(?im)^[ \\t]*(export[ \\t]+)?AWS_SECRET_ACCESS_KEY[ \\t]*="
+  ],
+  "forbidden_path_globs": [
+    ".env",
+    ".env.*",
+    "*.env",
+    "env.txt",
+    "runtime.env",
+    "*.pem",
+    "*.key",
+    "*.p12",
+    "*.pfx",
+    "id_rsa*",
+    ".netrc",
+    "credentials*",
+    "secrets*",
+    "*secret*",
+    "*_token*",
+    "*token.json",
+    "*apikey*",
+    "*api_key*",
+    "__pycache__",
+    "*.pyc",
+    ".DS_Store"
+  ],
+  "frozen_model_source_files": [
+    "src/nba_prop_quant/production.py",
+    "src/nba_prop_quant/gate3_v2.py",
+    "src/nba_prop_quant/prospective_snapshot.py",
+    "src/nba_prop_quant/pricing.py",
+    "src/nba_prop_quant/distributions.py",
+    "scripts/10_predict_slate.py",
+    "scripts/11_collect_snapshots.py",
+    "scripts/12_run_snapshot_cycle.py",
+    "scripts/15_price_markets.py"
+  ],
+  "gate3_candidate_policy_id": "nba_prop_quant_v2_gate3_dd2d394b6def",
+  "gate3_policy": {
+    "assists": "v2_role_shock_calibrated",
+    "blocks": "frozen_selected_v1",
+    "points": "frozen_selected_v1",
+    "points_assists": "v2_role_increment",
+    "points_rebounds": "v2_role_increment",
+    "points_rebounds_assists": "frozen_selected_v1",
+    "rebounds": "frozen_selected_v1",
+    "rebounds_assists": "frozen_selected_v1",
+    "steals": "frozen_selected_v1",
+    "threes": "frozen_selected_v1"
+  },
+  "gate3_policy_lock_commit": "dd2d394b6def1e146a193b9000536158d1ec383d",
+  "groups": {
+    "claim_policy": {
+      "files": [
+        "docs/wizardofodds/PUBLIC_CLAIM_POLICY_V1.json",
+        "docs/wizardofodds/PUBLIC_CLAIM_POLICY_V1.md",
+        "docs/wizardofodds/PUBLIC_CLAIM_POLICY_V1_SHA256SUMS.txt"
+      ],
+      "purpose": "Frozen public claim policy carried with the runtime so published output can never outrun it.",
+      "required": true,
+      "root": "project_root"
+    },
+    "configs": {
+      "files": [
+        "configs/model.yaml"
+      ],
+      "purpose": "Historical model configuration. Retained for provenance; not read by the live entry points.",
+      "required": false,
+      "root": "project_root"
+    },
+    "gate3_deployment_artifacts": {
+      "files": [
+        "research/v2_gate3_deployment_artifacts/SHA256SUMS.txt",
+        "research/v2_gate3_deployment_artifacts/deployment_manifest.json",
+        "research/v2_gate3_deployment_artifacts/probability_parameters.json",
+        "research/v2_gate3_deployment_artifacts/role_minutes_model.joblib",
+        "research/v2_gate3_deployment_artifacts/role_state_seed.json"
+      ],
+      "purpose": "Loaded by nba_prop_quant.gate3_v2.load_gate3_runtime() on every production run.",
+      "required": true,
+      "root": "project_root"
+    },
+    "gate3_policy_locks": {
+      "files": [
+        "research/v2_gate1_lock/CANDIDATE_POLICY.json",
+        "research/v2_gate1_lock/GATE2_CERTIFICATION_PREREGISTRATION.md",
+        "research/v2_gate1_lock/SHA256SUMS.txt",
+        "research/v2_gate3_capture_lock/GATE3_CAPTURE_POLICY.json",
+        "research/v2_gate3_capture_lock/GATE3_CAPTURE_PROTOCOL.md",
+        "research/v2_gate3_capture_lock/SHA256SUMS.txt",
+        "research/v2_gate3_lock/GATE3_CANDIDATE_POLICY.json",
+        "research/v2_gate3_lock/GATE3_PROSPECTIVE_PREREGISTRATION.md",
+        "research/v2_gate3_lock/SHA256SUMS.txt"
+      ],
+      "purpose": "Pre-registered Gate 1/Gate 3 policy locks, including the T-20m capture policy the runtime must honour.",
+      "required": true,
+      "root": "project_root"
+    },
+    "model_artifacts": {
+      "files": [
+        "ast.joblib",
+        "blk.joblib",
+        "combo_dependence_policy.json",
+        "copula.joblib",
+        "dynamic_params.json",
+        "experience_curves.joblib",
+        "fg3m.joblib",
+        "marginal_selection.json",
+        "marginals.joblib",
+        "market_probability_calibration_policy.json",
+        "mean_model_selection.json",
+        "minutes.joblib",
+        "pts.joblib",
+        "reb.joblib",
+        "stl.joblib"
+      ],
+      "purpose": "Frozen model artifacts read by scripts/10_predict_slate.py, scripts/15_price_markets.py or scripts/10a_validate_production_contract.py.",
+      "required": true,
+      "root": "model_dir",
+      "stage_prefix": "models"
+    },
+    "model_provenance_artifacts": {
+      "files": [
+        "copula_pre2025.joblib",
+        "ensemble_weights.json",
+        "marginals_pre2025.joblib",
+        "market_probability_calibration.json"
+      ],
+      "purpose": "Frozen release artifacts that live inference does not read. Bundled and hashed when present so the runtime carries the same artifact set the v1 freeze covered.",
+      "required": false,
+      "root": "model_dir",
+      "stage_prefix": "models"
+    },
+    "packaging": {
+      "files": [
+        "pyproject.toml"
+      ],
+      "purpose": "Declared dependency set required to install the package on a clean hosted runner.",
+      "required": true,
+      "root": "project_root"
+    },
+    "runtime_data": {
+      "patterns": [
+        {
+          "glob": "raw/seasons/**/stats.parquet",
+          "min_files": 1,
+          "read_by": "nba_prop_quant.pipeline.load_history_box_stats"
+        },
+        {
+          "glob": "raw/advanced/**/*.parquet",
+          "min_files": 1,
+          "read_by": "nba_prop_quant.pipeline.load_advanced"
+        }
+      ],
+      "purpose": "Historical box-score and advanced state required to rebuild upcoming-slate features on a clean runner.",
+      "required": true,
+      "root": "data_dir",
+      "stage_prefix": "data"
+    },
+    "scripts": {
+      "files": [
+        "scripts/10_predict_slate.py",
+        "scripts/10a_validate_production_contract.py",
+        "scripts/11_collect_snapshots.py",
+        "scripts/12_run_snapshot_cycle.py",
+        "scripts/15_price_markets.py"
+      ],
+      "purpose": "Production entry points: snapshot capture, slate projection, market pricing, and the frozen-contract preflight.",
+      "required": true,
+      "root": "project_root"
+    },
+    "source_files": {
+      "files": [
+        "src/nba_prop_quant/__init__.py",
+        "src/nba_prop_quant/api.py",
+        "src/nba_prop_quant/availability.py",
+        "src/nba_prop_quant/copula.py",
+        "src/nba_prop_quant/decay.py",
+        "src/nba_prop_quant/distributions.py",
+        "src/nba_prop_quant/experience.py",
+        "src/nba_prop_quant/features.py",
+        "src/nba_prop_quant/game_context.py",
+        "src/nba_prop_quant/gate3_v2.py",
+        "src/nba_prop_quant/kalman.py",
+        "src/nba_prop_quant/model.py",
+        "src/nba_prop_quant/normalize.py",
+        "src/nba_prop_quant/pipeline.py",
+        "src/nba_prop_quant/pricing.py",
+        "src/nba_prop_quant/production.py",
+        "src/nba_prop_quant/prospective_snapshot.py",
+        "src/nba_prop_quant/settings.py",
+        "src/nba_prop_quant/slate.py",
+        "src/nba_prop_quant/snapshot_schedule.py",
+        "src/nba_prop_quant/storage.py"
+      ],
+      "purpose": "Transitive nba_prop_quant import closure of the production entry points.",
+      "required": true,
+      "root": "project_root"
+    }
+  },
+  "manifest_freeze_stage": "external_test_deployment",
+  "model_source_commit": "4def8ad33ccc56016fb19a97fceca6e027c9612a",
+  "primary_certification_offset_minutes": 20,
+  "primary_certification_window": "T-20m",
+  "prospective_claim_allowed": false,
+  "runtime_manifest_basename": "nba_prop_quant_v2_gate3_runtime_manifest.json",
+  "runtime_name": "nba_prop_quant_v2_gate3_runtime",
+  "runtime_version": 1,
+  "schema_version": 2,
+  "sha256sums_groups": [
+    "docs/wizardofodds/PUBLIC_CLAIM_POLICY_V1_SHA256SUMS.txt",
+    "research/v2_gate1_lock/SHA256SUMS.txt",
+    "research/v2_gate2_certification_outputs/SHA256SUMS.txt",
+    "research/v2_gate3_capture_lock/SHA256SUMS.txt",
+    "research/v2_gate3_deployment_artifacts/SHA256SUMS.txt",
+    "research/v2_gate3_lock/SHA256SUMS.txt"
+  ]
+}
