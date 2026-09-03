@@ -27,7 +27,8 @@ import tarfile
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 
 DEFAULT_CONTRACT = (
@@ -182,6 +183,7 @@ def git(root: Path, *args: str) -> str:
         cwd=root,
         capture_output=True,
         text=True,
+        check=False,
     )
 
     if result.returncode != 0:
@@ -223,6 +225,7 @@ def resolve_source_provenance(
         cwd=root,
         capture_output=True,
         text=True,
+        check=False,
     )
 
     if ancestry.returncode != 0:
@@ -276,6 +279,7 @@ def verify_frozen_model_sources(
             ["git", "cat-file", "blob", f"{model_source_commit}:{relative}"],
             cwd=root,
             capture_output=True,
+            check=False,
         )
 
         if blob.returncode != 0:
@@ -431,7 +435,7 @@ def verify_capture_window(
 
     source = root / "src/nba_prop_quant/prospective_snapshot.py"
     text = source.read_text(encoding="utf-8")
-    match = re.search(r"^PRIMARY_OFFSET_MINUTES\s*=\s*(\d+)", text, re.M)
+    match = re.search(r"^PRIMARY_OFFSET_MINUTES\s*=\s*(\d+)", text, re.MULTILINE)
 
     if match is None:
         raise BuildError(
@@ -839,14 +843,13 @@ def create_archive(staging: Path, archive_path: Path) -> Path:
             with path.open("rb") as handle:
                 tar.addfile(info, handle)
 
-    with archive_path.open("wb") as handle:
-        with gzip.GzipFile(
-            filename="",
-            mode="wb",
-            fileobj=handle,
-            mtime=0,
-        ) as gz:
-            gz.write(raw.getvalue())
+    with archive_path.open("wb") as handle, gzip.GzipFile(
+        filename="",
+        mode="wb",
+        fileobj=handle,
+        mtime=0,
+    ) as gz:
+        gz.write(raw.getvalue())
 
     return archive_path
 
@@ -860,7 +863,7 @@ def import_verifier(project_root: Path):
     """
 
     try:
-        from nba_prop_quant.production import (  # noqa: PLC0415
+        from nba_prop_quant.production import (
             load_verified_manifest_metadata,
         )
     except ImportError:
@@ -869,7 +872,7 @@ def import_verifier(project_root: Path):
         if source_root not in sys.path:
             sys.path.insert(0, source_root)
 
-        from nba_prop_quant.production import (  # noqa: PLC0415
+        from nba_prop_quant.production import (
             load_verified_manifest_metadata,
         )
 

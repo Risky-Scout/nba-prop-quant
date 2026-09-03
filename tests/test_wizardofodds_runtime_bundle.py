@@ -661,6 +661,26 @@ def test_bundle_latest_pointer_matches_runtime_manifest(workspace):
         assert (staging / relative).read_bytes() == canonical
 
 
+def test_archive_members_are_normalized(workspace):
+    result = build(workspace)
+
+    with tarfile.open(result["archive_path"], "r:gz") as tar:
+        members = tar.getmembers()
+
+    names = [member.name for member in members]
+
+    assert names == sorted(names)
+
+    for member in members:
+        assert member.isfile()
+        assert member.mtime == 0
+        assert member.uid == 0
+        assert member.gid == 0
+        assert member.uname == ""
+        assert member.gname == ""
+        assert member.name.startswith(f"{result['staging_name']}/")
+
+
 def test_archive_round_trip_detects_tampering(workspace):
     result = build(workspace)
 
