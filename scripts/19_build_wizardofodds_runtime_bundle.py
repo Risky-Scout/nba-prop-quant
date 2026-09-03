@@ -13,6 +13,7 @@ it with ``project_root=<bundle>`` and ``model_dir=<bundle>/models``.
 from __future__ import annotations
 
 import argparse
+import ast
 import fnmatch
 import gzip
 import hashlib
@@ -341,12 +342,50 @@ def verify_sha256sums_group(root: Path, relative_sums: str) -> int:
     return checked
 
 
+def source_gate3_policy(project_root: Path) -> dict[str, str]:
+    """Read the 10-prop policy that gate3_v2.load_gate3_runtime() enforces."""
+
+    source = project_root / "src/nba_prop_quant/gate3_v2.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+
+        targets = [
+            target.id
+            for target in node.targets
+            if isinstance(target, ast.Name)
+        ]
+
+        if "required_policy" not in targets:
+            continue
+
+        try:
+            return dict(ast.literal_eval(node.value))
+        except ValueError as exc:
+            raise BuildError(
+                f"Could not read required_policy from {source}: {exc}"
+            ) from exc
+
+    raise BuildError(f"No required_policy assignment found in {source}")
+
+
 def verify_gate3_policy(
     artifact_dir: Path,
     expected_policy: dict[str, str],
     expected_candidate_id: str,
     expected_lock_commit: str,
+    project_root: Path,
 ) -> dict[str, Any]:
+    from_source = source_gate3_policy(project_root)
+
+    if from_source != expected_policy:
+        raise BuildError(
+            "Runtime contract Gate 3 policy does not match the policy "
+            "enforced by src/nba_prop_quant/gate3_v2.py."
+        )
+
     manifest_path = artifact_dir / "deployment_manifest.json"
 
     if not manifest_path.exists():
@@ -1019,6 +1058,7 @@ def build_runtime_bundle(
         dict(contract["gate3_policy"]),
         str(contract["gate3_candidate_policy_id"]),
         str(contract["gate3_policy_lock_commit"]),
+        project_root,
     )
 
     verify_capture_window(

@@ -252,6 +252,14 @@ def workspace(tmp_path: Path) -> dict:
         "PRIMARY_OFFSET_MINUTES = 20\n",
     )
 
+    write(
+        project / "src/nba_prop_quant/gate3_v2.py",
+        "def load_gate3_runtime():\n"
+        "    required_policy = "
+        + repr(dict(sorted(GATE3_POLICY.items())))
+        + "\n    return required_policy\n",
+    )
+
     write(project / "scripts/10_predict_slate.py", "# predict\n")
     write(project / "scripts/15_price_markets.py", "# price\n")
 
@@ -437,6 +445,13 @@ def test_real_contract_schema_is_complete():
     )
 
     assert contract["gate3_candidate_policy_id"] == derived
+
+
+def test_real_contract_policy_matches_frozen_gate3_source():
+    contract = json.loads(REAL_CONTRACT_PATH.read_text(encoding="utf-8"))
+
+    assert builder.source_gate3_policy(PROJECT) == contract["gate3_policy"]
+    assert builder.source_gate3_policy(PROJECT) == GATE3_POLICY
 
 
 def test_real_contract_covers_runtime_import_closure():
@@ -786,15 +801,43 @@ def test_tampered_gate3_artifact_fails_checksum_group(workspace):
         build(workspace)
 
 
-def test_gate3_policy_mismatch_fails(workspace):
+def test_deployment_manifest_policy_mismatch_fails(workspace):
+    manifest_path = (
+        workspace["gate3_artifact_dir"] / "deployment_manifest.json"
+    )
+
+    deployment = json.loads(manifest_path.read_text(encoding="utf-8"))
+    deployment["gate3_policy"]["assists"] = "frozen_selected_v1"
+
+    manifest_path.write_text(
+        json.dumps(deployment, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    write_sha256sums(
+        manifest_path.parent,
+        ["deployment_manifest.json", "probability_parameters.json"],
+    )
+
+    git(workspace["project"], "add", "-A")
+    git(workspace["project"], "commit", "-q", "-m", "shift deployed policy")
+
+    with pytest.raises(
+        builder.BuildError,
+        match="Gate 3 10-prop policy mismatch",
+    ):
+        build(workspace)
+
+
+def test_contract_policy_must_match_frozen_source_policy(workspace):
     def mutate(contract):
-        contract["gate3_policy"]["assists"] = "frozen_selected_v1"
+        contract["gate3_policy"]["points"] = "v2_role_increment"
 
     patch_contract(workspace, mutate)
 
     with pytest.raises(
         builder.BuildError,
-        match="Gate 3 10-prop policy mismatch",
+        match="does not match the policy",
     ):
         build(workspace)
 
