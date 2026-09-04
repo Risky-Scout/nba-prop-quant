@@ -1,7 +1,7 @@
 {
   "auto_bet": false,
   "contract_name": "nba_prop_quant_v2_gate3_runtime_contract",
-  "contract_version": 1,
+  "contract_version": 2,
   "description": "Declarative deployment-integrity contract for the already-frozen NBA Prop Quant v2 / Gate 3 model. This file lists which resources belong to the hosted production runtime; it does not define statistical behaviour and contains no hashes of binary model artifacts, which are distributed outside git and hashed by the bundle builder at build time.",
   "excluded_development_resources": [
     {
@@ -95,6 +95,18 @@
     "*.pyc",
     ".DS_Store"
   ],
+  "frozen_integrity_groups": [
+    "source_files",
+    "scripts",
+    "model_artifacts",
+    "model_provenance_artifacts",
+    "gate3_deployment_artifacts",
+    "gate3_policy_locks",
+    "claim_policy",
+    "configs",
+    "packaging"
+  ],
+  "frozen_integrity_groups_purpose": "Groups whose build-time SHA-256 records are emitted into the runtime manifest's \"files\" object and are therefore re-verified on every production run by nba_prop_quant.production.load_verified_manifest_metadata(). Nothing in these groups may ever change after the bundle is built.",
   "frozen_model_source_files": [
     "src/nba_prop_quant/production.py",
     "src/nba_prop_quant/gate3_v2.py",
@@ -274,6 +286,10 @@
   "primary_certification_offset_minutes": 20,
   "primary_certification_window": "T-20m",
   "prospective_claim_allowed": false,
+  "rolling_integrity_groups": [
+    "runtime_data"
+  ],
+  "rolling_integrity_groups_purpose": "Groups holding historical inference state that legitimately advances as 2026-27 games complete. They stay required at build time, are copied into the bundle, are hashed into runtime_data_hashes and RUNTIME_SHA256SUMS.txt, and are excluded from the runtime manifest's \"files\" object so a lawful postgame refresh cannot invalidate frozen-model verification. Their post-deployment integrity is governed by a separate rolling-state contract that does not exist yet.",
   "runtime_manifest_basename": "nba_prop_quant_v2_gate3_runtime_manifest.json",
   "runtime_name": "nba_prop_quant_v2_gate3_runtime",
   "runtime_version": 1,

@@ -591,6 +591,61 @@ def collect_bundle_files(
     return resolved, absent_optional
 
 
+def resolve_integrity_domains(
+    contract: dict[str, Any],
+) -> tuple[list[str], list[str]]:
+    """Split the contract's groups into the frozen and rolling domains.
+
+    ``manifest["files"]`` is the permanently frozen hash set that the
+    unchanged production verifier re-checks on every run, so it may carry
+    only the groups the contract declares frozen. Rolling groups are still
+    required, staged and hashed at build time, but their contents advance
+    lawfully once the season starts.
+    """
+
+    declared_groups = set(contract.get("groups", {}))
+    domains: dict[str, list[str]] = {}
+    problems: list[str] = []
+
+    for key in ("frozen_integrity_groups", "rolling_integrity_groups"):
+        if key not in contract:
+            problems.append(f"runtime contract does not declare {key}")
+            domains[key] = []
+            continue
+
+        names = [str(name) for name in contract[key]]
+        domains[key] = names
+
+        for name in sorted(set(names) - declared_groups):
+            problems.append(f"{key}: {name!r} is not a contract group")
+
+    frozen = domains["frozen_integrity_groups"]
+    rolling = domains["rolling_integrity_groups"]
+
+    overlap = sorted(set(frozen) & set(rolling))
+
+    if overlap:
+        problems.append(
+            "declared both frozen and rolling: " + ", ".join(overlap)
+        )
+
+    undeclared = sorted(declared_groups - set(frozen) - set(rolling))
+
+    if undeclared:
+        problems.append(
+            "contract groups assigned to no integrity domain: "
+            + ", ".join(undeclared)
+        )
+
+    if problems:
+        raise BuildError(
+            "Runtime contract integrity domains are invalid:\n  "
+            + "\n  ".join(problems)
+        )
+
+    return sorted(frozen), sorted(rolling)
+
+
 def enforce_secret_exclusion(
     resolved: dict[str, list[tuple[str, Path]]],
     contract: dict[str, Any],
@@ -668,21 +723,31 @@ def build_manifest(
     absent_optional: list[str],
     dependency_lock: dict[str, Any],
     runtime_version: int,
+    frozen_groups: list[str],
+    rolling_groups: list[str],
     created: datetime,
 ) -> dict[str, Any]:
-    files: dict[str, list[dict[str, Any]]] = {}
+    staged: dict[str, list[dict[str, Any]]] = {}
 
     for group_name in sorted(resolved):
-        files[group_name] = [
+        staged[group_name] = [
             file_record(staging, stage)
             for stage, _ in resolved[group_name]
         ]
+
+    frozen = set(frozen_groups)
+
+    files = {
+        group_name: records
+        for group_name, records in staged.items()
+        if group_name in frozen
+    }
 
     def hashes_for(*group_names: str) -> dict[str, str]:
         out: dict[str, str] = {}
 
         for group_name in group_names:
-            for record in files.get(group_name, []):
+            for record in staged.get(group_name, []):
                 out[record["path"]] = record["sha256"]
 
         return dict(sorted(out.items()))
@@ -694,11 +759,11 @@ def build_manifest(
 
     total_bytes = sum(
         record["bytes"]
-        for records in files.values()
+        for records in staged.values()
         for record in records
     )
 
-    file_count = sum(len(records) for records in files.values())
+    file_count = sum(len(records) for records in staged.values())
 
     return {
         "schema_version": int(contract["schema_version"]),
@@ -752,7 +817,9 @@ def build_manifest(
             "scripts",
             "packaging",
         ),
-        "runtime_data_hashes": hashes_for("runtime_data"),
+        "runtime_data_hashes": hashes_for(*rolling_groups),
+        "frozen_integrity_groups": list(frozen_groups),
+        "rolling_integrity_groups": list(rolling_groups),
         "files": files,
         "absent_optional_files": sorted(absent_optional),
         "excluded_development_resources": list(
@@ -1036,6 +1103,8 @@ def build_runtime_bundle(
 
     contract = load_json(contract_path)
 
+    frozen_groups, rolling_groups = resolve_integrity_domains(contract)
+
     provenance = resolve_source_provenance(
         project_root,
         str(contract["model_source_commit"]),
@@ -1117,6 +1186,8 @@ def build_runtime_bundle(
             if runtime_version is not None
             else int(contract["runtime_version"])
         ),
+        frozen_groups=frozen_groups,
+        rolling_groups=rolling_groups,
         created=created,
     )
 
@@ -1181,12 +1252,20 @@ def print_summary(result: dict[str, Any]) -> None:
     print(f"auto_bet                : {manifest['auto_bet']}")
     print()
 
-    print("Bundled groups:")
+    print("Frozen integrity groups (permanent manifest['files'] hash set):")
 
     for group_name in sorted(manifest["files"]):
         records = manifest["files"][group_name]
         size = sum(record["bytes"] for record in records)
         print(f"  {group_name:30s} {len(records):5d} files  {size:>14,d} B")
+
+    print()
+    print("Rolling integrity groups (bootstrap state, build-time hashed):")
+
+    for group_name in manifest["rolling_integrity_groups"]:
+        entries = result["resolved"].get(group_name, [])
+        size = sum(source.stat().st_size for _, source in entries)
+        print(f"  {group_name:30s} {len(entries):5d} files  {size:>14,d} B")
 
     print()
     print("Frozen mathematical source verified against "
