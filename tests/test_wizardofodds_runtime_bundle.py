@@ -145,6 +145,18 @@ def synthetic_contract(model_source_commit: str) -> dict:
             "(?im)^[ \\t]*(export[ \\t]+)?FTP_PASSWORD[ \\t]*=",
         ],
         "excluded_development_resources": [],
+        "frozen_integrity_groups": [
+            "source_files",
+            "scripts",
+            "model_artifacts",
+            "model_provenance_artifacts",
+            "gate3_deployment_artifacts",
+            "gate3_policy_locks",
+            "packaging",
+        ],
+        "rolling_integrity_groups": [
+            "runtime_data",
+        ],
         "groups": {
             "source_files": {
                 "root": "project_root",
@@ -404,6 +416,30 @@ def patch_contract(workspace: dict, mutate) -> None:
     git(workspace["project"], "commit", "-q", "-m", "adjust contract")
 
 
+HISTORICAL_STAGED_PATHS = [
+    "data/raw/seasons/season=2024/stats.parquet",
+    "data/raw/advanced/season=2024/advanced.parquet",
+]
+
+
+def extract(workspace: dict, result: dict, name: str = "extracted") -> Path:
+    destination = workspace["output_dir"] / name
+
+    with tarfile.open(result["archive_path"], "r:gz") as tar:
+        tar.extractall(destination, filter="data")
+
+    return destination / result["staging_name"]
+
+
+def verify_frozen_manifest(bundle: Path) -> dict:
+    load_verified_manifest_metadata = builder.import_verifier(PROJECT)
+
+    return load_verified_manifest_metadata(
+        model_dir=bundle / "models",
+        project_root=bundle,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Real repository contract
 # ---------------------------------------------------------------------------
@@ -445,6 +481,54 @@ def test_real_contract_schema_is_complete():
     )
 
     assert contract["gate3_candidate_policy_id"] == derived
+
+
+def test_real_contract_declares_two_integrity_domains():
+    contract = json.loads(REAL_CONTRACT_PATH.read_text(encoding="utf-8"))
+
+    frozen = contract["frozen_integrity_groups"]
+    rolling = contract["rolling_integrity_groups"]
+
+    assert frozen == [
+        "source_files",
+        "scripts",
+        "model_artifacts",
+        "model_provenance_artifacts",
+        "gate3_deployment_artifacts",
+        "gate3_policy_locks",
+        "claim_policy",
+        "configs",
+        "packaging",
+    ]
+
+    assert rolling == ["runtime_data"]
+
+    assert "runtime_data" in rolling
+    assert "runtime_data" not in frozen
+    assert set(frozen) & set(rolling) == set()
+
+    groups = set(contract["groups"])
+
+    assert set(frozen) <= groups
+    assert set(rolling) <= groups
+    assert set(frozen) | set(rolling) == groups
+
+
+def test_real_contract_version_tracks_the_domain_split():
+    contract = json.loads(REAL_CONTRACT_PATH.read_text(encoding="utf-8"))
+
+    assert contract["contract_version"] == 2
+    assert contract["schema_version"] == 2
+    assert contract["runtime_version"] == 1
+
+
+def test_real_contract_preserves_published_runtime_properties():
+    contract = json.loads(REAL_CONTRACT_PATH.read_text(encoding="utf-8"))
+
+    assert contract["model_source_commit"] == FROZEN_MODEL_COMMIT
+    assert contract["primary_certification_window"] == "T-20m"
+    assert contract["prospective_claim_allowed"] is False
+    assert contract["auto_bet"] is False
 
 
 def test_real_contract_policy_matches_frozen_gate3_source():
@@ -634,13 +718,264 @@ def test_manifest_never_records_absolute_build_paths(workspace):
     assert str(workspace["project"]) not in serialized
 
 
-def test_runtime_data_is_bundled_under_data_prefix(workspace):
+def test_generated_manifest_preserves_published_runtime_properties(workspace):
+    manifest = build(workspace)["manifest"]
+    real = json.loads(REAL_CONTRACT_PATH.read_text(encoding="utf-8"))
+
+    assert real["model_source_commit"] == FROZEN_MODEL_COMMIT
+    assert manifest["primary_certification_window"] == "T-20m"
+    assert manifest["prospective_claim_allowed"] is False
+    assert manifest["auto_bet"] is False
+
+
+def test_real_contract_generates_metadata_pinned_to_the_model_anchor(tmp_path):
+    """The real contract, not just a fixture, must still pin the anchor.
+
+    A full build needs the release-asset model artifacts and historical
+    parquets, so the manifest is generated from the real contract with empty
+    groups: enough to prove contract fields reach the runtime metadata.
+    """
+
+    contract = json.loads(REAL_CONTRACT_PATH.read_text(encoding="utf-8"))
+
+    frozen_groups, rolling_groups = builder.resolve_integrity_domains(contract)
+
+    manifest = builder.build_manifest(
+        contract=contract,
+        resolved={name: [] for name in contract["groups"]},
+        staging=tmp_path,
+        provenance={
+            "model_source_commit": contract["model_source_commit"],
+            "production_source_commit": "0" * 40,
+            "production_source_branch": "production/wizardofodds-integration",
+            "production_source_dirty": False,
+        },
+        gate3={
+            "candidate_id": contract["gate3_candidate_policy_id"],
+            "gate3_lock_commit": contract["gate3_policy_lock_commit"],
+            "deployment_manifest_sha256": "0" * 64,
+        },
+        frozen_sources={},
+        absent_optional=[],
+        dependency_lock={},
+        runtime_version=int(contract["runtime_version"]),
+        frozen_groups=frozen_groups,
+        rolling_groups=rolling_groups,
+        created=builder.datetime(2026, 9, 4, tzinfo=builder.timezone.utc),
+    )
+
+    assert manifest["model_source_commit"] == FROZEN_MODEL_COMMIT
+    assert manifest["primary_certification_window"] == "T-20m"
+    assert manifest["primary_certification_offset_minutes"] == 20
+    assert manifest["prospective_claim_allowed"] is False
+    assert manifest["auto_bet"] is False
+    assert manifest["gate3_policy"] == GATE3_POLICY
+    assert manifest["contract_version"] == contract["contract_version"]
+
+    assert manifest["rolling_integrity_groups"] == ["runtime_data"]
+    assert "runtime_data" not in manifest["frozen_integrity_groups"]
+    assert "runtime_data" not in manifest["files"]
+
+
+# ---------------------------------------------------------------------------
+# Frozen versus rolling integrity domains
+# ---------------------------------------------------------------------------
+
+
+def test_generated_manifest_records_both_integrity_domains(workspace):
     manifest = build(workspace)["manifest"]
 
-    paths = {record["path"] for record in manifest["files"]["runtime_data"]}
+    frozen = manifest["frozen_integrity_groups"]
+    rolling = manifest["rolling_integrity_groups"]
 
-    assert "data/raw/seasons/season=2024/stats.parquet" in paths
-    assert "data/raw/advanced/season=2024/advanced.parquet" in paths
+    assert "runtime_data" in rolling
+    assert "runtime_data" not in frozen
+    assert set(frozen) & set(rolling) == set()
+    assert set(manifest["files"]) <= set(frozen)
+
+
+def test_runtime_data_is_bundled_under_data_prefix(workspace):
+    result = build(workspace)
+
+    staged = {stage for stage, _ in result["resolved"]["runtime_data"]}
+
+    assert set(HISTORICAL_STAGED_PATHS) <= staged
+
+    with tarfile.open(result["archive_path"], "r:gz") as tar:
+        archived = set(tar.getnames())
+
+    for relative in HISTORICAL_STAGED_PATHS:
+        assert f"{result['staging_name']}/{relative}" in archived
+
+    bundle = extract(workspace, result)
+
+    for relative in HISTORICAL_STAGED_PATHS:
+        assert (bundle / relative).is_file()
+
+
+def test_runtime_data_hashes_cover_every_staged_historical_file(workspace):
+    result = build(workspace, keep_staging=True)
+    manifest = result["manifest"]
+    staging = result["staging_path"]
+
+    staged = {stage for stage, _ in result["resolved"]["runtime_data"]}
+
+    assert staged
+    assert set(HISTORICAL_STAGED_PATHS) <= staged
+    assert set(manifest["runtime_data_hashes"]) == staged
+
+    for relative, digest in manifest["runtime_data_hashes"].items():
+        assert digest == builder.sha256_file(staging / relative)
+
+
+def test_runtime_sha256sums_still_covers_historical_data(workspace):
+    result = build(workspace, keep_staging=True)
+    staging = result["staging_path"]
+
+    listed = {
+        line.split(None, 1)[1].strip(): line.split(None, 1)[0]
+        for line in (
+            staging / builder.RUNTIME_SHA256SUMS_NAME
+        ).read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    }
+
+    staged = {stage for stage, _ in result["resolved"]["runtime_data"]}
+
+    assert staged <= set(listed)
+
+    for relative in staged:
+        assert listed[relative] == builder.sha256_file(staging / relative)
+
+
+def test_frozen_manifest_excludes_runtime_data(workspace):
+    manifest = build(workspace)["manifest"]
+
+    assert "runtime_data" not in manifest["files"]
+
+    frozen_paths = {
+        record["path"]
+        for records in manifest["files"].values()
+        for record in records
+    }
+
+    assert frozen_paths
+    assert not any(path.startswith("data/") for path in frozen_paths)
+    assert not any(path.endswith(".parquet") for path in frozen_paths)
+
+    for relative in HISTORICAL_STAGED_PATHS:
+        assert relative not in frozen_paths
+
+
+def test_rolling_data_mutation_does_not_break_frozen_verifier(workspace):
+    result = build(workspace)
+    bundle = extract(workspace, result)
+
+    assert verify_frozen_manifest(bundle)["freeze_id"] == (
+        result["manifest"]["freeze_id"]
+    )
+
+    rolling = bundle / "data/raw/seasons/season=2024/stats.parquet"
+    before = rolling.read_bytes()
+
+    rolling.write_text(
+        "synthetic-stats\nsynthetic-postgame-refresh\n",
+        encoding="utf-8",
+    )
+
+    assert rolling.read_bytes() != before
+
+    metadata = verify_frozen_manifest(bundle)
+
+    assert metadata["freeze_id"] == result["manifest"]["freeze_id"]
+    assert metadata["freeze_stage"] == "external_test_deployment"
+
+
+def test_frozen_file_mutation_still_fails_frozen_verifier(workspace):
+    result = build(workspace)
+    bundle = extract(workspace, result)
+
+    assert verify_frozen_manifest(bundle)["freeze_id"] == (
+        result["manifest"]["freeze_id"]
+    )
+
+    frozen_paths = {
+        record["path"]
+        for records in result["manifest"]["files"].values()
+        for record in records
+    }
+
+    assert "scripts/10_predict_slate.py" in frozen_paths
+
+    (bundle / "scripts/10_predict_slate.py").write_text(
+        "# tampered frozen entry point\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="hash_mismatch"):
+        verify_frozen_manifest(bundle)
+
+
+def test_missing_frozen_file_still_fails_frozen_verifier(workspace):
+    result = build(workspace)
+    bundle = extract(workspace, result)
+
+    (bundle / "scripts/10_predict_slate.py").unlink()
+
+    with pytest.raises(RuntimeError, match="missing="):
+        verify_frozen_manifest(bundle)
+
+
+def test_undeclared_contract_group_fails_the_build(workspace):
+    def mutate(contract):
+        contract["frozen_integrity_groups"].remove("packaging")
+
+    patch_contract(workspace, mutate)
+
+    with pytest.raises(
+        builder.BuildError,
+        match="assigned to no integrity domain",
+    ):
+        build(workspace)
+
+
+def test_group_in_both_integrity_domains_fails_the_build(workspace):
+    def mutate(contract):
+        contract["frozen_integrity_groups"].append("runtime_data")
+
+    patch_contract(workspace, mutate)
+
+    with pytest.raises(
+        builder.BuildError,
+        match="declared both frozen and rolling",
+    ):
+        build(workspace)
+
+
+def test_unknown_integrity_group_fails_the_build(workspace):
+    def mutate(contract):
+        contract["frozen_integrity_groups"].append("not_a_group")
+
+    patch_contract(workspace, mutate)
+
+    with pytest.raises(
+        builder.BuildError,
+        match="is not a contract group",
+    ):
+        build(workspace)
+
+
+def test_missing_integrity_domain_declaration_fails_the_build(workspace):
+    def mutate(contract):
+        contract.pop("rolling_integrity_groups")
+
+    patch_contract(workspace, mutate)
+
+    with pytest.raises(
+        builder.BuildError,
+        match="does not declare rolling_integrity_groups",
+    ):
+        build(workspace)
 
 
 def test_sha256sums_covers_every_bundled_file(workspace):

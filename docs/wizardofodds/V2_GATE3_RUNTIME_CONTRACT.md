@@ -62,8 +62,8 @@ with `project_root=<bundle>` and `model_dir=<bundle>/models`:
   models/                        frozen model artifacts
   models/frozen_manifests/nba_prop_quant_v2_gate3_runtime_manifest.json
   models/frozen_manifests/LATEST.json      byte-identical pointer copy
-  data/raw/seasons/**/stats.parquet        historical box-score state
-  data/raw/advanced/**/*.parquet           historical advanced state
+  data/raw/seasons/**/stats.parquet        historical box-score bootstrap
+  data/raw/advanced/**/*.parquet           historical advanced bootstrap
 ```
 
 `RUNTIME_SHA256SUMS.txt` cannot contain its own hash; every other bundled file,
@@ -89,12 +89,71 @@ not package size.
 | `runtime_data` | yes | Historical state needed to rebuild upcoming-slate features. |
 | `packaging` | yes | Declared dependencies for a clean runner. |
 
+Every group above belongs to exactly one integrity domain; see section 4a.
+
 Deliberately excluded, with reasons recorded in the contract's
 `excluded_development_resources`: the 2025 out-of-fold and market-backtest
 parquets, Gate 2 certification outputs, `data/raw/seasons/**/games.parquet`
 (`load_history_box_stats()` globs `stats.parquet` only), development-only
 `nba_prop_quant` modules outside the import closure, and all mutable runtime
 state.
+
+## 4a. Frozen integrity versus rolling integrity
+
+The runtime resources split into two integrity domains that answer different
+questions. The contract states the split explicitly, in `contract_version` 2,
+through two top-level lists the builder reads directly:
+
+```json
+"frozen_integrity_groups": [
+  "source_files", "scripts", "model_artifacts",
+  "model_provenance_artifacts", "gate3_deployment_artifacts",
+  "gate3_policy_locks", "claim_policy", "configs", "packaging"
+],
+"rolling_integrity_groups": ["runtime_data"]
+```
+
+Nothing is inferred from a naming convention, and neither verifier contains a
+`runtime_data` special case. The builder fails the build if a listed group is
+not a real contract group, if a group appears in both lists, or if a contract
+group is assigned to no domain at all.
+
+**Frozen integrity** covers the mathematical model, its source closure, the
+production entry points, the Gate 3 deployment artifacts, the pre-registered
+policy locks, the public claim policy and the packaging metadata. These are
+the only groups emitted into the runtime manifest's `files` object, which is
+the set `nba_prop_quant.production.load_verified_manifest_metadata()`
+re-verifies on every production run. They must never change after the bundle
+is built, and a single changed byte is still a fail-closed error.
+
+**Rolling integrity** covers historical inference state that is *expected* to
+advance as 2026-27 games finish: `data/raw/seasons/**/stats.parquet` and
+`data/raw/advanced/**/*.parquet`. Under the previous single-domain layout the
+first lawful postgame refresh changed those hashes and broke the frozen-model
+verifier, which conflated "the model was tampered with" with "last night's
+games were played". Those are different failures and now have different
+homes.
+
+Rolling status is not a weakening. `runtime_data` remains a **required** build
+input: a build with no matching historical parquet still fails with
+`Required historical runtime data missing`. It is still copied into the
+bundle, still hashed at build time into `runtime_data_hashes`, still listed in
+`RUNTIME_SHA256SUMS.txt`, and still shipped inside the archive.
+
+This yields two separate, simultaneously true guarantees:
+
+1. A freshly downloaded immutable runtime archive verifies byte-for-byte
+   exactly as built, historical bootstrap included, via
+   `RUNTIME_SHA256SUMS.txt` and `runtime_data_hashes`.
+2. After deployment, replacing the current-season historical state with a
+   legitimate refresh leaves frozen-model verification passing, because those
+   bytes were never part of the permanent frozen hash set.
+
+Post-deployment integrity of the rolling files is therefore **not yet
+covered** by any contract. A separate rolling-state integrity contract is
+future work and does not exist in this repository; until it lands, the
+current-season historical state carries only its build-time bootstrap
+attestation.
 
 ## 5. Immutable bundle versus mutable runtime state
 
@@ -140,7 +199,8 @@ It refuses to produce an archive unless all of the following pass:
    false.
 5. The capture lock and `prospective_snapshot.PRIMARY_OFFSET_MINUTES` agree on
    T-20m with no fallback and no retuning from prospective results.
-6. Every required model artifact and historical data file is present.
+6. Every required model artifact and historical data file is present, and
+   every contract group is declared in exactly one integrity domain.
 7. No bundled path matches a credential filename pattern and no bundled text
    file contains a credential-shaped assignment or private key block.
 8. The archive round-trips: it is extracted to a temporary directory, every
@@ -163,7 +223,9 @@ python scripts/10a_validate_production_contract.py
 
 The runtime pointer `models/frozen_manifests/LATEST.json` inside the bundle is
 the v2 runtime manifest, so the verifier passes against the current Gate 3
-source.
+source. It keeps passing once the deployed `data/raw/**` bootstrap has been
+refreshed with completed 2026-27 games, because those files are rolling, not
+frozen.
 
 The repository's own `models/frozen_manifests/LATEST.json` is intentionally
 left as the v1 pointer. A committed v2 pointer could not include hashes for the
