@@ -728,6 +728,55 @@ def test_generated_manifest_preserves_published_runtime_properties(workspace):
     assert manifest["auto_bet"] is False
 
 
+def test_real_contract_generates_metadata_pinned_to_the_model_anchor(tmp_path):
+    """The real contract, not just a fixture, must still pin the anchor.
+
+    A full build needs the release-asset model artifacts and historical
+    parquets, so the manifest is generated from the real contract with empty
+    groups: enough to prove contract fields reach the runtime metadata.
+    """
+
+    contract = json.loads(REAL_CONTRACT_PATH.read_text(encoding="utf-8"))
+
+    frozen_groups, rolling_groups = builder.resolve_integrity_domains(contract)
+
+    manifest = builder.build_manifest(
+        contract=contract,
+        resolved={name: [] for name in contract["groups"]},
+        staging=tmp_path,
+        provenance={
+            "model_source_commit": contract["model_source_commit"],
+            "production_source_commit": "0" * 40,
+            "production_source_branch": "production/wizardofodds-integration",
+            "production_source_dirty": False,
+        },
+        gate3={
+            "candidate_id": contract["gate3_candidate_policy_id"],
+            "gate3_lock_commit": contract["gate3_policy_lock_commit"],
+            "deployment_manifest_sha256": "0" * 64,
+        },
+        frozen_sources={},
+        absent_optional=[],
+        dependency_lock={},
+        runtime_version=int(contract["runtime_version"]),
+        frozen_groups=frozen_groups,
+        rolling_groups=rolling_groups,
+        created=builder.datetime(2026, 9, 4, tzinfo=builder.timezone.utc),
+    )
+
+    assert manifest["model_source_commit"] == FROZEN_MODEL_COMMIT
+    assert manifest["primary_certification_window"] == "T-20m"
+    assert manifest["primary_certification_offset_minutes"] == 20
+    assert manifest["prospective_claim_allowed"] is False
+    assert manifest["auto_bet"] is False
+    assert manifest["gate3_policy"] == GATE3_POLICY
+    assert manifest["contract_version"] == contract["contract_version"]
+
+    assert manifest["rolling_integrity_groups"] == ["runtime_data"]
+    assert "runtime_data" not in manifest["frozen_integrity_groups"]
+    assert "runtime_data" not in manifest["files"]
+
+
 # ---------------------------------------------------------------------------
 # Frozen versus rolling integrity domains
 # ---------------------------------------------------------------------------
