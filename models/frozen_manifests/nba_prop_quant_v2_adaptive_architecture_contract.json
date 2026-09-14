@@ -1,0 +1,188 @@
+{
+  "adaptive_daily_fitted_values": [
+    "XGBoost fitted booster parameters",
+    "ensemble fitted weights",
+    "ZINB fitted parameters",
+    "adaptive copula correlation",
+    "Platt fitted coefficients",
+    "experience-curve fitted coefficients",
+    "role/minutes fitted weights"
+  ],
+  "architecture_reference_sha": "4def8ad33ccc56016fb19a97fceca6e027c9612a",
+  "contract_name": "nba_prop_quant_v2_adaptive_architecture_contract",
+  "contract_version": 1,
+  "enforcement": {
+    "enforced_at_registration": [
+      "architecture_reference_sha",
+      "architecture_contract_sha256",
+      "frozen_choices.routing",
+      "frozen_choices.feature_schema_hash",
+      "frozen_choices.config_hash",
+      "frozen_choices.gate3_candidate_policy_id",
+      "frozen_choices.core_seed",
+      "frozen_choices.gate3_seed",
+      "frozen_choices.effective_n_jobs",
+      "frozen_policy_digests"
+    ],
+    "rationale": "Some policy documents hold a frozen decision and a daily fitted value in the same file: mean_model_selection carries production_weights, market_probability_calibration_policy carries production_parameters, and the Gate 3 deployment manifest pins the inputs of one particular role-model build. Hashing those files whole would freeze values this contract explicitly permits to change daily, so each frozen policy digest is taken over the document with its daily fitted fields pruned, as listed in frozen_policy_digest_scope. The whole-file hashes under reference_file_sha256 are provenance for the tree this contract was generated from and are not enforced.",
+    "recorded_but_not_enforced": [
+      "reference_file_sha256"
+    ]
+  },
+  "frozen_choices": {
+    "config_hash": "12afbb1df6a62f8121319e587f65ebb1403d7a59dd721eadefdc209d2efe9140",
+    "core_seed": 73,
+    "effective_n_jobs": 2,
+    "feature_schema_counts": {
+      "advanced_features": 24,
+      "feature_exact": 32,
+      "feature_prefixes": 6,
+      "targets": 6,
+      "volume_stats": 11
+    },
+    "feature_schema_hash": "0c569e86f912b29fc806a8fde9a77e10b61782792c74707e853f8f3b49dfdcf8",
+    "gate3_candidate_policy_id": "nba_prop_quant_v2_gate3_dd2d394b6def",
+    "gate3_lock_commit": "dd2d394b6def1e146a193b9000536158d1ec383d",
+    "gate3_seed": 20260830,
+    "mean_model_routing_alias": {
+      "fg3m": "3PM"
+    },
+    "monte_carlo_simulations": 20000,
+    "primary_certification_capture": {
+      "fallback_allowed": false,
+      "offset_minutes_before_tip": 20,
+      "window_label": "T-20m"
+    },
+    "role_minutes_feature_count": 36,
+    "routing": {
+      "calibration_family_routing": {
+        "assists": "prop",
+        "blocks": "raw",
+        "points": "prop",
+        "points_assists": "prop",
+        "points_rebounds": "prop",
+        "points_rebounds_assists": "prop",
+        "rebounds": "prop",
+        "rebounds_assists": "prop",
+        "steals": "raw",
+        "threes": "prop"
+      },
+      "dependence_production_lambda": {
+        "points_assists": 0.0,
+        "points_rebounds": 0.0,
+        "points_rebounds_assists": 0.0,
+        "rebounds_assists": 0.85,
+        "stocks": 0.0
+      },
+      "gate3_routing": {
+        "assists": "v2_role_shock_calibrated",
+        "blocks": "frozen_selected_v1",
+        "points": "frozen_selected_v1",
+        "points_assists": "v2_role_increment",
+        "points_rebounds": "v2_role_increment",
+        "points_rebounds_assists": "frozen_selected_v1",
+        "rebounds": "frozen_selected_v1",
+        "rebounds_assists": "frozen_selected_v1",
+        "steals": "frozen_selected_v1",
+        "threes": "frozen_selected_v1"
+      },
+      "marginal_family_routing": {
+        "ast": "zinb",
+        "blk": "zinb",
+        "fg3m": "zinb",
+        "pts": "zinb",
+        "reb": "zinb",
+        "stl": "zinb"
+      },
+      "mean_model_routing": {
+        "ast": "xgb",
+        "blk": "ensemble",
+        "fg3m": "xgb",
+        "pts": "xgb",
+        "reb": "ensemble",
+        "stl": "xgb"
+      }
+    },
+    "training_window": {
+      "advanced_start_season": 2015,
+      "history_start_season": 2001,
+      "note": "Raw ingest begins at history_start_season so career and experience features resolve. Minutes and target mean models train from advanced_start_season onward.",
+      "production_train_end_season": 2025
+    }
+  },
+  "frozen_policy_digest_scope": {
+    "combo_dependence_policy": {
+      "pruned_before_hashing": [],
+      "source": "models/combo_dependence_policy.json"
+    },
+    "gate3_deployment_policy": {
+      "pruned_before_hashing": [
+        "builder_commit",
+        "deployment_parameter_fit",
+        "gate2_evidence_commit",
+        "generated_at_utc",
+        "input_sha256",
+        "role_minutes_training_games",
+        "role_minutes_training_rows",
+        "role_state_seed_players",
+        "role_state_seed_teams"
+      ],
+      "source": "research/v2_gate3_deployment_artifacts/deployment_manifest.json"
+    },
+    "marginal_selection": {
+      "pruned_before_hashing": [],
+      "source": "models/marginal_selection.json"
+    },
+    "market_probability_calibration_policy": {
+      "pruned_before_hashing": [
+        "props.*.production_parameters"
+      ],
+      "source": "models/market_probability_calibration_policy.json"
+    },
+    "mean_model_selection": {
+      "pruned_before_hashing": [
+        "targets.*.production_weights"
+      ],
+      "source": "models/mean_model_selection.json"
+    }
+  },
+  "frozen_policy_digests": {
+    "combo_dependence_policy": "76248438b2b0bb4b4b7cc5179c4c2419262a1db7d22e86348d7476fa717031f4",
+    "gate3_deployment_policy": "8ee17957efbcfcc7210192d4b193514a2f115187a7f014090834541286c6c4ee",
+    "marginal_selection": "d4d9c117af49d885a4a1a39a2a23d2e451df7ce0a45ca7700458c534fef1eee8",
+    "market_probability_calibration_policy": "8f14c0dfb77a5fd05bb8b5d30e19766960579b09bb3518d82a07ac1841d84680",
+    "mean_model_selection": "053640cab14b042182e0c10a90bfbeb99e31414d11520af57e6031f302f611ff"
+  },
+  "generated_from_commit": "b7bb2e41a9efa296e776c619ed286a7f42f5e44d",
+  "model_source_generation": "NBA Prop Quant v2 / Gate 3 architecture",
+  "never_frozen_by_this_contract": [
+    "Daily fitted booster parameters",
+    "Daily ensemble weights",
+    "Daily ZINB parameters",
+    "Daily copula correlation",
+    "Daily Platt coefficients",
+    "Daily experience-curve coefficients",
+    "Daily role/minutes weights"
+  ],
+  "prohibited_under_this_contract": [
+    "Running model selection as part of a daily fit",
+    "Changing model family selection",
+    "Changing feature definitions",
+    "Changing hyperparameters",
+    "Changing dependence methodology",
+    "Changing calibration methodology",
+    "Changing Gate 3 routing",
+    "Changing the T-20 capture protocol"
+  ],
+  "purpose": "Freeze the model architecture so that a daily adaptive fit may change numerical fitted parameters only. Daily fitting is not daily model selection. This contract is additive: it does not replace or amend any historical static runtime contract, and it is not a claim policy.",
+  "reference_file_sha256": {
+    "configs/model.yaml": "12afbb1df6a62f8121319e587f65ebb1403d7a59dd721eadefdc209d2efe9140",
+    "models/combo_dependence_policy.json": "37dba3b7ff1c27d8cced09c6d8655c9c8ee7afc295427163a08846b0ccddf735",
+    "models/marginal_selection.json": "5516f941bdb9d8d723650f46d90afb6f1a7d39de777f0dd95bb7060a6bfe84e3",
+    "models/market_probability_calibration_policy.json": "484656bbc50ff111bb7990ccef75260a8f47b568c3f8a08816c82f65ab10f7a8",
+    "models/mean_model_selection.json": "d8961f7156514a7b5b92cde943c181566796254e46cea03f96bf6e7f7abbe438",
+    "research/v2_gate3_deployment_artifacts/deployment_manifest.json": "19536d2e694c66f518a01b35adff8d9b2288c8069992c7577f5a5ad983119271",
+    "src/nba_prop_quant/features.py": "956a95456dc5e344ef679d5e8bfacbabca9486caa745be2d1080d8517dcc4124"
+  },
+  "reproducibility_note": "This contract carries no wall-clock timestamp and is byte reproducible from the working tree at generated_from_commit."
+}
