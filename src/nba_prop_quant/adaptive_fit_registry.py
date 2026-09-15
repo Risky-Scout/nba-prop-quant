@@ -40,6 +40,8 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
+import yaml
+
 
 # --------------------------------------------------------------------------
 # identity and location constants
@@ -68,6 +70,44 @@ FEATURES_RELATIVE_PATH = (
 )
 
 CONTRACT_VERSION = 1
+
+# configs/model.yaml holds frozen hyperparameters and operational season
+# boundaries in the same file. The end of the eligible training history has to
+# advance as seasons complete, so hashing the file whole would make a lawful
+# season advancement look identical to architecture drift and would refuse
+# every fit from the next season onward. The config digest is therefore taken
+# over the hyperparameter projection with these operational fields pruned.
+CONFIG_OPERATIONAL_FIELDS: tuple[str, ...] = (
+    "advanced_start_season",
+    "history_start_season",
+    "play_by_play_start_season",
+    "production_train_end_season",
+)
+
+# The two window boundaries that are genuinely frozen. They leave the config
+# digest with the other season fields, so the contract pins them by value
+# instead and they are checked against the tree at registration.
+TRAINING_WINDOW_FROZEN_BOUNDARIES: tuple[str, ...] = (
+    "advanced_start_season",
+    "history_start_season",
+)
+
+TRAINING_WINDOW_POLICY_KEY = "training_window_policy"
+
+TRAINING_END_POLICY = "expanding_through_training_cutoff"
+
+TRAINING_CUTOFF_RELATION = "strictly_before_slate_date"
+
+# A terminal training season may never re-enter the frozen choices: a daily
+# adaptive fit has to be able to reach every season that completes after the
+# architecture was frozen.
+PROHIBITED_TRAINING_END_KEYS: frozenset[str] = frozenset(
+    {
+        "production_train_end_season",
+        "train_end_season",
+        "training_end_season",
+    }
+)
 
 MANIFEST_SCHEMA_VERSION = 1
 
@@ -510,7 +550,9 @@ def feature_schema_hash(project_root: Path) -> str:
     )
 
 
-def config_hash(project_root: Path) -> str:
+def load_model_config(
+    project_root: Path,
+) -> dict[str, Any]:
     path = project_root / CONFIG_RELATIVE_PATH
 
     if not path.exists():
@@ -518,7 +560,57 @@ def config_hash(project_root: Path) -> str:
             f"model config missing: {path}"
         )
 
-    return sha256_file(path)
+    with path.open("r", encoding="utf-8") as handle:
+        payload = yaml.safe_load(handle)
+
+    if not isinstance(payload, dict):
+        raise ArchitectureContractViolation(
+            f"model config is not a mapping: {path}"
+        )
+
+    return payload
+
+
+def config_projection(
+    project_root: Path,
+) -> dict[str, Any]:
+    """Return the model config with the operational season fields pruned.
+
+    Targets, distribution policy, dynamic priors, the booster
+    hyperparameters and the seeds all stay in the projection, so a
+    hyperparameter or target-set change still cannot register. Only the
+    season boundaries leave, because the training end expands as seasons
+    complete.
+    """
+    return prune_paths(
+        load_model_config(project_root),
+        CONFIG_OPERATIONAL_FIELDS,
+    )
+
+
+def config_hash(project_root: Path) -> str:
+    return sha256_canonical(
+        config_projection(project_root)
+    )
+
+
+def training_window_boundaries(
+    project_root: Path,
+) -> dict[str, int]:
+    """Read the frozen window boundaries the config digest no longer covers."""
+    config = load_model_config(project_root)
+
+    boundaries: dict[str, int] = {}
+
+    for name in TRAINING_WINDOW_FROZEN_BOUNDARIES:
+        if name not in config:
+            raise ArchitectureContractViolation(
+                f"model config is missing {name!r}"
+            )
+
+        boundaries[name] = int(config[name])
+
+    return boundaries
 
 
 def gate3_candidate_policy_id(project_root: Path) -> str:
@@ -616,11 +708,82 @@ def load_architecture_contract(
                 f"contract is missing {required!r}"
             )
 
+    _assert_training_window_policy(payload["frozen_choices"])
+
     return ArchitectureContract(
         path=path,
         payload=payload,
         sha256=sha256_file(path),
     )
+
+
+def _find_prohibited_training_end(
+    node: Any, trail: str
+) -> str | None:
+    if isinstance(node, dict):
+        for key, value in node.items():
+            path = f"{trail}.{key}"
+
+            if str(key) in PROHIBITED_TRAINING_END_KEYS:
+                return path
+
+            found = _find_prohibited_training_end(
+                value, path
+            )
+
+            if found is not None:
+                return found
+
+    return None
+
+
+def _assert_training_window_policy(
+    frozen: dict[str, Any],
+) -> None:
+    """Refuse a contract that pins a terminal production training season.
+
+    The architecture is frozen; the end of the eligible training history is
+    not. A contract naming a final season would stop every season completed
+    after the freeze from ever entering a daily adaptive fit.
+    """
+    prohibited = _find_prohibited_training_end(
+        frozen, "frozen_choices"
+    )
+
+    if prohibited is not None:
+        raise ArchitectureContractViolation(
+            f"{prohibited} pins a terminal production "
+            "training season; the training end expands "
+            "through the daily training_cutoff and is not a "
+            "frozen architecture choice"
+        )
+
+    policy = frozen.get(TRAINING_WINDOW_POLICY_KEY)
+
+    if not isinstance(policy, dict):
+        raise ArchitectureContractViolation(
+            "contract is missing frozen_choices."
+            f"{TRAINING_WINDOW_POLICY_KEY}"
+        )
+
+    for key, expected in (
+        ("end_policy", TRAINING_END_POLICY),
+        ("cutoff_relation", TRAINING_CUTOFF_RELATION),
+    ):
+        observed = policy.get(key)
+
+        if observed != expected:
+            raise ArchitectureContractViolation(
+                f"{TRAINING_WINDOW_POLICY_KEY}.{key} is "
+                f"{observed!r}, expected {expected!r}"
+            )
+
+    for name in TRAINING_WINDOW_FROZEN_BOUNDARIES:
+        if name not in policy:
+            raise ArchitectureContractViolation(
+                f"{TRAINING_WINDOW_POLICY_KEY} is missing "
+                f"{name!r}"
+            )
 
 
 def verify_contract_against_tree(
@@ -654,6 +817,22 @@ def verify_contract_against_tree(
             f"{observed_config}, contract "
             f"{frozen['config_hash']}"
         )
+
+    policy = frozen[TRAINING_WINDOW_POLICY_KEY]
+
+    observed_window = training_window_boundaries(
+        project_root
+    )
+
+    for name in TRAINING_WINDOW_FROZEN_BOUNDARIES:
+        expected_boundary = int(policy[name])
+
+        if observed_window[name] != expected_boundary:
+            raise ArchitectureContractViolation(
+                f"frozen training window {name} drifted: "
+                f"tree {observed_window[name]}, contract "
+                f"{expected_boundary}"
+            )
 
     observed_digests = frozen_policy_digests(project_root)
 

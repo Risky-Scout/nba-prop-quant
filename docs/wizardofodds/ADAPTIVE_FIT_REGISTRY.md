@@ -54,8 +54,11 @@ amend any historical static runtime contract, and it is not a claim policy.
 | Gate 2 / Gate 3 seed | 20260830 |
 | Effective XGBoost `n_jobs` | 2 |
 | Primary certification capture | T-20m, no fallback |
-| Feature-schema hash | derived from `src/nba_prop_quant/features.py` |
-| Config hash | derived from `configs/model.yaml` |
+| Feature-schema hash | derived from the hyperparameter projection of `src/nba_prop_quant/features.py` |
+| Config hash | derived from the hyperparameter projection of `configs/model.yaml` |
+| History start season | 2001 |
+| Advanced start season | 2015 |
+| Training end | **not frozen** — expands through the daily `training_cutoff` |
 | Frozen policy digests | one per selection, calibration, dependence and Gate 3 policy |
 
 ### Daily fitted values
@@ -72,6 +75,41 @@ These are the registry payload and are expected to differ every day:
 
 None of these is frozen by the contract.
 
+### The training window expands; its start does not
+
+A daily adaptive fit is worthless if it can only ever see seasons that had
+already finished when the architecture was frozen. The contract therefore
+freezes the *start* of the eligible history and the *rule* for its end, but
+never a terminal season, under
+`frozen_choices.training_window_policy`:
+
+| Field | Value | Status |
+| --- | --- | --- |
+| `history_start_season` | 2001 | frozen |
+| `advanced_start_season` | 2015 | frozen |
+| `end_policy` | `expanding_through_training_cutoff` | frozen rule |
+| `cutoff_relation` | `strictly_before_slate_date` | frozen rule |
+
+Raw ingest still begins in 2001 so career and experience features resolve, and
+minutes and target mean models still train from 2015 onward. The end of the
+window is whatever the fit declares as its `training_cutoff`, which must fall
+strictly before the fit's own `fit_date`. Every season completing after the
+freeze therefore becomes eligible training data as soon as it is complete,
+with no contract amendment, while a fit can never train on information from
+the slate date it is predicting.
+
+Registration refuses a contract that names a terminal season under any of
+`production_train_end_season`, `train_end_season` or `training_end_season`,
+anywhere inside `frozen_choices`. The defect that rule exists to prevent is
+concrete: an earlier draft of this contract pinned
+`production_train_end_season: 2025`, which would have frozen the model out of
+the 2026-27 season and every season after it.
+
+Because the two frozen boundaries are pruned from the config digest along with
+the other season fields, they are pinned by value in the policy instead and
+compared against `configs/model.yaml` at registration. Moving 2001 or 2015 is
+still refused.
+
 ### Why the policy digests are projections
 
 Several policy documents hold a frozen decision and a daily fitted value in
@@ -84,21 +122,32 @@ the same file:
 - the Gate 3 deployment manifest carries `gate3_policy` next to
   `input_sha256`, row counts and a build timestamp that all move whenever the
   role model is rebuilt
+- `configs/model.yaml` carries the frozen booster hyperparameters, seeds,
+  target set and distribution policy next to operational season boundaries,
+  one of which — the training end — has to advance every season
 
 Hashing those files whole would freeze exactly the numbers the contract
 permits to change daily, and every legitimate adaptive fit would be refused.
 So each frozen policy digest is taken over the document with its daily fitted
 fields pruned first. The pruning rules are published in the contract under
-`frozen_policy_digest_scope`, so the projection is auditable rather than
+`frozen_policy_digest_scope`, and the rules for the model config under
+`frozen_config_projection_scope`, so every projection is auditable rather than
 implicit.
 
 The effect is a lock that is tight in the right dimension:
 
 - refitting ensemble weights, Platt coefficients or the role model leaves the
   digest unchanged and the fit registers normally
+- advancing `production_train_end_season` or `play_by_play_start_season` as
+  seasons complete leaves `config_hash` unchanged and the fit registers
+  normally
 - changing a mean-model route, a marginal family, a calibration family, a
   dependence lambda or a Gate 3 route changes the digest and registration is
   refused
+- changing `n_estimators`, `max_depth`, `learning_rate`, `subsample`,
+  `reg_lambda`, `min_child_weight`, `random_state`, the simulation count, a
+  dynamic-prior constant or the target set changes `config_hash` and
+  registration is refused
 
 Whole-file hashes are still recorded under `reference_file_sha256` as
 provenance for the tree the contract was generated from. They are explicitly

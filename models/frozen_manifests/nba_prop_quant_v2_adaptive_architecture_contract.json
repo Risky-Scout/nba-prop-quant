@@ -18,19 +18,20 @@
       "frozen_choices.routing",
       "frozen_choices.feature_schema_hash",
       "frozen_choices.config_hash",
+      "frozen_choices.training_window_policy",
       "frozen_choices.gate3_candidate_policy_id",
       "frozen_choices.core_seed",
       "frozen_choices.gate3_seed",
       "frozen_choices.effective_n_jobs",
       "frozen_policy_digests"
     ],
-    "rationale": "Some policy documents hold a frozen decision and a daily fitted value in the same file: mean_model_selection carries production_weights, market_probability_calibration_policy carries production_parameters, and the Gate 3 deployment manifest pins the inputs of one particular role-model build. Hashing those files whole would freeze values this contract explicitly permits to change daily, so each frozen policy digest is taken over the document with its daily fitted fields pruned, as listed in frozen_policy_digest_scope. The whole-file hashes under reference_file_sha256 are provenance for the tree this contract was generated from and are not enforced.",
+    "rationale": "Some policy documents hold a frozen decision and a daily fitted value in the same file: mean_model_selection carries production_weights, market_probability_calibration_policy carries production_parameters, and the Gate 3 deployment manifest pins the inputs of one particular role-model build. Hashing those files whole would freeze values this contract explicitly permits to change daily, so each frozen policy digest is taken over the document with its daily fitted fields pruned, as listed in frozen_policy_digest_scope. configs/model.yaml is projected for the same reason: it mixes frozen hyperparameters with operational season boundaries, and the training end must advance as seasons complete, so config_hash covers only the hyperparameter projection described in frozen_config_projection_scope. The two window boundaries that stay frozen are pinned by value under frozen_choices.training_window_policy and checked against the tree instead. The whole-file hashes under reference_file_sha256 are provenance for the tree this contract was generated from and are not enforced.",
     "recorded_but_not_enforced": [
       "reference_file_sha256"
     ]
   },
   "frozen_choices": {
-    "config_hash": "12afbb1df6a62f8121319e587f65ebb1403d7a59dd721eadefdc209d2efe9140",
+    "config_hash": "d85f3ac25f83485bf47b2b13c61306e527c962a3412f8ec8e4193164a9331349",
     "core_seed": 73,
     "effective_n_jobs": 2,
     "feature_schema_counts": {
@@ -103,11 +104,28 @@
         "stl": "xgb"
       }
     },
-    "training_window": {
+    "training_window_policy": {
       "advanced_start_season": 2015,
+      "cutoff_relation": "strictly_before_slate_date",
+      "end_policy": "expanding_through_training_cutoff",
       "history_start_season": 2001,
-      "note": "Raw ingest begins at history_start_season so career and experience features resolve. Minutes and target mean models train from advanced_start_season onward.",
-      "production_train_end_season": 2025
+      "note": "Raw ingest begins at history_start_season so career and experience features resolve. Minutes and target mean models train from advanced_start_season onward. Both boundaries are frozen. The training END is not: eligible history expands to cover every season completed before the declared daily training_cutoff, and that cutoff must fall strictly before the prediction slate date. No terminal season may be named here."
+    }
+  },
+  "frozen_config_projection_scope": {
+    "model_hyperparameters": {
+      "operational_not_frozen": [
+        "play_by_play_start_season",
+        "production_train_end_season"
+      ],
+      "pruned_before_hashing": [
+        "advanced_start_season",
+        "history_start_season",
+        "play_by_play_start_season",
+        "production_train_end_season"
+      ],
+      "purpose": "config_hash is taken over configs/model.yaml with the operational season fields pruned, so that advancing the training end as seasons complete is not mistaken for architecture drift. Targets, distribution policy, dynamic priors, booster hyperparameters, seeds and effective n_jobs all remain inside the hashed projection and are still refused when they move. advanced_start_season and history_start_season are pruned from the digest but remain frozen by value under frozen_choices.training_window_policy.",
+      "source": "configs/model.yaml"
     }
   },
   "frozen_policy_digest_scope": {

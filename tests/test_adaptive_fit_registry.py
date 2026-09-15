@@ -19,13 +19,18 @@ import pytest
 
 from nba_prop_quant.adaptive_fit_registry import (
     ARCHITECTURE_REFERENCE_SHA,
+    CONFIG_OPERATIONAL_FIELDS,
     CONFIG_RELATIVE_PATH,
     CONTRACT_RELATIVE_PATH,
     FEATURES_RELATIVE_PATH,
     FIT_ID_PREFIX,
     FROZEN_POLICY_SOURCES,
+    PROHIBITED_TRAINING_END_KEYS,
     REGISTRY_ENV_VAR,
     REQUIRED_VALIDATION_CHECKS,
+    TRAINING_CUTOFF_RELATION,
+    TRAINING_END_POLICY,
+    TRAINING_WINDOW_POLICY_KEY,
     ArchitectureContractViolation,
     FitAlreadyExists,
     FitMetadata,
@@ -37,7 +42,10 @@ from nba_prop_quant.adaptive_fit_registry import (
     RegistryRootError,
     StagedTreeError,
     ValidationRefused,
+    _find_prohibited_training_end,
     canonical_json,
+    config_hash,
+    config_projection,
     derive_fit_id,
     feature_schema_hash,
     frozen_policy_digests,
@@ -47,6 +55,7 @@ from nba_prop_quant.adaptive_fit_registry import (
     parse_checksums,
     prune_paths,
     resolve_registry_root,
+    training_window_boundaries,
 )
 
 
@@ -793,6 +802,390 @@ def test_training_cutoff_must_precede_fit_date(
             staged,
             make_metadata(training_cutoff="2026-11-15"),
         )
+
+
+# --------------------------------------------------------------------------
+# adaptive training window
+#
+# The architecture is frozen; the end of the eligible training history is not.
+# These tests hold that line in both directions: a season completing after the
+# freeze must be able to enter a daily fit, and a hyperparameter change must
+# still be refused.
+# --------------------------------------------------------------------------
+
+
+def test_no_terminal_training_season_is_frozen(
+    project_root: Path,
+):
+    """2025, or any other season, is never the frozen production end."""
+    contract = load_architecture_contract(project_root)
+
+    assert (
+        _find_prohibited_training_end(
+            contract.frozen_choices, "frozen_choices"
+        )
+        is None
+    )
+
+    policy = contract.frozen_choices[
+        TRAINING_WINDOW_POLICY_KEY
+    ]
+
+    assert policy["end_policy"] == TRAINING_END_POLICY
+
+    assert (
+        policy["cutoff_relation"]
+        == TRAINING_CUTOFF_RELATION
+    )
+
+    assert "training_window" not in contract.frozen_choices
+
+
+@pytest.mark.parametrize(
+    "key",
+    sorted(PROHIBITED_TRAINING_END_KEYS),
+)
+def test_contract_pinning_a_terminal_season_rejected(
+    fake_project: Path, key: str
+):
+    """Re-freezing a terminal season is refused, not silently honoured."""
+    contract_path = fake_project / CONTRACT_RELATIVE_PATH
+
+    payload = read_json(contract_path)
+
+    payload["frozen_choices"][
+        TRAINING_WINDOW_POLICY_KEY
+    ][key] = 2025
+
+    write_json(contract_path, payload)
+
+    with pytest.raises(
+        ArchitectureContractViolation,
+        match="terminal production training season",
+    ):
+        load_architecture_contract(fake_project)
+
+
+def test_legacy_nested_training_window_rejected(
+    fake_project: Path,
+):
+    """The exact shape this correction removed cannot come back."""
+    contract_path = fake_project / CONTRACT_RELATIVE_PATH
+
+    payload = read_json(contract_path)
+
+    payload["frozen_choices"]["training_window"] = {
+        "advanced_start_season": 2015,
+        "history_start_season": 2001,
+        "production_train_end_season": 2025,
+    }
+
+    write_json(contract_path, payload)
+
+    with pytest.raises(
+        ArchitectureContractViolation,
+        match="terminal production training season",
+    ):
+        load_architecture_contract(fake_project)
+
+
+def test_missing_training_window_policy_rejected(
+    fake_project: Path,
+):
+    contract_path = fake_project / CONTRACT_RELATIVE_PATH
+
+    payload = read_json(contract_path)
+
+    del payload["frozen_choices"][
+        TRAINING_WINDOW_POLICY_KEY
+    ]
+
+    write_json(contract_path, payload)
+
+    with pytest.raises(
+        ArchitectureContractViolation,
+        match=TRAINING_WINDOW_POLICY_KEY,
+    ):
+        load_architecture_contract(fake_project)
+
+
+@pytest.mark.parametrize(
+    "key",
+    ["end_policy", "cutoff_relation"],
+)
+def test_training_window_policy_semantics_pinned(
+    fake_project: Path, key: str
+):
+    """The policy cannot quietly become a different policy."""
+    contract_path = fake_project / CONTRACT_RELATIVE_PATH
+
+    payload = read_json(contract_path)
+
+    payload["frozen_choices"][
+        TRAINING_WINDOW_POLICY_KEY
+    ][key] = "fixed_at_2025"
+
+    write_json(contract_path, payload)
+
+    with pytest.raises(
+        ArchitectureContractViolation, match=key
+    ):
+        load_architecture_contract(fake_project)
+
+
+def test_future_training_cutoff_registers(
+    tmp_path: Path, project_root: Path, staged: Path
+):
+    """A cutoff in a season completed long after the freeze is registrable."""
+    registry = make_registry(tmp_path, project_root)
+
+    fit_id = registry.register(
+        staged,
+        make_metadata(
+            fit_date="2031-01-15",
+            training_cutoff="2031-01-14",
+        ),
+    )
+
+    manifest = registry.load_manifest(fit_id)
+
+    assert manifest["training_cutoff"] == "2031-01-14"
+
+    assert manifest["fit_date"] == "2031-01-15"
+
+    registry.verify(fit_id)
+
+
+@pytest.mark.parametrize(
+    "fit_date,training_cutoff",
+    [
+        ("2031-01-15", "2031-01-15"),
+        ("2031-01-15", "2031-01-16"),
+        ("2026-11-15", "2027-06-01"),
+    ],
+)
+def test_training_cutoff_not_strictly_before_rejected(
+    tmp_path: Path,
+    project_root: Path,
+    staged: Path,
+    fit_date: str,
+    training_cutoff: str,
+):
+    """An expanding window is still never allowed to reach the slate date."""
+    registry = make_registry(tmp_path, project_root)
+
+    with pytest.raises(
+        ArchitectureContractViolation,
+        match="strictly before",
+    ):
+        registry.register(
+            staged,
+            make_metadata(
+                fit_date=fit_date,
+                training_cutoff=training_cutoff,
+            ),
+        )
+
+    assert registry.list_fits() == []
+
+
+def test_frozen_window_boundaries_are_2001_and_2015(
+    project_root: Path,
+):
+    contract = load_architecture_contract(project_root)
+
+    policy = contract.frozen_choices[
+        TRAINING_WINDOW_POLICY_KEY
+    ]
+
+    assert policy["history_start_season"] == 2001
+
+    assert policy["advanced_start_season"] == 2015
+
+    assert training_window_boundaries(project_root) == {
+        "advanced_start_season": 2015,
+        "history_start_season": 2001,
+    }
+
+
+@pytest.mark.parametrize(
+    "field,replacement",
+    [
+        ("history_start_season: 2001", "history_start_season: 2002"),
+        (
+            "advanced_start_season: 2015",
+            "advanced_start_season: 2016",
+        ),
+    ],
+)
+def test_frozen_window_boundary_drift_rejected(
+    tmp_path: Path,
+    fake_project: Path,
+    staged: Path,
+    field: str,
+    replacement: str,
+):
+    """Pruning the boundaries from the digest did not unprotect them."""
+    config = fake_project / CONFIG_RELATIVE_PATH
+
+    config.write_text(
+        config.read_text(encoding="utf-8").replace(
+            field, replacement, 1
+        ),
+        encoding="utf-8",
+    )
+
+    registry = make_registry(tmp_path, fake_project)
+
+    with pytest.raises(
+        ArchitectureContractViolation,
+        match="frozen training window",
+    ):
+        registry.register(staged, make_metadata())
+
+    assert registry.list_fits() == []
+
+
+@pytest.mark.parametrize(
+    "field,replacement",
+    [
+        (
+            "production_train_end_season: 2025",
+            "production_train_end_season: 2026",
+        ),
+        (
+            "production_train_end_season: 2025",
+            "production_train_end_season: 2031",
+        ),
+        (
+            "play_by_play_start_season: 2025",
+            "play_by_play_start_season: 2026",
+        ),
+    ],
+)
+def test_season_advancement_is_not_architecture_drift(
+    tmp_path: Path,
+    fake_project: Path,
+    staged: Path,
+    field: str,
+    replacement: str,
+):
+    """Advancing an operational season leaves the architecture lock intact."""
+    config = fake_project / CONFIG_RELATIVE_PATH
+
+    before = config_hash(fake_project)
+
+    config.write_text(
+        config.read_text(encoding="utf-8").replace(
+            field, replacement, 1
+        ),
+        encoding="utf-8",
+    )
+
+    assert config_hash(fake_project) == before
+
+    registry = make_registry(tmp_path, fake_project)
+
+    fit_id = registry.register(
+        staged,
+        make_metadata(
+            fit_date="2031-01-15",
+            training_cutoff="2031-01-14",
+        ),
+    )
+
+    assert registry.list_fits() == [fit_id]
+
+    registry.verify(fit_id)
+
+
+def test_operational_fields_are_outside_the_config_digest(
+    project_root: Path,
+):
+    projection = config_projection(project_root)
+
+    for name in CONFIG_OPERATIONAL_FIELDS:
+        assert name not in projection
+
+    # The hyperparameters, seeds and target set stay inside it.
+    assert projection["model"]["max_depth"] == 5
+
+    assert projection["model"]["random_state"] == 73
+
+    assert projection["model"]["n_jobs"] == 2
+
+    assert projection["distribution"]["simulations"] == 20000
+
+    assert projection["targets"] == [
+        "pts",
+        "reb",
+        "ast",
+        "stl",
+        "blk",
+        "fg3m",
+    ]
+
+
+@pytest.mark.parametrize(
+    "field,replacement",
+    [
+        ("n_estimators: 700", "n_estimators: 900"),
+        ("learning_rate: 0.03", "learning_rate: 0.05"),
+        ("max_depth: 5", "max_depth: 7"),
+        ("subsample: 0.85", "subsample: 0.7"),
+        ("reg_lambda: 4.0", "reg_lambda: 2.0"),
+        ("min_child_weight: 8.0", "min_child_weight: 4.0"),
+        ("random_state: 73", "random_state: 99"),
+        ("simulations: 20000", "simulations: 40000"),
+        ("prior_strength: 8.0", "prior_strength: 3.0"),
+        ("calibration_fraction: 0.15", "calibration_fraction: 0.3"),
+    ],
+)
+def test_hyperparameter_drift_still_rejected(
+    tmp_path: Path,
+    fake_project: Path,
+    staged: Path,
+    field: str,
+    replacement: str,
+):
+    """Projecting the config did not loosen hyperparameter locking."""
+    config = fake_project / CONFIG_RELATIVE_PATH
+
+    config.write_text(
+        config.read_text(encoding="utf-8").replace(
+            field, replacement, 1
+        ),
+        encoding="utf-8",
+    )
+
+    registry = make_registry(tmp_path, fake_project)
+
+    with pytest.raises(
+        ArchitectureContractViolation, match="config hash"
+    ):
+        registry.register(staged, make_metadata())
+
+    assert registry.list_fits() == []
+
+
+def test_target_set_change_still_rejected(
+    tmp_path: Path, fake_project: Path, staged: Path
+):
+    config = fake_project / CONFIG_RELATIVE_PATH
+
+    config.write_text(
+        config.read_text(encoding="utf-8").replace(
+            "- fg3m\n", "- fg3m\n- tov\n", 1
+        ),
+        encoding="utf-8",
+    )
+
+    registry = make_registry(tmp_path, fake_project)
+
+    with pytest.raises(
+        ArchitectureContractViolation, match="config hash"
+    ):
+        registry.register(staged, make_metadata())
 
 
 # --------------------------------------------------------------------------
