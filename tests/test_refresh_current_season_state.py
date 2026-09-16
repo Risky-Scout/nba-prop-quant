@@ -11,7 +11,9 @@ import fcntl
 import hashlib
 import importlib.util
 import io
+import json
 import os
+import shutil
 import socket
 import sys
 from contextlib import redirect_stderr, redirect_stdout
@@ -1399,3 +1401,431 @@ def test_slate_date_must_be_exact_iso(monkeypatch, env):
     assert "must be exact YYYY-MM-DD" in result.output
     assert result.preflight_calls == []
     assert env.raw_hashes() == before
+
+
+# ----------------------------------------------------------------------
+# Step 3B: crash-recoverable multi-file transaction
+# ----------------------------------------------------------------------
+
+
+class SimulatedCrash(BaseException):
+    """Stands in for a process kill.
+
+    Deliberately not an Exception, so it bypasses the in-process rollback and
+    leaves exactly what a killed process would leave: a prepared journal and a
+    partially replaced live tree.
+    """
+
+
+def transaction_dirs(env: Env) -> list[Path]:
+    root = env.data_dir / refresh.TRANSACTIONS_RELATIVE_PATH
+
+    if not root.is_dir():
+        return []
+
+    return sorted(
+        entry
+        for entry in root.iterdir()
+        if entry.is_dir() and entry.name.startswith(refresh.TRANSACTION_PREFIX)
+    )
+
+
+def only_transaction(env: Env) -> Path:
+    directories = transaction_dirs(env)
+
+    assert len(directories) == 1, directories
+
+    return directories[0]
+
+
+def crash_after_replacements(monkeypatch, count: int) -> None:
+    """Let `count` live replacements land, then die like a killed process.
+
+    The crash fires once. Everything afterwards behaves normally, because
+    recovery runs in a new process that carries no such fault.
+    """
+    state = {"done": 0, "crashed": False}
+    real_replace = refresh._atomic_replace
+
+    def replace(source: Path, destination: Path) -> None:
+        if state["done"] >= count and not state["crashed"]:
+            state["crashed"] = True
+
+            raise SimulatedCrash(
+                f"simulated process loss after {count} replacement(s)"
+            )
+
+        state["done"] += 1
+        real_replace(source, destination)
+
+    monkeypatch.setattr(refresh, "_atomic_replace", replace)
+
+
+def crashed_refresh(monkeypatch, env: Env, *, after: int, **kwargs):
+    crash_after_replacements(monkeypatch, after)
+
+    with pytest.raises(SimulatedCrash):
+        run_refresh(monkeypatch, env, **kwargs)
+
+
+def staged_generation_hashes(env: Env) -> dict[str, str]:
+    """Hashes of the new generation stage_valid produces, without committing."""
+    workspace = env.data_dir / ".expected_generation"
+    workspace.mkdir(parents=True, exist_ok=True)
+
+    stage_valid(workspace)
+
+    staged = refresh.season_paths(workspace, SEASON)
+
+    hashes = {
+        label: hash_bytes(path.read_bytes())
+        for label, path in staged.as_items()
+    }
+
+    shutil.rmtree(workspace, ignore_errors=True)
+
+    return hashes
+
+
+def live_generation_hashes(env: Env) -> dict[str, str]:
+    return {
+        label: hash_bytes(path.read_bytes()) if path.exists() else None
+        for label, path in env.live.as_items()
+    }
+
+
+def recover(env: Env) -> list[str]:
+    return refresh.recover_incomplete_transactions(env.data_dir)
+
+
+def test_successful_refresh_leaves_no_open_transaction(monkeypatch, env):
+    result = run_refresh(monkeypatch, env)
+
+    assert result.code == refresh.EXIT_OK
+    assert transaction_dirs(env) == []
+    assert "refresh transaction: txn_" in result.output
+
+
+def test_prepare_records_every_target_before_any_replacement(monkeypatch, env):
+    crashed_refresh(monkeypatch, env, after=0)
+
+    journal = only_transaction(env)
+
+    assert (journal / refresh.PREPARED_MARKER).exists()
+    assert not (journal / refresh.COMMITTED_MARKER).exists()
+
+    manifest = json.loads((journal / "manifest.json").read_text())
+
+    assert {entry["label"] for entry in manifest["targets"]} == {
+        "stats",
+        "games",
+        "advanced",
+    }
+
+    for entry in manifest["targets"]:
+        assert entry["existed"] is True
+        assert len(entry["old_sha256"]) == 64
+        assert len(entry["new_sha256"]) == 64
+        # Portable: the journal records paths relative to the data root.
+        assert not entry["relative_path"].startswith("/")
+        assert (journal / "backups" / f"{entry['label']}.parquet").exists()
+
+
+@pytest.mark.parametrize("after", [0, 1, 2])
+def test_crash_before_or_between_replacements_rolls_back(
+    monkeypatch, env, after
+):
+    before = env.raw_hashes()
+
+    crashed_refresh(monkeypatch, env, after=after)
+
+    if after:
+        # A killed process really does leave a mixed generation behind.
+        assert env.raw_hashes() != before
+
+    outcomes = recover(env)
+
+    assert len(outcomes) == 1
+    assert "rolled back" in outcomes[0]
+
+    assert env.raw_hashes() == before
+    assert transaction_dirs(env) == []
+
+
+def test_crash_after_all_replacements_rolls_forward(monkeypatch, env):
+    """Only the commit marker was lost, so the new generation is complete."""
+    expected = staged_generation_hashes(env)
+
+    def crash(*args, **kwargs):
+        raise SimulatedCrash("simulated process loss before the commit marker")
+
+    monkeypatch.setattr(refresh, "write_state_record", crash)
+
+    with pytest.raises(SimulatedCrash):
+        run_refresh(monkeypatch, env)
+
+    assert live_generation_hashes(env) == expected
+
+    outcomes = recover(env)
+
+    assert len(outcomes) == 1
+    assert "rolled forward" in outcomes[0]
+
+    assert live_generation_hashes(env) == expected
+    assert transaction_dirs(env) == []
+
+
+@pytest.mark.parametrize("after", [0, 1, 2])
+def test_recovered_state_is_never_a_mixture(monkeypatch, env, after):
+    previous = live_generation_hashes(env)
+    incoming = staged_generation_hashes(env)
+
+    crashed_refresh(monkeypatch, env, after=after)
+    recover(env)
+
+    observed = live_generation_hashes(env)
+
+    assert observed in (previous, incoming)
+
+
+def test_second_refresh_after_recovery_succeeds(monkeypatch, env):
+    expected = staged_generation_hashes(env)
+
+    crashed_refresh(monkeypatch, env, after=1)
+
+    result = run_refresh(monkeypatch, env)
+
+    assert result.code == refresh.EXIT_OK
+    assert "recovered interrupted refresh" in result.output
+    assert "rolled back" in result.output
+
+    assert live_generation_hashes(env) == expected
+    assert transaction_dirs(env) == []
+
+
+def test_recovery_runs_before_the_preflight(monkeypatch, env):
+    crashed_refresh(monkeypatch, env, after=1)
+
+    result = run_refresh(monkeypatch, env, preflight_code=10)
+
+    # The preflight withheld readiness, so no new data was fetched, but the
+    # interrupted transaction was still resolved first.
+    assert result.code == 10
+    assert result.ingest_calls == []
+    assert transaction_dirs(env) == []
+
+
+def test_corrupt_backup_fails_recovery_closed(monkeypatch, env):
+    crashed_refresh(monkeypatch, env, after=1)
+
+    journal = only_transaction(env)
+    (journal / "backups" / "stats.parquet").write_bytes(b"corrupt")
+
+    with pytest.raises(refresh.RefreshFailure) as caught:
+        recover(env)
+
+    assert caught.value.code == refresh.EXIT_RECOVERY_FAILED
+    assert "corrupt" in str(caught.value)
+    assert "manual inspection" in str(caught.value)
+
+    # The journal is kept so the operator still has the evidence.
+    assert transaction_dirs(env) == [journal]
+
+
+def test_missing_backup_fails_recovery_closed(monkeypatch, env):
+    crashed_refresh(monkeypatch, env, after=1)
+
+    journal = only_transaction(env)
+    (journal / "backups" / "games.parquet").unlink()
+
+    with pytest.raises(refresh.RefreshFailure) as caught:
+        recover(env)
+
+    assert caught.value.code == refresh.EXIT_RECOVERY_FAILED
+    assert "cannot be restored automatically" in str(caught.value)
+
+
+def test_unreadable_manifest_fails_recovery_closed(monkeypatch, env):
+    crashed_refresh(monkeypatch, env, after=1)
+
+    journal = only_transaction(env)
+    (journal / "manifest.json").write_text("{ not json", encoding="utf-8")
+
+    with pytest.raises(refresh.RefreshFailure) as caught:
+        recover(env)
+
+    assert caught.value.code == refresh.EXIT_RECOVERY_FAILED
+    assert "manifest is unreadable" in str(caught.value)
+
+
+def test_journal_without_prepared_marker_is_discarded(monkeypatch, env):
+    """No PREPARED marker proves no live file was ever replaced."""
+    before = env.raw_hashes()
+
+    crashed_refresh(monkeypatch, env, after=0)
+
+    journal = only_transaction(env)
+    (journal / refresh.PREPARED_MARKER).unlink()
+
+    outcomes = recover(env)
+
+    assert "no live file had been replaced" in outcomes[0]
+    assert env.raw_hashes() == before
+    assert transaction_dirs(env) == []
+
+
+def test_committed_journal_is_cleaned_up_silently(monkeypatch, env):
+    crashed_refresh(monkeypatch, env, after=0)
+
+    journal = only_transaction(env)
+    refresh.write_marker(journal / refresh.COMMITTED_MARKER)
+
+    assert recover(env) == []
+    assert transaction_dirs(env) == []
+
+
+def test_staged_file_changing_after_validation_is_refused(monkeypatch, env):
+    """Bytes that moved after validation approved them are never published."""
+    before = env.raw_hashes()
+
+    real_prepare = refresh.prepare_transaction
+
+    def prepare_then_corrupt(staged, live, data_root, season, slate_date):
+        transaction = real_prepare(staged, live, data_root, season, slate_date)
+
+        # Corrupt an approved staged file after its hash was recorded, as a
+        # concurrent writer or a failing disk would. stats is replaced before
+        # games, so this also exercises rollback of an already-replaced file.
+        staged.games.write_bytes(staged.games.read_bytes() + b"\x00")
+
+        return transaction
+
+    monkeypatch.setattr(refresh, "prepare_transaction", prepare_then_corrupt)
+
+    result = run_refresh(monkeypatch, env)
+
+    assert result.code == refresh.EXIT_COMMIT_ROLLED_BACK
+    assert "changed after validation" in result.output
+    assert env.raw_hashes() == before
+    assert transaction_dirs(env) == []
+
+
+def test_transaction_discarded_when_in_process_rollback_succeeds(
+    monkeypatch, env
+):
+    before = env.raw_hashes()
+
+    failing_replace(monkeypatch, 2)
+
+    result = run_refresh(monkeypatch, env)
+
+    assert result.code == refresh.EXIT_COMMIT_ROLLED_BACK
+    assert env.raw_hashes() == before
+    assert transaction_dirs(env) == []
+
+
+# ----------------------------------------------------------------------
+# Step 3B: semantic rolling-state integrity record
+# ----------------------------------------------------------------------
+
+
+def state_record(env: Env) -> dict:
+    return json.loads(
+        (env.data_dir / refresh.STATE_RELATIVE_PATH).read_text(
+            encoding="utf-8"
+        )
+    )
+
+
+def test_successful_refresh_writes_the_state_record(monkeypatch, env):
+    result = run_refresh(monkeypatch, env)
+
+    assert result.code == refresh.EXIT_OK
+
+    record = state_record(env)
+
+    assert record["schema_version"] == refresh.STATE_SCHEMA_VERSION
+    assert record["season"] == SEASON
+    assert record["slate_date"] == SLATE_DATE
+    assert set(record["datasets"]) == {"stats", "games", "advanced"}
+    assert len(record["datasets_fingerprint"]) == 64
+
+    stats = record["datasets"]["stats"]
+
+    assert stats["row_count"] == len(make_stats(STAGED_COMPLETED))
+    assert stats["key_columns"] == ["game_id", "player_id"]
+    assert stats["max_date"] == STAGED_COMPLETED[-1][1]
+    assert stats["relative_path"] == (
+        f"raw/seasons/season={SEASON}/stats.parquet"
+    )
+
+    assert ".state/current_season_state.json" in result.output
+
+
+def test_state_record_is_under_the_data_root_not_the_repository(
+    monkeypatch, env
+):
+    run_refresh(monkeypatch, env)
+
+    assert (env.data_dir / refresh.STATE_RELATIVE_PATH).is_file()
+    assert not (PROJECT / refresh.STATE_RELATIVE_PATH).exists()
+
+
+def test_state_record_records_no_absolute_paths_or_secrets(monkeypatch, env):
+    run_refresh(monkeypatch, env)
+
+    text = (env.data_dir / refresh.STATE_RELATIVE_PATH).read_text(
+        encoding="utf-8"
+    )
+
+    assert str(env.data_dir) not in text
+
+    for banned in ("api_key", "password", "token", "secret", "authorization"):
+        assert banned not in text.lower()
+
+
+def test_state_fingerprint_is_stable_across_identical_refreshes(
+    monkeypatch, env
+):
+    run_refresh(monkeypatch, env)
+    first = state_record(env)
+
+    run_refresh(monkeypatch, env)
+    second = state_record(env)
+
+    assert first["datasets_fingerprint"] == second["datasets_fingerprint"]
+    assert first["datasets"] == second["datasets"]
+
+
+def test_state_fingerprint_moves_when_records_change(monkeypatch, env):
+    run_refresh(monkeypatch, env)
+    first = state_record(env)
+
+    extra = STAGED_COMPLETED + [(7, "2026-11-14")]
+
+    run_refresh(
+        monkeypatch,
+        env,
+        stage=staging(
+            stats=make_stats(extra),
+            advanced=make_advanced(extra),
+            games=make_games(extra + SCHEDULED),
+        ),
+    )
+
+    second = state_record(env)
+
+    assert first["datasets_fingerprint"] != second["datasets_fingerprint"]
+    assert (
+        second["datasets"]["stats"]["row_count"]
+        > first["datasets"]["stats"]["row_count"]
+    )
+
+
+def test_state_record_is_not_written_when_the_refresh_fails(monkeypatch, env):
+    failing_replace(monkeypatch, 1)
+
+    result = run_refresh(monkeypatch, env)
+
+    assert result.code == refresh.EXIT_COMMIT_ROLLED_BACK
+    assert not (env.data_dir / refresh.STATE_RELATIVE_PATH).exists()
