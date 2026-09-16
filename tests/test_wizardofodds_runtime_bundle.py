@@ -604,16 +604,141 @@ def test_real_contract_excludes_mutable_runtime_state():
     assert "research/v2_gate2_certification_outputs/**" in excluded
 
 
+ADAPTIVE_SERVING_CONTRACT_PATH = (
+    PROJECT
+    / "models"
+    / "frozen_manifests"
+    / "nba_prop_quant_v2_adaptive_serving_source_contract.json"
+)
+
+
+def adaptive_serving_contract() -> dict:
+    return json.loads(
+        ADAPTIVE_SERVING_CONTRACT_PATH.read_text(encoding="utf-8")
+    )
+
+
 def test_frozen_mathematical_sources_match_anchor():
+    """Every serving source still matches the anchor unless declared otherwise.
+
+    Adaptive production may need a serving-correctness fix in a file the
+    historical contract byte-pins. Such a file is enumerated in the adaptive
+    serving source contract with a justification; everything else must still
+    be byte-identical to the frozen commit, and an undeclared difference still
+    fails here.
+    """
     contract = json.loads(REAL_CONTRACT_PATH.read_text(encoding="utf-8"))
+    adaptive = adaptive_serving_contract()
+
+    declared = set(adaptive["diverged_from_historical_reference"])
+
+    unchanged = [
+        relative
+        for relative in contract["frozen_model_source_files"]
+        if relative not in declared
+    ]
 
     verified = builder.verify_frozen_model_sources(
         PROJECT,
         FROZEN_MODEL_COMMIT,
-        contract["frozen_model_source_files"],
+        unchanged,
     )
 
-    assert set(verified) == set(contract["frozen_model_source_files"])
+    assert set(verified) == set(unchanged)
+
+    # A declared divergence must be a real one, so the exemption cannot be
+    # used to quietly wave through an unchanged file.
+    for relative in sorted(declared):
+        assert relative in set(contract["frozen_model_source_files"])
+
+        with pytest.raises(builder.BuildError):
+            builder.verify_frozen_model_sources(
+                PROJECT,
+                FROZEN_MODEL_COMMIT,
+                [relative],
+            )
+
+
+def test_historical_reference_bytes_are_still_intact():
+    """The anchor itself is unchanged, including for the diverged file.
+
+    The adaptive contract records the historical SHA256 of every locked file.
+    Those must still match the blobs at the frozen commit, so the historical
+    evidence remains verifiable even where serving has moved on.
+    """
+    adaptive = adaptive_serving_contract()
+
+    assert (
+        adaptive["historical_architecture_reference"] == FROZEN_MODEL_COMMIT
+    )
+
+    historical_contract_sha = hashlib.sha256(
+        REAL_CONTRACT_PATH.read_bytes()
+    ).hexdigest()
+
+    assert (
+        adaptive["historical_contract_sha256"] == historical_contract_sha
+    )
+
+    for relative, entry in sorted(
+        adaptive["locked_serving_source_files"].items()
+    ):
+        blob = subprocess.run(
+            ["git", "cat-file", "blob", f"{FROZEN_MODEL_COMMIT}:{relative}"],
+            cwd=PROJECT,
+            capture_output=True,
+            check=True,
+        )
+
+        assert (
+            hashlib.sha256(blob.stdout).hexdigest()
+            == entry["historical_reference_sha256"]
+        ), f"{relative} anchor bytes moved"
+
+
+def test_adaptive_serving_source_matches_its_contract():
+    """What adaptive serving runs is pinned, not merely exempted."""
+    contract = json.loads(REAL_CONTRACT_PATH.read_text(encoding="utf-8"))
+    adaptive = adaptive_serving_contract()
+
+    locked = adaptive["locked_serving_source_files"]
+
+    assert set(locked) == set(contract["frozen_model_source_files"])
+
+    for relative, entry in sorted(locked.items()):
+        observed = hashlib.sha256(
+            (PROJECT / relative).read_bytes()
+        ).hexdigest()
+
+        assert observed == entry["current_sha256"], (
+            f"{relative} does not match the adaptive serving source contract"
+        )
+
+        matches = entry["matches_historical_reference"]
+
+        assert matches == (
+            entry["current_sha256"] == entry["historical_reference_sha256"]
+        )
+
+        if not matches:
+            assert entry["divergence_reason"].strip()
+
+
+def test_adaptive_serving_contract_asserts_no_model_change():
+    invariants = adaptive_serving_contract()["invariants"]
+
+    for name in (
+        "model_mathematics_changed",
+        "gate3_routing_changed",
+        "calibration_methodology_changed",
+        "dependence_methodology_changed",
+        "marginal_family_changed",
+        "mean_model_routing_changed",
+        "feature_definitions_changed",
+        "t20_certification_protocol_changed",
+        "fitted_model_artifacts_changed",
+    ):
+        assert invariants[name] is False
 
 
 def test_v1_freeze_manifests_are_unchanged():

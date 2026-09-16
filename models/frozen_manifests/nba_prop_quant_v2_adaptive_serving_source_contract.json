@@ -1,0 +1,76 @@
+{
+  "contract_name": "nba_prop_quant_v2_adaptive_serving_source_contract",
+  "contract_version": 1,
+  "diverged_from_historical_reference": [
+    "scripts/15_price_markets.py"
+  ],
+  "historical_architecture_reference": "4def8ad33ccc56016fb19a97fceca6e027c9612a",
+  "historical_contract_path": "models/frozen_manifests/nba_prop_quant_v2_gate3_runtime_contract.json",
+  "historical_contract_sha256": "793b287434f13999e283fb28adc71b8198fc848ff496f8728dec5be95a6fb437",
+  "introduced_by": "Production Step 3B production-path correction",
+  "invariant_basis": "The only divergence is a lineage-field ordering correction in the pricing emitter. It creates no probability, changes no line, and touches no routing, calibration, dependence, marginal or mean-model code path. The Step 3A adaptive architecture contract remains the authority on frozen model choices and is unchanged.",
+  "invariants": {
+    "calibration_methodology_changed": false,
+    "dependence_methodology_changed": false,
+    "feature_definitions_changed": false,
+    "fitted_model_artifacts_changed": false,
+    "gate3_routing_changed": false,
+    "marginal_family_changed": false,
+    "mean_model_routing_changed": false,
+    "model_mathematics_changed": false,
+    "t20_certification_protocol_changed": false
+  },
+  "known_limitation": "scripts/19_build_wizardofodds_runtime_bundle.py still verifies serving sources against the historical architecture reference only, so building a runtime bundle from this corrected source would fail its frozen-source check. Teaching the bundle builder about this contract is deployment work and is deliberately out of scope for this correction.",
+  "locked_serving_source_files": {
+    "scripts/10_predict_slate.py": {
+      "current_sha256": "045d75037dcb030076aa70e08e3b71b63fa8fba761bd63b9b3a4e20d5f2e5e45",
+      "historical_reference_sha256": "045d75037dcb030076aa70e08e3b71b63fa8fba761bd63b9b3a4e20d5f2e5e45",
+      "matches_historical_reference": true
+    },
+    "scripts/11_collect_snapshots.py": {
+      "current_sha256": "dd0c3ed393ec04bbef521c4ff0d719bf3744ee04ef6405e83bc19b99233b6535",
+      "historical_reference_sha256": "dd0c3ed393ec04bbef521c4ff0d719bf3744ee04ef6405e83bc19b99233b6535",
+      "matches_historical_reference": true
+    },
+    "scripts/12_run_snapshot_cycle.py": {
+      "current_sha256": "edc37f73ff434791dcab32eac29c0a5b134b47cd988e8ce2a1c197e47b053397",
+      "historical_reference_sha256": "edc37f73ff434791dcab32eac29c0a5b134b47cd988e8ce2a1c197e47b053397",
+      "matches_historical_reference": true
+    },
+    "scripts/15_price_markets.py": {
+      "current_sha256": "868df444a557b2139a909f53b831db6850326fe8617953af5ec4c75d8a9d1159",
+      "divergence_reason": "Serving-correctness fix only. The lineage tail assigned gate3_external_test_record from priced['external_test_record'] before that column was created, and no upstream stage produces it: scripts/10_predict_slate.py emits gate3_external_test_candidate instead. On a real pricing run the read raised KeyError, so no priced_markets parquet could be produced at all. The run-level flag is now established before it is read, and the Gate 3 lineage flag is derived from the projection-side candidacy combined with it. No probability, price, edge, EV or routing computation was touched.",
+      "historical_reference_sha256": "79b893904eb34190b4f2afec2a44b4a18a4bc9d455b0ba4add6b93bf7a66e540",
+      "matches_historical_reference": false
+    },
+    "src/nba_prop_quant/distributions.py": {
+      "current_sha256": "0fac50865b33dcbdb5ac2b4e63b1a66f179c2ab446f1575e62053e48b0402ba6",
+      "historical_reference_sha256": "0fac50865b33dcbdb5ac2b4e63b1a66f179c2ab446f1575e62053e48b0402ba6",
+      "matches_historical_reference": true
+    },
+    "src/nba_prop_quant/gate3_v2.py": {
+      "current_sha256": "35d290a87ac1999b6d339b58302d143dce342343319548e551da530220ab38ef",
+      "historical_reference_sha256": "35d290a87ac1999b6d339b58302d143dce342343319548e551da530220ab38ef",
+      "matches_historical_reference": true
+    },
+    "src/nba_prop_quant/pricing.py": {
+      "current_sha256": "1a757e9ee4d955eea2d2e6150bafe647d5e3c4b6adafca0ea1be022c2589fb2a",
+      "historical_reference_sha256": "1a757e9ee4d955eea2d2e6150bafe647d5e3c4b6adafca0ea1be022c2589fb2a",
+      "matches_historical_reference": true
+    },
+    "src/nba_prop_quant/production.py": {
+      "current_sha256": "dff10b03677cec8e6d124987a5bc733177a8985c55abf2c7d020f494c9066ad1",
+      "historical_reference_sha256": "dff10b03677cec8e6d124987a5bc733177a8985c55abf2c7d020f494c9066ad1",
+      "matches_historical_reference": true
+    },
+    "src/nba_prop_quant/prospective_snapshot.py": {
+      "current_sha256": "2389d919c1d791eb044f786495cd55d6de505dfd7a58cfa548a7a07f14c9dedb",
+      "historical_reference_sha256": "2389d919c1d791eb044f786495cd55d6de505dfd7a58cfa548a7a07f14c9dedb",
+      "matches_historical_reference": true
+    }
+  },
+  "production_source_base": "a9450a882a19e524c21599f5ea47493bab8fe3b3",
+  "production_source_branch": "production/wizardofodds-integration",
+  "purpose": "Lock the adaptive-production serving source. The historical static contract pins these same files to the immutable architecture reference and remains untouched as historical evidence. This contract records what adaptive serving actually runs, and requires every difference from the historical reference to be enumerated and justified here.",
+  "supersedes_nothing": "This is additive. It does not replace, amend or reinterpret models/frozen_manifests/nba_prop_quant_v2_gate3_runtime_contract.json and it is not a new schema version of it."
+}
