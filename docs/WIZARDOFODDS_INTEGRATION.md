@@ -422,36 +422,50 @@ genuine `priced_markets.parquet` to confirm the selected side, edge and EV
 column names is closed: they are `model_preferred_side`,
 `model_preferred_edge` and `model_preferred_ev`, read from the emitter.
 
-**Two defects are recorded, not fixed.** Both sit in files byte-pinned to the
-frozen model source commit by the Gate 3 runtime contract. Changing either
-would break the frozen-source verification that guarantees the deployed
-predictive source matches the certified architecture, so correcting them
-requires a deliberate re-freeze and is out of scope for this change. Neither
-was reproduced by executing the pipeline; both are established from the source
-and the deployed artifacts.
+**Two serving-path defects were found and have since been corrected.** Both
+blocked a feed from being produced at all. Neither changed any model
+mathematics, and neither is evidence for or against model quality.
 
-*1. The Gate 3 role-minutes model requires two features the slate never
-builds.* `research/v2_gate3_deployment_artifacts/role_minutes_model.joblib`
-declares 36 `feature_names`, matching `role_minutes_features` in its
-deployment manifest exactly. Two of them, `player_game_number` and
-`team_game_number`, are produced only by `build_base_frame` in
-`src/nba_prop_quant/features.py`, which serves the historical training path.
-They are not produced by `build_upcoming_slate_features`, not computed by
-`apply_gate3_role_state`, and not assigned anywhere in
-`scripts/10_predict_slate.py`. `apply_gate3_role_state` fails closed on any
-absent feature with `Gate 3 role model missing live features: [...]`, so on a
-real slate run the projection step raises before Gate 3 role state is
-attached. Every `gate3_role_*` and `gate3_delta_*` field in
+*1. The Gate 3 role-minutes model required two features the slate never built.*
+`research/v2_gate3_deployment_artifacts/role_minutes_model.joblib` declares 36
+`feature_names`. Two of them, `player_game_number` and `team_game_number`, were
+produced only by `build_base_frame` on the historical training path, and
+`apply_gate3_role_state` fails closed on any absent feature, so the projection
+step raised before Gate 3 role state could be attached. Every `gate3_role_*`
+and `gate3_delta_*` field in
 [section 3](#3-projections-feed-projection_schema_version--3), and the
 `gate3_role_state_unavailable` rejection path in
 [section 7](#7-rejected-quotes), depend on that step completing.
 
-*2. `external_test_record` is read before it is assigned.* In
-`scripts/15_price_markets.py` the column is read while building
-`gate3_external_test_record` immediately before it is created, and no other
-code in `scripts/` or `src/` creates it. On a real pricing run this reads as a
-`KeyError`.
+`build_upcoming_slate_features` now emits both, reproducing the training
+definitions exactly: `player_game_number` is the count of the player's games
+strictly before the slate, which is what `build_base_frame` assigns as
+`career_games_prior`; `team_game_number` is one past the team's games already
+played in the season, which keeps `season_progress` equal to
+`(team_game_number - 1) / 82`. Parity against `build_base_frame` is asserted in
+the test suite, and the fail-closed feature check is unchanged.
 
-Neither item is evidence for or against model quality. Both mean the
-corresponding feed cannot currently be produced end to end, which the website
-layer should treat as absence of data rather than as stale data.
+*2. `external_test_record` was read before it was assigned.*
+`scripts/15_price_markets.py` read the column while building
+`gate3_external_test_record` immediately before creating it, and nothing
+upstream produces it, so the lineage tail raised `KeyError`.
+
+The two fields now have explicit, separately tested semantics:
+
+| Field | Meaning |
+| --- | --- |
+| `external_test_record` | Run level: this pricing run's freeze stage is `external_test_deployment`. Established before anything reads it. |
+| `gate3_external_test_record` | Row level: the projection marked the row `gate3_external_test_candidate` **and** the run is an external-test deployment. |
+
+Because `scripts/15_price_markets.py` is byte-pinned to the architecture
+reference by the Gate 3 runtime contract, that contract is left untouched and
+the corrected serving source is locked separately by
+`models/frozen_manifests/nba_prop_quant_v2_adaptive_serving_source_contract.json`,
+described in `docs/wizardofodds/V2_REFERENCE_PROVENANCE_ADDENDUM.md`.
+
+**One limitation remains open.**
+`scripts/19_build_wizardofodds_runtime_bundle.py` still verifies serving
+sources against the architecture reference alone, so building a runtime bundle
+from the corrected source fails its frozen-source check. Teaching the bundle
+builder about the adaptive serving contract is deployment work and is out of
+scope for this change.

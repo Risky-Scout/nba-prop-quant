@@ -92,7 +92,56 @@ be recorded once it exists.
 
 ---
 
-## 5. How provenance is established from here
+## 5. Adaptive serving source diverges from the anchor, by declaration
+
+The Gate 3 runtime contract byte-pins nine serving source files to the
+architecture reference. Adaptive production needed a serving-correctness fix in
+one of them, so a second contract now records what adaptive serving actually
+runs:
+
+`models/frozen_manifests/nba_prop_quant_v2_adaptive_serving_source_contract.json`
+(SHA256 `97292af4dc9486de1bee1a446c9ef0f7f85a3db162c0a84eb17ce639727c4ad9`).
+
+It is additive. It does not replace, amend or reinterpret the historical Gate 3
+runtime contract, and it is not a new schema version of it. The historical
+contract is unchanged and still pins those files to
+`4def8ad33ccc56016fb19a97fceca6e027c9612a`.
+
+For each of the nine files it records the current SHA256, the SHA256 of the
+blob at the architecture reference, and whether the two match. Exactly one
+diverges:
+
+| File | Status |
+| --- | --- |
+| `scripts/15_price_markets.py` | diverged, reason recorded |
+| the other eight | byte-identical to the architecture reference |
+
+The divergence is a lineage-field ordering correction. The pricing emitter
+assigned `gate3_external_test_record` from `priced["external_test_record"]`
+before that column existed, and no upstream stage produces it, so the read
+raised `KeyError` and no priced-markets output could be produced. The run-level
+flag is now established before it is read.
+
+The contract asserts, and the test suite enforces, that this changed no model
+mathematics, no Gate 3 routing, no calibration or dependence methodology, no
+marginal family or mean-model routing, no feature definition, no fitted
+artifact and no T-20 protocol.
+
+Integrity verification was widened rather than relaxed. The suite now checks
+that the eight unchanged files are still byte-identical to the anchor, that a
+declared divergence is a real one, that the anchor's own bytes are unchanged
+for all nine, and that every file matches the new serving contract.
+
+One limitation is recorded in the contract itself:
+`scripts/19_build_wizardofodds_runtime_bundle.py` still verifies serving
+sources against the architecture reference alone, so building a runtime bundle
+from the corrected source would fail its frozen-source check. Teaching the
+bundle builder about this contract is deployment work and is deliberately out
+of scope here.
+
+---
+
+## 6. How provenance is established from here
 
 The Step 3A immutable adaptive fit registry removes the need to infer source
 provenance from a freeze-time capture at all.
@@ -112,7 +161,7 @@ relying on any historical manifest field.
 
 ---
 
-## 6. Scope
+## 7. Scope
 
 This addendum is a provenance statement and nothing else. It does not revise
 any frozen model artifact, any historical runtime contract, or
