@@ -35,6 +35,7 @@ import argparse
 import errno
 import fcntl
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -43,9 +44,16 @@ import sys
 import tempfile
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
+
+from nba_prop_quant.slate import (
+    HistoryLeakageError,
+    assert_history_precedes_slate,
+)
+from nba_prop_quant.storage import sort_by_keys
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -57,6 +65,37 @@ LOCK_RELATIVE_PATH = Path(".locks") / "current_season_refresh.lock"
 
 SHADOW_PREFIX = ".refresh_shadow_"
 ROLLBACK_PREFIX = ".refresh_rollback_"
+
+# Durable multi-file refresh journal. Three os.replace calls cannot be one
+# POSIX atomic operation, so crash recoverability is provided by a journal
+# instead: the pre-transaction bytes and both content hashes of every target
+# are recorded durably before the first live replacement, and an interrupted
+# transaction is resolved to a single coherent generation on the next run.
+TRANSACTIONS_RELATIVE_PATH = Path(".refresh_transactions")
+
+TRANSACTION_PREFIX = "txn_"
+
+PREPARED_MARKER = "PREPARED"
+COMMITTED_MARKER = "COMMITTED"
+
+TRANSACTION_SCHEMA_VERSION = 1
+
+# Deterministic semantic integrity record for the mutable rolling tree. Raw
+# parquet SHA256 answers "did these bytes change"; this answers "did the
+# logical records change", which is the question that survives a rewrite.
+STATE_RELATIVE_PATH = Path(".state") / "current_season_state.json"
+
+STATE_SCHEMA_VERSION = 1
+
+# Logical identity of each rolling dataset. Row order is not part of identity,
+# so every semantic measurement below is taken on the key-sorted frame.
+ROLLING_KEY_COLUMNS = {
+    "stats": ("game_id", "player_id"),
+    "games": ("id",),
+    "advanced": ("game_id", "player_id"),
+}
+
+ROLLING_DATE_COLUMN = "date"
 
 DEFAULT_SEASON = 2026
 
@@ -73,6 +112,7 @@ EXIT_COMMIT_ROLLED_BACK = 73
 EXIT_POST_COMMIT_ROLLED_BACK = 74
 EXIT_LOCK_BUSY = 75
 EXIT_ROLLBACK_FAILED = 78
+EXIT_RECOVERY_FAILED = 79
 
 STATS_REQUIRED_COLUMNS = (
     "player_id",
@@ -211,6 +251,54 @@ def _atomic_replace(source: Path, destination: Path) -> None:
 
 def _temp_sibling(destination: Path) -> Path:
     return destination.parent / f".{destination.name}.refresh_{uuid.uuid4().hex}"
+
+
+def _fsync_file(path: Path) -> None:
+    fd = os.open(path, os.O_RDONLY)
+
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _fsync_dir(path: Path) -> None:
+    fd = os.open(path, os.O_RDONLY)
+
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def write_json_durable(payload: dict, path: Path) -> None:
+    """Write deterministic JSON so a crash leaves either old or new content."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    text = json.dumps(payload, sort_keys=True, indent=2) + "\n"
+
+    temporary = _temp_sibling(path)
+
+    with temporary.open("w", encoding="utf-8") as handle:
+        handle.write(text)
+        handle.flush()
+        os.fsync(handle.fileno())
+
+    # Deliberately not _atomic_replace: that seam is reserved for replacements
+    # of live rolling data, and journal and state metadata are neither.
+    os.replace(temporary, path)
+    _fsync_dir(path.parent)
+
+
+def write_marker(path: Path) -> None:
+    """Create a durable status marker.
+
+    Recovery reads these markers after a crash, so the marker must be on disk
+    before the step it authorises is allowed to proceed.
+    """
+    path.write_text("", encoding="utf-8")
+    _fsync_file(path)
+    _fsync_dir(path.parent)
 
 
 class WriterLock:
@@ -484,23 +572,22 @@ def assert_no_leakage(
     path: Path,
     slate_date: pd.Timestamp,
 ) -> pd.Timestamp:
-    latest = parsed_dates(frame, f"staged {label}", path).max()
+    """Delegate to the shared cutoff rule so staging and prediction agree.
 
-    if pd.isna(latest):
-        raise RefreshFailure(
-            EXIT_VALIDATION_FAILED,
-            f"staged {label} has no usable date: {path}",
+    nba_prop_quant.slate owns the single definition of "history must end
+    strictly before the slate date". Keeping a second copy here would let the
+    staging gate and the prediction gate drift apart.
+    """
+    try:
+        return assert_history_precedes_slate(
+            frame,
+            f"staged {label}",
+            slate_date,
+            path,
         )
 
-    if latest >= slate_date:
-        raise RefreshFailure(
-            EXIT_VALIDATION_FAILED,
-            f"staged {label} would leak same-or-later-day results into the "
-            f"information set: max date {latest.date()} is not strictly "
-            f"before slate date {slate_date.date()}",
-        )
-
-    return latest
+    except HistoryLeakageError as exc:
+        raise RefreshFailure(EXIT_VALIDATION_FAILED, str(exc)) from exc
 
 
 def live_counts(paths: SeasonPaths) -> dict[str, dict[str, int]]:
@@ -641,6 +728,447 @@ def validate_staged_tree(
     return after
 
 
+def semantic_fingerprint(frame: pd.DataFrame, key_columns: tuple[str, ...]) -> str:
+    """Hash the logical content of a rolling dataset.
+
+    Deliberately independent of parquet byte layout. The frame is ordered by
+    its key columns and its columns are ordered by name, so rewriting the same
+    records with a different row order, a different compression setting or a
+    newer parquet writer yields the same fingerprint, while any changed,
+    added or removed record changes it.
+    """
+    ordered = sort_by_keys(frame, list(key_columns))
+    ordered = ordered[sorted(ordered.columns)]
+
+    canonical = ordered.copy()
+
+    for column in canonical.columns:
+        values = canonical[column]
+
+        if pd.api.types.is_datetime64_any_dtype(values):
+            # Normalize to a stable textual form so timezone or unit changes
+            # in the storage layer cannot move the fingerprint.
+            canonical[column] = values.dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+    payload = canonical.to_csv(index=False, float_format="%.12g")
+
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def dataset_state_record(
+    frame: pd.DataFrame,
+    label: str,
+    path: Path,
+    data_root: Path,
+) -> dict:
+    """Describe one rolling dataset semantically, with no host-private paths."""
+    key_columns = ROLLING_KEY_COLUMNS[label]
+
+    record: dict = {
+        "columns": sorted(str(column) for column in frame.columns),
+        "key_columns": list(key_columns),
+        "relative_path": path.relative_to(data_root).as_posix(),
+        "row_count": int(len(frame)),
+        "schema_fingerprint": hashlib.sha256(
+            json.dumps(
+                {
+                    str(column): str(frame[column].dtype)
+                    for column in sorted(frame.columns)
+                },
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest(),
+        "semantic_fingerprint": semantic_fingerprint(frame, key_columns),
+        "unique_key_count": int(
+            len(frame.drop_duplicates(subset=list(key_columns)))
+        ),
+    }
+
+    if ROLLING_DATE_COLUMN in frame.columns:
+        dates = pd.to_datetime(frame[ROLLING_DATE_COLUMN], errors="coerce")
+        usable = dates.dropna()
+
+        record["min_date"] = (
+            usable.min().date().isoformat() if not usable.empty else None
+        )
+        record["max_date"] = (
+            usable.max().date().isoformat() if not usable.empty else None
+        )
+
+    game_column = GAMES_ID_COLUMN if label == "games" else "game_id"
+
+    if game_column in frame.columns:
+        record["game_count"] = len(numeric_id_set(frame, game_column))
+
+    return record
+
+
+def build_state_record(
+    live: SeasonPaths,
+    data_root: Path,
+    season: int,
+    slate_date: pd.Timestamp,
+) -> dict:
+    """Read the committed live tree back and describe it semantically."""
+    datasets = {
+        label: dataset_state_record(
+            read_parquet_or_fail(path, f"committed {label}"),
+            label,
+            path,
+            data_root,
+        )
+        for label, path in live.as_items()
+    }
+
+    return {
+        "datasets": datasets,
+        # Fingerprint of the datasets block alone, so an identical live tree
+        # always produces an identical value regardless of when it was written.
+        "datasets_fingerprint": hashlib.sha256(
+            json.dumps(datasets, sort_keys=True, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        ).hexdigest(),
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "schema_version": STATE_SCHEMA_VERSION,
+        "season": int(season),
+        "slate_date": slate_date.date().isoformat(),
+    }
+
+
+def write_state_record(
+    live: SeasonPaths,
+    data_root: Path,
+    season: int,
+    slate_date: pd.Timestamp,
+    expected_counts: dict[str, dict[str, int]],
+) -> dict:
+    """Validate the committed tree semantically, then record it atomically."""
+    record = build_state_record(live, data_root, season, slate_date)
+
+    for label, expected in expected_counts.items():
+        observed = record["datasets"][label]["row_count"]
+
+        if observed != expected["rows"]:
+            raise RefreshFailure(
+                EXIT_VALIDATION_FAILED,
+                f"committed {label} holds {observed} rows but validation "
+                f"approved {expected['rows']}",
+            )
+
+    write_json_durable(record, data_root / STATE_RELATIVE_PATH)
+
+    return record
+
+
+# ----------------------------------------------------------------------
+# crash-recoverable multi-file transaction
+# ----------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class TransactionTarget:
+    label: str
+    relative_path: str
+    existed: bool
+    old_sha256: str | None
+    new_sha256: str
+
+    def as_dict(self) -> dict:
+        return {
+            "existed": self.existed,
+            "label": self.label,
+            "new_sha256": self.new_sha256,
+            "old_sha256": self.old_sha256,
+            "relative_path": self.relative_path,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict) -> "TransactionTarget":
+        return cls(
+            label=str(payload["label"]),
+            relative_path=str(payload["relative_path"]),
+            existed=bool(payload["existed"]),
+            old_sha256=payload["old_sha256"],
+            new_sha256=str(payload["new_sha256"]),
+        )
+
+
+@dataclass(frozen=True)
+class RefreshTransaction:
+    root: Path
+    data_root: Path
+    targets: tuple[TransactionTarget, ...]
+
+    @property
+    def manifest_path(self) -> Path:
+        return self.root / "manifest.json"
+
+    @property
+    def backups_dir(self) -> Path:
+        return self.root / "backups"
+
+    @property
+    def prepared_marker(self) -> Path:
+        return self.root / PREPARED_MARKER
+
+    @property
+    def committed_marker(self) -> Path:
+        return self.root / COMMITTED_MARKER
+
+    def backup_path(self, label: str) -> Path:
+        return self.backups_dir / f"{label}.parquet"
+
+    def destination(self, target: TransactionTarget) -> Path:
+        return self.data_root / target.relative_path
+
+
+def transactions_root(data_root: Path) -> Path:
+    return data_root / TRANSACTIONS_RELATIVE_PATH
+
+
+def prepare_transaction(
+    staged: SeasonPaths,
+    live: SeasonPaths,
+    data_root: Path,
+    season: int,
+    slate_date: pd.Timestamp,
+) -> RefreshTransaction:
+    """Record every target and preserve the bytes needed to undo the change.
+
+    Nothing live may be replaced until this returns: the PREPARED marker is
+    what tells a later recovery that a replacement may have started.
+    """
+    root = transactions_root(data_root) / (
+        f"{TRANSACTION_PREFIX}{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}_"
+        f"{uuid.uuid4().hex[:12]}"
+    )
+
+    backups = root / "backups"
+    backups.mkdir(parents=True, exist_ok=True)
+
+    staged_paths = dict(staged.as_items())
+
+    targets: list[TransactionTarget] = []
+
+    for label, destination in live.as_items():
+        staged_path = staged_paths[label]
+        existed = destination.exists()
+
+        old_hash = None
+
+        if existed:
+            backup = backups / f"{label}.parquet"
+            shutil.copyfile(destination, backup)
+            _fsync_file(backup)
+
+            old_hash = sha256_file(backup)
+
+            if old_hash != sha256_file(destination):
+                raise RefreshFailure(
+                    EXIT_VALIDATION_FAILED,
+                    f"live {label} changed while it was being backed up; "
+                    "refusing to start a refresh transaction.",
+                )
+
+        targets.append(
+            TransactionTarget(
+                label=label,
+                relative_path=destination.relative_to(data_root).as_posix(),
+                existed=existed,
+                old_sha256=old_hash,
+                new_sha256=sha256_file(staged_path),
+            )
+        )
+
+    _fsync_dir(backups)
+
+    manifest = {
+        "data_root_is_relative": True,
+        "schema_version": TRANSACTION_SCHEMA_VERSION,
+        "season": int(season),
+        "slate_date": slate_date.date().isoformat(),
+        "started_at_utc": datetime.now(timezone.utc).isoformat(),
+        "targets": [target.as_dict() for target in targets],
+    }
+
+    transaction = RefreshTransaction(
+        root=root,
+        data_root=data_root,
+        targets=tuple(targets),
+    )
+
+    write_json_durable(manifest, transaction.manifest_path)
+    write_marker(transaction.prepared_marker)
+
+    return transaction
+
+
+def load_transaction(root: Path, data_root: Path) -> RefreshTransaction | None:
+    """Rebuild a transaction from its journal, or None if it is unreadable."""
+    manifest_path = root / "manifest.json"
+
+    if not manifest_path.exists():
+        return None
+
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        targets = tuple(
+            TransactionTarget.from_dict(entry)
+            for entry in manifest["targets"]
+        )
+
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+    return RefreshTransaction(root=root, data_root=data_root, targets=targets)
+
+
+def discard_transaction(root: Path) -> None:
+    shutil.rmtree(root, ignore_errors=True)
+
+
+def restore_target(
+    transaction: RefreshTransaction,
+    target: TransactionTarget,
+) -> None:
+    """Put one target back to its pre-transaction state, verifying hashes."""
+    destination = transaction.destination(target)
+
+    if not target.existed:
+        if destination.exists():
+            destination.unlink()
+
+        if destination.exists():
+            raise RefreshFailure(
+                EXIT_RECOVERY_FAILED,
+                f"could not remove {destination}, which did not exist before "
+                "the interrupted refresh",
+            )
+
+        return
+
+    backup = transaction.backup_path(target.label)
+
+    if not backup.exists():
+        raise RefreshFailure(
+            EXIT_RECOVERY_FAILED,
+            f"backup for {target.label} is missing at {backup}; the previous "
+            "generation cannot be restored automatically.",
+        )
+
+    if sha256_file(backup) != target.old_sha256:
+        raise RefreshFailure(
+            EXIT_RECOVERY_FAILED,
+            f"backup for {target.label} is corrupt: {backup} does not match "
+            f"the recorded hash {target.old_sha256}. The live current-season "
+            "tree needs manual inspection before any prediction or pricing "
+            "run.",
+        )
+
+    temporary = _temp_sibling(destination)
+
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(backup, temporary)
+        _atomic_replace(temporary, destination)
+
+    finally:
+        if temporary.exists():
+            temporary.unlink(missing_ok=True)
+
+    if sha256_file(destination) != target.old_sha256:
+        raise RefreshFailure(
+            EXIT_RECOVERY_FAILED,
+            f"restoring {destination} did not reproduce the pre-transaction "
+            "bytes",
+        )
+
+
+def recover_transaction(transaction: RefreshTransaction) -> str:
+    """Resolve one interrupted transaction to a single coherent generation.
+
+    Rolling back is preferred. Rolling forward is only allowed when every
+    target already matches the validated new generation, which proves the
+    replacements all completed and only the commit marker was lost.
+    """
+    observed: dict[str, str | None] = {}
+
+    for target in transaction.targets:
+        destination = transaction.destination(target)
+
+        observed[target.label] = (
+            sha256_file(destination) if destination.exists() else None
+        )
+
+    complete_new = all(
+        observed[target.label] == target.new_sha256
+        for target in transaction.targets
+    )
+
+    if complete_new:
+        return (
+            "rolled forward: every target already matched the validated new "
+            "generation, so only the commit marker was missing"
+        )
+
+    for target in transaction.targets:
+        restore_target(transaction, target)
+
+    return (
+        "rolled back to the complete pre-transaction generation: "
+        + ", ".join(
+            f"{target.label}="
+            + ("restored" if target.existed else "removed")
+            for target in transaction.targets
+        )
+    )
+
+
+def recover_incomplete_transactions(data_root: Path) -> list[str]:
+    """Resolve any interrupted refresh before a new one is allowed to start."""
+    root = transactions_root(data_root)
+
+    if not root.is_dir():
+        return []
+
+    outcomes: list[str] = []
+
+    for entry in sorted(root.iterdir()):
+        if not entry.is_dir() or not entry.name.startswith(TRANSACTION_PREFIX):
+            continue
+
+        if (entry / COMMITTED_MARKER).exists():
+            discard_transaction(entry)
+            continue
+
+        if not (entry / PREPARED_MARKER).exists():
+            # The marker is written before the first replacement, so its
+            # absence proves no live file was touched.
+            discard_transaction(entry)
+            outcomes.append(
+                f"{entry.name}: discarded, no live file had been replaced"
+            )
+            continue
+
+        transaction = load_transaction(entry, data_root)
+
+        if transaction is None:
+            raise RefreshFailure(
+                EXIT_RECOVERY_FAILED,
+                f"interrupted refresh {entry.name} is prepared but its "
+                "manifest is unreadable; the live current-season tree needs "
+                "manual inspection before any prediction or pricing run.",
+            )
+
+        outcome = recover_transaction(transaction)
+
+        discard_transaction(entry)
+        outcomes.append(f"{entry.name}: {outcome}")
+
+    return outcomes
+
+
 def rollback(
     entries: list[tuple[str, Path, Path, str]],
     backups: dict[str, Path],
@@ -685,39 +1213,57 @@ def rollback(
 def commit_staged_bytes(
     staged: SeasonPaths,
     live: SeasonPaths,
-    rollback_dir: Path,
+    transaction: RefreshTransaction,
 ) -> dict[str, str]:
     """Copy the exact staged bytes over the live destinations.
 
     The staged files are never rewritten from a DataFrame, so row order,
     column order, compression and parquet metadata are exactly whatever the
     existing writer produced.
+
+    The prepared transaction already holds the pre-replacement bytes and both
+    content hashes of every target, so an in-process failure rolls back here
+    and a process loss is resolved by recovery on the next run.
     """
-    entries: list[tuple[str, Path, Path, str]] = []
+    staged_paths = dict(staged.as_items())
+    live_paths = dict(live.as_items())
 
-    for label, staged_path in staged.as_items():
-        destination = dict(live.as_items())[label]
-        entries.append(
-            (label, staged_path, destination, sha256_file(staged_path))
+    entries: list[tuple[str, Path, Path, str]] = [
+        (
+            target.label,
+            staged_paths[target.label],
+            live_paths[target.label],
+            target.new_sha256,
         )
+        for target in transaction.targets
+    ]
 
-    backups: dict[str, Path] = {}
-    original_hashes: dict[str, str] = {}
+    backups: dict[str, Path] = {
+        target.label: transaction.backup_path(target.label)
+        for target in transaction.targets
+        if target.existed
+    }
 
-    for label, _staged_path, destination, _staged_hash in entries:
-        if not destination.exists():
-            continue
-
-        backup = rollback_dir / f"{label}.parquet"
-        shutil.copyfile(destination, backup)
-
-        backups[label] = backup
-        original_hashes[label] = sha256_file(backup)
+    original_hashes: dict[str, str] = {
+        target.label: str(target.old_sha256)
+        for target in transaction.targets
+        if target.existed
+    }
 
     for label, staged_path, destination, staged_hash in entries:
         temporary = _temp_sibling(destination)
 
         try:
+            # Refuse a staged file that changed after it was validated and
+            # recorded, rather than publishing unvalidated bytes.
+            observed = sha256_file(staged_path)
+
+            if observed != staged_hash:
+                raise RuntimeError(
+                    f"staged {label} changed after validation: {observed} "
+                    f"does not match the prepared hash {staged_hash}"
+                )
+
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(staged_path, temporary)
             _atomic_replace(temporary, destination)
@@ -789,9 +1335,6 @@ def refresh(
     data_dir.mkdir(parents=True, exist_ok=True)
 
     shadow_root = Path(tempfile.mkdtemp(prefix=SHADOW_PREFIX, dir=data_dir))
-    rollback_dir = Path(
-        tempfile.mkdtemp(prefix=ROLLBACK_PREFIX, dir=data_dir)
-    )
 
     try:
         print(f"shadow data root: {shadow_root}")
@@ -806,9 +1349,49 @@ def refresh(
             )
 
         staged = season_paths(shadow_root, season)
-        validate_staged_tree(staged, live, slate_date)
+        approved = validate_staged_tree(staged, live, slate_date)
 
-        committed = commit_staged_bytes(staged, live, rollback_dir)
+        transaction = prepare_transaction(
+            staged,
+            live,
+            data_dir,
+            season,
+            slate_date,
+        )
+
+        print(f"refresh transaction: {transaction.root.name}")
+
+        try:
+            committed = commit_staged_bytes(staged, live, transaction)
+
+        except RefreshFailure as exc:
+            # commit_staged_bytes rolls back in process and reports the
+            # outcome. The journal is only kept when that rollback could not
+            # be verified, because then its backups are the remaining way
+            # back to the previous generation.
+            if exc.code != EXIT_ROLLBACK_FAILED:
+                discard_transaction(transaction.root)
+
+            raise
+
+        try:
+            state = write_state_record(
+                live,
+                data_dir,
+                season,
+                slate_date,
+                approved,
+            )
+
+        except RefreshFailure:
+            for target in transaction.targets:
+                restore_target(transaction, target)
+
+            discard_transaction(transaction.root)
+            raise
+
+        write_marker(transaction.committed_marker)
+        discard_transaction(transaction.root)
 
         print()
         print("refresh committed; live files match staged bytes:")
@@ -816,11 +1399,17 @@ def refresh(
         for label, digest in committed.items():
             print(f"  {label}: {digest}")
 
+        print()
+        print(
+            "rolling-state integrity record: "
+            f"{STATE_RELATIVE_PATH.as_posix()} "
+            f"({state['datasets_fingerprint']})"
+        )
+
         return EXIT_OK
 
     finally:
         shutil.rmtree(shadow_root, ignore_errors=True)
-        shutil.rmtree(rollback_dir, ignore_errors=True)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -889,6 +1478,12 @@ def run(args: argparse.Namespace) -> int:
         return EXIT_LOCK_BUSY
 
     try:
+        # An interrupted refresh is resolved to one coherent generation before
+        # anything else is allowed to touch the rolling tree.
+        for outcome in recover_incomplete_transactions(data_dir):
+            print(f"recovered interrupted refresh {outcome}")
+            print()
+
         code = run_preflight(
             season=season,
             slate_date=args.slate_date,
