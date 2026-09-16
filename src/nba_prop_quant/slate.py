@@ -483,6 +483,13 @@ def build_upcoming_slate_features(
                     else np.nan,
                     "b2b": int(days_since_prev == 1) if pd.notna(days_since_prev) else 0,
                     "team_change": team_change,
+                    # build_base_frame assigns player_game_number as the
+                    # player's 0-indexed cumcount and then defines
+                    # career_games_prior as exactly that value. The upcoming
+                    # game sits after all history, so its cumcount is the
+                    # number of games already played. The fitted Gate 3 role
+                    # model asks for the first name, so both are exposed.
+                    "player_game_number": games_prior,
                     "career_games_prior": games_prior,
                     "experience_years": experience,
                     "pos_G": int("G" in position),
@@ -494,6 +501,10 @@ def build_upcoming_slate_features(
                 current_season_games = stats[
                     stats["team_id"].eq(team_id) & stats["season"].eq(season)
                 ]["game_id"].nunique()
+                # build_base_frame numbers each team's games within a season
+                # from 1, so the upcoming game is one past those already
+                # played, and season_progress stays (team_game_number - 1)/82.
+                row["team_game_number"] = current_season_games + 1
                 row["season_progress"] = np.clip(current_season_games / 82.0, 0.0, 1.5)
 
                 for stat, mapping in player_rate_maps.items():
