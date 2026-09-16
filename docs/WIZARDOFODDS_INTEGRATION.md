@@ -89,6 +89,25 @@ history_latest_date
 advanced_latest_date
 ```
 
+### Capture lineage (snapshot mode only)
+
+When the slate is built from a captured Gate 3 prospective snapshot rather
+than a live fetch, these are merged on `game_id` and identify exactly which
+capture the projection was produced from:
+
+```text
+gate3_capture_id
+gate3_capture_window_id
+gate3_capture_offset_minutes
+gate3_captured_at_utc
+gate3_input_source
+gate3_component_sha256_json
+```
+
+`gate3_capture_offset_minutes` is the T-N capture offset, 20 under the frozen
+T-20m certification protocol. These fields are the basis for any freshness
+check: prefer them to wall-clock arrival time.
+
 ### Per-target distribution summary
 
 For each of the six primitive targets `pts`, `reb`, `ast`, `stl`, `blk`,
@@ -403,15 +422,36 @@ genuine `priced_markets.parquet` to confirm the selected side, edge and EV
 column names is closed: they are `model_preferred_side`,
 `model_preferred_edge` and `model_preferred_ev`, read from the emitter.
 
-**One defect is recorded, not fixed.** In `scripts/15_price_markets.py` the
-column `external_test_record` is read while building
-`gate3_external_test_record` immediately before it is assigned, and no other
-code in `scripts/` or `src/` creates that column. On a real pricing run this
-reads as a `KeyError`. This is a code-reading finding, not an observed
-failure. It is left untouched here because that file is byte-pinned to the
-frozen model source commit by the Gate 3 runtime contract and changing it
+**Two defects are recorded, not fixed.** Both sit in files byte-pinned to the
+frozen model source commit by the Gate 3 runtime contract. Changing either
 would break the frozen-source verification that guarantees the deployed
-predictive source matches the certified architecture. Correcting it requires a
-deliberate re-freeze, which is out of scope for this change.
+predictive source matches the certified architecture, so correcting them
+requires a deliberate re-freeze and is out of scope for this change. Neither
+was reproduced by executing the pipeline; both are established from the source
+and the deployed artifacts.
 
-Neither item is evidence for or against model quality.
+*1. The Gate 3 role-minutes model requires two features the slate never
+builds.* `research/v2_gate3_deployment_artifacts/role_minutes_model.joblib`
+declares 36 `feature_names`, matching `role_minutes_features` in its
+deployment manifest exactly. Two of them, `player_game_number` and
+`team_game_number`, are produced only by `build_base_frame` in
+`src/nba_prop_quant/features.py`, which serves the historical training path.
+They are not produced by `build_upcoming_slate_features`, not computed by
+`apply_gate3_role_state`, and not assigned anywhere in
+`scripts/10_predict_slate.py`. `apply_gate3_role_state` fails closed on any
+absent feature with `Gate 3 role model missing live features: [...]`, so on a
+real slate run the projection step raises before Gate 3 role state is
+attached. Every `gate3_role_*` and `gate3_delta_*` field in
+[section 3](#3-projections-feed-projection_schema_version--3), and the
+`gate3_role_state_unavailable` rejection path in
+[section 7](#7-rejected-quotes), depend on that step completing.
+
+*2. `external_test_record` is read before it is assigned.* In
+`scripts/15_price_markets.py` the column is read while building
+`gate3_external_test_record` immediately before it is created, and no other
+code in `scripts/` or `src/` creates it. On a real pricing run this reads as a
+`KeyError`.
+
+Neither item is evidence for or against model quality. Both mean the
+corresponding feed cannot currently be produced end to end, which the website
+layer should treat as absence of data rather than as stale data.
