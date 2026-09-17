@@ -26,6 +26,33 @@ def write_parquet_atomic(df: pd.DataFrame, path: Path) -> None:
             temp_path.unlink(missing_ok=True)
 
 
+def sort_by_keys(df: pd.DataFrame, key_columns: list[str]) -> pd.DataFrame:
+    """Order rows deterministically by the dataset's declared key columns.
+
+    Rolling state is rewritten every refresh, so without an explicit order the
+    stored row order depends on the arrival order of the incoming batch. Two
+    runs over the same semantic records would then produce different files and
+    neither diffing nor content fingerprinting would mean anything.
+
+    The sort is stable and pins NaN placement so the result depends only on the
+    key values, never on how the frame happened to be assembled.
+    """
+    missing = [column for column in key_columns if column not in df.columns]
+
+    if missing:
+        raise KeyError(
+            f"cannot order rows by absent key column(s): {', '.join(missing)}"
+        )
+
+    ordered = df.sort_values(
+        by=list(key_columns),
+        kind="stable",
+        na_position="last",
+    )
+
+    return ordered.reset_index(drop=True)
+
+
 def upsert_parquet(
     df: pd.DataFrame,
     path: Path,
@@ -34,8 +61,11 @@ def upsert_parquet(
     if path.exists():
         old = pd.read_parquet(path)
         df = pd.concat([old, df], ignore_index=True)
+    # Deduplicate first: keep="last" resolves a replaced record in favour of
+    # the incoming batch, and that depends on concat order. Sorting beforehand
+    # could hand the row to the stale copy instead.
     df = df.drop_duplicates(subset=key_columns, keep="last")
-    write_parquet_atomic(df, path)
+    write_parquet_atomic(sort_by_keys(df, key_columns), path)
 
 
 def read_parquet_tree(path: Path) -> pd.DataFrame:

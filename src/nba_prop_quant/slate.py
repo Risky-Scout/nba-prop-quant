@@ -1,11 +1,243 @@
 from __future__ import annotations
 
+from datetime import date, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
 
 from .features import ADVANCED_FEATURES, TARGETS, add_dynamic_priors
+
+
+# The NBA schedules and reports its slates in Eastern time. A 10:30pm PT tip is
+# still part of that evening's Eastern slate even though its UTC timestamp has
+# already rolled over to the next calendar day, so any slate date derived from a
+# tip timestamp must be taken in this zone rather than in UTC or local time.
+NBA_SLATE_TIMEZONE = "America/New_York"
+
+NBA_SLATE_ZONE = ZoneInfo(NBA_SLATE_TIMEZONE)
+
+
+class SlateDateError(ValueError):
+    """A value could not be resolved to an unambiguous NBA slate date."""
+
+
+class HistoryLeakageError(ValueError):
+    """Historical inputs are not strictly older than the slate being predicted."""
+
+
+def slate_date_from_schedule_date(value: Any) -> date:
+    """Return the authoritative schedule date carried by a date-only value.
+
+    BALLDONTLIE game payloads carry a ``date`` field that already *is* the NBA
+    scheduled game date. It is preserved verbatim: treating it as UTC midnight
+    and converting it to Eastern would silently shift every slate back a day.
+
+    A midnight-normalized naive timestamp is accepted because it carries no
+    time of day and is how this codebase already represents a slate date. A
+    naive timestamp with a real time of day is refused rather than guessed at.
+    """
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value.strip())
+        except ValueError as error:
+            raise SlateDateError(
+                f"schedule date must be an exact YYYY-MM-DD value; got {value!r}"
+            ) from error
+
+    if isinstance(value, (datetime, pd.Timestamp)):
+        moment = pd.Timestamp(value)
+
+        if moment.tzinfo is not None:
+            raise SlateDateError(
+                "an offset-aware timestamp is not a schedule date; use "
+                "slate_date_from_tip_timestamp so the NBA slate timezone is "
+                "applied"
+            )
+
+        if moment != moment.normalize():
+            raise SlateDateError(
+                "a naive timestamp with a time of day is an ambiguous slate "
+                f"date; supply an offset or a date-only value, got {value!r}"
+            )
+
+        return moment.date()
+
+    raise SlateDateError(f"unsupported schedule date value: {value!r}")
+
+
+def slate_date_from_tip_timestamp(value: Any) -> date:
+    """Return the NBA slate date a tip-off timestamp belongs to.
+
+    The timestamp must carry an offset. A naive timestamp is refused rather than
+    assumed to be UTC or local, because guessing is what moves a late West-coast
+    game onto the wrong slate.
+    """
+    if isinstance(value, str):
+        text = value.strip()
+
+        if text.endswith(("Z", "z")):
+            text = text[:-1] + "+00:00"
+
+        try:
+            moment: datetime = datetime.fromisoformat(text)
+        except ValueError as error:
+            raise SlateDateError(
+                f"tip timestamp is not ISO 8601: {value!r}"
+            ) from error
+
+    elif isinstance(value, pd.Timestamp):
+        moment = value.to_pydatetime()
+
+    elif isinstance(value, datetime):
+        moment = value
+
+    else:
+        raise SlateDateError(f"unsupported tip timestamp value: {value!r}")
+
+    if moment.tzinfo is None or moment.utcoffset() is None:
+        raise SlateDateError(
+            "tip timestamp must include timezone information so the NBA slate "
+            f"date is unambiguous; got {value!r}"
+        )
+
+    return moment.astimezone(NBA_SLATE_ZONE).date()
+
+
+def resolve_slate_date(value: Any) -> date:
+    """Resolve either a schedule date or a tip timestamp to an NBA slate date.
+
+    Only an offset-aware timestamp is converted through the NBA slate timezone.
+    Date-only values are preserved exactly as scheduled.
+    """
+    if isinstance(value, (datetime, pd.Timestamp)):
+        aware = pd.Timestamp(value).tzinfo is not None
+
+        return (
+            slate_date_from_tip_timestamp(value)
+            if aware
+            else slate_date_from_schedule_date(value)
+        )
+
+    if isinstance(value, str):
+        text = value.strip()
+
+        return (
+            slate_date_from_schedule_date(text)
+            if len(text) == 10
+            else slate_date_from_tip_timestamp(text)
+        )
+
+    return slate_date_from_schedule_date(value)
+
+
+def _latest_history_date(
+    frame: pd.DataFrame,
+    label: str,
+    source: Any,
+) -> pd.Timestamp:
+    """Return max(date), refusing a frame whose dates cannot all be trusted."""
+    if "date" not in getattr(frame, "columns", []):
+        raise HistoryLeakageError(f"{label} has no date column: {source}")
+
+    dates = pd.to_datetime(frame["date"], errors="coerce")
+
+    unparseable = int(dates.isna().sum())
+
+    if unparseable:
+        raise HistoryLeakageError(
+            f"{label} has {unparseable} unparseable date value(s): {source}"
+        )
+
+    latest = dates.dt.normalize().max()
+
+    if pd.isna(latest):
+        raise HistoryLeakageError(f"{label} has no usable date: {source}")
+
+    return latest
+
+
+def assert_history_precedes_slate(
+    frame: pd.DataFrame,
+    label: str,
+    slate_date: Any,
+    source: Any = "",
+) -> pd.Timestamp:
+    """Refuse historical inputs that are not strictly older than the slate.
+
+    Training consumes a shifted lagged EWM state while live inference consumes
+    the latest historical EWM state. The two are equivalent only while history
+    ends strictly before the slate date, so this is a train/serve-skew guard as
+    much as a leakage guard.
+
+    Returns the observed maximum date when the inputs are safe.
+    """
+    required = pd.Timestamp(resolve_slate_date(slate_date)).normalize()
+
+    latest = _latest_history_date(frame, label, source)
+
+    if latest >= required:
+        raise HistoryLeakageError(
+            f"{label} would leak same-or-later-day results into the "
+            f"information set: max date {latest.date()} is not strictly "
+            f"before slate date {required.date()}"
+        )
+
+    return latest
+
+
+def slate_date_of_upcoming_games(upcoming_games: pd.DataFrame) -> pd.Timestamp:
+    """Return the slate date the upcoming games belong to.
+
+    The earliest scheduled game date is used, because history must already be
+    complete before the first tip of the slate. BALLDONTLIE supplies this as a
+    date field, so it is the authoritative schedule date and is not reinterpreted
+    through any timezone.
+    """
+    if "date" not in getattr(upcoming_games, "columns", []):
+        raise SlateDateError("upcoming games have no date column")
+
+    dates = pd.to_datetime(upcoming_games["date"], errors="coerce")
+
+    earliest = dates.dt.normalize().min()
+
+    if pd.isna(earliest):
+        raise SlateDateError("upcoming games have no usable date")
+
+    return earliest
+
+
+def assert_slate_inputs_precede_slate(
+    history_stats: pd.DataFrame,
+    advanced: pd.DataFrame,
+    upcoming_games: pd.DataFrame,
+) -> pd.Timestamp:
+    """Fail closed when slate inputs are not strictly older than the slate.
+
+    This runs inside the slate builder rather than in the calling script so the
+    check cannot be bypassed by a caller and so every consumer of upcoming-slate
+    features inherits it. It is deliberately placed before any feature is
+    derived, which puts it before all model inference.
+
+    Only the historical inputs are checked. upcoming_games legitimately holds
+    future scheduled rows and is the source of the slate date itself.
+    """
+    slate_date = slate_date_of_upcoming_games(upcoming_games)
+
+    assert_history_precedes_slate(history_stats, "historical stats", slate_date)
+
+    if not advanced.empty:
+        assert_history_precedes_slate(
+            advanced,
+            "historical advanced",
+            slate_date,
+        )
+
+    return slate_date
 
 
 def _final_ewm_by_player(
@@ -168,6 +400,8 @@ def build_upcoming_slate_features(
     upcoming = upcoming_games.copy()
     upcoming["date"] = pd.to_datetime(upcoming["date"]).dt.normalize()
 
+    assert_slate_inputs_precede_slate(stats, advanced, upcoming)
+
     team_context = _latest_team_context(stats)
     advanced_latest = _advanced_latest(advanced)
 
@@ -249,6 +483,13 @@ def build_upcoming_slate_features(
                     else np.nan,
                     "b2b": int(days_since_prev == 1) if pd.notna(days_since_prev) else 0,
                     "team_change": team_change,
+                    # build_base_frame assigns player_game_number as the
+                    # player's 0-indexed cumcount and then defines
+                    # career_games_prior as exactly that value. The upcoming
+                    # game sits after all history, so its cumcount is the
+                    # number of games already played. The fitted Gate 3 role
+                    # model asks for the first name, so both are exposed.
+                    "player_game_number": games_prior,
                     "career_games_prior": games_prior,
                     "experience_years": experience,
                     "pos_G": int("G" in position),
@@ -260,6 +501,10 @@ def build_upcoming_slate_features(
                 current_season_games = stats[
                     stats["team_id"].eq(team_id) & stats["season"].eq(season)
                 ]["game_id"].nunique()
+                # build_base_frame numbers each team's games within a season
+                # from 1, so the upcoming game is one past those already
+                # played, and season_progress stays (team_game_number - 1)/82.
+                row["team_game_number"] = current_season_games + 1
                 row["season_progress"] = np.clip(current_season_games / 82.0, 0.0, 1.5)
 
                 for stat, mapping in player_rate_maps.items():

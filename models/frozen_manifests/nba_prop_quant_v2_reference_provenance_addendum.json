@@ -1,0 +1,114 @@
+{
+  "addendum_name": "nba_prop_quant_v2_reference_provenance_addendum",
+  "addendum_version": 1,
+  "authoritative_static_reference": {
+    "commit": "4def8ad33ccc56016fb19a97fceca6e027c9612a",
+    "resolves_in_this_repository": true,
+    "role": "Immutable architecture and mathematical source reference. The Gate 3 runtime contract pins frozen_model_source_files to this commit, and the Step 3A adaptive architecture contract carries it as architecture_reference_sha."
+  },
+  "does_not_modify": [
+    "models/frozen_manifests/LATEST.json",
+    "models/frozen_manifests/nba_prop_quant_20260818T202318Z.json",
+    "models/frozen_manifests/nba_prop_quant_20260818T205213Z.json",
+    "models/frozen_manifests/nba_prop_quant_v2_gate3_runtime_contract.json",
+    "docs/wizardofodds/PUBLIC_CLAIM_POLICY_V1.md"
+  ],
+  "forward_provenance_mechanism": {
+    "component": "Step 3A immutable adaptive fit registry",
+    "explanation": "Every registered daily fit records the exact source commit it was produced from in its immutable manifest, and that field is one of the inputs the fit_id digest is taken over. Source provenance is therefore per fit and independently verifiable from this point forward, rather than inherited from a single freeze-time capture.",
+    "manifest_field": "source_commit_sha",
+    "module": "src/nba_prop_quant/adaptive_fit_registry.py"
+  },
+  "non_authoritative_recorded_commit": {
+    "commit": "fda849a36ac8e61b122f07cb821e0071f2b26107",
+    "evidence": {
+      "explanation": "The status_porcelain captured alongside the commit is rooted at a user home directory rather than at this repository. It lists home-directory dotfiles at top level and sibling project trees that do not exist in this repository, so the capture was taken in an outer working tree and its commit identifies that outer tree, not the NBA model source.",
+      "home_directory_markers_at_top_level": [
+        ".CFUserTextEncoding",
+        ".DS_Store",
+        ".Renviron",
+        ".bash_history",
+        ".cache"
+      ],
+      "status_porcelain_entry_count": 7656,
+      "top_level_paths_recorded": [
+        {
+          "entries": 6940,
+          "path": "woo_models"
+        },
+        {
+          "entries": 576,
+          "path": "SportsModels"
+        },
+        {
+          "entries": 1,
+          "path": ".CFUserTextEncoding"
+        },
+        {
+          "entries": 1,
+          "path": ".DS_Store"
+        },
+        {
+          "entries": 1,
+          "path": ".Renviron"
+        },
+        {
+          "entries": 1,
+          "path": ".bash_history"
+        }
+      ],
+      "unrelated_sibling_project_trees": [
+        "SportsModels/wnba-player-props-pmf-model",
+        "woo_models"
+      ]
+    },
+    "finding": "This commit does not resolve in Risky-Scout/nba-prop-quant and is therefore not authoritative NBA source provenance.",
+    "historical_dirty_flag": {
+      "recorded_value": true,
+      "treatment": "Preserved exactly as captured. The dirty flag is historical evidence about how the freeze was taken and is not rewritten."
+    },
+    "recorded_in": [
+      {
+        "branch_recorded": "main",
+        "dirty_recorded": true,
+        "freeze_id": "nba_prop_quant_20260818T205213Z",
+        "freeze_stage": "external_test_deployment",
+        "relative_path": "models/frozen_manifests/LATEST.json",
+        "status_porcelain_entry_count": 7656
+      },
+      {
+        "branch_recorded": "main",
+        "dirty_recorded": true,
+        "freeze_id": "nba_prop_quant_20260818T202318Z",
+        "freeze_stage": "pre_live_integration_architecture_baseline",
+        "relative_path": "models/frozen_manifests/nba_prop_quant_20260818T202318Z.json",
+        "status_porcelain_entry_count": 7656
+      },
+      {
+        "branch_recorded": "main",
+        "dirty_recorded": true,
+        "freeze_id": "nba_prop_quant_20260818T205213Z",
+        "freeze_stage": "external_test_deployment",
+        "relative_path": "models/frozen_manifests/nba_prop_quant_20260818T205213Z.json",
+        "status_porcelain_entry_count": 7656
+      }
+    ],
+    "resolves_in_this_repository": false
+  },
+  "purpose": "Record, without altering any historical artifact, that the git.commit value captured in the historical static freeze manifests is not authoritative NBA source provenance, and state what is.",
+  "step3b_source_lineage": {
+    "base_branch": "production/wizardofodds-integration",
+    "base_commit": "a9450a882a19e524c21599f5ea47493bab8fe3b3",
+    "base_commit_resolves": true,
+    "implementation_branch": "cursor/nba-step3b-correctness-integrity",
+    "merge_commit": null,
+    "merge_commit_note": "Step 3B is under review and unmerged, so its merge commit does not exist yet. It is recorded as null rather than invented; the base commit and implementation branch above identify the lineage while this change is open."
+  },
+  "what_this_addendum_does_not_claim": [
+    "It does not revise any frozen model artifact.",
+    "It does not revise any historical runtime contract.",
+    "It does not revise PUBLIC_CLAIM_POLICY_V1.",
+    "It makes no statement about model quality or predictive performance.",
+    "It does not assert where the unresolved commit does live, only that it is not a commit of this repository."
+  ]
+}

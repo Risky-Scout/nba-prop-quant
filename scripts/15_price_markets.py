@@ -1063,12 +1063,10 @@ def main() -> None:
         "deployment_manifest_sha256"
     ]
 
-    priced[
-        "gate3_external_test_record"
-    ] = priced[
-        "external_test_record"
-    ]
-
+    # Establish the run-level flag before anything reads it. This assignment
+    # previously came after gate3_external_test_record read the column, and no
+    # upstream stage produces it: projections emit
+    # gate3_external_test_candidate, so the read raised KeyError.
     priced[
         "external_test_record"
     ] = (
@@ -1076,6 +1074,22 @@ def main() -> None:
             "freeze_stage"
         ]
         == "external_test_deployment"
+    )
+
+    # Kept distinct from the run-level flag: a row is an external-test Gate 3
+    # record only when the projection marked it a Gate 3 candidate and this
+    # run is an external-test deployment.
+    priced[
+        "gate3_external_test_record"
+    ] = (
+        priced[
+            "gate3_external_test_candidate"
+        ].astype(
+            bool
+        )
+        & priced[
+            "external_test_record"
+        ]
     )
 
     out_dir = (
