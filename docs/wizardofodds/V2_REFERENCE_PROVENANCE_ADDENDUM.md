@@ -94,50 +94,74 @@ be recorded once it exists.
 
 ## 5. Adaptive serving source diverges from the anchor, by declaration
 
-The Gate 3 runtime contract byte-pins nine serving source files to the
-architecture reference. Adaptive production needed a serving-correctness fix in
-one of them, so a second contract now records what adaptive serving actually
-runs:
+Adaptive production needed serving-correctness fixes, so a second contract
+records what adaptive serving actually runs:
 
 `models/frozen_manifests/nba_prop_quant_v2_adaptive_serving_source_contract.json`
-(SHA256 `97292af4dc9486de1bee1a446c9ef0f7f85a3db162c0a84eb17ce639727c4ad9`).
+(version 2, SHA256
+`b4498aa3a803d2d9da2e82dbea714cbb99658574ae33b10f6d34359f62bc01e9`).
 
 It is additive. It does not replace, amend or reinterpret the historical Gate 3
 runtime contract, and it is not a new schema version of it. The historical
-contract is unchanged and still pins those files to
+contract is unchanged and still pins its nine files to
 `4def8ad33ccc56016fb19a97fceca6e027c9612a`.
 
-For each of the nine files it records the current SHA256, the SHA256 of the
-blob at the architecture reference, and whether the two match. Exactly one
-diverges:
+### What it covers, and why that is more than nine files
 
-| File | Status |
+The historical contract byte-pins nine serving files. It also *stages* a wider
+import closure into the runtime bundle without pinning it, and two of those
+staged-but-unpinned modules are load-bearing for serving and were changed by
+Step 3B:
+
+- `src/nba_prop_quant/slate.py` is imported by `scripts/10_predict_slate.py`,
+  which calls `build_upcoming_slate_features` to construct the live slate;
+- `src/nba_prop_quant/storage.py` is imported by both
+  `scripts/10_predict_slate.py` and `scripts/15_price_markets.py`, which call
+  `write_parquet_atomic` to emit their feeds.
+
+A contract claiming to pin what serving runs while omitting them would not be
+true, so it locks eleven files. A module that merely changed during Step 3B
+without being on the serving path, such as
+`ops/refresh_current_season_state.py`, is deliberately not locked here.
+
+For each locked file it records the current SHA256, the SHA256 of the blob at
+the architecture reference, whether the two match, whether the historical
+contract byte-pinned it, and the file's serving role. Three diverge:
+
+| File | Divergence |
 | --- | --- |
-| `scripts/15_price_markets.py` | diverged, reason recorded |
+| `scripts/15_price_markets.py` | Pricing lineage tail read `external_test_record` before creating it, so no priced-markets output could be produced. The run-level flag is now established before it is read. |
+| `src/nba_prop_quant/slate.py` | Fail-closed historical cutoff at live slate construction; explicit NBA slate-date semantics; live `player_game_number` and `team_game_number` parity required by the already fitted Gate 3 role model. |
+| `src/nba_prop_quant/storage.py` | Deterministic ordering of upserted rolling parquet rows. Changes the order rows are written in, nothing else. |
 | the other eight | byte-identical to the architecture reference |
 
-The divergence is a lineage-field ordering correction. The pricing emitter
-assigned `gate3_external_test_record` from `priced["external_test_record"]`
-before that column existed, and no upstream stage produces it, so the read
-raised `KeyError` and no priced-markets output could be produced. The run-level
-flag is now established before it is read.
+The `slate.py` divergence is a parity repair against a model that was already
+fitted, not new model research. The role model's `feature_names` already listed
+both fields; only the live path failed to produce them.
 
-The contract asserts, and the test suite enforces, that this changed no model
-mathematics, no Gate 3 routing, no calibration or dependence methodology, no
-marginal family or mean-model routing, no feature definition, no fitted
-artifact and no T-20 protocol.
+The contract asserts, and the test suite enforces, that none of this changed
+model mathematics, model family or routing, Gate 3 routing, calibration or
+dependence methodology, marginal family or mean-model routing, training feature
+definitions, fitted artifacts, or the T-20 protocol.
 
-Integrity verification was widened rather than relaxed. The suite now checks
-that the eight unchanged files are still byte-identical to the anchor, that a
-declared divergence is a real one, that the anchor's own bytes are unchanged
-for all nine, and that every file matches the new serving contract.
+### Integrity verification was widened, not relaxed
 
-One limitation is recorded in the contract itself:
+The suite checks that the files declared unchanged are still byte-identical to
+the anchor, that every declared divergence genuinely differs from it, that the
+anchor's own bytes are unchanged for all eleven, that `slate.py` and
+`storage.py` are covered along with the import evidence that puts them on the
+serving path, that the locked set is a superset of the historically pinned set,
+that every file matches its locked hash, and that editing any locked serving
+source is detected.
+
+### A deferred obligation, still open
+
 `scripts/19_build_wizardofodds_runtime_bundle.py` still verifies serving
 sources against the architecture reference alone, so building a runtime bundle
 from the corrected source would fail its frozen-source check. Teaching the
-bundle builder about this contract is deployment work and is deliberately out
-of scope here.
+bundle builder about this contract is a Step 3D deployment obligation.
+Expanding this contract does not resolve it, and a test asserts the limitation
+stays recorded rather than quietly dropped.
 
 ---
 
