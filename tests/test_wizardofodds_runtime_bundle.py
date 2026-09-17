@@ -618,6 +618,44 @@ def adaptive_serving_contract() -> dict:
     )
 
 
+def anchor_blob_sha256(relative: str) -> str:
+    blob = subprocess.run(
+        ["git", "cat-file", "blob", f"{FROZEN_MODEL_COMMIT}:{relative}"],
+        cwd=PROJECT,
+        capture_output=True,
+        check=True,
+    )
+
+    return hashlib.sha256(blob.stdout).hexdigest()
+
+
+def adaptive_serving_problems(read_bytes=None) -> list[str]:
+    """Verify every locked serving source against the adaptive contract.
+
+    read_bytes lets a test substitute the content of one file so tampering can
+    be exercised without touching the worktree.
+    """
+    if read_bytes is None:
+
+        def read_bytes(relative: str) -> bytes:
+            return (PROJECT / relative).read_bytes()
+
+    problems: list[str] = []
+
+    for relative, entry in sorted(
+        adaptive_serving_contract()["locked_serving_source_files"].items()
+    ):
+        observed = hashlib.sha256(read_bytes(relative)).hexdigest()
+
+        if observed != entry["current_sha256"]:
+            problems.append(
+                f"{relative}: {observed} does not match the locked "
+                f"{entry['current_sha256']}"
+            )
+
+    return problems
+
+
 def test_frozen_mathematical_sources_match_anchor():
     """Every serving source still matches the anchor unless declared otherwise.
 
@@ -646,17 +684,115 @@ def test_frozen_mathematical_sources_match_anchor():
 
     assert set(verified) == set(unchanged)
 
-    # A declared divergence must be a real one, so the exemption cannot be
-    # used to quietly wave through an unchanged file.
-    for relative in sorted(declared):
-        assert relative in set(contract["frozen_model_source_files"])
-
+    # A declared divergence among the historically pinned files must be a real
+    # one, so the exemption cannot quietly wave through an unchanged file.
+    for relative in sorted(declared & set(contract["frozen_model_source_files"])):
         with pytest.raises(builder.BuildError):
             builder.verify_frozen_model_sources(
                 PROJECT,
                 FROZEN_MODEL_COMMIT,
                 [relative],
             )
+
+
+def test_every_declared_divergence_genuinely_differs():
+    """Covers the locked files the historical contract never pinned too."""
+    adaptive = adaptive_serving_contract()
+
+    declared = adaptive["diverged_from_historical_reference"]
+
+    assert declared, "the contract declares no divergence"
+    assert adaptive["divergence_count"] == len(declared)
+
+    for relative in declared:
+        entry = adaptive["locked_serving_source_files"][relative]
+
+        assert entry["current_sha256"] != entry["historical_reference_sha256"]
+        assert entry["matches_historical_reference"] is False
+        assert entry["divergence_reason"].strip()
+
+
+def test_every_declared_non_divergence_matches_the_anchor():
+    adaptive = adaptive_serving_contract()
+
+    declared = set(adaptive["diverged_from_historical_reference"])
+
+    for relative, entry in sorted(
+        adaptive["locked_serving_source_files"].items()
+    ):
+        if relative in declared:
+            continue
+
+        assert entry["matches_historical_reference"] is True
+
+        observed = hashlib.sha256(
+            (PROJECT / relative).read_bytes()
+        ).hexdigest()
+
+        assert observed == anchor_blob_sha256(relative)
+
+
+def test_live_serving_modules_are_locked():
+    """slate.py and storage.py are on the serving path and must be pinned.
+
+    The historical contract stages both into the bundle but never listed them
+    in frozen_model_source_files, so their content shipped unpinned. Step 3B
+    changed both, which is why the adaptive contract has to cover them.
+    """
+    locked = set(adaptive_serving_contract()["locked_serving_source_files"])
+
+    assert "src/nba_prop_quant/slate.py" in locked
+    assert "src/nba_prop_quant/storage.py" in locked
+
+    predict = (PROJECT / "scripts" / "10_predict_slate.py").read_text(
+        encoding="utf-8"
+    )
+    price = (PROJECT / "scripts" / "15_price_markets.py").read_text(
+        encoding="utf-8"
+    )
+
+    # The import evidence that puts them on the serving path.
+    assert "from nba_prop_quant.slate import" in predict
+    assert "from nba_prop_quant.storage import" in predict
+    assert "from nba_prop_quant.storage import" in price
+
+
+def test_locked_set_covers_the_historical_pinned_set():
+    contract = json.loads(REAL_CONTRACT_PATH.read_text(encoding="utf-8"))
+    locked = adaptive_serving_contract()["locked_serving_source_files"]
+
+    assert set(locked) >= set(contract["frozen_model_source_files"])
+
+    for relative, entry in sorted(locked.items()):
+        assert entry["historically_byte_pinned"] == (
+            relative in set(contract["frozen_model_source_files"])
+        )
+
+
+def test_adaptive_serving_sources_match_their_locked_hashes():
+    assert adaptive_serving_problems() == []
+
+
+def test_changing_a_locked_serving_source_fails_verification():
+    """A silent edit to any locked serving source must be detected."""
+    adaptive = adaptive_serving_contract()
+
+    for target in (
+        "src/nba_prop_quant/slate.py",
+        "src/nba_prop_quant/storage.py",
+        "scripts/15_price_markets.py",
+    ):
+        assert target in adaptive["locked_serving_source_files"]
+
+        def tampered(relative: str, _target=target) -> bytes:
+            content = (PROJECT / relative).read_bytes()
+
+            return content + b"\n# silently edited\n" if relative == _target else content
+
+        problems = adaptive_serving_problems(tampered)
+
+        assert len(problems) == 1
+        assert problems[0].startswith(target)
 
 
 def test_historical_reference_bytes_are_still_intact():
@@ -683,27 +819,21 @@ def test_historical_reference_bytes_are_still_intact():
     for relative, entry in sorted(
         adaptive["locked_serving_source_files"].items()
     ):
-        blob = subprocess.run(
-            ["git", "cat-file", "blob", f"{FROZEN_MODEL_COMMIT}:{relative}"],
-            cwd=PROJECT,
-            capture_output=True,
-            check=True,
-        )
-
         assert (
-            hashlib.sha256(blob.stdout).hexdigest()
+            anchor_blob_sha256(relative)
             == entry["historical_reference_sha256"]
         ), f"{relative} anchor bytes moved"
 
 
 def test_adaptive_serving_source_matches_its_contract():
-    """What adaptive serving runs is pinned, not merely exempted."""
-    contract = json.loads(REAL_CONTRACT_PATH.read_text(encoding="utf-8"))
+    """What adaptive serving runs is pinned, not merely exempted.
+
+    The locked set is a superset of the historically pinned nine, because
+    serving also depends on modules that contract never pinned.
+    """
     adaptive = adaptive_serving_contract()
 
     locked = adaptive["locked_serving_source_files"]
-
-    assert set(locked) == set(contract["frozen_model_source_files"])
 
     for relative, entry in sorted(locked.items()):
         observed = hashlib.sha256(
@@ -729,16 +859,35 @@ def test_adaptive_serving_contract_asserts_no_model_change():
 
     for name in (
         "model_mathematics_changed",
+        "model_family_or_routing_changed",
         "gate3_routing_changed",
         "calibration_methodology_changed",
         "dependence_methodology_changed",
         "marginal_family_changed",
         "mean_model_routing_changed",
+        "training_feature_definitions_changed",
         "feature_definitions_changed",
         "t20_certification_protocol_changed",
         "fitted_model_artifacts_changed",
     ):
         assert invariants[name] is False
+
+
+def test_runtime_bundle_limitation_stays_documented():
+    """Expanding the lock must not quietly drop the deferred obligation."""
+    limitation = adaptive_serving_contract()["known_limitation"]
+
+    assert "19_build_wizardofodds_runtime_bundle.py" in limitation
+    assert "Step 3D" in limitation
+
+    addendum = (
+        PROJECT
+        / "docs"
+        / "wizardofodds"
+        / "V2_REFERENCE_PROVENANCE_ADDENDUM.md"
+    ).read_text(encoding="utf-8")
+
+    assert "19_build_wizardofodds_runtime_bundle.py" in addendum
 
 
 def test_v1_freeze_manifests_are_unchanged():

@@ -1,14 +1,22 @@
 {
   "contract_name": "nba_prop_quant_v2_adaptive_serving_source_contract",
-  "contract_version": 1,
+  "contract_version": 2,
+  "contract_version_history": {
+    "1": "Initial lock. Mirrored the historical nine-file set only, which did not cover every serving source Step 3B changed.",
+    "2": "Added src/nba_prop_quant/slate.py and src/nba_prop_quant/storage.py, which the production entry points import directly and which Step 3B changed, so the contract now pins what serving actually runs."
+  },
+  "coverage_basis": "A file is locked here when a production serving entry point, scripts/10_predict_slate.py or scripts/15_price_markets.py, depends on it. slate.py and storage.py are staged into the runtime bundle by the historical contract's source_files group but were never listed in its frozen_model_source_files, so their content was shipped without being pinned. Modules that merely changed during Step 3B without being on the serving path, such as ops/refresh_current_season_state.py, are deliberately not locked here.",
   "diverged_from_historical_reference": [
-    "scripts/15_price_markets.py"
+    "scripts/15_price_markets.py",
+    "src/nba_prop_quant/slate.py",
+    "src/nba_prop_quant/storage.py"
   ],
+  "divergence_count": 3,
   "historical_architecture_reference": "4def8ad33ccc56016fb19a97fceca6e027c9612a",
   "historical_contract_path": "models/frozen_manifests/nba_prop_quant_v2_gate3_runtime_contract.json",
   "historical_contract_sha256": "793b287434f13999e283fb28adc71b8198fc848ff496f8728dec5be95a6fb437",
   "introduced_by": "Production Step 3B production-path correction",
-  "invariant_basis": "The only divergence is a lineage-field ordering correction in the pricing emitter. It creates no probability, changes no line, and touches no routing, calibration, dependence, marginal or mean-model code path. The Step 3A adaptive architecture contract remains the authority on frozen model choices and is unchanged.",
+  "invariant_basis": "Every divergence listed above is a serving-correctness or storage determinism fix. Two of them unblock a feed that could not be produced at all: the pricing lineage tail raised KeyError, and the live Gate 3 role path failed closed on feature names the fitted model requires. The third changes only the order rows are written in. None creates or alters a probability, price, edge, EV, line or route, none changes a training feature definition, and no fitted artifact was touched. The Step 3A adaptive architecture contract remains the authority on frozen model choices and is unchanged.",
   "invariants": {
     "calibration_methodology_changed": false,
     "dependence_methodology_changed": false,
@@ -17,60 +25,96 @@
     "gate3_routing_changed": false,
     "marginal_family_changed": false,
     "mean_model_routing_changed": false,
+    "model_family_or_routing_changed": false,
     "model_mathematics_changed": false,
-    "t20_certification_protocol_changed": false
+    "t20_certification_protocol_changed": false,
+    "training_feature_definitions_changed": false
   },
-  "known_limitation": "scripts/19_build_wizardofodds_runtime_bundle.py still verifies serving sources against the historical architecture reference only, so building a runtime bundle from this corrected source would fail its frozen-source check. Teaching the bundle builder about this contract is deployment work and is deliberately out of scope for this correction.",
+  "known_limitation": "scripts/19_build_wizardofodds_runtime_bundle.py still verifies serving sources against the historical architecture reference only, so building a runtime bundle from this corrected source would fail its frozen-source check. Teaching the bundle builder about this contract is a Step 3D deployment obligation and is deliberately out of scope for this correction. Expanding this contract does not resolve that limitation.",
   "locked_serving_source_files": {
     "scripts/10_predict_slate.py": {
       "current_sha256": "045d75037dcb030076aa70e08e3b71b63fa8fba761bd63b9b3a4e20d5f2e5e45",
       "historical_reference_sha256": "045d75037dcb030076aa70e08e3b71b63fa8fba761bd63b9b3a4e20d5f2e5e45",
-      "matches_historical_reference": true
+      "historically_byte_pinned": true,
+      "matches_historical_reference": true,
+      "serving_role": "Byte-pinned serving source in the historical Gate 3 runtime contract."
     },
     "scripts/11_collect_snapshots.py": {
       "current_sha256": "dd0c3ed393ec04bbef521c4ff0d719bf3744ee04ef6405e83bc19b99233b6535",
       "historical_reference_sha256": "dd0c3ed393ec04bbef521c4ff0d719bf3744ee04ef6405e83bc19b99233b6535",
-      "matches_historical_reference": true
+      "historically_byte_pinned": true,
+      "matches_historical_reference": true,
+      "serving_role": "Byte-pinned serving source in the historical Gate 3 runtime contract."
     },
     "scripts/12_run_snapshot_cycle.py": {
       "current_sha256": "edc37f73ff434791dcab32eac29c0a5b134b47cd988e8ce2a1c197e47b053397",
       "historical_reference_sha256": "edc37f73ff434791dcab32eac29c0a5b134b47cd988e8ce2a1c197e47b053397",
-      "matches_historical_reference": true
+      "historically_byte_pinned": true,
+      "matches_historical_reference": true,
+      "serving_role": "Byte-pinned serving source in the historical Gate 3 runtime contract."
     },
     "scripts/15_price_markets.py": {
       "current_sha256": "868df444a557b2139a909f53b831db6850326fe8617953af5ec4c75d8a9d1159",
       "divergence_reason": "Serving-correctness fix only. The lineage tail assigned gate3_external_test_record from priced['external_test_record'] before that column was created, and no upstream stage produces it: scripts/10_predict_slate.py emits gate3_external_test_candidate instead. On a real pricing run the read raised KeyError, so no priced_markets parquet could be produced at all. The run-level flag is now established before it is read, and the Gate 3 lineage flag is derived from the projection-side candidacy combined with it. No probability, price, edge, EV or routing computation was touched.",
       "historical_reference_sha256": "79b893904eb34190b4f2afec2a44b4a18a4bc9d455b0ba4add6b93bf7a66e540",
-      "matches_historical_reference": false
+      "historically_byte_pinned": true,
+      "matches_historical_reference": false,
+      "serving_role": "Byte-pinned serving source in the historical Gate 3 runtime contract."
     },
     "src/nba_prop_quant/distributions.py": {
       "current_sha256": "0fac50865b33dcbdb5ac2b4e63b1a66f179c2ab446f1575e62053e48b0402ba6",
       "historical_reference_sha256": "0fac50865b33dcbdb5ac2b4e63b1a66f179c2ab446f1575e62053e48b0402ba6",
-      "matches_historical_reference": true
+      "historically_byte_pinned": true,
+      "matches_historical_reference": true,
+      "serving_role": "Byte-pinned serving source in the historical Gate 3 runtime contract."
     },
     "src/nba_prop_quant/gate3_v2.py": {
       "current_sha256": "35d290a87ac1999b6d339b58302d143dce342343319548e551da530220ab38ef",
       "historical_reference_sha256": "35d290a87ac1999b6d339b58302d143dce342343319548e551da530220ab38ef",
-      "matches_historical_reference": true
+      "historically_byte_pinned": true,
+      "matches_historical_reference": true,
+      "serving_role": "Byte-pinned serving source in the historical Gate 3 runtime contract."
     },
     "src/nba_prop_quant/pricing.py": {
       "current_sha256": "1a757e9ee4d955eea2d2e6150bafe647d5e3c4b6adafca0ea1be022c2589fb2a",
       "historical_reference_sha256": "1a757e9ee4d955eea2d2e6150bafe647d5e3c4b6adafca0ea1be022c2589fb2a",
-      "matches_historical_reference": true
+      "historically_byte_pinned": true,
+      "matches_historical_reference": true,
+      "serving_role": "Byte-pinned serving source in the historical Gate 3 runtime contract."
     },
     "src/nba_prop_quant/production.py": {
       "current_sha256": "dff10b03677cec8e6d124987a5bc733177a8985c55abf2c7d020f494c9066ad1",
       "historical_reference_sha256": "dff10b03677cec8e6d124987a5bc733177a8985c55abf2c7d020f494c9066ad1",
-      "matches_historical_reference": true
+      "historically_byte_pinned": true,
+      "matches_historical_reference": true,
+      "serving_role": "Byte-pinned serving source in the historical Gate 3 runtime contract."
     },
     "src/nba_prop_quant/prospective_snapshot.py": {
       "current_sha256": "2389d919c1d791eb044f786495cd55d6de505dfd7a58cfa548a7a07f14c9dedb",
       "historical_reference_sha256": "2389d919c1d791eb044f786495cd55d6de505dfd7a58cfa548a7a07f14c9dedb",
-      "matches_historical_reference": true
+      "historically_byte_pinned": true,
+      "matches_historical_reference": true,
+      "serving_role": "Byte-pinned serving source in the historical Gate 3 runtime contract."
+    },
+    "src/nba_prop_quant/slate.py": {
+      "current_sha256": "95e6ade3204996556b62a8dd33bfc8d0f99afc988ef9357f9ecf2de696ca35a9",
+      "divergence_reason": "Serving-correctness fixes only, in three parts. (1) A fail-closed historical cutoff at live slate construction: build_upcoming_slate_features now refuses box-score or advanced history that is not strictly older than the slate date, before any feature is derived and therefore before all model inference. Training consumes a shifted lagged EWM state while live inference consumes the latest historical EWM state, so the two agree only under that condition. (2) Explicit NBA slate-date semantics: America/New_York is named as the canonical slate timezone for a slate date derived from an offset-aware tip timestamp, a date-only schedule field is preserved verbatim rather than reinterpreted as UTC midnight, and a naive timestamp carrying a time of day is refused rather than guessed at. (3) Live parity for player_game_number and team_game_number, which the already fitted Gate 3 role model lists in its feature_names. Both were produced only on the historical training path, so apply_gate3_role_state failed closed on the live path and assists, points+assists and points+rebounds could not be priced. The live values reproduce the existing definitions in build_base_frame exactly and are read only from history before the slate. This is a parity repair against an already fitted model, not new model research: no model mathematics, model family or routing, training feature definition, or fitted artifact was changed.",
+      "historical_reference_sha256": "c6c8880a37c933e0a15947c80e20750884204ae44aa33726c861a661aa608318",
+      "historically_byte_pinned": false,
+      "matches_historical_reference": false,
+      "serving_role": "Imported by scripts/10_predict_slate.py, which calls build_upcoming_slate_features to construct the live slate."
+    },
+    "src/nba_prop_quant/storage.py": {
+      "current_sha256": "220ece7f79ff195608ed62344d5362c517d17acf32f644e8be385de41ea5578e",
+      "divergence_reason": "Operational storage determinism only. upsert_parquet concatenated and deduplicated without a final sort, so the stored row order of mutable rolling state depended on the arrival order of the incoming batch and two runs over the same semantic records produced different files. Rows are now ordered by the dataset's declared key columns with a stable sort and pinned NaN placement, and the index is reset before the write. The sort runs after deduplication so keep-last still resolves a replaced record in favour of the incoming batch. No value is computed, altered or rounded: this changes the order bytes are written in, nothing else.",
+      "historical_reference_sha256": "a4f6d1b513507beda585813c00fcd24f884e6554b1cc2faecf048627b61b48a3",
+      "historically_byte_pinned": false,
+      "matches_historical_reference": false,
+      "serving_role": "Imported by scripts/10_predict_slate.py and scripts/15_price_markets.py, which call write_parquet_atomic to emit the projections and priced-markets feeds."
     }
   },
   "production_source_base": "a9450a882a19e524c21599f5ea47493bab8fe3b3",
   "production_source_branch": "production/wizardofodds-integration",
-  "purpose": "Lock the adaptive-production serving source. The historical static contract pins these same files to the immutable architecture reference and remains untouched as historical evidence. This contract records what adaptive serving actually runs, and requires every difference from the historical reference to be enumerated and justified here.",
+  "purpose": "Pin the source that adaptive production serving actually runs. The historical static contract byte-pins nine of these files to the immutable architecture reference and remains untouched as historical evidence. This contract additionally covers serving modules the production entry points import that the historical lock never pinned, and requires every difference from the historical reference to be enumerated and justified here.",
   "supersedes_nothing": "This is additive. It does not replace, amend or reinterpret models/frozen_manifests/nba_prop_quant_v2_gate3_runtime_contract.json and it is not a new schema version of it."
 }
