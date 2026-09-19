@@ -124,9 +124,12 @@
     },
     "training_window": {
       "advanced_start_season": 2015,
+      "corpus_vs_rolling_state": "The Step 3B rolling-state record authenticates the latest coherent rolling partition. It does not define the training corpus. Fitting snapshots and reads the full expanding historical corpus across every eligible season from the floors above through the verified cutoff, and the rolling state's partition must be present within that corpus and still match what it recorded. The rolling state must never be used to truncate history to a single season.",
+      "eligible_information_set": "The manifest also records eligible_input_sha256, taken over the cutoff-filtered content, and the fitting information digest is computed from that rather than from raw bytes. A future schedule change that adds no completed game therefore cannot masquerade as new training information.",
       "end": "expanding through the verified training cutoff",
       "fold_count": "Not fixed. Season-keyed walk-forward folds grow naturally as seasons become eligible.",
-      "history_start_season": 2001
+      "history_start_season": 2001,
+      "input_lineage": "Every historical file used for fitting is copied into the isolated workspace before numerical fitting begins and its SHA256 is recorded in the training-data manifest under input_sha256. No fitting stage reads the mutable data root."
     }
   },
   "feature_schema_hash": "0c569e86f912b29fc806a8fde9a77e10b61782792c74707e853f8f3b49dfdcf8",

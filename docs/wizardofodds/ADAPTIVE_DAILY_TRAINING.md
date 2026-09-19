@@ -105,6 +105,40 @@ refresh already committed, and it verifies that state before spending time
 fitting: every dataset is re-read and re-fingerprinted, and a mismatch stops
 the run. A record the data no longer matches is worth nothing.
 
+### The rolling state authenticates; it does not define the corpus
+
+This distinction is load-bearing, and getting it wrong is what the first real
+full-data benchmark caught.
+
+The Step 3B state record describes the **latest coherent rolling partition** —
+one season. The training corpus is the **whole expanding historical window**:
+raw history from 2001, advanced from 2015, through the verified cutoff.
+
+Snapshotting only the datasets named in the state record leaves the workspace
+holding a single season, and the frozen pipeline then fails with
+`At least two seasons are required`. So the snapshot enumerates the season
+directories directly, from the frozen floors through the season containing the
+cutoff, and copies every `raw/seasons/season=YYYY/{stats,games}.parquet`,
+every `raw/advanced/season=YYYY/advanced.parquet` at or after the advanced
+floor, and `raw/players.parquet`.
+
+The rolling state keeps its job: its partition must be present in that corpus
+and must still match what it recorded, or the run stops. It is never used to
+truncate history.
+
+Feature assembly then uses the canonical loaders and `build_base_frame`,
+pointed at the snapshot rather than the data root, so the frame is the one the
+certified pipeline builds — stats, games, players and advanced together, across
+every eligible season. A frame spanning fewer than two seasons is refused
+outright rather than fitted.
+
+### Input lineage
+
+Every historical file used for fitting is copied into the workspace before
+numerical fitting begins, and each copy's SHA256 is recorded in the manifest
+under `input_sha256`. No fitting stage reads the mutable data root; a test
+asserts the production engine never references it.
+
 The training cutoff is **derived, never supplied**. It is the latest completed
 history date the verified state actually contains, and it must be strictly
 before the slate date. A caller may assert a narrower cutoff; a caller asking
@@ -115,15 +149,26 @@ legitimately holds future scheduled rows.
 ### NO_NEW_TRAINING_DATA
 
 Before fitting, the trainer builds the training-data manifest from the data
-root and hashes it. The manifest is deterministic and carries no wall-clock
-field, so an unchanged information set produces an unchanged hash. If that
-hash and the cutoff both match the parent fit, the run returns
-`NO_NEW_TRAINING_DATA`: no fit, no new `fit_id`, no promotion-state change.
+root and takes a **fitting information digest** over it. The digest is
+deterministic and carries no wall-clock field, so an unchanged information set
+produces an unchanged digest. If that digest and the cutoff both match the
+parent fit, the run returns `NO_NEW_TRAINING_DATA`: no fit, no new `fit_id`,
+no promotion-state change.
 
 That is the correct outcome for an NBA off day or an offseason day, and it
-costs a few file hashes rather than a full retrain. Because the manifest also
+costs a few file hashes rather than a full retrain. Because the digest also
 covers the contracts, the protocol and the source commit, a code change with
 unchanged data is still recognised as a genuinely new fit.
+
+The digest is taken over `eligible_input_sha256` — the cutoff-filtered content
+of each input — rather than over raw file bytes. `games.parquet` legitimately
+changes whenever the schedule moves, and a schedule edit that adds no completed
+game is not new training information. Keying on raw bytes would trigger a
+pointless full retrain every time the league published a fixture change.
+
+Because the cutoff is the minimum completed date across the rolling datasets, a
+game that has landed in `stats` but not yet in `advanced` is correctly not yet
+eligible, and the run reports no new data until the rest arrives.
 
 ---
 
