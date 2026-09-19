@@ -750,38 +750,159 @@ def assert_workspace_is_isolated(
 # --------------------------------------------------------------------------
 
 
-def hash_rolling_inputs(
+SEASON_DIRECTORY = "season="
+
+
+def _season_of(directory: Path) -> int | None:
+    if not directory.is_dir() or not directory.name.startswith(
+        SEASON_DIRECTORY
+    ):
+        return None
+
+    try:
+        return int(directory.name.split("=", 1)[1])
+    except (IndexError, ValueError):
+        return None
+
+
+def eligible_history_files(
     data_root: Path,
-    state: dict[str, Any],
-) -> dict[str, str]:
-    """Content hashes of the rolling inputs, keyed by data-root-relative path."""
+    training_cutoff: date,
+) -> list[str]:
+    """Every historical file the frozen training pipeline reads.
+
+    The Step 3B rolling state authenticates the latest coherent partition; it
+    does not define the training corpus. Fitting needs the whole expanding
+    window, so the seasons are enumerated from the frozen floors up to the
+    season containing the cutoff. Row-level eligibility is enforced separately,
+    after assembly.
+    """
     data_root = Path(data_root)
 
-    return {
-        str(record["relative_path"]): sha256_file(
-            data_root / str(record["relative_path"])
+    relatives: list[str] = []
+
+    seasons_root = data_root / "raw" / "seasons"
+
+    if seasons_root.is_dir():
+        for directory in sorted(seasons_root.iterdir()):
+            season = _season_of(directory)
+
+            if season is None:
+                continue
+
+            if season < HISTORY_START_SEASON or season > training_cutoff.year:
+                continue
+
+            for name in ("stats.parquet", "games.parquet"):
+                path = directory / name
+
+                if path.exists():
+                    relatives.append(
+                        path.relative_to(data_root).as_posix()
+                    )
+
+    advanced_root = data_root / "raw" / "advanced"
+
+    if advanced_root.is_dir():
+        for directory in sorted(advanced_root.iterdir()):
+            season = _season_of(directory)
+
+            if season is None:
+                continue
+
+            # The advanced floor is frozen at 2015 and is preserved here
+            # rather than narrowed to whatever the rolling state holds.
+            if season < ADVANCED_START_SEASON or season > training_cutoff.year:
+                continue
+
+            path = directory / "advanced.parquet"
+
+            if path.exists():
+                relatives.append(path.relative_to(data_root).as_posix())
+
+    players = data_root / "raw" / "players.parquet"
+
+    if players.exists():
+        relatives.append(players.relative_to(data_root).as_posix())
+
+    return sorted(set(relatives))
+
+
+def eligible_content_hash(path: Path, training_cutoff: date) -> str:
+    """Hash only the rows this fit may actually learn from.
+
+    A file carrying future scheduled rows changes whenever the schedule
+    changes. Keying the information set on raw bytes would make a schedule
+    edit look like newly completed NBA data and trigger a pointless retrain, so
+    eligibility is measured on the cutoff-filtered content instead.
+    """
+    import pandas as pd
+
+    frame = pd.read_parquet(path)
+
+    if "date" in frame.columns:
+        dates = pd.to_datetime(frame["date"], errors="coerce")
+
+        frame = frame.loc[
+            dates.dt.normalize() <= pd.Timestamp(training_cutoff)
+        ]
+
+    ordered = frame[sorted(frame.columns)].copy()
+
+    for column in ordered.columns:
+        if pd.api.types.is_datetime64_any_dtype(ordered[column]):
+            ordered[column] = ordered[column].dt.strftime(
+                "%Y-%m-%dT%H:%M:%S"
+            )
+
+    if "date" in ordered.columns:
+        ordered = ordered.sort_values(
+            by=sorted(ordered.columns), kind="stable"
         )
-        for _label, record in sorted(state["datasets"].items())
-    }
+
+    payload = ordered.to_csv(index=False, float_format="%.12g")
+
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def hash_training_corpus(
+    data_root: Path,
+    training_cutoff: date,
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Raw and cutoff-eligible hashes for the whole historical corpus."""
+    data_root = Path(data_root)
+
+    raw: dict[str, str] = {}
+    eligible: dict[str, str] = {}
+
+    for relative in eligible_history_files(data_root, training_cutoff):
+        path = data_root / relative
+
+        raw[relative] = sha256_file(path)
+
+        if path.suffix == ".parquet":
+            eligible[relative] = eligible_content_hash(path, training_cutoff)
+
+    return raw, eligible
 
 
 def snapshot_training_inputs(
     data_root: Path,
     workspace: TrainingWorkspace,
     state: dict[str, Any],
+    training_cutoff: date,
 ) -> dict[str, str]:
-    """Copy every load-bearing rolling input into the workspace.
+    """Copy the whole eligible historical corpus into the workspace.
 
-    A long fit must not read files that can change underneath it, so the inputs
-    are copied once and hashed, and every later stage reads the copy.
+    A long fit must not read files that can change underneath it, so every
+    load-bearing input is copied once and hashed here, and every later stage
+    reads the copy rather than the mutable data root.
     """
     data_root = Path(data_root)
 
     hashes: dict[str, str] = {}
 
-    for _label, record in sorted(state["datasets"].items()):
-        relative = str(record["relative_path"])
-
+    for relative in eligible_history_files(data_root, training_cutoff):
         source = data_root / relative
         destination = workspace.inputs / relative
 
@@ -790,6 +911,28 @@ def snapshot_training_inputs(
         shutil.copyfile(source, destination)
 
         hashes[relative] = sha256_file(destination)
+
+    # The rolling state authenticates the latest partition, so those files must
+    # be present in the snapshot and must still match what it recorded.
+    for label, record in sorted(state["datasets"].items()):
+        relative = str(record["relative_path"])
+
+        if relative not in hashes:
+            raise DataStateError(
+                f"the rolling state's {label} partition at {relative} is not "
+                "part of the snapshotted training corpus; the corpus and the "
+                "authenticated rolling generation disagree"
+            )
+
+        if hashes[relative] != sha256_file(data_root / relative):
+            raise DataStateError(
+                f"{relative} changed while it was being snapshotted"
+            )
+
+    if not hashes:
+        raise DataStateError(
+            f"no eligible historical training files found under {data_root}"
+        )
 
     return hashes
 
@@ -801,14 +944,21 @@ def build_training_data_manifest(
     slate_date: date,
     training_cutoff: date,
     input_hashes: dict[str, str],
+    eligible_hashes: dict[str, str],
     contract: ArchitectureContract,
     source_commit_sha: str,
 ) -> dict[str, Any]:
     """Describe exactly the information set this fit is allowed to see.
 
-    Deterministic: it carries no wall-clock field, so two days that see the
-    same information produce the same manifest hash. That is what lets an NBA
-    off day be recognised without fitting anything.
+    Two hash sets are recorded because they answer different questions.
+    input_sha256 is the lineage of the exact bytes fitting consumed.
+    eligible_input_sha256 is the cutoff-filtered content, and it is what the
+    fitting information digest is taken over, so a schedule edit that adds no
+    completed game cannot masquerade as new training data.
+
+    Deterministic: no wall-clock field, so two days seeing the same information
+    produce the same digest, which is what lets an off day be recognised
+    without fitting anything.
     """
     project_root = Path(project_root)
 
@@ -832,6 +982,8 @@ def build_training_data_manifest(
         "history_start_season": HISTORY_START_SEASON,
         # Relative to the data root, so the manifest stays portable.
         "input_sha256": dict(sorted(input_hashes.items())),
+        "eligible_input_sha256": dict(sorted(eligible_hashes.items())),
+        "training_corpus_file_count": len(input_hashes),
         "rolling_state_datasets": {
             label: {
                 "max_date": record.get("max_date"),
@@ -849,6 +1001,26 @@ def build_training_data_manifest(
         "source_commit_sha": source_commit_sha,
         "training_cutoff": training_cutoff.isoformat(),
     }
+
+    # What the fit may actually learn from, plus the frozen inputs that decide
+    # how. Deliberately excludes input_sha256 so schedule churn beyond the
+    # cutoff cannot look like new completed information.
+    manifest["fitting_information_digest"] = sha256_canonical(
+        {
+            "adaptive_update_protocol_sha256": manifest[
+                "adaptive_update_protocol_sha256"
+            ],
+            "architecture_contract_sha256": manifest[
+                "architecture_contract_sha256"
+            ],
+            "config_hash": manifest["config_hash"],
+            "eligible_input_sha256": manifest["eligible_input_sha256"],
+            "feature_schema_hash": manifest["feature_schema_hash"],
+            "frozen_policy_digests": manifest["frozen_policy_digests"],
+            "source_commit_sha": manifest["source_commit_sha"],
+            "training_cutoff": manifest["training_cutoff"],
+        }
+    )
 
     return manifest
 
@@ -1305,17 +1477,22 @@ def run_daily_fit(
 
         # Built before any fitting, from the data root itself, so an off day
         # costs a few hashes rather than a full retrain.
+        corpus_hashes, eligible_hashes = hash_training_corpus(
+            data_root, training_cutoff
+        )
+
         prospective_manifest = build_training_data_manifest(
             project_root=project_root,
             state=state,
             slate_date=resolved_slate,
             training_cutoff=training_cutoff,
-            input_hashes=hash_rolling_inputs(data_root, state),
+            input_hashes=corpus_hashes,
+            eligible_hashes=eligible_hashes,
             contract=contract,
             source_commit_sha=source_commit_sha,
         )
 
-        manifest_hash = sha256_canonical(prospective_manifest)
+        manifest_hash = prospective_manifest["fitting_information_digest"]
 
         if not has_new_training_data(parent, training_cutoff, manifest_hash):
             guard.verify("no_new_training_data")
@@ -1353,16 +1530,20 @@ def run_daily_fit(
         with selector_guard():
             with benchmark.stage("input_snapshot"):
                 snapshotted = snapshot_training_inputs(
-                    data_root, workspace, state
+                    data_root, workspace, state, training_cutoff
                 )
 
                 if snapshotted != prospective_manifest["input_sha256"]:
                     raise DataStateError(
-                        "rolling inputs changed while they were being "
+                        "training inputs changed while they were being "
                         "snapshotted; refusing to fit a moving information set"
                     )
 
                 context.training_manifest = prospective_manifest
+
+                benchmark.record(
+                    "training_corpus_files", len(snapshotted)
+                )
 
                 write_json_atomic(
                     prospective_manifest,
@@ -1413,9 +1594,9 @@ def run_daily_fit(
         result: dict[str, Any] = {
             "outcome": OUTCOME_COMPLETED,
             "plan": plan,
-            "training_data_manifest_sha256": sha256_canonical(
-                context.training_manifest
-            ),
+            "training_data_manifest_sha256": context.training_manifest[
+                "fitting_information_digest"
+            ],
             "validation_checks": checks,
             "deferred_validation_checks": list(deferred_validation_checks()),
             "calibration_fallbacks": dict(context.calibration_fallbacks),
@@ -1574,6 +1755,18 @@ def load_script_module(project_root: Path, relative: str):
     return module
 
 
+@dataclass(frozen=True)
+class SnapshotSettings:
+    """Minimal settings shim so the canonical loaders read the snapshot.
+
+    nba_prop_quant.pipeline's loaders take a settings object and use only
+    raw_dir. Pointing them at the workspace copy is what keeps the daily fit
+    reading immutable bytes while still using the certified assembly code.
+    """
+
+    raw_dir: Path
+
+
 class ProductionFitEngine:
     """The real daily fit.
 
@@ -1608,17 +1801,51 @@ class ProductionFitEngine:
     # -- stages ---------------------------------------------------------
 
     def build_features(self, context: "FitContext") -> None:
-        import pandas as pd
+        """Assemble the full expanding historical training frame.
 
+        Uses the canonical loaders and build_base_frame, pointed at the
+        immutable snapshot rather than the mutable data root, so the frame is
+        the same one the certified pipeline builds. It spans every eligible
+        season, not just the latest rolling partition.
+        """
         from .features import add_dynamic_priors, build_base_frame
-        from .pipeline import load_json
-
-        stats = pd.read_parquet(
-            context.workspace.inputs
-            / context.state["datasets"]["stats"]["relative_path"]
+        from .pipeline import (
+            load_advanced,
+            load_history_box_stats,
+            load_history_games,
+            load_json,
+            load_players,
         )
 
-        base = build_base_frame(self._eligible(stats, context))
+        snapshot = SnapshotSettings(raw_dir=context.workspace.inputs / "raw")
+
+        stats = load_history_box_stats(snapshot)
+        games = load_history_games(snapshot)
+        players = load_players(snapshot)
+        advanced = load_advanced(snapshot)
+
+        if stats.empty:
+            raise CandidateIncomplete(
+                "the snapshotted training corpus holds no box-score history"
+            )
+
+        # Applied before assembly so a future scheduled row can never become a
+        # training outcome. games keeps its future rows only as schedule
+        # context, which build_base_frame joins by game id.
+        eligible_stats = self._eligible(stats, context)
+
+        eligible_advanced = (
+            self._eligible(advanced, context)
+            if not advanced.empty and "date" in advanced.columns
+            else advanced
+        )
+
+        base = build_base_frame(
+            eligible_stats,
+            players=players,
+            advanced=eligible_advanced,
+            games=games,
+        )
 
         params = load_json(
             self.project_root / "models" / "dynamic_params.json"
@@ -1626,10 +1853,27 @@ class ProductionFitEngine:
 
         features = add_dynamic_priors(base, params)
 
+        # Defence in depth: nothing downstream may see a post-cutoff row.
+        features = self._eligible(features, context)
+
+        seasons = sorted(
+            int(season) for season in features["season"].dropna().unique()
+        )
+
+        if len(seasons) < 2:
+            raise CandidateIncomplete(
+                "the training frame spans "
+                f"{len(seasons)} season(s) {seasons}; the frozen pipeline "
+                "needs the expanding historical window, so the snapshot did "
+                "not capture the full corpus"
+            )
+
         context.benchmark.record("feature_rows", int(len(features)))
         context.benchmark.record(
             "feature_columns", int(len(features.columns))
         )
+        context.benchmark.record("training_seasons", seasons)
+        context.benchmark.record("training_season_count", len(seasons))
 
         features.to_parquet(
             context.workspace.processed / "features.parquet", index=False
