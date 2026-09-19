@@ -1503,3 +1503,631 @@ def test_tests_do_not_write_a_rolling_state_into_the_repository():
 def test_no_test_reaches_the_network():
     with pytest.raises(RuntimeError, match="network access is forbidden"):
         socket.socket()
+
+
+# ----------------------------------------------------------------------
+# Regression: the full-data benchmark defect
+#
+# The first real benchmark failed with "At least two seasons are required".
+# The workspace held only the latest season because the snapshot looped over
+# the Step 3B rolling-state datasets, and feature construction read only the
+# state's stats partition. The rolling state authenticates the latest coherent
+# partition; it does not define the historical training corpus.
+# ----------------------------------------------------------------------
+
+
+HISTORICAL_SEASONS = (2023, 2024, 2025, 2026)
+
+STATE_SEASON = 2026
+
+
+def season_stats(season: int, dates: list[str]) -> pd.DataFrame:
+    rows = []
+
+    for index, moment in enumerate(dates):
+        game_id = season * 1000 + index
+
+        for player_id, team_id in ((1, 10), (2, 10), (3, 20), (4, 20)):
+            home = 10 if index % 2 == 0 else 20
+
+            rows.append(
+                {
+                    "stat_id": len(rows) + season * 10000,
+                    "player_id": player_id,
+                    "team_id": team_id,
+                    "game_id": game_id,
+                    "date": pd.Timestamp(moment),
+                    "season": season,
+                    "postseason": False,
+                    "home_team_id": home,
+                    "visitor_team_id": 20 if home == 10 else 10,
+                    "position": "G" if player_id % 2 else "F",
+                    "draft_year": 2018,
+                    "min": "30:00",
+                    "minutes": 28.0 + player_id,
+                    "pts": 10 + player_id + index,
+                    "reb": 3 + player_id,
+                    "ast": 2 + index,
+                    "stl": player_id % 2,
+                    "blk": 0,
+                    "fg3m": 1,
+                    "fga": 10,
+                    "fg3a": 4,
+                    "fta": 2,
+                    "oreb": 1,
+                    "dreb": 3,
+                    "turnover": 1,
+                    "pf": 2,
+                }
+            )
+
+    return pd.DataFrame(rows)
+
+
+def season_games(
+    season: int, dates: list[str], id_offset: int = 0
+) -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "id": season * 1000 + id_offset + index,
+                "date": pd.Timestamp(moment),
+                "season": season,
+                "home_team_id": 10 if index % 2 == 0 else 20,
+                "visitor_team_id": 20 if index % 2 == 0 else 10,
+                "status": "Final",
+                "postseason": False,
+            }
+            for index, moment in enumerate(dates)
+        ]
+    )
+
+
+def season_advanced(season: int, dates: list[str]) -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "player_id": player_id,
+                "game_id": season * 1000 + index,
+                "date": pd.Timestamp(moment),
+                "season": season,
+                "usage_percentage": 20.0 + player_id,
+                "assist_percentage": 12.0,
+                "rebound_percentage": 9.0,
+                "pace": 99.0,
+            }
+            for index, moment in enumerate(dates)
+            for player_id in (1, 2, 3, 4)
+        ]
+    )
+
+
+def season_dates(season: int) -> list[str]:
+    """Ten dated games per season, starting in that season's November."""
+    return [
+        (pd.Timestamp(f"{season}-11-01") + pd.Timedelta(days=2 * step))
+        .date()
+        .isoformat()
+        for step in range(10)
+    ]
+
+
+FUTURE_SCHEDULED = ["2026-12-20", "2027-01-15"]
+
+
+def build_multi_season_data_root(root: Path) -> Path:
+    """Several historical seasons, with state describing only the latest.
+
+    This is the shape the real benchmark ran against: a complete local data
+    root, and a Step 3B state record covering one partition.
+    """
+    root.mkdir(parents=True, exist_ok=True)
+
+    for season in HISTORICAL_SEASONS:
+        dates = season_dates(season)
+
+        season_dir = root / f"raw/seasons/season={season}"
+        season_dir.mkdir(parents=True, exist_ok=True)
+
+        season_stats(season, dates).to_parquet(
+            season_dir / "stats.parquet", index=False
+        )
+
+        games = season_games(season, dates)
+
+        if season == STATE_SEASON:
+            # Future scheduled rows are legitimate in games.
+            games = pd.concat(
+                [
+                    games,
+                    season_games(season, FUTURE_SCHEDULED, id_offset=900),
+                ],
+                ignore_index=True,
+            )
+
+        games.to_parquet(season_dir / "games.parquet", index=False)
+
+        advanced_dir = root / f"raw/advanced/season={season}"
+        advanced_dir.mkdir(parents=True, exist_ok=True)
+
+        season_advanced(season, dates).to_parquet(
+            advanced_dir / "advanced.parquet", index=False
+        )
+
+    # The rolling state authenticates only the latest partition.
+    datasets = {}
+
+    layout = {
+        "stats": (
+            f"raw/seasons/season={STATE_SEASON}/stats.parquet",
+            ["game_id", "player_id"],
+        ),
+        "advanced": (
+            f"raw/advanced/season={STATE_SEASON}/advanced.parquet",
+            ["game_id", "player_id"],
+        ),
+        "games": (
+            f"raw/seasons/season={STATE_SEASON}/games.parquet",
+            ["id"],
+        ),
+    }
+
+    for label, (relative, keys) in layout.items():
+        frame = pd.read_parquet(root / relative)
+
+        usable = pd.to_datetime(frame["date"]).dropna()
+
+        datasets[label] = {
+            "columns": sorted(str(c) for c in frame.columns),
+            "key_columns": keys,
+            "max_date": usable.max().date().isoformat(),
+            "min_date": usable.min().date().isoformat(),
+            "relative_path": relative,
+            "row_count": int(len(frame)),
+            "schema_fingerprint": "s" * 64,
+            "semantic_fingerprint": semantic_fingerprint(frame, keys),
+            "unique_key_count": int(len(frame.drop_duplicates(subset=keys))),
+        }
+
+    state = {
+        "datasets": datasets,
+        "datasets_fingerprint": hashlib.sha256(
+            json.dumps(datasets, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+        "generated_at_utc": "2026-11-21T09:00:00+00:00",
+        "schema_version": 1,
+        "season": STATE_SEASON,
+        "slate_date": "2026-11-21",
+    }
+
+    state_path = root / ROLLING_STATE_RELATIVE_PATH
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json.dumps(state, indent=2, sort_keys=True))
+
+    return root
+
+
+MULTI_SLATE_DATE = "2026-11-21"
+
+MULTI_CUTOFF = "2026-11-19"
+
+
+@pytest.fixture
+def multi_season_root(tmp_path) -> Path:
+    return build_multi_season_data_root(tmp_path / "full_data")
+
+
+class RealFeatureEngine(StubFitEngine):
+    """Stub everywhere except the real feature assembly under test."""
+
+    def build_features(self, context) -> None:
+        self._record("build_features")
+
+        from nba_prop_quant.adaptive_training import ProductionFitEngine
+
+        ProductionFitEngine(self.project_root).build_features(context)
+
+
+def test_state_describes_only_the_latest_season(multi_season_root):
+    """The fixture reproduces the condition that caused the failure."""
+    state = json.loads(
+        (multi_season_root / ROLLING_STATE_RELATIVE_PATH).read_text(
+            encoding="utf-8"
+        )
+    )
+
+    for record in state["datasets"].values():
+        assert f"season={STATE_SEASON}" in record["relative_path"]
+
+    assert len(HISTORICAL_SEASONS) > 1
+
+
+def test_a_snapshot_captures_the_full_historical_corpus(
+    multi_season_root, tmp_path
+):
+    from nba_prop_quant.adaptive_training import (
+        eligible_history_files,
+        snapshot_training_inputs,
+    )
+
+    state = json.loads(
+        (multi_season_root / ROLLING_STATE_RELATIVE_PATH).read_text(
+            encoding="utf-8"
+        )
+    )
+
+    cutoff = date.fromisoformat(MULTI_CUTOFF)
+
+    relatives = eligible_history_files(multi_season_root, cutoff)
+
+    # Every season's stats and games, not only the state's partition.
+    for season in HISTORICAL_SEASONS:
+        assert f"raw/seasons/season={season}/stats.parquet" in relatives
+        assert f"raw/seasons/season={season}/games.parquet" in relatives
+
+    workspace = new_workspace(tmp_path / "work", MULTI_SLATE_DATE)
+
+    hashes = snapshot_training_inputs(
+        multi_season_root, workspace, state, cutoff
+    )
+
+    assert set(hashes) == set(relatives)
+
+    snapshotted_seasons = {
+        int(path.parent.name.split("=")[1])
+        for path in (workspace.inputs / "raw" / "seasons").iterdir()
+        for _ in [0]
+        for path in [path / "stats.parquet"]
+        if path.exists()
+    }
+
+    assert snapshotted_seasons == set(HISTORICAL_SEASONS)
+
+
+def test_b_latest_state_partition_is_still_verified(
+    multi_season_root, tmp_path
+):
+    """Authentication of the rolling generation is unchanged."""
+    from nba_prop_quant.adaptive_training import (
+        snapshot_training_inputs,
+        verify_rolling_state,
+    )
+
+    state = verify_rolling_state(multi_season_root)
+
+    workspace = new_workspace(tmp_path / "work", MULTI_SLATE_DATE)
+
+    hashes = snapshot_training_inputs(
+        multi_season_root,
+        workspace,
+        state,
+        date.fromisoformat(MULTI_CUTOFF),
+    )
+
+    for record in state["datasets"].values():
+        assert record["relative_path"] in hashes
+
+    # A state partition missing from the corpus is a hard stop.
+    stats_relative = state["datasets"]["stats"]["relative_path"]
+
+    (multi_season_root / stats_relative).unlink()
+
+    with pytest.raises(DataStateError, match="not part of the snapshotted"):
+        snapshot_training_inputs(
+            multi_season_root,
+            new_workspace(tmp_path / "work2", MULTI_SLATE_DATE),
+            state,
+            date.fromisoformat(MULTI_CUTOFF),
+        )
+
+
+def test_advanced_floor_is_preserved(multi_season_root, tmp_path):
+    """Advanced history is not narrowed to the latest rolling partition."""
+    from nba_prop_quant.adaptive_training import eligible_history_files
+
+    relatives = eligible_history_files(
+        multi_season_root, date.fromisoformat(MULTI_CUTOFF)
+    )
+
+    advanced = [name for name in relatives if "raw/advanced/" in name]
+
+    assert len(advanced) == len(HISTORICAL_SEASONS)
+
+    for season in HISTORICAL_SEASONS:
+        assert season >= ADVANCED_START_SEASON
+        assert f"raw/advanced/season={season}/advanced.parquet" in advanced
+
+
+def test_pre_2015_advanced_is_excluded(multi_season_root):
+    """The frozen advanced floor still holds."""
+    from nba_prop_quant.adaptive_training import eligible_history_files
+
+    early = multi_season_root / "raw/advanced/season=2012"
+    early.mkdir(parents=True, exist_ok=True)
+
+    season_advanced(2012, season_dates(2012)).to_parquet(
+        early / "advanced.parquet", index=False
+    )
+
+    relatives = eligible_history_files(
+        multi_season_root, date.fromisoformat(MULTI_CUTOFF)
+    )
+
+    assert "raw/advanced/season=2012/advanced.parquet" not in relatives
+
+
+def multi_season_fit(multi_season_root, work_root, registry, engine=None):
+    return run_daily_fit(
+        project_root=PROJECT,
+        data_root=multi_season_root,
+        work_root=work_root,
+        slate_date=MULTI_SLATE_DATE,
+        registry=registry,
+        engine=engine if engine is not None else RealFeatureEngine(PROJECT),
+        mode=MODE_REGISTER_CANDIDATE,
+        source_commit_sha="d8a32599738e858dc6153d62892a62d22562b981",
+    )
+
+
+def test_cd_training_frame_spans_multiple_seasons(
+    multi_season_root, work_root, registry
+):
+    """The exact failure: the frame must not collapse to the state season.
+
+    Against the previous behaviour this raised
+    "the training frame spans 1 season(s)" because only the state partition was
+    snapshotted and read.
+    """
+    result = multi_season_fit(multi_season_root, work_root, registry)
+
+    assert result["outcome"] == OUTCOME_COMPLETED
+
+    seasons = result["benchmark"]["details"]["training_seasons"]
+
+    assert len(seasons) >= 2
+    assert seasons == sorted(HISTORICAL_SEASONS)
+    assert seasons != [STATE_SEASON]
+
+    workspace = Path(result["workspace"])
+
+    features = pd.read_parquet(workspace / "processed" / "features.parquet")
+
+    assert sorted(features["season"].unique().tolist()) == sorted(
+        HISTORICAL_SEASONS
+    )
+
+    print(
+        "\ntraining frame seasons: "
+        f"{sorted(features['season'].unique().tolist())} "
+        f"({len(features):,} rows) while the Step 3B semantic state points "
+        f"only at season {STATE_SEASON}"
+    )
+
+
+def test_e_manifest_hashes_cover_every_historical_input(
+    multi_season_root, work_root, registry
+):
+    result = multi_season_fit(multi_season_root, work_root, registry)
+
+    manifest = json.loads(
+        (
+            Path(result["workspace"])
+            / "candidate"
+            / "training_data_manifest.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    recorded = manifest["input_sha256"]
+
+    for season in HISTORICAL_SEASONS:
+        for relative in (
+            f"raw/seasons/season={season}/stats.parquet",
+            f"raw/seasons/season={season}/games.parquet",
+            f"raw/advanced/season={season}/advanced.parquet",
+        ):
+            assert relative in recorded, relative
+
+            assert recorded[relative] == hashlib.sha256(
+                (multi_season_root / relative).read_bytes()
+            ).hexdigest()
+
+    assert manifest["training_corpus_file_count"] == len(recorded)
+
+    # The rolling fingerprint still authenticates the latest generation.
+    state = json.loads(
+        (multi_season_root / ROLLING_STATE_RELATIVE_PATH).read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert (
+        manifest["rolling_state_fingerprint"]
+        == state["datasets_fingerprint"]
+    )
+
+
+def test_f_future_rows_are_excluded_by_the_cutoff(
+    multi_season_root, work_root, registry
+):
+    result = multi_season_fit(multi_season_root, work_root, registry)
+
+    assert result["plan"]["training_cutoff"] == MULTI_CUTOFF
+
+    features = pd.read_parquet(
+        Path(result["workspace"]) / "processed" / "features.parquet"
+    )
+
+    latest = pd.to_datetime(features["date"]).max().date()
+
+    assert latest <= date.fromisoformat(MULTI_CUTOFF)
+
+    for scheduled in FUTURE_SCHEDULED:
+        assert latest < date.fromisoformat(scheduled)
+
+
+def test_future_schedule_churn_is_not_new_training_data(
+    multi_season_root, work_root, registry
+):
+    """A schedule edit adds no completed game, so it must not trigger a refit."""
+    first = multi_season_fit(multi_season_root, work_root, registry)
+
+    assert first["outcome"] == OUTCOME_COMPLETED
+
+    games_relative = f"raw/seasons/season={STATE_SEASON}/games.parquet"
+    games_path = multi_season_root / games_relative
+
+    before = hashlib.sha256(games_path.read_bytes()).hexdigest()
+
+    games = pd.read_parquet(games_path)
+
+    extra = season_games(STATE_SEASON, ["2027-02-01"], id_offset=950)
+
+    pd.concat([games, extra], ignore_index=True).to_parquet(
+        games_path, index=False
+    )
+
+    after = hashlib.sha256(games_path.read_bytes()).hexdigest()
+
+    assert after != before
+
+    # The state record must be refreshed for the new bytes, as Step 3B would.
+    state_path = multi_season_root / ROLLING_STATE_RELATIVE_PATH
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+
+    updated = pd.read_parquet(games_path)
+    record = state["datasets"]["games"]
+    record["row_count"] = int(len(updated))
+    record["columns"] = sorted(str(c) for c in updated.columns)
+    record["max_date"] = (
+        pd.to_datetime(updated["date"]).max().date().isoformat()
+    )
+    record["semantic_fingerprint"] = semantic_fingerprint(updated, ["id"])
+    state["datasets_fingerprint"] = hashlib.sha256(
+        json.dumps(
+            state["datasets"], sort_keys=True, separators=(",", ":")
+        ).encode()
+    ).hexdigest()
+    state_path.write_text(json.dumps(state, indent=2, sort_keys=True))
+
+    second = multi_season_fit(multi_season_root, work_root, registry)
+
+    assert second["outcome"] == OUTCOME_NO_NEW_TRAINING_DATA
+    assert registry.list_fits() == [first["fit_id"]]
+
+
+def test_a_completed_game_is_new_training_data(
+    multi_season_root, work_root, registry
+):
+    """The counterpart: newly completed history does trigger a refit."""
+    first = multi_season_fit(multi_season_root, work_root, registry)
+
+    stats_relative = f"raw/seasons/season={STATE_SEASON}/stats.parquet"
+    stats_path = multi_season_root / stats_relative
+
+    stats = pd.read_parquet(stats_path)
+
+    fresh = season_stats(STATE_SEASON, ["2026-11-20"])
+    fresh["stat_id"] = fresh["stat_id"] + 500000
+    fresh["game_id"] = 987654
+
+    pd.concat([stats, fresh], ignore_index=True).to_parquet(
+        stats_path, index=False
+    )
+
+    # A completed game lands in every rolling dataset. The cutoff is the
+    # minimum across them, so advancing stats alone would correctly still be
+    # no new eligible information.
+    advanced_relative = (
+        f"raw/advanced/season={STATE_SEASON}/advanced.parquet"
+    )
+    advanced_path = multi_season_root / advanced_relative
+
+    fresh_advanced = season_advanced(STATE_SEASON, ["2026-11-20"])
+    fresh_advanced["game_id"] = 987654
+
+    pd.concat(
+        [pd.read_parquet(advanced_path), fresh_advanced], ignore_index=True
+    ).to_parquet(advanced_path, index=False)
+
+    games_relative = f"raw/seasons/season={STATE_SEASON}/games.parquet"
+    games_path = multi_season_root / games_relative
+
+    fresh_game = season_games(STATE_SEASON, ["2026-11-20"])
+    fresh_game["id"] = 987654
+
+    pd.concat(
+        [pd.read_parquet(games_path), fresh_game], ignore_index=True
+    ).to_parquet(games_path, index=False)
+
+    state_path = multi_season_root / ROLLING_STATE_RELATIVE_PATH
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+
+    for label, relative, keys in (
+        ("stats", stats_relative, ["game_id", "player_id"]),
+        ("advanced", advanced_relative, ["game_id", "player_id"]),
+        ("games", games_relative, ["id"]),
+    ):
+        updated = pd.read_parquet(multi_season_root / relative)
+
+        record = state["datasets"][label]
+        record["row_count"] = int(len(updated))
+        record["columns"] = sorted(str(c) for c in updated.columns)
+        record["max_date"] = (
+            pd.to_datetime(updated["date"]).max().date().isoformat()
+        )
+        record["semantic_fingerprint"] = semantic_fingerprint(updated, keys)
+
+    state["datasets_fingerprint"] = hashlib.sha256(
+        json.dumps(
+            state["datasets"], sort_keys=True, separators=(",", ":")
+        ).encode()
+    ).hexdigest()
+    state_path.write_text(json.dumps(state, indent=2, sort_keys=True))
+
+    second = multi_season_fit(multi_season_root, work_root, registry)
+
+    assert second["outcome"] == OUTCOME_COMPLETED
+    assert second["fit_id"] != first["fit_id"]
+    assert len(registry.list_fits()) == 2
+
+
+def test_g_no_selector_runs_during_the_corrected_path(
+    multi_season_root, work_root, registry
+):
+    """The corrected snapshot did not weaken the selector prohibition."""
+    from nba_prop_quant import decay, kalman, model
+
+    originals = (
+        model.expanding_time_oof_target,
+        model.expanding_time_oof_minutes,
+        decay.tune_decay_beta,
+        kalman.tune_kalman,
+    )
+
+    result = multi_season_fit(multi_season_root, work_root, registry)
+
+    assert result["outcome"] == OUTCOME_COMPLETED
+
+    assert (
+        model.expanding_time_oof_target,
+        model.expanding_time_oof_minutes,
+        decay.tune_decay_beta,
+        kalman.tune_kalman,
+    ) == originals
+
+    # No policy file moved while the corrected path ran.
+    guard = FrozenPolicyGuard(PROJECT)
+    guard.snapshot()
+    guard.verify("post_run")
+
+
+def test_no_fitting_stage_reads_the_mutable_data_root():
+    """Stages read the snapshot; only the snapshot stage touches data_root."""
+    source = (
+        PROJECT / "src" / "nba_prop_quant" / "adaptive_training.py"
+    ).read_text(encoding="utf-8")
+
+    engine = source.split("class ProductionFitEngine")[1]
+
+    assert "context.data_root" not in engine
+    assert "workspace.inputs" in engine
