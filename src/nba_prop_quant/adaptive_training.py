@@ -2007,7 +2007,7 @@ class ProductionFitEngine:
         _ = np
 
     def fit_marginals(self, context: "FitContext") -> None:
-        """Refit ZINB parameters only. No family ladder runs."""
+        """Refit frozen ZINB marginals from canonical selected means."""
         import joblib
         import pandas as pd
 
@@ -2015,26 +2015,126 @@ class ProductionFitEngine:
             self.project_root, "scripts/07_fit_marginals.py"
         )
 
+        if not hasattr(marginals_module, "inflation_features_for"):
+            raise RuntimeError(
+                "scripts/07_fit_marginals.py is missing required "
+                "inflation_features_for(target, frame)"
+            )
+
         frame = pd.read_parquet(
             context.workspace.processed / "oof_predictions.parquet"
+        )
+
+        ensemble_weights = context.notes.get("ensemble_weights", {})
+
+        # Materialize the frozen canonical selected-mean contract:
+        # PTS/AST/STL/FG3M -> XGB
+        # REB/BLK          -> fitted convex ensemble
+        for target, route in sorted(FROZEN_MEAN_ROUTES.items()):
+            xgb_col = f"mu_{target}"
+            selected_col = f"mu_selected_{target}"
+
+            if xgb_col not in frame.columns:
+                raise RuntimeError(
+                    f"Missing XGB OOF mean column for target={target}: "
+                    f"{xgb_col}"
+                )
+
+            if route == "ensemble":
+                weights = ensemble_weights.get(target)
+
+                if not weights:
+                    raise RuntimeError(
+                        f"Missing fitted ensemble weights for target={target}"
+                    )
+
+                required_weight_keys = {"xgb", "decay", "kalman"}
+                missing_weight_keys = (
+                    required_weight_keys - set(weights)
+                )
+
+                if missing_weight_keys:
+                    raise RuntimeError(
+                        f"Incomplete ensemble weights for target={target}: "
+                        f"missing {sorted(missing_weight_keys)}"
+                    )
+
+                decay_col = f"decay_prior_{target}_rate"
+                kalman_col = f"kalman_prior_{target}_rate"
+
+                missing_columns = [
+                    column
+                    for column in (decay_col, kalman_col)
+                    if column not in frame.columns
+                ]
+
+                if missing_columns:
+                    raise RuntimeError(
+                        f"Missing ensemble source columns for target={target}: "
+                        f"{missing_columns}"
+                    )
+
+                frame[selected_col] = (
+                    float(weights["xgb"]) * frame[xgb_col]
+                    + float(weights["decay"]) * frame[decay_col]
+                    + float(weights["kalman"]) * frame[kalman_col]
+                )
+
+            elif route == "xgb":
+                frame[selected_col] = frame[xgb_col]
+
+            else:
+                raise RuntimeError(
+                    f"Unsupported frozen mean route for target={target}: "
+                    f"{route!r}"
+                )
+
+        # Persist the canonical OOF selected means so every downstream
+        # distribution/dependence stage consumes the same mean contract.
+        frame.to_parquet(
+            context.workspace.processed / "oof_selected_means.parquet",
+            index=False,
         )
 
         fitted: dict[str, Any] = {}
         convergence: dict[str, bool] = {}
 
         for target in sorted(FROZEN_MEAN_ROUTES):
-            usable = frame.dropna(subset=[target, f"mu_{target}"])
+            selected_col = f"mu_selected_{target}"
 
-            inflation = marginals_module.inflation_feature_columns(
-                usable, target
-            ) if hasattr(
-                marginals_module, "inflation_feature_columns"
-            ) else None
+            usable = frame.dropna(
+                subset=[target, selected_col]
+            ).copy()
+
+            inflation = marginals_module.inflation_features_for(
+                target,
+                usable,
+            )
+
+            if not inflation:
+                raise RuntimeError(
+                    f"No ZINB inflation features available for "
+                    f"target={target}"
+                )
+
+            non_numeric = [
+                column
+                for column in inflation
+                if not pd.api.types.is_numeric_dtype(
+                    usable[column].dtype
+                )
+            ]
+
+            if non_numeric:
+                raise TypeError(
+                    f"Non-numeric ZINB inflation features for "
+                    f"target={target}: {non_numeric}"
+                )
 
             model = marginals_module.fit_candidate(
                 FROZEN_MARGINAL_FAMILY,
                 y=usable[target].to_numpy(dtype=int),
-                mu=usable[f"mu_{target}"].to_numpy(dtype=float),
+                mu=usable[selected_col].to_numpy(dtype=float),
                 frame=usable,
                 inflation_features=inflation,
             )
@@ -2044,7 +2144,10 @@ class ProductionFitEngine:
 
             context.benchmark.count("marginal_fits")
 
-        joblib.dump(fitted, context.workspace.models / "marginals.joblib")
+        joblib.dump(
+            fitted,
+            context.workspace.models / "marginals.joblib",
+        )
 
         context.notes["marginal_convergence"] = convergence
 
@@ -2056,7 +2159,7 @@ class ProductionFitEngine:
         from .copula import GaussianCopula
 
         frame = pd.read_parquet(
-            context.workspace.processed / "oof_predictions.parquet"
+            context.workspace.processed / "oof_selected_means.parquet"
         )
 
         marginals = joblib.load(
@@ -2067,7 +2170,7 @@ class ProductionFitEngine:
             frame,
             marginals=marginals,
             mu_columns={
-                target: f"mu_{target}" for target in sorted(FROZEN_MEAN_ROUTES)
+                target: f"mu_selected_{target}" for target in sorted(FROZEN_MEAN_ROUTES)
             },
         )
 
@@ -2169,87 +2272,176 @@ class ProductionFitEngine:
         }
 
     def fit_gate3(self, context: "FitContext") -> None:
-        """Refit Gate 3 numerical parameters under frozen routing."""
-        import json as _json
+        """Install the checksum-verified frozen Gate 3 deployment artifacts."""
+        import hashlib
+        import shutil
 
         import joblib
-        import pandas as pd
-        from sklearn.ensemble import HistGradientBoostingRegressor
 
-        manifest = _load_json(
+        source_dir = (
             self.project_root
             / "research"
             / "v2_gate3_deployment_artifacts"
-            / "deployment_manifest.json"
         )
 
-        role_features = list(manifest["role_minutes_features"])
-
-        frame = pd.read_parquet(
-            context.workspace.processed / "stack_training.parquet"
+        required = (
+            "SHA256SUMS.txt",
+            "deployment_manifest.json",
+            "probability_parameters.json",
+            "role_minutes_model.joblib",
+            "role_state_seed.json",
         )
 
-        usable = frame.dropna(subset=["minutes", "expected_minutes"])
+        missing = [
+            name
+            for name in required
+            if not (source_dir / name).is_file()
+        ]
 
-        available = [name for name in role_features if name in usable.columns]
-
-        if len(available) != len(role_features):
-            missing = sorted(set(role_features) - set(available))
-
+        if missing:
             raise CandidateIncomplete(
-                "Gate 3 role model requires features the training frame does "
-                f"not provide: {missing}"
+                "Frozen Gate 3 deployment bundle is incomplete: "
+                f"{missing}"
             )
 
-        model = HistGradientBoostingRegressor(
-            learning_rate=0.05,
-            max_iter=300,
-            max_leaf_nodes=31,
-            min_samples_leaf=50,
-            l2_regularization=3.0,
-            random_state=GATE3_SEED,
+        checksums: dict[str, str] = {}
+
+        for raw_line in (
+            source_dir / "SHA256SUMS.txt"
+        ).read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+
+            if not line:
+                continue
+
+            parts = line.split(maxsplit=1)
+
+            if len(parts) != 2:
+                raise CandidateIncomplete(
+                    "Malformed frozen Gate 3 SHA256SUMS.txt entry: "
+                    f"{raw_line!r}"
+                )
+
+            digest, label = parts
+            label = label.strip()
+
+            if label.startswith("*"):
+                label = label[1:]
+
+            checksums[Path(label).name] = digest.lower()
+
+        verified_hashes: dict[str, str] = {}
+
+        for name in required[1:]:
+            expected = checksums.get(name)
+
+            if not expected:
+                raise CandidateIncomplete(
+                    "Frozen Gate 3 checksum missing for "
+                    f"{name}"
+                )
+
+            actual = hashlib.sha256(
+                (source_dir / name).read_bytes()
+            ).hexdigest()
+
+            if actual != expected:
+                raise CandidateIncomplete(
+                    "Frozen Gate 3 checksum mismatch for "
+                    f"{name}: expected {expected}, got {actual}"
+                )
+
+            verified_hashes[name] = actual
+
+        manifest = _load_json(
+            source_dir / "deployment_manifest.json"
         )
 
-        model.fit(
-            usable[role_features],
-            (usable["minutes"] - usable["expected_minutes"]).to_numpy(
-                dtype=float
-            ),
+        role_state = _load_json(
+            source_dir / "role_state_seed.json"
         )
 
-        context.benchmark.count("gate3_role_model_fits")
+        role_model_payload = joblib.load(
+            source_dir / "role_minutes_model.joblib"
+        )
 
-        joblib.dump(
-            {
-                "model": model,
-                "feature_names": role_features,
-                "target": "minutes - expected_minutes",
-                "training_rows": int(len(usable)),
-                "estimator_parameters": {
-                    "learning_rate": 0.05,
-                    "max_iter": 300,
-                    "max_leaf_nodes": 31,
-                    "min_samples_leaf": 50,
-                    "l2_regularization": 3.0,
-                    "random_state": GATE3_SEED,
-                },
-            },
+        if not isinstance(role_model_payload, dict):
+            raise CandidateIncomplete(
+                "Frozen Gate 3 role_minutes_model.joblib "
+                "does not contain the expected payload"
+            )
+
+        manifest_features = list(
+            manifest.get("role_minutes_features") or []
+        )
+
+        payload_features = list(
+            role_model_payload.get("feature_names") or []
+        )
+
+        if not manifest_features:
+            raise CandidateIncomplete(
+                "Frozen Gate 3 deployment manifest has no "
+                "role_minutes_features"
+            )
+
+        if payload_features != manifest_features:
+            raise CandidateIncomplete(
+                "Frozen Gate 3 role-model feature contract does not "
+                "match the deployment manifest"
+            )
+
+        expected_rows = manifest.get(
+            "role_minutes_training_rows"
+        )
+
+        payload_rows = role_model_payload.get(
+            "training_rows"
+        )
+
+        if (
+            expected_rows is not None
+            and payload_rows is not None
+            and int(payload_rows) != int(expected_rows)
+        ):
+            raise CandidateIncomplete(
+                "Frozen Gate 3 role-model training row count does "
+                "not match the deployment manifest: "
+                f"{payload_rows} != {expected_rows}"
+            )
+
+        # These are the two artifacts this stage historically produced.
+        # Preserve that output contract, but install the frozen certified
+        # versions rather than refitting from prospective/adaptive data.
+        shutil.copy2(
+            source_dir / "role_minutes_model.joblib",
             context.workspace.models / "role_minutes_model.joblib",
         )
 
-        role_state = {
-            "generated_from_training_cutoff": (
-                context.training_cutoff.isoformat()
-            ),
-            "role_minutes_training_rows": int(len(usable)),
-        }
-
-        (context.workspace.models / "role_state_seed.json").write_text(
-            _json.dumps(role_state, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
+        shutil.copy2(
+            source_dir / "role_state_seed.json",
+            context.workspace.models / "role_state_seed.json",
         )
 
-        context.notes["role_state_hash"] = sha256_canonical(role_state)
+        context.notes["role_state_hash"] = sha256_canonical(
+            role_state
+        )
+
+        context.notes["gate3_role_model_source"] = (
+            "frozen_deployment_artifact"
+        )
+
+        context.notes["gate3_deployment_artifact"] = (
+            manifest.get("artifact")
+        )
+
+        context.notes["gate3_deployment_artifact_version"] = (
+            manifest.get("artifact_version")
+        )
+
+        context.notes["gate3_verified_hashes"] = (
+            verified_hashes
+        )
 
     def assemble_candidate(self, context: "FitContext") -> None:
         """Collect the serving artifacts plus the provenance they were fit under."""
