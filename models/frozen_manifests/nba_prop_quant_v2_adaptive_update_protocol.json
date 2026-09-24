@@ -1,0 +1,175 @@
+{
+  "adaptive_serving_source_contract_path": "models/frozen_manifests/nba_prop_quant_v2_adaptive_serving_source_contract.json",
+  "adaptive_serving_source_contract_sha256": "b4498aa3a803d2d9da2e82dbea714cbb99658574ae33b10f6d34359f62bc01e9",
+  "architecture_contract_path": "models/frozen_manifests/nba_prop_quant_v2_adaptive_architecture_contract.json",
+  "architecture_contract_sha256": "059d2a66cd7f976c7a2ae854f69986e361a41b9d253e57f26bc52fd02963ff58",
+  "architecture_reference_sha": "4def8ad33ccc56016fb19a97fceca6e027c9612a",
+  "config_hash": "d85f3ac25f83485bf47b2b13c61306e527c962a3412f8ec8e4193164a9331349",
+  "contains_fitted_values": false,
+  "dag_stages": [
+    "input_snapshot",
+    "feature_build",
+    "minutes_fit",
+    "target_fit",
+    "ensemble_weight_fit",
+    "marginal_fit",
+    "dependence_fit",
+    "calibration_fit",
+    "gate3_fit",
+    "candidate_assembly",
+    "validation",
+    "registration"
+  ],
+  "daily_update_methodology": {
+    "calibration_policy": {
+      "fallback": "A fitted unit below the minimum reuses the corresponding prior good parameter only when that parameter was fitted under the same method, and the reuse is recorded in candidate metadata. With no compatible prior parameter the candidate fails.",
+      "method_selection_runs": false,
+      "minimum_outcome_classes": 2,
+      "minimum_rows": 100,
+      "raw_routes_have_fitted_parameters": false,
+      "routes": {
+        "assists": "prop",
+        "blocks": "raw",
+        "points": "prop",
+        "points_assists": "prop",
+        "points_rebounds": "prop",
+        "points_rebounds_assists": "prop",
+        "rebounds": "prop",
+        "rebounds_assists": "prop",
+        "steals": "raw",
+        "threes": "prop"
+      },
+      "sample_window": "Expanding eligible history through the training cutoff. No event dated on or after the slate date may be used."
+    },
+    "cutoff_policy": {
+      "caller_may_widen_cutoff": false,
+      "requires_verified_rolling_state": true,
+      "rolling_state_path": ".state/current_season_state.json",
+      "rule": "The training cutoff is derived from the verified rolling state, never supplied by the caller, and must be strictly before the slate date.",
+      "slate_date_semantics": "Step 3B NBA production semantics: America/New_York for a date derived from an offset-aware tip timestamp, and a date-only schedule field preserved verbatim."
+    },
+    "dependence_policy": {
+      "correlation_refittable": true,
+      "lambda_search_runs": false,
+      "note": "The Gaussian copula correlation is a fitted numerical parameter and is re-estimated from eligible pre-cutoff data. The frozen production lambda is then applied unchanged.",
+      "production_lambda": {
+        "points_assists": 0.0,
+        "points_rebounds": 0.0,
+        "points_rebounds_assists": 0.0,
+        "rebounds_assists": 0.85,
+        "stocks": 0.0
+      }
+    },
+    "gate3_policy": {
+      "note": "Which props receive a role adjustment is frozen. Only the numerical parameters under those frozen routes are refit.",
+      "refittable": [
+        "role/minutes numerical model",
+        "AST role-shock calibration coefficients",
+        "points_assists role-increment gamma and standardization",
+        "points_rebounds role-increment gamma and standardization",
+        "role-state seed artifacts"
+      ],
+      "routing_frozen": true,
+      "seed": 20260830
+    },
+    "marginal_policy": {
+      "applies_to": [
+        "pts",
+        "reb",
+        "ast",
+        "stl",
+        "blk",
+        "fg3m"
+      ],
+      "family": "zinb",
+      "family_selection_runs": false,
+      "note": "Only the numerical ZINB parameters are re-estimated, using the existing mean-preserving methodology, after mean fitting."
+    },
+    "mean_policy": {
+      "ensemble_weights_refittable": true,
+      "note": "Routes are frozen. REB and BLK ensemble weights are daily fitted numerical values. No alternative family is evaluated.",
+      "routes": {
+        "ast": "xgb",
+        "blk": "ensemble",
+        "fg3m": "xgb",
+        "pts": "xgb",
+        "reb": "ensemble",
+        "stl": "xgb"
+      },
+      "selector_runs": false
+    },
+    "no_new_data_policy": {
+      "outcome": "NO_NEW_TRAINING_DATA",
+      "rule": "When the derived cutoff and the rolling-state fingerprint both match the parent fit, the information set is unchanged and no fit is produced. An NBA off day mints no duplicate fit_id and changes no promotion state."
+    },
+    "oof_policy": {
+      "prohibited_methodology": [
+        "expanding_time_oof_minutes",
+        "expanding_time_oof_target"
+      ],
+      "rationale": "Season-keyed walk-forward is the certified methodology. The expanding time variants split on row position rather than season and are research tools.",
+      "required_methodology": [
+        "season_walk_forward_oof_minutes",
+        "season_walk_forward_oof_target"
+      ]
+    },
+    "promotion": {
+      "automatic_promotion": false,
+      "note": "Step 3C registers an immutable candidate and stops. Live validation and promotion are Step 3D."
+    },
+    "seeds": {
+      "core_seed": 73,
+      "effective_n_jobs": 2,
+      "gate3_seed": 20260830
+    },
+    "training_window": {
+      "advanced_start_season": 2015,
+      "corpus_vs_rolling_state": "The Step 3B rolling-state record authenticates the latest coherent rolling partition. It does not define the training corpus. Fitting snapshots and reads the full expanding historical corpus across every eligible season from the floors above through the verified cutoff, and the rolling state's partition must be present within that corpus and still match what it recorded. The rolling state must never be used to truncate history to a single season.",
+      "eligible_information_set": "The manifest also records eligible_input_sha256, taken over the cutoff-filtered content, and the fitting information digest is computed from that rather than from raw bytes. A future schedule change that adds no completed game therefore cannot masquerade as new training information.",
+      "end": "expanding through the verified training cutoff",
+      "fold_count": "Not fixed. Season-keyed walk-forward folds grow naturally as seasons become eligible.",
+      "history_start_season": 2001,
+      "input_lineage": "Every historical file used for fitting is copied into the isolated workspace before numerical fitting begins and its SHA256 is recorded in the training-data manifest under input_sha256. No fitting stage reads the mutable data root."
+    }
+  },
+  "feature_schema_hash": "0c569e86f912b29fc806a8fde9a77e10b61782792c74707e853f8f3b49dfdcf8",
+  "frozen_policy_digests": {
+    "combo_dependence_policy": "76248438b2b0bb4b4b7cc5179c4c2419262a1db7d22e86348d7476fa717031f4",
+    "gate3_deployment_policy": "8ee17957efbcfcc7210192d4b193514a2f115187a7f014090834541286c6c4ee",
+    "marginal_selection": "d4d9c117af49d885a4a1a39a2a23d2e451df7ce0a45ca7700458c534fef1eee8",
+    "market_probability_calibration_policy": "8f14c0dfb77a5fd05bb8b5d30e19766960579b09bb3518d82a07ac1841d84680",
+    "mean_model_selection": "053640cab14b042182e0c10a90bfbeb99e31414d11520af57e6031f302f611ff"
+  },
+  "gate3_candidate_policy_id": "nba_prop_quant_v2_gate3_dd2d394b6def",
+  "prohibited_under_this_protocol": [
+    "model-family search",
+    "hyperparameter search",
+    "feature search",
+    "marginal-family selection",
+    "calibration-method selection",
+    "dependence-lambda selection",
+    "Gate 3 routing selection",
+    "T-20 protocol selection",
+    "automatic promotion"
+  ],
+  "protocol_name": "nba_prop_quant_v2_adaptive_update_protocol",
+  "protocol_version": 1,
+  "purpose": "Lock the methodology of the daily adaptive update. It fixes what the nightly job is allowed to do, not what it produces: no fitted value appears here. A daily fit re-estimates numerical parameters under an architecture that was already chosen and certified.",
+  "selector_prohibition": {
+    "callables": [
+      "nba_prop_quant.model.expanding_time_oof_target",
+      "nba_prop_quant.model.expanding_time_oof_minutes",
+      "nba_prop_quant.decay.tune_decay_beta",
+      "nba_prop_quant.kalman.tune_kalman"
+    ],
+    "enforcement": "The forbidden callables are patched to raise for the duration of the fit, and the frozen policy files are hashed before the run and re-verified after every stage. Any change fails the candidate before registration.",
+    "scripts": [
+      "scripts/03_tune_dynamic_priors.py",
+      "scripts/06c_select_mean_models.py",
+      "scripts/08c_tune_copula_shrinkage.py",
+      "scripts/08d_refine_copula_shrinkage_cv.py",
+      "scripts/09d_select_probability_calibration.py",
+      "scripts/13_gate2_certify_v2.py"
+    ]
+  }
+}
