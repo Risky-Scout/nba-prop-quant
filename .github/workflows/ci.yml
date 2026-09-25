@@ -33,6 +33,12 @@ jobs:
     steps:
       - name: Check out the branch under test
         uses: actions/checkout@v4
+        with:
+          # Full history, not the default shallow clone. The repository's
+          # frozen-source integrity tests read blobs at the architecture
+          # reference commit 4def8ad with `git cat-file`, which a depth-1
+          # clone cannot resolve.
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5

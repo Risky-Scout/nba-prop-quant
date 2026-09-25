@@ -353,7 +353,14 @@ def run_preflight(
 ) -> PreflightResult:
     result = PreflightResult(mode=mode)
 
-    check_authoritative_checkout(result, expected_ref)
+    # Production always proves its checkout. validate-only does so only when
+    # the caller names a ref, because CI runs against a pull request's
+    # synthetic merge commit, which is correctly not yet on production; making
+    # that a failure would mean no production PR could ever report a green
+    # check.
+    if mode == MODE_PRODUCTION or expected_ref:
+        check_authoritative_checkout(result, expected_ref)
+
     check_frozen_contracts(result)
 
     # validate-only proves the workflow and the code are sound without

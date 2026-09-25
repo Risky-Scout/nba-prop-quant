@@ -33,6 +33,11 @@ CI_WORKFLOW = WORKFLOW_DIR / "ci.yml"
 
 AUTHORITATIVE_BRANCH = "production/wizardofodds-integration"
 
+
+def head_sha() -> str:
+    """The checkout under test, whatever shape CI gave it."""
+    return preflight.git("rev-parse", "HEAD")
+
 GITHUB_DEFAULT_BRANCH = "main"
 
 
@@ -268,6 +273,7 @@ def test_required_secret_names_are_declared_not_invented():
 def test_missing_secret_fails_preflight_before_any_mutation():
     result = preflight.run_preflight(
         preflight.MODE_PRODUCTION,
+        expected_ref=head_sha(),
         environ={
             "NBA_PROP_DATA_DIR": "/srv/nba/data",
             "NBA_PROP_FIT_REGISTRY_DIR": "/srv/nba/fits",
@@ -286,6 +292,7 @@ def test_missing_secret_fails_preflight_before_any_mutation():
 def test_preflight_never_returns_a_secret_value():
     result = preflight.run_preflight(
         preflight.MODE_PRODUCTION,
+        expected_ref=head_sha(),
         environ={
             "BDL_API_KEY": "super-secret-value",
             "NBA_PROP_DATA_DIR": "/srv/nba/data",
@@ -323,10 +330,11 @@ def test_secrets_are_only_bound_to_environment_variables():
 # ----------------------------------------------------------------------
 
 
-def test_authoritative_checkout_accepts_the_production_head():
+def test_authoritative_checkout_accepts_the_expected_ref():
+    """Deterministic: CI checks out a PR merge commit, not a branch tip."""
     result = preflight.PreflightResult(mode="validate-only")
 
-    preflight.check_authoritative_checkout(result, None)
+    preflight.check_authoritative_checkout(result, head_sha())
 
     assert result.checks[0].passed, result.checks[0].detail
 
@@ -343,7 +351,9 @@ def test_authoritative_checkout_rejects_a_foreign_ref():
 
 
 def test_frozen_contracts_are_verified_before_production_work():
-    result = preflight.run_preflight(preflight.MODE_VALIDATE_ONLY)
+    result = preflight.run_preflight(
+        preflight.MODE_VALIDATE_ONLY, expected_ref=head_sha()
+    )
 
     names = [check.name for check in result.checks]
 
@@ -354,6 +364,24 @@ def test_frozen_contracts_are_verified_before_production_work():
     assert result.ok
 
 
+def test_validate_only_does_not_demand_a_production_checkout():
+    """A production PR is not yet on production; CI must still report green."""
+    result = preflight.run_preflight(preflight.MODE_VALIDATE_ONLY)
+
+    assert [check.name for check in result.checks] == ["frozen_contracts"]
+    assert result.ok
+
+
+def test_production_mode_always_proves_its_checkout():
+    result = preflight.run_preflight(
+        preflight.MODE_PRODUCTION, environ={}
+    )
+
+    assert "authoritative_checkout" in {
+        check.name for check in result.checks
+    }
+
+
 # ----------------------------------------------------------------------
 # durable state backend
 # ----------------------------------------------------------------------
@@ -361,7 +389,9 @@ def test_frozen_contracts_are_verified_before_production_work():
 
 def test_unconfigured_state_backend_blocks_production():
     result = preflight.run_preflight(
-        preflight.MODE_PRODUCTION, environ={"BDL_API_KEY": "present"}
+        preflight.MODE_PRODUCTION,
+        expected_ref=head_sha(),
+        environ={"BDL_API_KEY": "present"},
     )
 
     assert not result.ok
@@ -375,6 +405,7 @@ def test_runner_local_state_is_refused(tmp_path):
     """Runner-local paths would silently reset production every night."""
     result = preflight.run_preflight(
         preflight.MODE_PRODUCTION,
+        expected_ref=head_sha(),
         environ={
             "BDL_API_KEY": "present",
             "RUNNER_TEMP": str(tmp_path),
@@ -391,6 +422,7 @@ def test_runner_local_state_is_refused(tmp_path):
 def test_in_repository_state_is_refused():
     result = preflight.run_preflight(
         preflight.MODE_PRODUCTION,
+        expected_ref=head_sha(),
         environ={
             "BDL_API_KEY": "present",
             "NBA_PROP_DATA_DIR": str(PROJECT / "data"),
@@ -406,6 +438,7 @@ def test_in_repository_state_is_refused():
 def test_durable_backend_satisfies_the_check():
     result = preflight.run_preflight(
         preflight.MODE_PRODUCTION,
+        expected_ref=head_sha(),
         environ={
             "BDL_API_KEY": "present",
             "NBA_PROP_DATA_DIR": "/srv/nba-prop/data",
