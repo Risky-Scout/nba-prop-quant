@@ -102,18 +102,29 @@ Actions.
 
 ---
 
-## 5. Permissions and secrets
+## 5. Permissions, environment, secrets
 
 `permissions: contents: read` on both workflows. Nothing in the lifecycle
 writes to the repository.
 
 The production job runs in the `wizardofodds-production` GitHub Environment,
-which already exists and whose protection rules are preserved.
+which already exists and whose protection rules are preserved. Both the
+credentials and the durable paths are scoped to that environment, so they do
+not resolve for any job outside it.
 
-| Secret | Required | Source |
-| --- | --- | --- |
-| `BDL_API_KEY` | yes | `Settings.bdl_api_key`, used by the data refresh |
-| `ODDS_API_KEY` | optional | market pricing, when live quotes are used |
+| Name | Kind | Required | Source |
+| --- | --- | --- | --- |
+| `BDL_API_KEY` | secret | yes | `Settings.bdl_api_key`, used by the data refresh |
+| `ODDS_API_KEY` | secret | optional | market pricing, when live quotes are used |
+| `NBA_PROP_DATA_DIR` | variable | yes | rolling data root |
+| `NBA_PROP_FIT_REGISTRY_DIR` | variable | yes | fit registry root |
+| `NBA_PROP_WORK_DIR` | variable | yes | trainer work root and lock location |
+
+Credentials come only from `${{ secrets.* }}` and paths only from
+`${{ vars.* }}`. The split is deliberate: variable values are readable by
+anyone who can read the repository settings, so a credential must never be one.
+Tests assert both directions — that no path is hard-coded into the YAML and
+that no credential is ever referenced as a variable.
 
 Names are derived from production code, not invented. The preflight checks
 presence **by name only**: it never reads, logs, returns or renders a value, a
@@ -126,12 +137,35 @@ could mutate state.
 
 ---
 
+## 5a. Runner placement
+
+```yaml
+runs-on:
+  - self-hosted
+  - nba-production
+```
+
+Only the mutating production lifecycle job runs there. `ci.yml` — the reported
+check for pull requests — stays on `ubuntu-latest`, and the production
+workflow has no `pull_request` or `pull_request_target` trigger at all.
+
+That separation is the point. The `nba-production` runner holds the full
+2001→present data root, the fit registry and the promotion pointer. Code
+arriving on a pull request is untrusted by definition, so it must never
+execute on the machine that owns production state. The workflow validator
+enforces both halves: the production job is rejected if it does not require
+both labels, and any workflow reachable from a pull-request trigger is
+rejected if any of its jobs is self-hosted.
+
+---
+
 ## 6. Daily sequence
 
 1. check out the authoritative production ref
 2. install the supported Python environment
-3. **preflight**: prove the checkout, verify the frozen contracts, check
-   secrets by name, require a durable state backend
+3. **preflight**: prove the checkout, verify the frozen contracts, verify the
+   installed scikit-learn matches the frozen artifacts, check secrets by name,
+   require a durable state backend
 4. refresh the current-season rolling state (`ops/refresh_current_season_state.py`)
 5. run the adaptive daily protocol (`ops/run_adaptive_daily_fit.py`)
 6. summarise the run and upload diagnostics
@@ -182,13 +216,17 @@ No DataFrame is rendered into the log.
 
 ---
 
-## 10. Open blocker: durable production state
+## 10. Durable production state — resolved
 
-**`DURABLE_PRODUCTION_STATE_BACKEND_REQUIRED`**
+**`DURABLE_PRODUCTION_STATE_BACKEND_REQUIRED`** — resolved by the self-hosted
+`nba-production` runner plus the three environment variables in §5. The
+preflight still enforces it and still fails closed in `production` mode when
+no backend is configured; what changed is that a backend now exists.
 
-The lifecycle cannot run unattended until production state survives between
-runs. The preflight enforces this and fails closed in `production` mode when
-no backend is configured.
+No new persistence implementation was written. The runner's filesystem is the
+backend, the three configured paths address it, and the existing `flock`
+locking keeps its original meaning because every writer is once again on one
+machine.
 
 ### What needs to persist
 
@@ -234,11 +272,12 @@ backend:
 None of these fail loudly. That is precisely why the preflight refuses to
 proceed rather than letting the lifecycle appear to work.
 
-### Smallest architecture-compatible implementation
+### What was configured
 
-Provide one durable POSIX-style location, reachable from the runner, holding
-the data root, registry root and work root, and point the three environment
-variables at it:
+Option 1, the self-hosted runner on the machine that already holds the full
+NBA data root. The paths are local, no data moves, and the three environment
+variables — set as environment **variables** (`vars`), not secrets, because
+they are paths and not credentials — address them:
 
 ```text
 NBA_PROP_DATA_DIR
@@ -246,21 +285,35 @@ NBA_PROP_FIT_REGISTRY_DIR
 NBA_PROP_WORK_DIR
 ```
 
-The code needs nothing more than paths that persist — no new cloud SDK, no
-schema change and no redesign. Two options fit the existing architecture:
+No cloud SDK, no schema change, no new persistence backend. The preflight's
+durability rules are unchanged and still reject a path that resolves inside
+the repository or inside `RUNNER_TEMP`, so a misconfigured variable still
+fails closed rather than quietly resetting production every night.
 
-1. **Self-hosted runner** on the machine that already holds the full NBA data
-   root. Smallest change: the paths are simply local, the existing `flock`
-   locking keeps its meaning, and no data moves.
-2. **Hosted runner plus a mounted durable volume or object store synced to
-   those paths** before and after the job, preserving the same layout.
+---
 
-Option 1 is the smaller change and preserves every existing guarantee. The
-choice is a deployment decision, not a code change, which is why this is
-recorded as a Step 3D configuration blocker rather than a new project.
+## 10a. Frozen-artifact dependency contract
 
-Set these as repository or environment **variables** (`vars`), not secrets;
-they are paths, not credentials.
+The frozen Gate 3 role model is a pickled scikit-learn estimator carrying no
+version of its own. Unpickling it under a different scikit-learn is not a
+guaranteed round trip: at best it warns, at worst it reconstructs different
+internals and produces different minutes. The first automated run installed
+**1.9.1** against artifacts built under **1.9.0**.
+
+So `pyproject.toml` pins `scikit-learn==1.9.0` — a pin, not a floor — and the
+preflight re-checks it at run time in `production` mode, failing with
+`INCOMPATIBLE_SCIKIT_LEARN_VERSION` and exit code 7 before any step that can
+mutate state.
+
+The required version is **read from the freeze manifest**, not written into
+the preflight: `models/frozen_manifests/LATEST.json` records the environment
+the artifacts were produced in, including the `pip_freeze` that names
+`scikit-learn==1.9.0`. Deriving it rather than restating it means the
+requirement cannot drift from the artifacts it describes, and a future refreeze
+updates both at once. A test asserts the `pyproject.toml` pin and the manifest
+still agree.
+
+No other package was repinned.
 
 ---
 

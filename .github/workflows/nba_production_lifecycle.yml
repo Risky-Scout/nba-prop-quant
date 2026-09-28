@@ -69,7 +69,17 @@ concurrency:
 jobs:
   lifecycle:
     name: NBA production lifecycle
-    runs-on: ubuntu-latest
+    # The self-hosted `nba-production` runner is the durable state backend.
+    # Its filesystem survives between runs, which is what makes
+    # current_good_fit_id, the rollback target, the 2001→present rolling data
+    # root and Step 3C's no-new-data detection mean anything. A GitHub-hosted
+    # runner is destroyed at the end of the job and would silently reset all
+    # of them. Only this job — the one that mutates production — runs here;
+    # pull-request validation stays on GitHub-hosted runners so untrusted
+    # branch code never executes on the machine that holds production state.
+    runs-on:
+      - self-hosted
+      - nba-production
     timeout-minutes: 360
     environment: wizardofodds-production
 

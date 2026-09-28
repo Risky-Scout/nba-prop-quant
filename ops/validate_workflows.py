@@ -3,8 +3,9 @@
 
 Catches the mistakes that are expensive to find by pushing and waiting: a
 workflow that parses but schedules from the wrong branch, forgets concurrency
-on a job that mutates production, grants more permission than it needs, or
-interpolates a secret into a place that ends up in a log.
+on a job that mutates production, grants more permission than it needs,
+interpolates a secret into a place that ends up in a log, or puts pull-request
+code on the self-hosted machine that holds production state.
 """
 
 from __future__ import annotations
@@ -26,6 +27,17 @@ CI_WORKFLOW = "ci.yml"
 
 AUTHORITATIVE_PRODUCTION_BRANCH = "production/wizardofodds-integration"
 
+# The production lifecycle mutates durable state that only exists on one
+# machine, so it must land on that machine and nowhere else.
+PRODUCTION_RUNNER_LABELS = ("self-hosted", "nba-production")
+
+SELF_HOSTED_LABEL = "self-hosted"
+
+# A pull request can carry arbitrary code from a contributor. Running it on
+# the self-hosted runner would hand that code the production data root, the
+# fit registry and the runner's credentials.
+UNTRUSTED_TRIGGERS = ("pull_request", "pull_request_target")
+
 
 def load(path: Path) -> dict:
     payload = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -39,6 +51,39 @@ def load(path: Path) -> dict:
 def triggers(workflow: dict) -> dict:
     # PyYAML resolves the bare key `on` to the boolean True.
     return workflow.get("on") or workflow.get(True) or {}
+
+
+def runner_labels(job: dict) -> list[str]:
+    """Every label a job requires, whatever form `runs-on` was written in."""
+    runs_on = job.get("runs-on")
+
+    if isinstance(runs_on, str):
+        return [runs_on]
+
+    if isinstance(runs_on, list):
+        return [str(label) for label in runs_on]
+
+    if isinstance(runs_on, dict):
+        labels = runs_on.get("labels") or []
+
+        if isinstance(labels, str):
+            labels = [labels]
+
+        return [str(label) for label in labels]
+
+    return []
+
+
+def untrusted_runner_problems(name: str, on: dict, jobs: dict) -> list[str]:
+    if not any(trigger in on for trigger in UNTRUSTED_TRIGGERS):
+        return []
+
+    return [
+        f"{name}: job {job_name} runs pull-request code on a self-hosted "
+        "runner, which holds production state"
+        for job_name, job in jobs.items()
+        if SELF_HOSTED_LABEL in runner_labels(job)
+    ]
 
 
 def problems_for(name: str, workflow: dict) -> list[str]:
@@ -63,6 +108,8 @@ def problems_for(name: str, workflow: dict) -> list[str]:
             f"{name}: permissions are broader than contents:read "
             f"({workflow['permissions']!r})"
         )
+
+    found += untrusted_runner_problems(name, on, jobs)
 
     if name == PRODUCTION_WORKFLOW:
         found += production_problems(name, on, workflow, jobs)
@@ -119,6 +166,19 @@ def production_problems(
         )
 
     for job_name, job in jobs.items():
+        labels = runner_labels(job)
+
+        absent = [
+            label for label in PRODUCTION_RUNNER_LABELS if label not in labels
+        ]
+
+        if absent:
+            found.append(
+                f"{name}: job {job_name} does not require "
+                f"{', '.join(absent)}; production state lives on the "
+                "self-hosted runner and does not survive a hosted one"
+            )
+
         steps = job.get("steps") or []
 
         checkout = [

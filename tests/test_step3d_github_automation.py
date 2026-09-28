@@ -255,6 +255,137 @@ def test_least_privilege_permissions():
 
 
 # ----------------------------------------------------------------------
+# runner placement
+# ----------------------------------------------------------------------
+
+
+def test_production_job_requires_the_self_hosted_production_runner():
+    """Production state only exists on that machine's filesystem."""
+    job = workflow(PRODUCTION_WORKFLOW)["jobs"]["lifecycle"]
+
+    labels = validator.runner_labels(job)
+
+    assert "self-hosted" in labels
+    assert "nba-production" in labels
+
+
+def test_pull_request_validation_stays_on_github_hosted_runners():
+    """Contributor code must never execute beside the production data root."""
+    for job in workflow(CI_WORKFLOW)["jobs"].values():
+        assert validator.runner_labels(job) == ["ubuntu-latest"]
+
+    assert "pull_request" not in triggers(workflow(PRODUCTION_WORKFLOW))
+    assert "pull_request_target" not in triggers(workflow(PRODUCTION_WORKFLOW))
+
+
+def test_validator_refuses_pull_request_code_on_the_production_runner():
+    problems = validator.untrusted_runner_problems(
+        "hypothetical.yml",
+        {"pull_request": {"branches": ["main"]}},
+        {"test": {"runs-on": ["self-hosted", "nba-production"]}},
+    )
+
+    assert any("pull-request code" in problem for problem in problems)
+
+
+def test_validator_refuses_a_hosted_production_runner(tmp_path, monkeypatch):
+    broken = tmp_path / "workflows"
+    broken.mkdir()
+
+    for path in (PRODUCTION_WORKFLOW, CI_WORKFLOW):
+        payload = path.read_text(encoding="utf-8")
+
+        if path is PRODUCTION_WORKFLOW:
+            payload = payload.replace(
+                "    runs-on:\n      - self-hosted\n      - nba-production\n",
+                "    runs-on: ubuntu-latest\n",
+            )
+
+        (broken / path.name).write_text(payload, encoding="utf-8")
+
+    monkeypatch.setattr(validator, "WORKFLOW_DIR", broken)
+
+    assert any(
+        "does not require self-hosted" in problem
+        for problem in validator.validate()
+    )
+
+
+# ----------------------------------------------------------------------
+# frozen-artifact dependency compatibility
+# ----------------------------------------------------------------------
+
+
+def test_production_pins_the_scikit_learn_the_artifacts_were_built_under():
+    """A pin, not a floor: CI installed 1.9.1 against 1.9.0 artifacts."""
+    required = preflight.frozen_sklearn_version()
+
+    assert required == "1.9.0"
+
+    pyproject = (PROJECT / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert f'"scikit-learn=={required}"' in pyproject
+
+
+def test_incompatible_sklearn_blocks_production():
+    result = preflight.PreflightResult(mode=preflight.MODE_PRODUCTION)
+
+    preflight.check_sklearn_version(result, installed="1.9.1")
+
+    assert not result.checks[0].passed
+    assert preflight.BLOCKER_SKLEARN_VERSION in result.blockers
+    assert preflight.exit_code_for(result) == (
+        preflight.EXIT_INCOMPATIBLE_DEPENDENCY
+    )
+
+    # The message has to be actionable, not just a failure.
+    assert "scikit-learn==1.9.0" in result.checks[0].detail
+
+
+def test_absent_sklearn_blocks_production():
+    result = preflight.PreflightResult(mode=preflight.MODE_PRODUCTION)
+
+    preflight.check_sklearn_version(result, installed=None)
+
+    assert not result.checks[0].passed
+    assert preflight.BLOCKER_SKLEARN_VERSION in result.blockers
+
+
+def test_matching_sklearn_satisfies_the_check():
+    result = preflight.PreflightResult(mode=preflight.MODE_PRODUCTION)
+
+    preflight.check_sklearn_version(result, installed="1.9.0")
+
+    assert result.checks[0].passed
+
+
+def test_production_mode_checks_sklearn_before_it_touches_state():
+    result = preflight.run_preflight(
+        preflight.MODE_PRODUCTION,
+        expected_ref=head_sha(),
+        environ={
+            "BDL_API_KEY": "present",
+            "NBA_PROP_DATA_DIR": "/srv/nba-prop/data",
+            "NBA_PROP_FIT_REGISTRY_DIR": "/srv/nba-prop/fits",
+            "NBA_PROP_WORK_DIR": "/srv/nba-prop/work",
+        },
+    )
+
+    names = [check.name for check in result.checks]
+
+    assert names.index("sklearn_version") < names.index(
+        "durable_state_backend"
+    )
+
+
+def test_the_installed_runtime_matches_the_frozen_artifacts():
+    assert (
+        preflight.installed_sklearn_version()
+        == preflight.frozen_sklearn_version()
+    )
+
+
+# ----------------------------------------------------------------------
 # secrets
 # ----------------------------------------------------------------------
 
@@ -308,6 +439,66 @@ def test_preflight_never_returns_a_secret_value():
 def test_no_workflow_writes_a_secret_to_the_log():
     for path in (PRODUCTION_WORKFLOW, CI_WORKFLOW):
         assert validator.secret_leak_problems(path.name) == []
+
+
+def env_bindings(path: Path, name: str) -> list[str]:
+    """Every value the workflow binds to `name`, job level and step level."""
+    found = []
+
+    for job in workflow(path)["jobs"].values():
+        blocks = [job.get("env") or {}]
+
+        blocks += [step.get("env") or {} for step in job.get("steps") or []]
+
+        for block in blocks:
+            if name in block:
+                found.append(str(block[name]))
+
+    return found
+
+
+def test_production_paths_come_from_github_environment_variables():
+    """The three durable roots are configuration, not literals in the YAML."""
+    text = PRODUCTION_WORKFLOW.read_text(encoding="utf-8")
+
+    for name in preflight.STATE_BACKEND_VARIABLES:
+        bindings = env_bindings(PRODUCTION_WORKFLOW, name)
+
+        assert bindings, f"{name} is never bound"
+
+        for binding in bindings:
+            assert binding == "${{ vars." + name + " }}", binding
+
+        # And nothing hard-codes a path under the same name.
+        assert f"{name}: /" not in text
+
+
+def test_api_credentials_come_only_from_github_secrets():
+    credentials = (
+        preflight.REQUIRED_PRODUCTION_SECRETS
+        + preflight.OPTIONAL_PRODUCTION_SECRETS
+    )
+
+    for name in credentials:
+        bindings = env_bindings(PRODUCTION_WORKFLOW, name)
+
+        assert bindings, f"{name} is never bound"
+
+        for binding in bindings:
+            assert binding == "${{ secrets." + name + " }}", binding
+
+        # A credential must never be offered as a `vars` value, which is
+        # readable by anyone who can read the repository settings.
+        assert "vars." + name not in PRODUCTION_WORKFLOW.read_text(
+            encoding="utf-8"
+        )
+
+
+def test_production_job_runs_in_the_configured_github_environment():
+    """Environment-scoped vars and secrets only resolve inside it."""
+    job = workflow(PRODUCTION_WORKFLOW)["jobs"]["lifecycle"]
+
+    assert job["environment"] == "wizardofodds-production"
 
 
 def test_secrets_are_only_bound_to_environment_variables():

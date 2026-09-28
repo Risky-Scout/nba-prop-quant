@@ -6,13 +6,15 @@ know before it is allowed to touch production state is resolved here in Python
 rather than in YAML conditionals, so the rules stay testable and stay in one
 place.
 
-It answers four questions, in order, and fails closed on the first that is not
+It answers five questions, in order, and fails closed on the first that is not
 satisfied:
 
     1. Is the checkout the authoritative production code?
     2. Are the frozen architecture contracts intact?
-    3. Is every required secret present? (names only; values are never read)
-    4. Is a durable production state backend configured?
+    3. Is the installed scikit-learn the one the frozen artifacts were built
+       under?
+    4. Is every required secret present? (names only; values are never read)
+    5. Is a durable production state backend configured?
 
 Nothing here refreshes data, fits a model, promotes a fit or contacts an
 external service. It reads the repository and the environment and reports.
@@ -56,6 +58,14 @@ STATE_BACKEND_VARIABLES = (
 
 BLOCKER_DURABLE_STATE = "DURABLE_PRODUCTION_STATE_BACKEND_REQUIRED"
 
+BLOCKER_SKLEARN_VERSION = "INCOMPATIBLE_SCIKIT_LEARN_VERSION"
+
+# The freeze manifest records the exact environment the frozen artifacts were
+# produced in, including the pip freeze of that environment. The required
+# scikit-learn is read from there rather than written here, so the requirement
+# cannot drift away from the artifacts it describes.
+FROZEN_MANIFEST_POINTER = Path("models/frozen_manifests/LATEST.json")
+
 MODE_VALIDATE_ONLY = "validate-only"
 MODE_PRODUCTION = "production"
 
@@ -65,6 +75,11 @@ EXIT_NOT_AUTHORITATIVE = 3
 EXIT_CONTRACT = 4
 EXIT_MISSING_SECRET = 5
 EXIT_NO_STATE_BACKEND = 6
+EXIT_INCOMPATIBLE_DEPENDENCY = 7
+
+# Distinguishes "the caller supplied nothing, go and resolve it" from "the
+# caller supplied nothing because nothing is there".
+_RESOLVE = object()
 
 
 @dataclass
@@ -239,6 +254,102 @@ def check_frozen_contracts(result: PreflightResult) -> None:
     )
 
 
+def frozen_sklearn_version(root: Path = ROOT) -> str | None:
+    """The scikit-learn the frozen model artifacts were produced under."""
+    try:
+        manifest = json.loads(
+            (root / FROZEN_MANIFEST_POINTER).read_text(encoding="utf-8")
+        )
+
+        freeze = root / manifest["environment"]["pip_freeze"]["path"]
+
+        for line in freeze.read_text(encoding="utf-8").splitlines():
+            name, separator, version = line.strip().partition("==")
+
+            if separator and name.strip().lower() == "scikit-learn":
+                return version.strip() or None
+
+    except Exception:
+        return None
+
+    return None
+
+
+def installed_sklearn_version() -> str | None:
+    try:
+        import sklearn
+    except Exception:
+        return None
+
+    return str(sklearn.__version__)
+
+
+def check_sklearn_version(
+    result: PreflightResult,
+    installed: str | None | object = _RESOLVE,
+    required: str | None | object = _RESOLVE,
+) -> None:
+    """Refuse to serve a frozen estimator under a foreign scikit-learn.
+
+    The Gate 3 role model is a pickled estimator with no version recorded on
+    it, so loading it under a different scikit-learn is unvalidated: at best
+    it warns, at worst it silently reconstructs different internals and
+    produces different minutes. Production must fail here rather than emit
+    projections nobody can reproduce.
+    """
+    if required is _RESOLVE:
+        required = frozen_sklearn_version()
+
+    if installed is _RESOLVE:
+        installed = installed_sklearn_version()
+
+    if not required:
+        result.add(
+            "sklearn_version",
+            False,
+            (
+                "the freeze manifest records no scikit-learn version, so the "
+                "frozen artifacts cannot be matched to a runtime"
+            ),
+            blocker=BLOCKER_SKLEARN_VERSION,
+        )
+
+        return
+
+    if not installed:
+        result.add(
+            "sklearn_version",
+            False,
+            (
+                "scikit-learn is not importable, but the frozen artifacts "
+                f"require {required}"
+            ),
+            blocker=BLOCKER_SKLEARN_VERSION,
+        )
+
+        return
+
+    if installed != required:
+        result.add(
+            "sklearn_version",
+            False,
+            (
+                f"scikit-learn {installed} is installed, but the frozen "
+                f"artifacts were produced under {required}; install "
+                f"scikit-learn=={required}"
+            ),
+            blocker=BLOCKER_SKLEARN_VERSION,
+        )
+
+        return
+
+    result.add(
+        "sklearn_version",
+        True,
+        f"scikit-learn {installed} matches the frozen artifacts",
+    )
+
+
 def check_required_secrets(
     result: PreflightResult,
     environ: dict[str, str] | None = None,
@@ -366,6 +477,7 @@ def run_preflight(
     # validate-only proves the workflow and the code are sound without
     # requiring production credentials or a state backend.
     if mode == MODE_PRODUCTION:
+        check_sklearn_version(result)
         check_required_secrets(result, environ)
         check_state_backend(result, environ)
 
@@ -383,6 +495,9 @@ def exit_code_for(result: PreflightResult) -> int:
 
     if "frozen_contracts" in failed:
         return EXIT_CONTRACT
+
+    if "sklearn_version" in failed:
+        return EXIT_INCOMPATIBLE_DEPENDENCY
 
     if "required_secrets" in failed:
         return EXIT_MISSING_SECRET
