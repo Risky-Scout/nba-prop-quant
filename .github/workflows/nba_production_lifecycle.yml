@@ -1,0 +1,196 @@
+name: NBA production lifecycle
+
+# Automated daily NBA Prop Quant production lifecycle.
+#
+# GitHub orchestrates; Python decides. Every rule about semantic state,
+# training cutoff, information-set eligibility, adaptive action selection,
+# candidate construction, validation, registration and promotion lives in
+# ops/run_adaptive_daily_fit.py and the adaptive training module. This file
+# sequences those calls and reports what happened; it contains no modelling
+# logic and no policy conditionals.
+#
+# DEFAULT-BRANCH BEHAVIOUR
+# ------------------------
+# The repository default branch is `main`, and GitHub only fires scheduled
+# events from the default branch. Production code lives on
+# `production/wizardofodds-integration`. So this workflow is written to run
+# correctly from either: it always checks out the authoritative production ref
+# explicitly and then proves, in Python, that the checkout really is that ref
+# before anything is allowed to touch production state. It never runs the
+# model from whatever the default branch happens to contain.
+#
+# To activate the schedule, this file must also exist on the default branch.
+# See docs/wizardofodds/PRODUCTION_AUTOMATION.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'validate-only proves the wiring; production runs the lifecycle'
+        type: choice
+        options:
+          - validate-only
+          - production
+        default: validate-only
+      slate_date:
+        description: 'Slate date YYYY-MM-DD. Defaults to today in US/Eastern.'
+        type: string
+        required: false
+      production_ref:
+        description: 'Authoritative production ref to check out'
+        type: string
+        required: false
+        default: production/wizardofodds-integration
+
+  schedule:
+    # 09:37 UTC daily. Deliberately off the top of the hour, where GitHub's
+    # scheduler is most congested and jobs are most often delayed or dropped.
+    # 09:37 UTC is 05:37 US/Eastern in daylight time and 04:37 in standard
+    # time, which is after every North American box score has settled and well
+    # before the T-20 capture window of that evening's slate. The repository
+    # documented no prior schedule policy, so this is the minimum reliable
+    # daily trigger; the rationale is recorded in
+    # docs/wizardofodds/PRODUCTION_AUTOMATION.md.
+    - cron: '37 9 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  # One production lifecycle at a time. A scheduled run and a manual run share
+  # this group, so they queue rather than race. Queued rather than cancelled:
+  # cancelling mid-flight could interrupt a registry write or leave a refresh
+  # transaction prepared but unresolved, and the repository's own locks are
+  # what make that recoverable. GitHub concurrency supplements the flock the
+  # trainer and the refresh already take; it does not replace it.
+  group: nba-production-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  lifecycle:
+    name: NBA production lifecycle
+    # The self-hosted `nba-production` runner is the durable state backend.
+    # Its filesystem survives between runs, which is what makes
+    # current_good_fit_id, the rollback target, the 2001→present rolling data
+    # root and Step 3C's no-new-data detection mean anything. A GitHub-hosted
+    # runner is destroyed at the end of the job and would silently reset all
+    # of them. Only this job — the one that mutates production — runs here;
+    # pull-request validation stays on GitHub-hosted runners so untrusted
+    # branch code never executes on the machine that holds production state.
+    runs-on:
+      - self-hosted
+      - nba-production
+    timeout-minutes: 360
+    environment: wizardofodds-production
+
+    env:
+      MODE: ${{ github.event_name == 'schedule' && 'production' || inputs.mode }}
+      PRODUCTION_REF: ${{ inputs.production_ref || 'production/wizardofodds-integration' }}
+
+    steps:
+      - name: Check out the authoritative production code
+        uses: actions/checkout@v4
+        with:
+          # Explicit: a scheduled event originates from the default branch, so
+          # the production ref is named rather than inherited.
+          ref: ${{ github.event_name == 'schedule' && 'production/wizardofodds-integration' || (inputs.production_ref || 'production/wizardofodds-integration') }}
+          fetch-depth: 0
+
+      - name: Record the production checkout
+        id: checkout
+        run: |
+          set -euo pipefail
+          SHA="$(git rev-parse HEAD)"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Production code SHA: $SHA"
+          echo "Triggered by: ${{ github.event_name }}"
+          echo "Workflow ref: ${{ github.ref }}"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install the production package
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -e '.[dev]'
+
+      - name: Preflight
+        id: preflight
+        env:
+          # Presence is checked by name. No value is printed by the preflight.
+          BDL_API_KEY: ${{ secrets.BDL_API_KEY }}
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+          NBA_PROP_FIT_REGISTRY_DIR: ${{ vars.NBA_PROP_FIT_REGISTRY_DIR }}
+          NBA_PROP_WORK_DIR: ${{ vars.NBA_PROP_WORK_DIR }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/run"
+          python ops/production_lifecycle_preflight.py \
+            --mode "$MODE" \
+            --expected-ref "$PRODUCTION_REF" \
+            --summary-path "$GITHUB_STEP_SUMMARY" \
+            --status-path "$RUNNER_TEMP/run/preflight.json"
+
+      # Everything below requires durable production state. The preflight
+      # above fails closed when no backend is configured, so these steps do
+      # not run and no partial mutation can occur.
+
+      - name: Refresh the current-season rolling state
+        if: env.MODE == 'production'
+        env:
+          BDL_API_KEY: ${{ secrets.BDL_API_KEY }}
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+        run: |
+          set -euo pipefail
+          SLATE="${{ inputs.slate_date }}"
+          if [ -z "$SLATE" ]; then
+            SLATE="$(TZ=America/New_York date +%F)"
+          fi
+          echo "slate=$SLATE" >> "$GITHUB_ENV"
+          python ops/refresh_current_season_state.py \
+            --slate-date "$SLATE" \
+            --data-dir "$NBA_PROP_DATA_DIR"
+
+      - name: Run the adaptive daily protocol
+        if: env.MODE == 'production'
+        env:
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+          NBA_PROP_FIT_REGISTRY_DIR: ${{ vars.NBA_PROP_FIT_REGISTRY_DIR }}
+          NBA_PROP_WORK_DIR: ${{ vars.NBA_PROP_WORK_DIR }}
+        run: |
+          set -euo pipefail
+          # The policy decides whether this is a no-op or a refit. The
+          # workflow does not decide; it reports what the policy chose.
+          python ops/run_adaptive_daily_fit.py \
+            --register-candidate \
+            --slate-date "$slate" \
+            --data-root "$NBA_PROP_DATA_DIR" \
+            --registry-root "$NBA_PROP_FIT_REGISTRY_DIR" \
+            --work-root "$NBA_PROP_WORK_DIR" \
+            | tee "$RUNNER_TEMP/run/adaptive.json"
+
+      - name: Report the run
+        if: always()
+        run: |
+          set -euo pipefail
+          python ops/summarise_production_run.py \
+            --preflight "$RUNNER_TEMP/run/preflight.json" \
+            --adaptive "$RUNNER_TEMP/run/adaptive.json" \
+            --production-sha "${{ steps.checkout.outputs.sha }}" \
+            --trigger "${{ github.event_name }}" \
+            --mode "$MODE" \
+            --summary-path "$GITHUB_STEP_SUMMARY" \
+            --status-path "$RUNNER_TEMP/run/run_status.json"
+
+      - name: Upload run diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nba-production-run-${{ github.run_id }}
+          path: ${{ runner.temp }}/run
+          retention-days: 14
+          if-no-files-found: warn
