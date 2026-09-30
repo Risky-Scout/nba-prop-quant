@@ -21,7 +21,12 @@ dependencies = [
   "python-dotenv>=1.0",
   "PyYAML>=6.0",
   "rich>=13.7",
-  "scikit-learn>=1.5",
+  # Pinned, not a floor. The frozen Gate 3 artifacts were produced under
+  # scikit-learn 1.9.0 (see models/frozen_manifests/LATEST.json), and
+  # unpickling an estimator under a different version is not a guaranteed
+  # round trip. ops/production_lifecycle_preflight.py re-checks this against
+  # the freeze manifest at run time.
+  "scikit-learn==1.9.0",
   "scipy>=1.14",
   "shap>=0.46",
   "tenacity>=9.0",
