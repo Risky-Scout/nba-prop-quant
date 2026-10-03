@@ -1,0 +1,729 @@
+name: WizardOfOdds NBA read-only server audit
+
+# One-time, read-only reconnaissance of the WizardOfOdds host.
+#
+# This workflow NEVER deploys, builds, trains, refits, recalibrates or grades
+# the NBA model, and it NEVER creates, modifies or removes anything on the
+# remote server. It only measures the server so a human can decide where an
+# adaptive NBA application could eventually live.
+#
+# The trigger is a path-restricted push to the production branch, so the audit
+# can only start when this reviewed file is merged into production.
+
+on:
+  push:
+    branches:
+      - production/wizardofodds-integration
+    paths:
+      - .github/workflows/wizardofodds_nba_readonly_server_audit.yml
+
+permissions:
+  contents: read
+
+jobs:
+  readonly-server-audit:
+    name: One-time read-only WizardOfOdds server audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: wizardofodds-production
+
+    steps:
+      - name: Stage read-only remote audit script (runner-local only)
+        run: |
+          set -euo pipefail
+
+          cat <<'REMOTE_AUDIT_EOF' > "$RUNNER_TEMP/wizard_remote_audit.sh"
+          #!/usr/bin/env bash
+          # WizardOfOdds NBA read-only server audit: discovery only.
+          # Nothing on this host is created, written, deleted, scheduled,
+          # started, stopped, reloaded or configured by this script.
+          set -u
+
+          AUDIT_USER="$(id -un 2>/dev/null || printf 'unknown')"
+          AUDIT_HOME="${HOME:-/}"
+
+          # Keep the SSH account name and its home path out of the CI log. The
+          # substitution is deliberately blunt, so unrelated text that happens to
+          # match the account name is redacted too rather than risk a leak.
+          redact() {
+              sed -e "s|${AUDIT_HOME}|[home]|g" -e "s|${AUDIT_USER}|[ssh-user]|g"
+          }
+
+          have() { command -v "$1" >/dev/null 2>&1; }
+
+          section() { printf '\n===== %s =====\n' "$1"; }
+
+          fact() { printf 'FACT:%s=%s\n' "$1" "$2"; }
+
+          banner() {
+            local tool="$1"
+            shift
+            if have "$tool"; then
+              printf '%-10s AVAILABLE  [%s]  %s\n' "$tool" "$(command -v "$tool")" "$("$tool" "$@" 2>&1 | head -n 1)"
+            else
+              printf '%-10s NOT AVAILABLE\n' "$tool"
+            fi
+          }
+
+          meminfo_mb() {
+            awk -v key="$1" '$1 == key":" { printf "%d", $2/1024; seen=1 } END { if (!seen) printf "0" }' /proc/meminfo 2>/dev/null
+          }
+
+          avail_gb() {
+            local target="$1" value
+            value="$(df -P -k "$target" 2>/dev/null | awk 'NR==2 { print int($4/1048576) }')"
+            if [ -z "$value" ]; then value="0"; fi
+            printf '%s' "$value"
+          }
+
+          main() {
+            printf 'WIZARDOFODDS NBA READ-ONLY SERVER AUDIT\n'
+            printf 'Mode: DISCOVERY ONLY. No server state is created, altered or deleted.\n'
+
+            # ---------------------------------------------------------------
+            section "1. SERVER IDENTITY"
+            # ---------------------------------------------------------------
+            if have hostname; then
+              printf 'hostname: %s\n' "$(hostname 2>/dev/null)"
+            elif [ -r /proc/sys/kernel/hostname ]; then
+              printf 'hostname: %s\n' "$(head -n 1 /proc/sys/kernel/hostname 2>/dev/null)"
+            else
+              printf 'hostname: NOT AVAILABLE\n'
+            fi
+            printf 'kernel: %s\n' "$(uname -s -r 2>/dev/null)"
+            printf 'architecture: %s\n' "$(uname -m 2>/dev/null)"
+            printf 'kernel os name: %s\n' "$(uname -o 2>/dev/null)"
+
+            if [ -r /etc/os-release ]; then
+              awk -F= '$1 == "PRETTY_NAME" || $1 == "ID" || $1 == "VERSION_ID" { gsub(/"/, "", $2); print "os " tolower($1) ": " $2 }' /etc/os-release 2>/dev/null
+            else
+              printf 'os release: NOT AVAILABLE\n'
+            fi
+
+            AUDIT_TZ=""
+            if have timedatectl; then
+              AUDIT_TZ="$(timedatectl show -p Timezone --value 2>/dev/null)"
+            fi
+            if [ -z "$AUDIT_TZ" ] && [ -r /etc/timezone ]; then
+              AUDIT_TZ="$(head -n 1 /etc/timezone 2>/dev/null)"
+            fi
+            if [ -z "$AUDIT_TZ" ]; then
+              AUDIT_TZ="$(date '+%Z %z' 2>/dev/null)"
+            fi
+            printf 'timezone: %s\n' "$AUDIT_TZ"
+            printf 'server local time: %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z' 2>/dev/null)"
+            printf 'server utc time: %s\n' "$(date -u '+%Y-%m-%d %H:%M:%S UTC' 2>/dev/null)"
+            printf 'note: no network interface, public IP or private IP information is collected.\n'
+
+            # ---------------------------------------------------------------
+            section "2. COMPUTE"
+            # ---------------------------------------------------------------
+            CPU_CORES="$(nproc 2>/dev/null)"
+            if [ -z "$CPU_CORES" ] && [ -r /proc/cpuinfo ]; then
+              CPU_CORES="$(grep -c '^processor' /proc/cpuinfo 2>/dev/null)"
+            fi
+            if [ -z "$CPU_CORES" ]; then CPU_CORES="0"; fi
+
+            CPU_MODEL="$(awk -F: '/^model name/ { sub(/^[ \t]+/, "", $2); print $2; exit }' /proc/cpuinfo 2>/dev/null)"
+            if [ -z "$CPU_MODEL" ] && have lscpu; then
+              CPU_MODEL="$(lscpu 2>/dev/null | awk -F: '/^Model name/ { sub(/^[ \t]+/, "", $2); print $2; exit }')"
+            fi
+            if [ -z "$CPU_MODEL" ]; then CPU_MODEL="UNKNOWN"; fi
+
+            MEM_TOTAL_MB="$(meminfo_mb MemTotal)"
+            MEM_FREE_MB="$(meminfo_mb MemFree)"
+            MEM_AVAIL_MB="$(meminfo_mb MemAvailable)"
+            SWAP_TOTAL_MB="$(meminfo_mb SwapTotal)"
+            SWAP_FREE_MB="$(meminfo_mb SwapFree)"
+            SWAP_USED_MB="$(( SWAP_TOTAL_MB - SWAP_FREE_MB ))"
+
+            printf 'logical cpu count: %s\n' "$CPU_CORES"
+            printf 'cpu model: %s\n' "$CPU_MODEL"
+            printf 'memory total MB: %s\n' "$MEM_TOTAL_MB"
+            printf 'memory free MB: %s\n' "$MEM_FREE_MB"
+            printf 'memory available MB: %s\n' "$MEM_AVAIL_MB"
+            printf 'swap total MB: %s\n' "$SWAP_TOTAL_MB"
+            printf 'swap free MB: %s\n' "$SWAP_FREE_MB"
+            printf 'swap used MB: %s\n' "$SWAP_USED_MB"
+
+            LOAD_1="0"; LOAD_5="0"; LOAD_15="0"
+            if [ -r /proc/loadavg ]; then
+              LOAD_1="$(awk '{ print $1 }' /proc/loadavg 2>/dev/null)"
+              LOAD_5="$(awk '{ print $2 }' /proc/loadavg 2>/dev/null)"
+              LOAD_15="$(awk '{ print $3 }' /proc/loadavg 2>/dev/null)"
+            fi
+            printf 'load average 1/5/15: %s / %s / %s\n' "$LOAD_1" "$LOAD_5" "$LOAD_15"
+
+            if [ -r /proc/uptime ]; then
+              awk '{ d=int($1/86400); h=int(($1%86400)/3600); m=int(($1%3600)/60); printf "uptime: %dd %dh %dm\n", d, h, m }' /proc/uptime 2>/dev/null
+            else
+              printf 'uptime: NOT AVAILABLE\n'
+            fi
+            printf 'note: no benchmark or stress workload was executed.\n'
+
+            # ---------------------------------------------------------------
+            section "3. STORAGE"
+            # ---------------------------------------------------------------
+            printf -- '-- df -h (capacity) --\n'
+            df -h 2>/dev/null || printf 'df -h: NOT AVAILABLE\n'
+            printf -- '\n-- df -i (inodes) --\n'
+            df -i 2>/dev/null || printf 'df -i: NOT AVAILABLE\n'
+            printf -- '\n-- home filesystem --\n'
+            df -P -h "$AUDIT_HOME" 2>/dev/null || printf 'home filesystem: NOT AVAILABLE\n'
+
+            DISK_HOME_GB="$(avail_gb "$AUDIT_HOME")"
+            DISK_ROOT_GB="$(avail_gb /)"
+            DISK_OPT_GB="$(avail_gb /opt)"
+            DISK_SRV_GB="$(avail_gb /srv)"
+            printf '\navailable GB on home filesystem: %s\n' "$DISK_HOME_GB"
+            printf 'available GB on root filesystem: %s\n' "$DISK_ROOT_GB"
+            printf 'note: only filesystem-level metadata was read; no recursive sizing of the server was performed.\n'
+
+            # ---------------------------------------------------------------
+            section "4. PYTHON"
+            # ---------------------------------------------------------------
+            for py_cmd in "python" "python3" "pip" "pip3"; do
+              banner "$py_cmd" --version
+            done
+
+            VENV_SUPPORTED="no"
+            if have python3 && python3 -m venv --help >/dev/null 2>&1; then
+              VENV_SUPPORTED="yes"
+            fi
+            printf 'python3 venv module usable: %s\n' "$VENV_SUPPORTED"
+            printf 'note: no virtual environment was created and no Python package was added.\n'
+
+            # ---------------------------------------------------------------
+            section "5. SCHEDULING"
+            # ---------------------------------------------------------------
+            CRON_AVAILABLE="no"
+            if have crontab || have cron || have crond || [ -d /etc/cron.d ]; then
+              CRON_AVAILABLE="yes"
+            fi
+            printf 'cron subsystem present: %s\n' "$CRON_AVAILABLE"
+            banner "crontab" -V
+
+            USER_CRONTAB="no"
+            if have crontab && crontab -l >/dev/null 2>&1; then
+              USER_CRONTAB="yes"
+            fi
+            printf 'current-user crontab exists: %s\n' "$(printf '%s' "$USER_CRONTAB" | tr '[:lower:]' '[:upper:]')"
+            printf 'note: crontab contents were never read into the log, and no other account was inspected.\n'
+
+            SYSTEMD_AVAILABLE="no"
+            SYSTEMD_USER="no"
+            SYSTEMD_TIMER_COUNT="0"
+            if have systemctl; then
+              SYSTEMD_AVAILABLE="yes"
+              SYSTEMD_TIMER_COUNT="$(systemctl list-timers --all --no-legend --no-pager 2>/dev/null | grep -c . )"
+              if systemctl --user list-units --no-legend --no-pager >/dev/null 2>&1; then
+                SYSTEMD_USER="yes"
+              fi
+            fi
+            printf 'systemctl present: %s\n' "$SYSTEMD_AVAILABLE"
+            printf 'systemd timer count (count only): %s\n' "$SYSTEMD_TIMER_COUNT"
+            printf 'systemd --user usable by SSH account: %s\n' "$SYSTEMD_USER"
+
+            LINGER="UNKNOWN"
+            if have loginctl; then
+              LINGER="$(loginctl show-user "$AUDIT_USER" -p Linger --value 2>/dev/null)"
+              if [ -z "$LINGER" ]; then LINGER="UNKNOWN"; fi
+            fi
+            printf 'systemd user lingering: %s\n' "$LINGER"
+
+            # ---------------------------------------------------------------
+            section "6. TOOLING"
+            # ---------------------------------------------------------------
+            banner "git" --version
+            banner "curl" --version
+            banner "wget" --version
+            banner "tar" --version
+            banner "gzip" --version
+            banner "rsync" --version
+            banner "flock" --version
+            printf 'note: version banners only. No download and no external API call were performed.\n'
+
+            # ---------------------------------------------------------------
+            section "7. WEB STACK"
+            # ---------------------------------------------------------------
+            WEBSERVER="none"
+            if have nginx || [ -d /etc/nginx ]; then
+              WEBSERVER="nginx"
+            fi
+            if have apache2 || have httpd || [ -d /etc/apache2 ] || [ -d /etc/httpd ]; then
+              if [ "$WEBSERVER" = "nginx" ]; then WEBSERVER="nginx+apache"; else WEBSERVER="apache"; fi
+            fi
+            printf 'web server detected: %s\n' "$WEBSERVER"
+
+            banner "nginx" -v
+            banner "apache2" -v
+            banner "httpd" -v
+            banner "php" --version
+            banner "php-fpm" --version
+
+            PHP_PRESENT="no"
+            if have php || have php-fpm; then PHP_PRESENT="yes"; fi
+            printf 'php present: %s\n' "$PHP_PRESENT"
+
+            WEB_PROC_NAMES="$(ps -eo comm= 2>/dev/null | sort -u | grep -iE 'nginx|apache|httpd|php|caddy|lighttpd|litespeed' | head -n 15 | tr '\n' ' ')"
+            if [ -z "$WEB_PROC_NAMES" ]; then WEB_PROC_NAMES="none"; fi
+            printf 'web-serving process names (names only, no arguments): %s\n' "$WEB_PROC_NAMES"
+
+            WEB_PROC_COUNT="$(ps -eo comm= 2>/dev/null | grep -icE '^(nginx|apache2|httpd|php-fpm[0-9.]*|caddy|lighttpd)$')"
+            if [ -z "$WEB_PROC_COUNT" ]; then WEB_PROC_COUNT="0"; fi
+            printf 'web-serving process count: %s\n' "$WEB_PROC_COUNT"
+
+            DOCROOT="UNDETERMINED"
+            DOCROOT_SOURCE="none"
+            for cfg in /etc/nginx/sites-enabled/* /etc/nginx/conf.d/*.conf /etc/nginx/nginx.conf; do
+              [ -r "$cfg" ] || continue
+              cand="$(awk '$1 == "root" { v=$2; sub(/;$/, "", v); print v; exit }' "$cfg" 2>/dev/null)"
+              if [ -n "$cand" ]; then DOCROOT="$cand"; DOCROOT_SOURCE="nginx root directive"; break; fi
+            done
+            if [ "$DOCROOT" = "UNDETERMINED" ]; then
+              for cfg in /etc/apache2/sites-enabled/*.conf /etc/apache2/apache2.conf /etc/httpd/conf.d/*.conf /etc/httpd/conf/httpd.conf; do
+                [ -r "$cfg" ] || continue
+                cand="$(awk 'tolower($1) == "documentroot" { v=$2; gsub(/"/, "", v); print v; exit }' "$cfg" 2>/dev/null)"
+                if [ -n "$cand" ]; then DOCROOT="$cand"; DOCROOT_SOURCE="apache DocumentRoot directive"; break; fi
+              done
+            fi
+            if [ "$DOCROOT" = "UNDETERMINED" ]; then
+              for cand in "$AUDIT_HOME/public_html" "$AUDIT_HOME/www" "$AUDIT_HOME/htdocs" /var/www/html /var/www /usr/share/nginx/html; do
+                if [ -d "$cand" ]; then DOCROOT="$cand"; DOCROOT_SOURCE="conventional directory probe"; break; fi
+              done
+            fi
+            printf 'probable document root: %s\n' "$DOCROOT"
+            printf 'document root evidence: %s\n' "$DOCROOT_SOURCE"
+
+            DOCROOT_WRITABLE="no"
+            if [ "$DOCROOT" != "UNDETERMINED" ] && [ -w "$DOCROOT" ]; then DOCROOT_WRITABLE="yes"; fi
+            printf 'document root writable by SSH account: %s\n' "$DOCROOT_WRITABLE"
+
+            if [ "$DOCROOT" != "UNDETERMINED" ]; then
+              printf -- '\n-- filesystem holding the website --\n'
+              df -P -h "$DOCROOT" 2>/dev/null || printf 'website filesystem: NOT AVAILABLE\n'
+            fi
+            printf '\nnote: only directive values were extracted. No web configuration body, credential or website listing was printed, and nothing was reloaded.\n'
+
+            # ---------------------------------------------------------------
+            section "8. EXISTING MODEL-HOSTING CONVENTION"
+            # ---------------------------------------------------------------
+            printf 'Directory names only. No proprietary source, mathematics, configuration or secret was read.\n'
+
+            HOME_DIRS="$(find "$AUDIT_HOME" -maxdepth 1 -mindepth 1 -type d -printf '%f\n' 2>/dev/null | sort | head -n 40)"
+            if [ -z "$HOME_DIRS" ]; then
+              HOME_DIRS="$(ls -1p "$AUDIT_HOME" 2>/dev/null | grep '/$' | head -n 40)"
+            fi
+            printf '\nSSH-account home top-level directories:\n%s\n' "${HOME_DIRS:-none readable}"
+
+            OPT_DIRS="$(ls -1p /opt 2>/dev/null | grep '/$' | head -n 25)"
+            printf '\n/opt top-level directories:\n%s\n' "${OPT_DIRS:-none readable}"
+
+            SRV_DIRS="$(ls -1p /srv 2>/dev/null | grep '/$' | head -n 25)"
+            printf '\n/srv top-level directories:\n%s\n' "${SRV_DIRS:-none readable}"
+
+            VENV_DIRS="$(find "$AUDIT_HOME" -maxdepth 3 -mindepth 1 -type d \( -name 'venv' -o -name '.venv' \) -printf '%p\n' 2>/dev/null | head -n 10)"
+            printf '\nexisting python environment directories under the SSH account home:\n%s\n' "${VENV_DIRS:-none found}"
+
+            RUNNING_UNITS="none"
+            if [ "$SYSTEMD_AVAILABLE" = "yes" ]; then
+              RUNNING_UNITS="$(systemctl list-units --type=service --state=running --no-legend --no-pager 2>/dev/null | awk '{ print $1 }' | head -n 40 | tr '\n' ' ')"
+              if [ -z "$RUNNING_UNITS" ]; then RUNNING_UNITS="none readable"; fi
+            fi
+            printf '\nrunning systemd unit names (names only):\n%s\n' "$RUNNING_UNITS"
+
+            # ---------------------------------------------------------------
+            section "9. PERMISSION PROBES FOR A FUTURE PRIVATE LOCATION"
+            # ---------------------------------------------------------------
+            HOME_WRITABLE="no"; OPT_WRITABLE="no"; SRV_WRITABLE="no"
+            [ -w "$AUDIT_HOME" ] && HOME_WRITABLE="yes"
+            [ -d /opt ] && [ -w /opt ] && OPT_WRITABLE="yes"
+            [ -d /srv ] && [ -w /srv ] && SRV_WRITABLE="yes"
+            printf 'home writable by SSH account: %s\n' "$HOME_WRITABLE"
+            printf '/opt writable by SSH account: %s\n' "$OPT_WRITABLE"
+            printf '/srv writable by SSH account: %s\n' "$SRV_WRITABLE"
+            printf 'note: writability was tested with a read-only permission check. Nothing was created.\n'
+
+            PRIVATE_BASE="$AUDIT_HOME"
+            if [ "$SRV_WRITABLE" = "yes" ]; then
+              PRIVATE_BASE="/srv"
+            elif [ "$OPT_WRITABLE" = "yes" ]; then
+              PRIVATE_BASE="/opt"
+            fi
+
+            PRIVATE_BASE_INSIDE_DOCROOT="no"
+            if [ "$DOCROOT" != "UNDETERMINED" ]; then
+              case "$PRIVATE_BASE" in
+                "$DOCROOT"|"$DOCROOT"/*) PRIVATE_BASE_INSIDE_DOCROOT="yes" ;;
+              esac
+            fi
+
+            PRIVATE_DISK_GB="$(avail_gb "$PRIVATE_BASE")"
+
+            # ---------------------------------------------------------------
+            section "10. MACHINE-READABLE FACTS"
+            # ---------------------------------------------------------------
+            fact CPU_CORES "$CPU_CORES"
+            fact MEM_TOTAL_MB "$MEM_TOTAL_MB"
+            fact MEM_AVAIL_MB "$MEM_AVAIL_MB"
+            fact SWAP_TOTAL_MB "$SWAP_TOTAL_MB"
+            fact SWAP_USED_MB "$SWAP_USED_MB"
+            fact LOAD_1 "$LOAD_1"
+            fact LOAD_15 "$LOAD_15"
+            fact DISK_HOME_GB "$DISK_HOME_GB"
+            fact DISK_ROOT_GB "$DISK_ROOT_GB"
+            fact DISK_OPT_GB "$DISK_OPT_GB"
+            fact DISK_SRV_GB "$DISK_SRV_GB"
+            fact DISK_PRIVATE_GB "$PRIVATE_DISK_GB"
+            fact PYTHON3 "$(if have python3; then printf 'yes'; else printf 'no'; fi)"
+            fact PIP3 "$(if have pip3; then printf 'yes'; else printf 'no'; fi)"
+            fact VENV "$VENV_SUPPORTED"
+            fact CRON "$CRON_AVAILABLE"
+            fact USER_CRONTAB "$USER_CRONTAB"
+            fact SYSTEMD "$SYSTEMD_AVAILABLE"
+            fact SYSTEMD_USER "$SYSTEMD_USER"
+            fact FLOCK "$(if have flock; then printf 'yes'; else printf 'no'; fi)"
+            fact GIT "$(if have git; then printf 'yes'; else printf 'no'; fi)"
+            fact RSYNC "$(if have rsync; then printf 'yes'; else printf 'no'; fi)"
+            fact WEBSERVER "$WEBSERVER"
+            fact WEB_PROC_COUNT "$WEB_PROC_COUNT"
+            fact PHP "$PHP_PRESENT"
+            fact DOCROOT "$DOCROOT"
+            fact DOCROOT_WRITABLE "$DOCROOT_WRITABLE"
+            fact PRIVATE_BASE "$PRIVATE_BASE"
+            fact PRIVATE_BASE_INSIDE_DOCROOT "$PRIVATE_BASE_INSIDE_DOCROOT"
+
+            printf '\nREAD-ONLY AUDIT COMPLETE. NO SERVER STATE WAS CHANGED.\n'
+          }
+
+          main 2>&1 | redact
+          exit 0
+          REMOTE_AUDIT_EOF
+
+          echo "Remote audit script staged at RUNNER_TEMP/wizard_remote_audit.sh"
+          wc -l "$RUNNER_TEMP/wizard_remote_audit.sh"
+
+      - name: Verify remote audit script is syntactically valid and mutation free
+        run: |
+          set -euo pipefail
+          script="$RUNNER_TEMP/wizard_remote_audit.sh"
+
+          bash -n "$script"
+          echo "bash syntax check: OK"
+
+          # Any of these in the remote script would mean the audit could change
+          # the WizardOfOdds server, so the job stops before connecting.
+          forbidden=(
+            '(^|[[:space:];&|(])sudo([[:space:]]|$)'
+            '(^|[[:space:];&|(])(touch|mkdir|rmdir|mv|cp|ln|dd|tee|truncate|shred|unlink)([[:space:]]|$)'
+            '(^|[[:space:];&|(])rm([[:space:]]|$)'
+            '(^|[[:space:];&|(])(chmod|chown|chgrp|setfacl|umask)([[:space:]]|$)'
+            'sed[[:space:]]+-[a-zA-Z]*i([[:space:]]|$)'
+            '(^|[[:space:];&|(])(apt|apt-get|yum|dnf|zypper|pacman|snap|npm|pip|pip3|gem|cargo)([[:space:]]|$)'
+            'python[0-9.]*[[:space:]]+-m[[:space:]]+pip'
+            'systemctl([[:space:]]+--user)?[[:space:]]+(start|stop|restart|reload|enable|disable|mask|unmask|kill|edit|set-property|daemon-reload)'
+            '(^|[[:space:];&|(])service([[:space:]]|$)'
+            'crontab[[:space:]]+-[erED]'
+            'git[[:space:]]+(clone|pull|fetch|push|checkout|reset|commit|init|remote)'
+            '(^|[[:space:];&|(])(kill|pkill|killall|reboot|shutdown|halt|poweroff)([[:space:]]|$)'
+            '(^|[[:space:];&|(])(mysql|mysqladmin|psql|mysqldump|pg_dump)([[:space:]]|$)'
+            '(^|[[:space:];&|(])(ip|ifconfig|ss|netstat|route)([[:space:]]|$)'
+            'hostname[[:space:]]+-I'
+            'ssh-keyscan'
+            '(^|[[:space:];&|(])(nginx|apachectl|apache2ctl)[[:space:]]+-[Ts]([[:space:]]|$)'
+          )
+
+          violations=0
+          for pattern in "${forbidden[@]}"; do
+            if grep -nE "$pattern" "$script"; then
+              echo "::error::Remote audit script matched a forbidden mutation pattern: $pattern"
+              violations=$((violations + 1))
+            fi
+          done
+
+          # Only /dev/null discards and stderr merges are legitimate redirections
+          # in a read-only script; anything else would write to the server.
+          leftover="$(sed -E -e 's/2>&1//g' -e 's/[0-9]?>[[:space:]]*\/dev\/null//g' "$script" | grep -nE '>' || true)"
+          if [ -n "$leftover" ]; then
+            echo "::error::Remote audit script contains a write redirection:"
+            printf '%s\n' "$leftover"
+            violations=$((violations + 1))
+          fi
+
+          if [ "$violations" -ne 0 ]; then
+            echo "::error::Aborting before any SSH connection is attempted."
+            exit 1
+          fi
+          echo "remote mutation guard: OK (read-only commands only)"
+
+      - name: Stage SSH material on the ephemeral runner
+        env:
+          WIZARD_SSH_PRIVATE_KEY: ${{ secrets.WIZARD_SSH_PRIVATE_KEY }}
+          WIZARD_SSH_KNOWN_HOSTS: ${{ secrets.WIZARD_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+
+          printf '%s\n' "$WIZARD_SSH_PRIVATE_KEY" > "$RUNNER_TEMP/wizard_ssh_key"
+          printf '%s\n' "$WIZARD_SSH_KNOWN_HOSTS" > "$RUNNER_TEMP/wizard_known_hosts"
+          chmod 600 "$RUNNER_TEMP/wizard_ssh_key"
+          chmod 600 "$RUNNER_TEMP/wizard_known_hosts"
+
+          if [ ! -s "$RUNNER_TEMP/wizard_ssh_key" ]; then
+            echo "::error::WIZARD_SSH_PRIVATE_KEY is empty in the wizardofodds-production environment."
+            exit 1
+          fi
+          if [ ! -s "$RUNNER_TEMP/wizard_known_hosts" ]; then
+            echo "::error::WIZARD_SSH_KNOWN_HOSTS is empty; strict host-key verification cannot proceed."
+            exit 1
+          fi
+
+          echo "SSH key and known-hosts staged under RUNNER_TEMP. Contents are never printed."
+          echo "host-key entries provided: $(grep -c . "$RUNNER_TEMP/wizard_known_hosts")"
+
+      - name: Run the read-only audit over SSH
+        env:
+          WIZARD_SSH_HOST: ${{ secrets.WIZARD_SSH_HOST }}
+          WIZARD_SSH_PORT: ${{ secrets.WIZARD_SSH_PORT }}
+          WIZARD_SSH_USER: ${{ secrets.WIZARD_SSH_USER }}
+        run: |
+          set -uo pipefail
+
+          ssh_port="${WIZARD_SSH_PORT:-22}"
+          report="$RUNNER_TEMP/wizard_audit_report.txt"
+          ssh_errors="$RUNNER_TEMP/wizard_audit_stderr.txt"
+
+          if [ -z "${WIZARD_SSH_HOST:-}" ] || [ -z "${WIZARD_SSH_USER:-}" ]; then
+            echo "::error::WizardOfOdds SSH connection secrets are missing."
+            exit 1
+          fi
+
+          rc=0
+          ssh -T \
+            -p "$ssh_port" \
+            -i "$RUNNER_TEMP/wizard_ssh_key" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o PubkeyAuthentication=yes \
+            -o PasswordAuthentication=no \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/wizard_known_hosts" \
+            -o ConnectTimeout=20 \
+            -o ServerAliveInterval=15 \
+            -o LogLevel=ERROR \
+            "$WIZARD_SSH_USER@$WIZARD_SSH_HOST" \
+            'bash -s' < "$RUNNER_TEMP/wizard_remote_audit.sh" 1> "$report" 2> "$ssh_errors" || rc=$?
+
+          if [ -s "$report" ]; then
+            cat "$report"
+          fi
+
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::Read-only audit failed with exit code ${rc}. Treating this as an SSH connection or host-key verification failure."
+            echo "--- ssh diagnostics (IP addresses redacted) ---"
+            sed -E 's/[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/<redacted-ip>/g' "$ssh_errors" | head -n 20
+            exit "$rc"
+          fi
+
+          if ! grep -q 'READ-ONLY AUDIT COMPLETE' "$report"; then
+            echo "::error::Audit output is incomplete; refusing to publish partial findings."
+            exit 1
+          fi
+
+      - name: Publish recommendations and suitability assessment
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/wizard_audit_report.txt"
+
+          get_fact() {
+            local key="$1" fallback="$2" line
+            line="$(grep -m1 "^FACT:${key}=" "$report" || true)"
+            if [ -z "$line" ]; then printf '%s' "$fallback"; else printf '%s' "${line#FACT:${key}=}"; fi
+          }
+
+          cores="$(get_fact CPU_CORES 0)"
+          mem_total="$(get_fact MEM_TOTAL_MB 0)"
+          mem_avail="$(get_fact MEM_AVAIL_MB 0)"
+          swap_total="$(get_fact SWAP_TOTAL_MB 0)"
+          swap_used="$(get_fact SWAP_USED_MB 0)"
+          load_1="$(get_fact LOAD_1 0)"
+          disk_private="$(get_fact DISK_PRIVATE_GB 0)"
+          python3_present="$(get_fact PYTHON3 no)"
+          venv_ok="$(get_fact VENV no)"
+          cron_ok="$(get_fact CRON no)"
+          systemd_ok="$(get_fact SYSTEMD no)"
+          systemd_user_ok="$(get_fact SYSTEMD_USER no)"
+          flock_ok="$(get_fact FLOCK no)"
+          webserver="$(get_fact WEBSERVER none)"
+          docroot="$(get_fact DOCROOT UNDETERMINED)"
+          private_base="$(get_fact PRIVATE_BASE UNDETERMINED)"
+          private_inside_docroot="$(get_fact PRIVATE_BASE_INSIDE_DOCROOT no)"
+
+          if [ "$cores" -lt 1 ] 2>/dev/null; then cores=1; fi
+          load_pct="$(awk -v l="$load_1" -v c="$cores" 'BEGIN { if (c < 1) c = 1; printf "%d", (l / c) * 100 }')"
+          swap_pct=0
+          if [ "$swap_total" -gt 0 ] 2>/dev/null; then
+            swap_pct="$(awk -v u="$swap_used" -v t="$swap_total" 'BEGIN { printf "%d", (u / t) * 100 }')"
+          fi
+          scheduler_ok="no"
+          if [ "$cron_ok" = "yes" ] || [ "$systemd_ok" = "yes" ] || [ "$systemd_user_ok" = "yes" ]; then
+            scheduler_ok="yes"
+          fi
+
+          emit() {
+            printf '%s\n' "$1"
+            printf '%s\n' "$1" >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          printf '## WizardOfOdds read-only NBA server audit\n\n```text\n' >> "$GITHUB_STEP_SUMMARY"
+
+          emit "MEASURED BASIS"
+          emit "  logical cpu cores ......... ${cores}"
+          emit "  total RAM MB .............. ${mem_total}"
+          emit "  available RAM MB .......... ${mem_avail}"
+          emit "  swap total / used MB ...... ${swap_total} / ${swap_used} (${swap_pct}% used)"
+          emit "  1-min load as % of cores .. ${load_pct}%"
+          emit "  free GB at private base ... ${disk_private}"
+          emit "  python3 / venv ............ ${python3_present} / ${venv_ok}"
+          emit "  scheduler available ....... ${scheduler_ok} (cron=${cron_ok}, systemd=${systemd_ok}, systemd-user=${systemd_user_ok})"
+          emit "  single-run lock (flock) ... ${flock_ok}"
+          emit "  web server ................ ${webserver}"
+          emit ""
+
+          # ---------------- private NBA location recommendation -------------
+          emit "RECOMMENDED PRIVATE NBA LOCATION (RECOMMENDATION ONLY - NOT CREATED)"
+          if [ "$private_base" = "UNDETERMINED" ]; then
+            emit "  Could not determine a writable private base. Human decision required."
+          else
+            nba_root="${private_base%/}/nba-prop-quant"
+            emit "  ${nba_root}"
+            emit ""
+            emit "  Suggested persistent layout beneath that single root:"
+            emit "    ${nba_root}/src                  application source"
+            emit "    ${nba_root}/venv                 python environment"
+            emit "    ${nba_root}/data/history         historical data"
+            emit "    ${nba_root}/data/snapshots       rolling snapshots"
+            emit "    ${nba_root}/data/training        training data"
+            emit "    ${nba_root}/models/fits          immutable daily model fits"
+            emit "    ${nba_root}/models/calibration   calibration versions"
+            emit "    ${nba_root}/models/last_good     last-good pointer"
+            emit "    ${nba_root}/ledger               prediction ledger / database"
+            emit "    ${nba_root}/logs                 logs"
+            emit ""
+            if [ "$private_inside_docroot" = "yes" ]; then
+              emit "  WARNING: the measured base sits inside the document root. Do NOT use it until a"
+              emit "  location outside the public webroot is agreed with the server owner."
+            elif [ "$docroot" = "UNDETERMINED" ]; then
+              emit "  No document root was discoverable read-only, so confirm with the server owner"
+              emit "  that this base really sits outside the public webroot before anything is created."
+            else
+              emit "  This base is outside the measured document root (${docroot})."
+            fi
+          fi
+          emit ""
+
+          # ---------------- public output recommendation --------------------
+          emit "RECOMMENDED PUBLIC OUTPUT LOCATION (RECOMMENDATION ONLY - NOT CREATED)"
+          if [ "$docroot" = "UNDETERMINED" ]; then
+            emit "  Document root could not be determined read-only. Human decision required."
+          else
+            emit "  ${docroot%/}/nba/"
+            emit "  Sanitized prediction and API assets only, published by copying finished files"
+            emit "  out of the private location. No model source or raw data belongs here."
+          fi
+          emit ""
+
+          # ---------------- resource suitability ----------------------------
+          verdict_refresh="SUITABLE"
+          if [ "$python3_present" != "yes" ] || [ "$disk_private" -lt 5 ]; then
+            verdict_refresh="UNSUITABLE"
+          elif [ "$mem_avail" -lt 1024 ] || [ "$cores" -lt 2 ] || [ "$disk_private" -lt 10 ] || [ "$scheduler_ok" != "yes" ]; then
+            verdict_refresh="QUESTIONABLE"
+          fi
+
+          verdict_retrain="SUITABLE"
+          if [ "$python3_present" != "yes" ] || [ "$venv_ok" != "yes" ] || [ "$cores" -lt 2 ] \
+             || [ "$mem_total" -lt 4096 ] || [ "$mem_avail" -lt 2048 ] || [ "$disk_private" -lt 20 ]; then
+            verdict_retrain="UNSUITABLE"
+          elif [ "$cores" -lt 4 ] || [ "$mem_total" -lt 8192 ] || [ "$mem_avail" -lt 4096 ] \
+             || [ "$disk_private" -lt 40 ] || [ "$load_pct" -ge 50 ] || [ "$swap_pct" -ge 25 ]; then
+            verdict_retrain="QUESTIONABLE"
+          fi
+
+          verdict_recal="SUITABLE"
+          if [ "$python3_present" != "yes" ] || [ "$mem_avail" -lt 1024 ] || [ "$disk_private" -lt 5 ]; then
+            verdict_recal="UNSUITABLE"
+          elif [ "$cores" -lt 2 ] || [ "$mem_avail" -lt 2048 ] || [ "$load_pct" -ge 60 ]; then
+            verdict_recal="QUESTIONABLE"
+          fi
+
+          verdict_t20="SUITABLE"
+          if [ "$python3_present" != "yes" ] || [ "$mem_avail" -lt 512 ] || [ "$disk_private" -lt 2 ] \
+             || [ "$scheduler_ok" != "yes" ]; then
+            verdict_t20="UNSUITABLE"
+          elif [ "$cores" -lt 2 ] || [ "$mem_avail" -lt 1024 ] || [ "$flock_ok" != "yes" ] || [ "$load_pct" -ge 70 ]; then
+            verdict_t20="QUESTIONABLE"
+          fi
+
+          verdict_grading="SUITABLE"
+          if [ "$python3_present" != "yes" ] || [ "$disk_private" -lt 2 ] || [ "$scheduler_ok" != "yes" ]; then
+            verdict_grading="UNSUITABLE"
+          elif [ "$mem_avail" -lt 512 ] || [ "$load_pct" -ge 70 ]; then
+            verdict_grading="QUESTIONABLE"
+          fi
+
+          emit "RESOURCE SUITABILITY (derived from measured CPU, RAM, swap, disk and load)"
+          emit "  DAILY DATA REFRESH ........ ${verdict_refresh}"
+          emit "  DAILY MODEL RETRAIN ....... ${verdict_retrain}"
+          emit "  DAILY RECALIBRATION ....... ${verdict_recal}"
+          emit "  T-20 PREDICTION ........... ${verdict_t20}"
+          emit "  AUTOMATIC GRADING ......... ${verdict_grading}"
+          emit ""
+          emit "  Note: the presence of Python alone never produces a SUITABLE retrain verdict."
+          emit "  Retrain suitability requires core count, total and available RAM, free disk,"
+          emit "  swap pressure and current load to all clear their thresholds."
+          emit ""
+
+          # ---------------- web interference risk ---------------------------
+          risk="LOW"
+          if [ "$webserver" != "none" ]; then
+            if [ "$cores" -le 2 ] || [ "$mem_avail" -lt 2048 ] || [ "$load_pct" -ge 70 ] || [ "$swap_pct" -ge 25 ]; then
+              risk="HIGH"
+            elif [ "$cores" -le 4 ] || [ "$mem_avail" -lt 4096 ] || [ "$load_pct" -ge 40 ]; then
+              risk="MODERATE"
+            fi
+          fi
+
+          emit "WEB-SERVER INTERFERENCE RISK: ${risk}"
+          if [ "$risk" = "LOW" ]; then
+            emit "  Adaptive NBA retraining is unlikely to degrade WizardOfOdds web serving at the"
+            emit "  measured headroom. Still schedule heavy work off-peak as a precaution."
+          else
+            emit "  Recommended mitigations (RECOMMENDATION ONLY - NOT IMPLEMENTED BY THIS AUDIT):"
+            emit "    - cap CPU with a systemd slice CPUQuota or an equivalent cgroup limit"
+            emit "    - cap memory with MemoryMax or MemoryHigh so retraining cannot starve the site"
+            emit "    - wrap heavy jobs in nice and ionice so web workers keep priority"
+            emit "    - schedule retraining off-peak, away from the T-20 prediction window"
+            emit "    - run the NBA workload under a separate low-privilege account"
+            emit "    - use flock so overlapping runs cannot stack up"
+            if [ "$risk" = "HIGH" ]; then
+              emit "    - strongly consider separate compute; this host has little headroom for"
+              emit "      daily retraining alongside live web serving"
+            fi
+          fi
+          emit ""
+          emit "AUDIT SCOPE: read-only discovery. Nothing was created, modified, scheduled,"
+          emit "started, reloaded or deployed on the WizardOfOdds server."
+
+          printf '```\n' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove temporary SSH material from the runner
+        if: always()
+        run: |
+          set -uo pipefail
+          rm -f "$RUNNER_TEMP/wizard_ssh_key" \
+                "$RUNNER_TEMP/wizard_known_hosts" \
+                "$RUNNER_TEMP/wizard_remote_audit.sh" \
+                "$RUNNER_TEMP/wizard_audit_report.txt" \
+                "$RUNNER_TEMP/wizard_audit_stderr.txt"
+          echo "Temporary SSH and audit files removed from the ephemeral runner."
