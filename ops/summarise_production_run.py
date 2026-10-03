@@ -3,7 +3,9 @@
 
 The summary answers, in one screen, what the run decided and whether
 production changed. A no-op is reported as a successful outcome, because a day
-with no newly completed NBA information genuinely requires no new model.
+with no newly completed NBA information genuinely requires no new model. That
+covers both kinds: an in-season day whose completed information has not
+changed, and a preseason day that has no regular-season history at all.
 
 No DataFrame is rendered here and no secret is read.
 """
@@ -22,6 +24,21 @@ OUTCOME_LABELS = {
     "ALREADY_RUNNING": "another production lifecycle holds the lock",
     "DRY_RUN_OK": "plan verified; nothing fitted",
 }
+
+# Refresh outcomes are classified by ops/classify_refresh_outcome.py. They are
+# reported here, not re-decided here.
+REFRESH_OUTCOME_LABELS = {
+    "REFRESHED": "rolling current-season state advanced",
+    "PRESEASON_BLOCK": "before NBA opening day; no refresh was due",
+    "REFRESH_FAILED": "refresh failed closed; nothing was published",
+}
+
+PRESEASON_BLOCK = "PRESEASON_BLOCK"
+
+# What the adaptive stage means when the refresh was a verified safe no-op.
+PRESEASON_ADAPTIVE_DETAIL = (
+    "skipped: preseason no-op; incumbent fit retained"
+)
 
 
 def read_json(path: Path | None) -> dict | None:
@@ -69,6 +86,7 @@ def build_status(
     production_sha: str,
     trigger: str,
     mode: str,
+    refresh: dict | None = None,
 ) -> dict:
     outcome = field(adaptive, "outcome")
 
@@ -76,18 +94,35 @@ def build_status(
 
     blockers = field(preflight, "blockers", default=[]) or []
 
+    refresh_outcome = field(refresh, "outcome")
+
+    refresh_ok = refresh is None or (
+        field(refresh, "lifecycle_status") == "success"
+    )
+
+    # A verified PRESEASON_BLOCK means the adaptive daily fit was deliberately
+    # not run, so its absence is the intended outcome rather than a failure.
+    preseason_no_op = refresh_ok and refresh_outcome == PRESEASON_BLOCK
+
     if not preflight_ok:
         failure_stage = "preflight"
-    elif adaptive is None and mode == "production":
+    elif not refresh_ok:
+        failure_stage = "refresh"
+    elif adaptive is None and mode == "production" and not preseason_no_op:
         failure_stage = "adaptive_protocol"
     else:
         failure_stage = None
 
     promoted = bool(field(adaptive, "promoted", default=False))
 
+    adaptive_detail = OUTCOME_LABELS.get(outcome, outcome)
+
+    if adaptive is None and preseason_no_op:
+        adaptive_detail = PRESEASON_ADAPTIVE_DETAIL
+
     return {
         "adaptive_action": outcome,
-        "adaptive_action_detail": OUTCOME_LABELS.get(outcome, outcome),
+        "adaptive_action_detail": adaptive_detail,
         "blockers": blockers,
         "candidate_fit_id": field(adaptive, "fit_id"),
         "current_good_fit_id_after": field(
@@ -99,7 +134,14 @@ def build_status(
         "preflight_status": field(preflight, "status", default="unknown"),
         "production_code_sha": production_sha,
         "promoted": promoted,
-        "slate_date": field(adaptive, "plan", "slate_date"),
+        "refresh_outcome": refresh_outcome,
+        "refresh_outcome_detail": REFRESH_OUTCOME_LABELS.get(
+            refresh_outcome, field(refresh, "detail", default=refresh_outcome)
+        ),
+        # In a preseason no-op there is no adaptive plan, so the slate date
+        # the refresh was invoked with is the only one the run has.
+        "slate_date": field(adaptive, "plan", "slate_date")
+        or field(refresh, "slate_date"),
         "training_cutoff": field(adaptive, "plan", "training_cutoff"),
         "trigger": trigger,
         "validation_checks_recorded": len(
@@ -123,6 +165,10 @@ def render(status: dict) -> str:
         ("slate date", status["slate_date"] or "n/a"),
         ("training cutoff", status["training_cutoff"] or "n/a"),
         ("preflight", status["preflight_status"]),
+        (
+            "refresh outcome",
+            status.get("refresh_outcome") or "not reported",
+        ),
         ("adaptive action", status["adaptive_action_detail"] or "not reached"),
         ("candidate fit id", status["candidate_fit_id"] or "none created"),
         ("promoted", "yes" if status["promoted"] else "no"),
@@ -165,6 +211,15 @@ def render(status: dict) -> str:
             "remains current and no model version was manufactured.",
         ]
 
+    if status.get("refresh_outcome") == PRESEASON_BLOCK:
+        lines += [
+            "",
+            "This is a successful outcome. The slate date precedes NBA "
+            "opening day, so there was no regular-season history to refresh: "
+            "no data was written, the adaptive daily fit was skipped, and "
+            "the incumbent production fit is retained unchanged.",
+        ]
+
     return "\n".join(lines) + "\n"
 
 
@@ -175,6 +230,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
 
     parser.add_argument("--preflight", type=Path, default=None)
+    parser.add_argument("--refresh", type=Path, default=None)
     parser.add_argument("--adaptive", type=Path, default=None)
     parser.add_argument("--production-sha", default="")
     parser.add_argument("--trigger", default="unknown")
@@ -194,6 +250,7 @@ def main(argv: list[str] | None = None) -> int:
         args.production_sha,
         args.trigger,
         args.mode,
+        refresh=read_json(args.refresh),
     )
 
     rendered = render(status)

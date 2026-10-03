@@ -7,7 +7,9 @@ name: NBA production lifecycle
 # candidate construction, validation, registration and promotion lives in
 # ops/run_adaptive_daily_fit.py and the adaptive training module. This file
 # sequences those calls and reports what happened; it contains no modelling
-# logic and no policy conditionals.
+# logic and no policy conditionals. What a refresh exit code means for the
+# lifecycle — including the preseason no-op before opening day — is decided by
+# ops/classify_refresh_outcome.py, not by YAML.
 #
 # DEFAULT-BRANCH BEHAVIOUR
 # ------------------------
@@ -151,12 +153,27 @@ jobs:
             SLATE="$(TZ=America/New_York date +%F)"
           fi
           echo "slate=$SLATE" >> "$GITHUB_ENV"
+          set +e
           python ops/refresh_current_season_state.py \
             --slate-date "$SLATE" \
             --data-dir "$NBA_PROP_DATA_DIR"
+          REFRESH_EXIT=$?
+          set -e
+          # The refresh returns the readiness preflight's own exit code. What
+          # that code means for the lifecycle is decided in Python, not here:
+          # exit 0 continues, a verified PRESEASON_BLOCK is a safe no-op, and
+          # every other nonzero code is re-raised so the job fails closed.
+          python ops/classify_refresh_outcome.py \
+            --refresh-exit-code "$REFRESH_EXIT" \
+            --slate-date "$SLATE" \
+            --status-path "$RUNNER_TEMP/run/refresh.json" \
+            --summary-path "$GITHUB_STEP_SUMMARY" \
+            --github-env "$GITHUB_ENV"
 
+      # RUN_ADAPTIVE is written by the classifier above. The workflow reads
+      # that decision; it does not make one.
       - name: Run the adaptive daily protocol
-        if: env.MODE == 'production'
+        if: env.MODE == 'production' && env.RUN_ADAPTIVE == 'true'
         env:
           NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
           NBA_PROP_FIT_REGISTRY_DIR: ${{ vars.NBA_PROP_FIT_REGISTRY_DIR }}
@@ -179,6 +196,7 @@ jobs:
           set -euo pipefail
           python ops/summarise_production_run.py \
             --preflight "$RUNNER_TEMP/run/preflight.json" \
+            --refresh "$RUNNER_TEMP/run/refresh.json" \
             --adaptive "$RUNNER_TEMP/run/adaptive.json" \
             --production-sha "${{ steps.checkout.outputs.sha }}" \
             --trigger "${{ github.event_name }}" \
