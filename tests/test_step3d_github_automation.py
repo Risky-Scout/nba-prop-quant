@@ -60,6 +60,8 @@ validator = load_ops("validate_workflows")
 
 summariser = load_ops("summarise_production_run")
 
+classifier = load_ops("classify_refresh_outcome")
+
 
 @pytest.fixture(autouse=True)
 def block_all_network(monkeypatch):
@@ -658,7 +660,9 @@ def test_production_steps_are_gated_behind_the_preflight():
 
         step = steps[names.index(mutating)]
 
-        assert step["if"] == "env.MODE == 'production'"
+        # Additional conditions are allowed, but production mode is always
+        # the first thing that has to hold.
+        assert str(step["if"]).startswith("env.MODE == 'production'")
 
 
 # ----------------------------------------------------------------------
@@ -788,6 +792,360 @@ def test_summary_renders_no_dataframe_dump():
     )
 
     assert len(rendered.splitlines()) < 40
+
+
+# ----------------------------------------------------------------------
+# preseason: a verified PRESEASON_BLOCK is a safe no-op
+# ----------------------------------------------------------------------
+
+
+PRESEASON_SLATE = "2026-10-02"
+
+OPENING_DAY = "2026-10-20"
+
+
+def test_opening_day_is_read_from_the_preflight_not_restated():
+    """One locked opening day, owned by the readiness preflight."""
+    table = classifier.load_opening_day_table()
+
+    assert table[2026] == OPENING_DAY
+
+    source = (
+        PROJECT / "ops" / "classify_refresh_outcome.py"
+    ).read_text(encoding="utf-8")
+
+    # The date itself must appear nowhere in the classifier.
+    assert OPENING_DAY not in source
+
+
+def test_refresh_exit_zero_continues_the_normal_lifecycle():
+    decision = classifier.classify(
+        refresh_exit_code=0,
+        slate_date="2026-11-15",
+    )
+
+    assert decision["outcome"] == "REFRESHED"
+    assert decision["lifecycle_status"] == "success"
+    assert decision["run_adaptive_fit"] is True
+    assert decision["writes_performed"] is True
+    assert classifier.exit_code_for(decision) == 0
+
+
+def test_verified_preseason_block_is_a_successful_no_op():
+    """The exact production failure: exit 20 on 2026-10-02."""
+    decision = classifier.classify(
+        refresh_exit_code=20,
+        season=2026,
+        slate_date=PRESEASON_SLATE,
+    )
+
+    assert decision["outcome"] == "PRESEASON_BLOCK"
+    assert decision["verified"] is True
+    assert decision["lifecycle_status"] == "success"
+    assert decision["opening_day"] == OPENING_DAY
+    assert classifier.exit_code_for(decision) == 0
+
+
+def test_preseason_block_skips_the_adaptive_daily_fit():
+    decision = classifier.classify(
+        refresh_exit_code=20,
+        slate_date=PRESEASON_SLATE,
+    )
+
+    assert decision["run_adaptive_fit"] is False
+    assert "RUN_ADAPTIVE=false" in classifier.github_env_lines(decision)
+    assert "REFRESH_OUTCOME=PRESEASON_BLOCK" in classifier.github_env_lines(
+        decision
+    )
+
+
+def test_preseason_block_performs_no_writes():
+    decision = classifier.classify(
+        refresh_exit_code=20,
+        slate_date=PRESEASON_SLATE,
+    )
+
+    assert decision["writes_performed"] is False
+
+    # And the classifier itself is incapable of writing production state.
+    source = (
+        PROJECT / "ops" / "classify_refresh_outcome.py"
+    ).read_text(encoding="utf-8")
+
+    for banned in (
+        "subprocess",
+        "shutil",
+        "os.replace",
+        "to_parquet",
+        ".promote(",
+    ):
+        assert banned not in source
+
+
+def test_unverifiable_preseason_claim_fails_closed():
+    """Exit 20 on or after opening day is not a no-op; it is a failure."""
+    decision = classifier.classify(
+        refresh_exit_code=20,
+        slate_date="2026-11-15",
+    )
+
+    assert decision["outcome"] == "REFRESH_FAILED"
+    assert decision["verified"] is False
+    assert decision["lifecycle_status"] == "failed"
+    assert decision["run_adaptive_fit"] is False
+    assert classifier.exit_code_for(decision) == 20
+
+
+def test_unparseable_slate_date_cannot_claim_preseason():
+    decision = classifier.classify(
+        refresh_exit_code=20,
+        slate_date="",
+    )
+
+    assert decision["lifecycle_status"] == "failed"
+    assert decision["run_adaptive_fit"] is False
+
+
+def test_unconfigured_season_cannot_claim_preseason():
+    decision = classifier.classify(
+        refresh_exit_code=20,
+        season=2031,
+        slate_date=PRESEASON_SLATE,
+    )
+
+    assert decision["lifecycle_status"] == "failed"
+    assert "no locked opening day" in decision["detail"]
+
+
+@pytest.mark.parametrize("code", [1, 10, 30, 31, 70, 71, 72, 73, 74, 75, 78, 79])
+def test_every_other_nonzero_refresh_code_remains_fail_closed(code):
+    """Only exit 0 and a verified exit 20 are allowed to succeed."""
+    decision = classifier.classify(
+        refresh_exit_code=code,
+        slate_date=PRESEASON_SLATE,
+    )
+
+    assert decision["outcome"] == "REFRESH_FAILED"
+    assert decision["lifecycle_status"] == "failed"
+    assert decision["run_adaptive_fit"] is False
+    assert classifier.exit_code_for(decision) == code
+
+
+def test_classifier_cli_reports_a_preseason_no_op(tmp_path):
+    status = tmp_path / "refresh.json"
+    github_env = tmp_path / "github_env"
+    summary = tmp_path / "summary.md"
+
+    code = classifier.main(
+        [
+            "--refresh-exit-code",
+            "20",
+            "--slate-date",
+            PRESEASON_SLATE,
+            "--status-path",
+            str(status),
+            "--github-env",
+            str(github_env),
+            "--summary-path",
+            str(summary),
+        ]
+    )
+
+    assert code == 0
+
+    payload = json.loads(status.read_text(encoding="utf-8"))
+
+    assert payload["outcome"] == "PRESEASON_BLOCK"
+    assert payload["run_adaptive_fit"] is False
+
+    assert "RUN_ADAPTIVE=false" in github_env.read_text(encoding="utf-8")
+
+    assert "PRESEASON_BLOCK" in summary.read_text(encoding="utf-8")
+
+
+def test_classifier_cli_propagates_an_unexpected_refresh_failure(tmp_path):
+    status = tmp_path / "refresh.json"
+    github_env = tmp_path / "github_env"
+
+    code = classifier.main(
+        [
+            "--refresh-exit-code",
+            "72",
+            "--slate-date",
+            "2026-11-15",
+            "--status-path",
+            str(status),
+            "--github-env",
+            str(github_env),
+        ]
+    )
+
+    assert code == 72
+
+    assert "RUN_ADAPTIVE=false" in github_env.read_text(encoding="utf-8")
+
+
+def test_workflow_classifies_the_refresh_instead_of_failing_on_exit_20():
+    job = workflow(PRODUCTION_WORKFLOW)["jobs"]["lifecycle"]
+
+    names = [step["name"] for step in job["steps"]]
+
+    refresh_step = job["steps"][
+        names.index("Refresh the current-season rolling state")
+    ]
+
+    script = str(refresh_step["run"])
+
+    assert "ops/classify_refresh_outcome.py" in script
+
+    # The refresh's own exit code has to reach the classifier rather than
+    # terminating the step.
+    assert "--refresh-exit-code" in script
+    assert "set +e" in script
+
+
+def test_workflow_gates_the_adaptive_fit_on_the_python_decision():
+    job = workflow(PRODUCTION_WORKFLOW)["jobs"]["lifecycle"]
+
+    names = [step["name"] for step in job["steps"]]
+
+    adaptive_step = job["steps"][names.index("Run the adaptive daily protocol")]
+
+    assert adaptive_step["if"] == (
+        "env.MODE == 'production' && env.RUN_ADAPTIVE == 'true'"
+    )
+
+    # The classifier, not the YAML, decides the value of that variable.
+    text = PRODUCTION_WORKFLOW.read_text(encoding="utf-8")
+
+    assert "RUN_ADAPTIVE=" not in text
+
+
+def classifier_gate_problems(adaptive_step: dict) -> list[str]:
+    return validator.refresh_classification_problems(
+        "hypothetical.yml",
+        {"lifecycle": {"steps": [adaptive_step]}},
+    )
+
+
+def test_validator_refuses_an_ungated_adaptive_fit():
+    problems = classifier_gate_problems(
+        {
+            "if": "env.MODE == 'production'",
+            "run": "python ops/run_adaptive_daily_fit.py",
+        }
+    )
+
+    assert any("RUN_ADAPTIVE" in problem for problem in problems)
+
+
+def test_validator_refuses_a_missing_refresh_classification():
+    problems = classifier_gate_problems(
+        {
+            "if": "env.MODE == 'production' && env.RUN_ADAPTIVE == 'true'",
+            "run": "python ops/run_adaptive_daily_fit.py",
+        }
+    )
+
+    assert any(
+        "classify_refresh_outcome.py" in problem for problem in problems
+    )
+
+
+def test_preseason_no_op_is_reported_as_success():
+    status = summariser.build_status(
+        {"status": "ok", "blockers": []},
+        None,
+        "c3b20da",
+        "schedule",
+        "production",
+        refresh=classifier.classify(
+            refresh_exit_code=20,
+            slate_date=PRESEASON_SLATE,
+        ),
+    )
+
+    assert status["refresh_outcome"] == "PRESEASON_BLOCK"
+    assert status["failure_stage"] is None
+    assert status["promoted"] is False
+    assert status["candidate_fit_id"] is None
+    assert status["current_good_fit_id_after"] is None
+    assert status["slate_date"] == PRESEASON_SLATE
+
+    rendered = summariser.render(status)
+
+    assert "PRESEASON_BLOCK" in rendered
+    assert "successful outcome" in rendered
+    assert "incumbent production fit is retained" in rendered
+    assert "Failed at stage" not in rendered
+
+
+def test_refresh_failure_names_the_refresh_stage():
+    status = summariser.build_status(
+        {"status": "ok", "blockers": []},
+        None,
+        "c3b20da",
+        "schedule",
+        "production",
+        refresh=classifier.classify(
+            refresh_exit_code=72,
+            slate_date="2026-11-15",
+        ),
+    )
+
+    assert status["failure_stage"] == "refresh"
+    assert status["promoted"] is False
+
+    assert "Failed at stage" in summariser.render(status)
+
+
+def test_a_missing_adaptive_result_after_a_good_refresh_still_fails():
+    """The preseason path must not excuse a genuinely absent adaptive run."""
+    status = summariser.build_status(
+        {"status": "ok", "blockers": []},
+        None,
+        "c3b20da",
+        "schedule",
+        "production",
+        refresh=classifier.classify(
+            refresh_exit_code=0,
+            slate_date="2026-11-15",
+        ),
+    )
+
+    assert status["failure_stage"] == "adaptive_protocol"
+
+
+def test_summary_without_a_refresh_record_is_unchanged():
+    """Reporting stays backward compatible with a run that has none."""
+    status = summariser.build_status(
+        {"status": "ok", "blockers": []},
+        None,
+        "c3b20da",
+        "schedule",
+        "production",
+    )
+
+    assert status["refresh_outcome"] is None
+    assert status["failure_stage"] == "adaptive_protocol"
+
+
+def test_preseason_handling_depends_on_step_3b_without_altering_it():
+    """The fix is orchestration and reporting only; the dependency is one-way."""
+    for path in (
+        PROJECT / "ops" / "preflight_current_season_refresh.py",
+        PROJECT / "ops" / "refresh_current_season_state.py",
+    ):
+        assert "classify_refresh_outcome" not in path.read_text(
+            encoding="utf-8"
+        )
+
+    refresh_wrapper = load_ops("refresh_current_season_state")
+
+    # The stop code the classifier keys on is still owned upstream.
+    assert classifier.REFRESH_EXIT_PRESEASON_BLOCK in (
+        refresh_wrapper.PREFLIGHT_STOP_CODES
+    )
 
 
 # ----------------------------------------------------------------------

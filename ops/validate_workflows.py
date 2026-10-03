@@ -38,6 +38,16 @@ SELF_HOSTED_LABEL = "self-hosted"
 # fit registry and the runner's credentials.
 UNTRUSTED_TRIGGERS = ("pull_request", "pull_request_target")
 
+# What a refresh exit code means for the lifecycle is decided in Python. The
+# workflow must call the classifier and must gate the adaptive daily fit on
+# the variable the classifier writes, so a verified PRESEASON_BLOCK is a safe
+# no-op and every other nonzero refresh code still fails closed.
+REFRESH_CLASSIFIER = "ops/classify_refresh_outcome.py"
+
+ADAPTIVE_ENTRY_POINT = "ops/run_adaptive_daily_fit.py"
+
+ADAPTIVE_GATE_VARIABLE = "RUN_ADAPTIVE"
+
 
 def load(path: Path) -> dict:
     payload = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -165,6 +175,8 @@ def production_problems(
             "scheduled run would use the default branch"
         )
 
+    found += refresh_classification_problems(name, jobs)
+
     for job_name, job in jobs.items():
         labels = runner_labels(job)
 
@@ -195,6 +207,48 @@ def production_problems(
                 found.append(
                     f"{name}: job {job_name} checks out without an explicit "
                     "ref; a scheduled run would take the default branch"
+                )
+
+    return found
+
+
+def refresh_classification_problems(name: str, jobs: dict) -> list[str]:
+    """Require the Python-owned refresh classification, not a YAML guess.
+
+    A raw refresh invocation fails the job on every nonzero exit, including the
+    preseason no-op; a YAML conditional that special-cased exit 20 itself
+    would put the rule in two places. So the classifier must be called and the
+    adaptive daily fit must be gated on the variable it writes.
+    """
+    found: list[str] = []
+
+    for job_name, job in jobs.items():
+        steps = job.get("steps") or []
+
+        commands = "\n".join(str(step.get("run", "")) for step in steps)
+
+        adaptive_steps = [
+            step
+            for step in steps
+            if ADAPTIVE_ENTRY_POINT in str(step.get("run", ""))
+        ]
+
+        if not adaptive_steps:
+            continue
+
+        if REFRESH_CLASSIFIER not in commands:
+            found.append(
+                f"{name}: job {job_name} runs the adaptive daily fit without "
+                f"calling {REFRESH_CLASSIFIER}, so a preseason refresh would "
+                "fail the run instead of being a safe no-op"
+            )
+
+        for step in adaptive_steps:
+            if ADAPTIVE_GATE_VARIABLE not in str(step.get("if", "")):
+                found.append(
+                    f"{name}: job {job_name} does not gate the adaptive "
+                    f"daily fit on env.{ADAPTIVE_GATE_VARIABLE}, so it could "
+                    "run after a refresh that produced no new state"
                 )
 
     return found

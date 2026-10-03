@@ -6,7 +6,7 @@ production lifecycle.
 Workflows: `.github/workflows/nba_production_lifecycle.yml` and
 `.github/workflows/ci.yml`. Supporting tools:
 `ops/production_lifecycle_preflight.py`, `ops/validate_workflows.py`,
-`ops/summarise_production_run.py`.
+`ops/classify_refresh_outcome.py`, `ops/summarise_production_run.py`.
 
 ---
 
@@ -167,11 +167,13 @@ rejected if any of its jobs is self-hosted.
    installed scikit-learn matches the frozen artifacts, check secrets by name,
    require a durable state backend
 4. refresh the current-season rolling state (`ops/refresh_current_season_state.py`)
+   and classify its exit code (`ops/classify_refresh_outcome.py`)
 5. run the adaptive daily protocol (`ops/run_adaptive_daily_fit.py`)
 6. summarise the run and upload diagnostics
 
 Steps 4 and 5 are gated behind the preflight and behind `production` mode, so
-a failed preflight cannot leave a partial mutation.
+a failed preflight cannot leave a partial mutation. Step 5 is additionally
+gated on `RUN_ADAPTIVE`, which step 4 decides in Python — see §7a.
 
 ---
 
@@ -190,10 +192,76 @@ retrain would be both wasteful and wrong.
 
 ---
 
+## 7a. Preseason is a no-op, not a failure
+
+`ops/refresh_current_season_state.py` returns the readiness preflight's own
+exit code unchanged. Before NBA opening day the preflight reports
+`Action: PRESEASON_BLOCK` and exits **20**: the slate date precedes the locked
+opening day, so no 2026-27 regular-season box score can exist yet, nothing is
+fetched and **no byte is written**.
+
+Run [37060158442](https://github.com/Risky-Scout/nba-prop-quant/actions/runs/37060158442)
+showed what that used to cost. On `2026-10-02`, 18 days before the locked
+opening day `2026-10-20`, the refresh step exited 20, the step failed, the
+adaptive stage never ran and the summary reported
+`Failed at stage: adaptive_protocol` — a red run describing a day on which the
+system had correctly done nothing.
+
+`ops/classify_refresh_outcome.py` resolves that. It is the single place that
+maps a refresh exit code onto the lifecycle decision, and it admits exactly
+three answers:
+
+| Refresh exit | Outcome | Lifecycle | Adaptive daily fit |
+| --- | --- | --- | --- |
+| `0` | `REFRESHED` | success | runs |
+| `20`, verified preseason | `PRESEASON_BLOCK` | success | **skipped** |
+| anything else | `REFRESH_FAILED` | **fails closed**, re-raising the refresh code | skipped |
+
+"Verified" is load-bearing. The classifier does not read the preflight's
+human-readable banner and does not take `20` on trust; it re-derives the
+preseason condition — slate date strictly before opening day — from the
+`OPENING_DAY_BY_SEASON` table the preflight itself owns. The opening day is
+**imported, never restated**, so the two cannot drift and this module has no
+opinion of its own about the schedule. An exit 20 on or after opening day, an
+unparseable slate date, or a season with no locked opening day are all
+unverifiable, and every unverifiable case fails closed.
+
+Codes `10`, `30` and `31` — `SKIP_REFRESH`, `HOLD_STANDARD_NOT_READY`,
+`HOLD_ADVANCED_NOT_READY` — are deliberately **not** widened into successes.
+Only `0` and a verified `20` may pass.
+
+The decision reaches the workflow as two variables written to `$GITHUB_ENV`,
+`REFRESH_OUTCOME` and `RUN_ADAPTIVE`, and the adaptive step is gated on the
+latter:
+
+```yaml
+if: env.MODE == 'production' && env.RUN_ADAPTIVE == 'true'
+```
+
+No YAML conditional inspects an exit code, names a date or special-cases `20`.
+`ops/validate_workflows.py` enforces that shape statically: a workflow that
+runs the adaptive daily fit without calling the classifier, or without gating
+on `RUN_ADAPTIVE`, fails validation.
+
+On a preseason day the run is therefore a **success**:
+
+- the refresh writes nothing
+- the adaptive daily fit does not run, so no candidate is fitted or registered
+- the incumbent `current_good_fit_id` is untouched
+- the summary reports `PRESEASON_BLOCK` and says why it is a success
+
+Nothing about this fabricates a slate, moves opening day, or lets the model
+train on information that does not exist.
+
+---
+
 ## 8. Fail closed
 
 Any failure in refresh, fitting, validation, registration or promotion leaves
-the current good fit exactly where it was. The registry's promotion state is
+the current good fit exactly where it was. The preseason no-op in §7a is the
+only refresh exit code other than `0` that is allowed to report success, and
+it is allowed only after the preseason condition has been re-verified from the
+preflight's own locked opening day. The registry's promotion state is
 only replaced by a single atomic write after every check passes, candidates
 are registered immutably and separately from promotion, and Step 3C records no
 promotion call at all.
@@ -207,9 +275,9 @@ summary.
 ## 9. Observability
 
 Every run writes a job summary containing the production code SHA, trigger,
-mode, slate date, training cutoff, preflight result, adaptive action, candidate
-fit id, promotion outcome, current good fit id, validation counts, runtime and
-failure stage, plus any blockers. The same content is written as machine-
+mode, slate date, training cutoff, preflight result, refresh outcome, adaptive
+action, candidate fit id, promotion outcome, current good fit id, validation
+counts, runtime and failure stage, plus any blockers. The same content is written as machine-
 readable JSON and uploaded as a run artifact with a 14-day retention.
 
 No DataFrame is rendered into the log.
