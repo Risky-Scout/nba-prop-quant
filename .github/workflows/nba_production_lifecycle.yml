@@ -55,7 +55,6 @@ on:
     # docs/wizardofodds/PRODUCTION_AUTOMATION.md.
     - cron: '37 9 * * *'
 
-    - cron: '*/5 * * * *'
 permissions:
   contents: read
 
