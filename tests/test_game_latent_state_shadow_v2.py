@@ -28,6 +28,7 @@ than a tolerance on an estimate, so each is tested as one:
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -64,6 +65,7 @@ from nba_prop_quant.research.game_latent_state.repair import (
     fit_repaired_factors,
 )
 from nba_prop_quant.research.game_latent_state.v2 import (
+    AXIS_INDIFFERENCE_TOLERANCE,
     MIN_ROLE_PAIRS,
     REPAIR_CONTROL_SPEC,
     SYMMETRIC_EIGENVALUE_FLOOR_FRACTION,
@@ -77,6 +79,7 @@ from nba_prop_quant.research.game_latent_state.v2 import (
     fit_role_layer,
     fit_v2_factors,
     initial_role_scores,
+    resolve_axis_indifference,
     role_conditioned_rmse,
     role_pair_moments,
     role_pair_shares,
@@ -270,6 +273,63 @@ def test_the_controls_carry_no_symmetric_subspace_or_role_deviation():
         assert spec.role_deviation is False
         assert spec.bridge_weight == 0.0
         assert spec.symmetric_mode == SYMMETRIC_MODE_RESIDUAL
+
+
+@pytest.mark.parametrize(
+    "mode", [SYMMETRIC_MODE_RESIDUAL, SYMMETRIC_MODE_RESERVED]
+)
+def test_the_symmetric_mode_is_inert_at_rank_zero(standardized, role_moments, mode):
+    """Rank zero is the same fit in either mode, and it is the repair control.
+
+    This is what makes a frozen candidate at rank zero unambiguous. The mode
+    field still has to be recorded and round-tripped -- a spec that silently
+    dropped it would fit a different model at any positive rank -- but at the
+    axis's null value it can have no effect, so the recorded value cannot
+    change what was frozen.
+    """
+    kwargs = {"bootstrap": 80, "seed": 73, "role_moments": role_moments}
+    control = fit_v2_factors(standardized, STATS, spec=REPAIR_CONTROL_SPEC, **kwargs)
+    at_null = fit_v2_factors(
+        standardized,
+        STATS,
+        spec=replace(REPAIR_CONTROL_SPEC, name="frozen", symmetric_mode=mode),
+        **kwargs,
+    )
+    assert at_null.loadings.r_symmetric == 0
+    assert at_null.loadings.symmetric is None
+    assert at_null.loadings.role_deviation is None
+    assert at_null.loadings.to_payload() == control.loadings.to_payload()
+
+
+def test_a_spec_round_trips_its_symmetric_mode(standardized, role_moments):
+    """The mode survives ``payload``, which is what the freeze record stores.
+
+    The freeze driver rebuilds the winning spec from the screening artifact
+    field by field, so a field missing from either side of that round trip is a
+    model substituted silently.
+    """
+    spec = v2_full_rank_spec(
+        "round_trip", r_symmetric=2, symmetric_mode=SYMMETRIC_MODE_RESERVED
+    )
+    payload = spec.payload()
+    assert payload["symmetric_mode"] == SYMMETRIC_MODE_RESERVED
+    rebuilt = V2Spec(
+        name=str(payload["name"]),
+        same_shrinkage=str(payload["same_shrinkage"]),
+        same_eb_family=str(payload["same_eb_family"]),
+        cross_shrinkage=str(payload["cross_shrinkage"]),
+        cross_eb_family=str(payload["cross_eb_family"]),
+        shrink_z=float(payload["shrink_z"]),
+        k_game=int(payload["k_game"]),
+        r_contrast=int(payload["r_contrast"]),
+        r_symmetric=int(payload["r_symmetric"]),
+        symmetric_mode=str(payload["symmetric_mode"]),
+        role_deviation=bool(payload["role_deviation"]),
+        role_column=payload["role_column"],
+        bridge_weight=float(payload["bridge_weight"]),
+        temporal_treatment=str(payload["temporal_treatment"]),
+    )
+    assert rebuilt == spec
 
 
 # ----------------------------------------------------------------------
@@ -1164,6 +1224,102 @@ def test_the_symmetric_block_declines_a_gap_that_is_only_rounding_error():
     block = effective_symmetric_block(real, 6, scale=scale)
     assert block is not None
     assert block.shape == (len(STATS), len(STATS))
+
+
+# ----------------------------------------------------------------------
+# an axis whose points are the same model resolves to its null value
+# ----------------------------------------------------------------------
+
+#: Metrics the same-team axis is judged by, as the screening drivers name them.
+JUDGED = ("mean_target_abs_error", "mean_global_latent_rmse", "mean_global_count_rmse")
+
+
+def axis_summaries(**points: dict[str, float]) -> dict[str, dict[str, object]]:
+    """A screening-shaped summary table for the judged metrics only."""
+    return {name: dict(metrics) for name, metrics in points.items()}
+
+
+def test_an_axis_whose_points_all_reproduce_the_null_is_indifferent():
+    """Float reassociation is not a model difference.
+
+    These are the magnitudes the third screening pass actually recorded: every
+    reserved rank matched rank zero to the sixteenth significant digit.
+    """
+    null = {key: value for key, value in zip(JUDGED, (3.7479e-3, 3.6404e-3, 4.4154e-3))}
+    summaries = axis_summaries(
+        null=null,
+        reassociated={key: value * (1.0 + 6.5e-15) for key, value in null.items()},
+        bitwise=dict(null),
+    )
+    verdict = resolve_axis_indifference(
+        summaries, ("reassociated", "bitwise"), null_point="null", metrics=JUDGED
+    )
+    assert verdict.axis_is_indifferent
+    assert verdict.distinguishable == ()
+    assert set(verdict.indistinguishable) == {"reassociated", "bitwise"}
+    assert verdict.relative_deviation["bitwise"] == 0.0
+    assert verdict.relative_deviation["reassociated"] < AXIS_INDIFFERENCE_TOLERANCE
+
+
+def test_a_point_that_moves_one_judged_metric_is_distinguishable():
+    """One metric is enough: the rule is an ``all``, so it cannot be diluted."""
+    null = {key: 1.0 for key in JUDGED}
+    moved = dict(null)
+    moved["mean_global_count_rmse"] = 1.0 - 1e-6
+    summaries = axis_summaries(null=null, earns_it=moved, noise_only=dict(null))
+    verdict = resolve_axis_indifference(
+        summaries, ("earns_it", "noise_only"), null_point="null", metrics=JUDGED
+    )
+    assert not verdict.axis_is_indifferent
+    assert verdict.distinguishable == ("earns_it",)
+    assert verdict.indistinguishable == ("noise_only",)
+
+
+def test_an_axis_with_no_admissible_point_is_not_called_indifferent():
+    """Indifference and an unsatisfiable guard are different findings.
+
+    Both resolve the axis to its null value, but only the first one says the
+    points were measured and found equivalent.
+    """
+    null = {key: 1.0 for key in JUDGED}
+    verdict = resolve_axis_indifference(
+        axis_summaries(null=null), (), null_point="null", metrics=JUDGED
+    )
+    assert not verdict.axis_is_indifferent
+    assert verdict.distinguishable == ()
+    assert verdict.indistinguishable == ()
+
+
+def test_the_indifference_comparison_is_relative_not_absolute():
+    """A tiny metric and a large one are held to the same relative standard."""
+    for magnitude in (1e-8, 1.0, 1e8):
+        inside_of = 1.0 + 0.1 * AXIS_INDIFFERENCE_TOLERANCE
+        outside_of = 1.0 + 10.0 * AXIS_INDIFFERENCE_TOLERANCE
+        null = {key: magnitude for key in JUDGED}
+        inside = {key: magnitude * inside_of for key in JUDGED}
+        outside = {key: magnitude * outside_of for key in JUDGED}
+        verdict = resolve_axis_indifference(
+            axis_summaries(null=null, inside=inside, outside=outside),
+            ("inside", "outside"),
+            null_point="null",
+            metrics=JUDGED,
+        )
+        assert verdict.indistinguishable == ("inside",), magnitude
+        assert verdict.distinguishable == ("outside",), magnitude
+
+
+def test_a_null_metric_of_zero_does_not_divide_by_zero():
+    """The relative denominator is floored, so an exact zero stays comparable."""
+    summaries = axis_summaries(
+        null={key: 0.0 for key in JUDGED},
+        also_zero={key: 0.0 for key in JUDGED},
+        nonzero={key: 1e-12 for key in JUDGED},
+    )
+    verdict = resolve_axis_indifference(
+        summaries, ("also_zero", "nonzero"), null_point="null", metrics=JUDGED
+    )
+    assert verdict.indistinguishable == ("also_zero",)
+    assert verdict.distinguishable == ("nonzero",)
 
 
 # ----------------------------------------------------------------------

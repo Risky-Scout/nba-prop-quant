@@ -100,10 +100,25 @@ def git_sha(ref: str = "HEAD") -> str:
     ).stdout.strip()
 
 
-def spec_from_screening(screening: dict, name: str | None = None) -> V2Spec:
-    """Rebuild the winning :class:`V2Spec` from the screening record."""
+def spec_from_screening(
+    screening: dict,
+    name: str | None = None,
+    resolution: dict | None = None,
+) -> V2Spec:
+    """Rebuild the winning :class:`V2Spec` from the screening record.
+
+    ``resolution`` is the axis-indifference resolution ``03b`` wrote, if one
+    exists. It can only substitute the same-team axis's two fields, and only
+    with values that axis's own grid already contained, so reading it cannot
+    introduce a setting the screen did not score.
+    """
     selected = name or screening["selected_candidate"]
     payload = screening["candidates"][selected]["spec"]
+    r_symmetric = int(payload["r_symmetric"])
+    symmetric_mode = str(payload["symmetric_mode"])
+    if resolution is not None and resolution["stage_two_winner"] == selected:
+        r_symmetric = int(resolution["resolved_r_symmetric"])
+        symmetric_mode = str(resolution["resolved_symmetric_mode"])
     return V2Spec(
         name=str(payload["name"]),
         same_shrinkage=str(payload["same_shrinkage"]),
@@ -113,7 +128,8 @@ def spec_from_screening(screening: dict, name: str | None = None) -> V2Spec:
         shrink_z=float(payload["shrink_z"]),
         k_game=int(payload["k_game"]),
         r_contrast=int(payload["r_contrast"]),
-        r_symmetric=int(payload["r_symmetric"]),
+        r_symmetric=r_symmetric,
+        symmetric_mode=symmetric_mode,
         role_deviation=bool(payload["role_deviation"]),
         role_column=payload["role_column"],
         bridge_weight=float(payload["bridge_weight"]),
@@ -190,9 +206,36 @@ def main() -> None:
     if bridge.get("hyperparameter_selected_here", True):
         raise SystemExit("the count bridge claims it selected a hyperparameter")
 
-    spec = spec_from_screening(screening, args.candidate)
+    # The same-team axis's indifference resolution, when ``03b`` has written
+    # one. It is a decision rule re-applied to the metrics the screen already
+    # persisted, so it substitutes a value from that axis's own grid without
+    # anything being refitted.
+    resolution_path = artifact_dir / "axis_indifference_resolution.json"
+    resolution = (
+        json.loads(resolution_path.read_text(encoding="utf-8"))
+        if resolution_path.exists()
+        else None
+    )
+    if resolution is not None:
+        if resolution["holdout_used_for_selection"]:
+            raise SystemExit("the axis resolution claims the holdout was used")
+        if resolution["resolves"]["artifact_sha256"] != sha256_file(screening_path):
+            raise SystemExit(
+                "the axis resolution was computed against a different "
+                "inner_screening.json; rerun 03b_resolve_axis_indifference.py"
+            )
+        if resolution["refitted_anything"]:
+            raise SystemExit("the axis resolution claims it refitted something")
+
+    spec = spec_from_screening(screening, args.candidate, resolution)
     console.rule(f"Freezing Shadow V2 candidate: {spec.name}")
     console.print(spec.payload())
+    if resolution is not None and resolution["selection_changed"]:
+        console.print(
+            f"  same-team axis resolved to {resolution['resolved_selection']} "
+            f"(screen recorded {resolution['recorded_selection']}): "
+            f"{resolution['reason']}"
+        )
 
     v1_spec = json.loads((v1_dir / FACTOR_SPEC_NAME).read_text(encoding="utf-8"))
     training_seasons = [int(season) for season in v1_spec["training_seasons"]]
@@ -397,7 +440,29 @@ def main() -> None:
     loadings_frame.to_parquet(loadings_path, index=False)
     console.print(loadings_frame.round(4).to_string(index=False))
 
-    selected = screening["candidates"][spec.name]
+    # Inner metrics come from the scored row whose spec *is* the frozen spec.
+    # Normally that is the winner's own row. When the axis resolution moved the
+    # same-team selection, the frozen spec coincides with a different row the
+    # screen also scored, and reading the winner's row would report the fold
+    # metrics of a fit the freeze did not take.
+    scored_as = spec.name
+    if resolution is not None and resolution["selection_changed"]:
+        equivalent = [
+            name
+            for name in resolution["resolved_winner_already_scored_as"]
+            if name in screening["candidates"]
+        ]
+        if not equivalent:
+            raise SystemExit(
+                "the resolved candidate's spec matches no scored screening row, "
+                "so its inner fold metrics are not known without rerunning 03"
+            )
+        scored_as = equivalent[0]
+        console.print(
+            f"  inner fold metrics read from {sorted(equivalent)}, whose spec "
+            "is the frozen spec field for field"
+        )
+    selected = screening["candidates"][scored_as]
     control = screening["candidates"]["control_repair"]
     calibration = temporal["uncertainty_calibration"]
     freeze = {
@@ -417,9 +482,23 @@ def main() -> None:
                 calibration["pooled"]["inflation"]
             ),
         },
-        "axis_selections": screening["axis_selections"],
+        "axis_selections": {
+            **screening["axis_selections"],
+            **(
+                {
+                    "same_team": resolution["resolved_selection"],
+                    "r_symmetric": resolution["resolved_r_symmetric"],
+                    "symmetric_mode": resolution["resolved_symmetric_mode"],
+                }
+                if resolution is not None
+                else {}
+            ),
+        },
+        "axis_selections_as_the_screen_recorded_them": screening["axis_selections"],
+        "axis_indifference_resolution": resolution,
         "inner_folds": screening["inner_folds"],
         "inner_target_verdicts": screening["inner_target_verdicts"][spec.name],
+        "inner_metrics_scored_as": scored_as,
         "inner_metrics": {
             key: selected[key]
             for key in (
@@ -455,6 +534,15 @@ def main() -> None:
             "pre-registered combination set scored on inner targets A-I. No "
             "axis was searched jointly with another and no grid was wider "
             "than five points."
+            + (
+                " The same-team axis's selection was then resolved by "
+                "03b_resolve_axis_indifference.py, which re-applied the "
+                "indifference rule to the fold metrics the screening run had "
+                "already written down. It refitted nothing and could only "
+                "substitute a point from that axis's own grid."
+                if resolution is not None and resolution["selection_changed"]
+                else ""
+            )
         ),
         "fitted_on": {
             "seasons": training_seasons,
@@ -506,6 +594,11 @@ def main() -> None:
         input_fingerprints={
             RESIDUAL_DATASET_NAME: sha256_file(residual_path),
             "inner_screening.json": sha256_file(screening_path),
+            **(
+                {"axis_indifference_resolution.json": sha256_file(resolution_path)}
+                if resolution is not None
+                else {}
+            ),
             "temporal_diagnostic.json": sha256_file(temporal_path),
             "count_bridge.json": sha256_file(bridge_path),
         },

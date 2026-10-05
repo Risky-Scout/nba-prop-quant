@@ -97,6 +97,7 @@ from nba_prop_quant.research.game_latent_state.repair import (  # noqa: E402
 )
 from nba_prop_quant.research.game_latent_state.simulator import GameRoster  # noqa: E402
 from nba_prop_quant.research.game_latent_state.v2 import (  # noqa: E402
+    AXIS_INDIFFERENCE_TOLERANCE,
     MIN_ROLE_PAIRS,
     REPAIR_CONTROL_SPEC,
     ROLE_CELL_REGRESSION_LIMIT,
@@ -106,6 +107,7 @@ from nba_prop_quant.research.game_latent_state.v2 import (  # noqa: E402
     V1_BASE_SPEC,
     V2Spec,
     fit_v2_factors,
+    resolve_axis_indifference,
     role_cell_report,
     role_conditioned_rmse,
     role_pair_moments,
@@ -259,16 +261,13 @@ SYMMETRIC_MODE_REFERENCE = SYMMETRIC_MODE_RESERVED
 #: and the point of screening it is to let the data say which is which.
 CROSS_TEAM_IDENTITY_TOLERANCE = 1e-12
 
-#: Relative difference below which two grid points on one axis are treated as
-#: the same point, so the axis resolves to its null value instead of letting a
-#: tie-break choose. Needed because the symmetric subspace can be an exact
-#: reparameterisation: at the repair's full-rank base every mode and every rank
-#: reproduced the control's fold metrics to the sixteenth significant digit,
-#: and the ordinary tie-break then selected a rank-2 subspace -- twelve
-#: stat-indexed parameters -- on a 1e-15 difference that is float reassociation
-#: and nothing else. Carrying parameters that provably change no fitted
-#: quantity is strictly worse by the parsimony rule the screen already uses.
-AXIS_INDIFFERENCE_TOLERANCE = 1e-9
+#: Metrics the same-team axis is judged by, and therefore the metrics an
+#: admissible point has to move to earn its parameters.
+SAME_TEAM_JUDGED_METRICS: tuple[str, ...] = (
+    "mean_target_abs_error",
+    "mean_global_latent_rmse",
+    "mean_global_count_rmse",
+)
 
 #: The role axis is on or off, with no weight between. There was a weight
 #: grid here, screened as a hierarchical dial between the role layer's gains
@@ -1230,24 +1229,15 @@ def main() -> None:
     # within :data:`AXIS_INDIFFERENCE_TOLERANCE` relatively is not a different
     # model -- it is the same model written differently -- so it cannot earn its
     # parameters and the axis resolves to the null value.
-    judged_on = (
-        "mean_target_abs_error",
-        "mean_global_latent_rmse",
-        "mean_global_count_rmse",
+    judged_on = SAME_TEAM_JUDGED_METRICS
+    indifference = resolve_axis_indifference(
+        summaries,  # type: ignore[arg-type]
+        eligible_ranks,
+        null_point="iso_rsym0",
+        metrics=judged_on,
     )
-
-    def indistinguishable_from_null(name: str) -> bool:
-        null = summaries["iso_rsym0"]
-        return all(
-            abs(float(summaries[name][key]) - float(null[key]))  # type: ignore[arg-type]
-            <= AXIS_INDIFFERENCE_TOLERANCE * max(abs(float(null[key])), 1e-30)  # type: ignore[arg-type]
-            for key in judged_on
-        )
-
-    distinguishable_ranks = [
-        name for name in eligible_ranks if not indistinguishable_from_null(name)
-    ]
-    rank_axis_indifferent = bool(eligible_ranks) and not distinguishable_ranks
+    distinguishable_ranks = list(indifference.distinguishable)
+    rank_axis_indifferent = indifference.axis_is_indifferent
     selected_rank = (
         # The null value for this axis is rank zero: no symmetric subspace, so
         # no same-team repair at all.
@@ -1619,6 +1609,7 @@ def main() -> None:
             "r_symmetric_distinguishable_points": sorted(distinguishable_ranks),
             "axis_indifference_tolerance": AXIS_INDIFFERENCE_TOLERANCE,
             "axis_indifference_metrics": list(judged_on),
+            "r_symmetric_relative_deviation_from_null": indifference.relative_deviation,
             "bridge_guard_unsatisfiable": bool(bridge_guard_unsatisfiable),
             # Why the bridge axis resolved to zero: whether any positive weight
             # was admissible at all, as distinct from zero simply winning.

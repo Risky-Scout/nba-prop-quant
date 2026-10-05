@@ -1,0 +1,102 @@
+{
+  "admissible_points": [
+    "iso_reserved_rsym1",
+    "iso_reserved_rsym2",
+    "iso_reserved_rsym3",
+    "iso_reserved_rsym6",
+    "iso_residual_rsym1",
+    "iso_residual_rsym2",
+    "iso_residual_rsym3",
+    "iso_residual_rsym6"
+  ],
+  "admissible_points_source": "reconstructed by applying the guard thresholds the screening run recorded (latent bound 0.00374964218, cross-team identity tolerance 1e-12) to the metrics it recorded",
+  "axis_is_indifferent": true,
+  "code_sha": "d6e97dc95126a5ace3704b72280937aa4c77ecef",
+  "distinguishable_from_null": [],
+  "holdout_seasons": [
+    2024,
+    2025
+  ],
+  "holdout_used_for_selection": false,
+  "indistinguishable_from_null": [
+    "iso_reserved_rsym1",
+    "iso_reserved_rsym2",
+    "iso_reserved_rsym3",
+    "iso_reserved_rsym6",
+    "iso_residual_rsym1",
+    "iso_residual_rsym2",
+    "iso_residual_rsym3",
+    "iso_residual_rsym6"
+  ],
+  "promotion_eligibility": "SHADOW_RESEARCH_ONLY__NOT_ELIGIBLE_FOR_PROMOTION",
+  "reason": "every admissible point reproduced iso_rsym0 to within 1e-09 relatively on ['mean_target_abs_error', 'mean_global_latent_rmse', 'mean_global_count_rmse'], so the subspace is a reparameterisation at this base and cannot earn its parameters",
+  "recorded_selection": "iso_reserved_rsym2",
+  "recorded_winner_spec": {
+    "bridge_weight": 0.0,
+    "cross_eb_family": "block_diagonal",
+    "cross_shrinkage": "empirical_bayes",
+    "k_game": 6,
+    "r_contrast": 6,
+    "r_symmetric": 2,
+    "role_column": "role_bucket",
+    "role_deviation": false,
+    "same_eb_family": "block_diagonal",
+    "same_shrinkage": "empirical_bayes",
+    "shrink_z": 1.96,
+    "symmetric_mode": "reserved",
+    "temporal_treatment": "T0_pooled_empirical_bayes"
+  },
+  "refitted_anything": false,
+  "relative_deviation_from_null": {
+    "iso_reserved_rsym1": 4.62846850367478e-15,
+    "iso_reserved_rsym2": 6.479855905144693e-15,
+    "iso_reserved_rsym3": 5.322738779225998e-15,
+    "iso_reserved_rsym6": 5.322738779225998e-15,
+    "iso_residual_rsym1": 0.0,
+    "iso_residual_rsym2": 0.0,
+    "iso_residual_rsym3": 0.0,
+    "iso_residual_rsym6": 0.0
+  },
+  "residual_data_read": false,
+  "resolved_r_symmetric": 0,
+  "resolved_selection": "iso_rsym0",
+  "resolved_symmetric_mode": "residual",
+  "resolved_winner_already_scored_as": [
+    "control_repair",
+    "iso_rsym0",
+    "v2_no_repair_twin"
+  ],
+  "resolved_winner_spec": {
+    "bridge_weight": 0.0,
+    "cross_eb_family": "block_diagonal",
+    "cross_shrinkage": "empirical_bayes",
+    "k_game": 6,
+    "r_contrast": 6,
+    "r_symmetric": 0,
+    "role_column": "role_bucket",
+    "role_deviation": false,
+    "same_eb_family": "block_diagonal",
+    "same_shrinkage": "empirical_bayes",
+    "shrink_z": 1.96,
+    "symmetric_mode": "residual",
+    "temporal_treatment": "T0_pooled_empirical_bayes"
+  },
+  "resolves": {
+    "artifact": "inner_screening.json",
+    "artifact_sha256": "7b36d1031fe0a6196531f06c080e3736cf062fa3085baf185541d6c8cbe67d63",
+    "axis": "same_team",
+    "screening_pass": 3
+  },
+  "rule": {
+    "judged_metrics": [
+      "mean_target_abs_error",
+      "mean_global_latent_rmse",
+      "mean_global_count_rmse"
+    ],
+    "null_point": "iso_rsym0",
+    "statement": "An admissible grid point that reproduces the axis's null value on every judged metric to within the tolerance relatively is the same model written differently, so it cannot buy parameters and the axis resolves to its null value.",
+    "tolerance": 1e-09
+  },
+  "selection_changed": true,
+  "stage_two_winner": "v2_iso"
+}

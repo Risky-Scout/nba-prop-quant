@@ -174,6 +174,79 @@ SYMMETRIC_MODES = (SYMMETRIC_MODE_RESIDUAL, SYMMETRIC_MODE_RESERVED)
 #: target leaves behind.
 SYMMETRIC_EIGENVALUE_FLOOR_FRACTION = 1e-8
 
+#: Relative difference below which two grid points on one axis are treated as
+#: the same point, so the axis resolves to its null value instead of letting a
+#: tie-break choose. Needed because the symmetric subspace can be an exact
+#: reparameterisation: at the repair's full-rank base every mode and every rank
+#: reproduced the control's fold metrics to the sixteenth significant digit,
+#: and the ordinary tie-break then selected a rank-2 subspace -- twelve
+#: stat-indexed parameters -- on a 1e-15 difference that is float reassociation
+#: and nothing else. Carrying parameters that provably change no fitted
+#: quantity is strictly worse by the parsimony rule the screen already uses.
+AXIS_INDIFFERENCE_TOLERANCE = 1e-9
+
+
+@dataclass(frozen=True)
+class AxisIndifference:
+    """Whether an axis's admissible points are distinguishable from its null.
+
+    Pure arithmetic over metrics a screen has already recorded, so it can be
+    applied either inside the screen or afterwards to its artifact. The
+    distinction matters: a selection rule that can only run during an
+    expensive fitting pass cannot be corrected without repeating the pass.
+    """
+
+    #: Admissible points that differ from the null point on some judged metric.
+    distinguishable: tuple[str, ...]
+    #: Admissible points that reproduce the null point on every judged metric.
+    indistinguishable: tuple[str, ...]
+    #: Largest relative deviation from the null, per admissible point.
+    relative_deviation: dict[str, float]
+    #: Metrics the comparison read.
+    metrics: tuple[str, ...]
+    tolerance: float
+
+    @property
+    def axis_is_indifferent(self) -> bool:
+        """True when points were admissible and none of them earned its keep."""
+        return bool(self.indistinguishable) and not self.distinguishable
+
+
+def resolve_axis_indifference(
+    summaries: dict[str, dict[str, object]],
+    points: Sequence[str],
+    null_point: str,
+    metrics: Sequence[str],
+    tolerance: float = AXIS_INDIFFERENCE_TOLERANCE,
+) -> AxisIndifference:
+    """Compare each admissible ``points`` entry with ``null_point``.
+
+    ``points`` are the admissible grid points -- those that already cleared
+    the axis's guards -- and ``null_point`` is the axis's null value, which is
+    never itself a candidate for being bought. A point within ``tolerance``
+    relatively of the null on every metric in ``metrics`` is the same model
+    written differently and cannot earn its parameters.
+    """
+    null = summaries[null_point]
+    deviations: dict[str, float] = {}
+    distinguishable: list[str] = []
+    indistinguishable: list[str] = []
+    for name in points:
+        worst = 0.0
+        for key in metrics:
+            baseline = float(null[key])  # type: ignore[arg-type]
+            gap = abs(float(summaries[name][key]) - baseline)  # type: ignore[arg-type]
+            worst = max(worst, gap / max(abs(baseline), 1e-30))
+        deviations[name] = worst
+        (indistinguishable if worst <= tolerance else distinguishable).append(name)
+    return AxisIndifference(
+        distinguishable=tuple(distinguishable),
+        indistinguishable=tuple(indistinguishable),
+        relative_deviation=deviations,
+        metrics=tuple(metrics),
+        tolerance=float(tolerance),
+    )
+
 
 @dataclass(frozen=True)
 class V2Spec:
