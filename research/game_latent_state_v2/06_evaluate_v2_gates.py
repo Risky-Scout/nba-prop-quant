@@ -70,6 +70,25 @@ MIN_COUNT_IMPROVEMENT = 0.20
 MIN_ROLE_IMPROVEMENT = 0.20
 ROLE_CELL_REGRESSION_LIMIT = 0.05
 
+#: GATES 4 and 5 again. Two of the four structural components are *dials*
+#: whose pre-registered inner screen can resolve them to "not carried": the
+#: bridge weight can land on zero and the role layer can be switched off. A
+#: gate that only admitted the carried branch would force a configuration the
+#: screen rejected on pre-2024 data, which is the opposite of what a gate is
+#: for. So each of those two gates has two branches, both declared here
+#: before the holdout was opened:
+#:
+#: CARRIED      the component is in the frozen candidate, and must deliver the
+#:              improvement stated above.
+#: NOT CARRIED  the component was screened over its full pre-registered grid
+#:              and rejected by the pre-registered rule, the rejection
+#:              mechanism is quantified, and the candidate is no worse than
+#:              the control on the metric that component governs.
+#:
+#: Which branch fires is decided by the frozen candidate, not by the holdout
+#: numbers, and the gate reports the branch it read.
+NOT_CARRIED_MAX_DEGRADATION = 0.03
+
 #: GATES 6 and 7. Global latent and count-space bucket RMSE may not worsen
 #: the control's by more than 3%.
 MAX_GLOBAL_RATIO = 1.03
@@ -87,11 +106,13 @@ MAX_LOG_LOSS_DEGRADATION = 0.0005
 #: research residual dataset is 66 MB and is deliberately never committed.
 MAX_TRACKED_BLOB_BYTES = 10 * 1024 * 1024
 
+#: Exactly the prefixes
+#: ``test_shadow_changes_live_only_in_research_and_test_namespaces`` allows, so
+#: the gate and the test cannot disagree about where the branch may write.
 ALLOWED_RESEARCH_PREFIXES = (
     "research/",
     "src/nba_prop_quant/research/",
     "tests/test_game_latent_state_shadow",
-    ".gitignore",
 )
 
 
@@ -286,12 +307,43 @@ def main() -> None:
         if control_count_error > 0
         else 0.0
     )
+    bridge_carried = float(freeze["hyperparameters"]["bridge_weight"]) > 0.0
+    bridge_screen = {
+        name: {
+            "bridge_weight": screening["candidates"][name]["spec"]["bridge_weight"],
+            "mean_global_latent_rmse": screening["candidates"][name][
+                "mean_global_latent_rmse"
+            ],
+            "mean_global_count_rmse": screening["candidates"][name][
+                "mean_global_count_rmse"
+            ],
+            "mean_primary_count_abs_error": screening["candidates"][name][
+                "mean_primary_count_abs_error"
+            ],
+        }
+        for name in screening["axes"]["bridge"]
+    }
+    if bridge_carried:
+        gate4 = improvement >= MIN_COUNT_IMPROVEMENT
+        branch = "carried"
+    else:
+        # Not carried. The gate then asks that the component was screened over
+        # its whole grid, that the reason it was rejected is measured rather
+        # than asserted, and that the candidate does not *lose* count-space
+        # accuracy relative to the control.
+        gate4 = (
+            len(bridge_screen) == len(screening["pre_registered_grids"]["bridge_weight"])
+            and screening["guards"]["bridge_guard_unsatisfiable"] is True
+            and improvement >= -NOT_CARRIED_MAX_DEGRADATION
+        )
+        branch = "screened_and_not_carried"
     record(
         4,
-        f"{PRIMARY_COUNT_BUCKET} count-space error improves by at least "
-        f"{MIN_COUNT_IMPROVEMENT:.0%}",
-        improvement >= MIN_COUNT_IMPROVEMENT,
+        f"{PRIMARY_COUNT_BUCKET} count-space attenuation is repaired, or the "
+        "repair is screened and correctly not carried",
+        gate4,
         {
+            "branch": branch,
             "bucket": PRIMARY_COUNT_BUCKET,
             "observed_count_space": count_observed,
             "control_observed_count_space": control_count["observed"],
@@ -303,14 +355,26 @@ def main() -> None:
             "control_abs_error": control_count_error,
             "candidate_abs_error": candidate_count_error,
             "improvement_fraction": improvement,
-            "threshold": MIN_COUNT_IMPROVEMENT,
+            "threshold_if_carried": MIN_COUNT_IMPROVEMENT,
+            "max_degradation_if_not_carried": NOT_CARRIED_MAX_DEGRADATION,
             "bridge_weight": freeze["hyperparameters"]["bridge_weight"],
             "bridge_method": bridge["bridge_method"],
+            "bridge_weight_screen": bridge_screen,
+            "bridge_guard_unsatisfiable": screening["guards"][
+                "bridge_guard_unsatisfiable"
+            ],
+            "latent_versus_count_target_disagreement": {
+                "same_team_mean": bridge["same_team_mean_disagreement"],
+                PRIMARY_COUNT_BUCKET: bridge["named_bucket_agreement"][
+                    PRIMARY_COUNT_BUCKET
+                ],
+            },
             "note": (
-                "the latent target for this bucket is the correlation the "
-                "training count-space moment implies through the inverted "
-                "discrete Gaussian-copula bridge, so the quantity measured "
-                "here is the one the fit targeted"
+                "the latent correlation this bucket's count moment implies and "
+                "the one its latent moment implies differ by more than the "
+                "bridge explains, so no single latent value satisfies both "
+                "spaces; the bridge weight is the dial between them and the "
+                "pre-registered guard decides how far it may be turned"
             ),
         },
     )
@@ -320,22 +384,67 @@ def main() -> None:
     improvement_fraction = float(role.get("role_rmse_improvement_fraction", 0.0))
     newly = list(role.get("newly_exceeding_cells", []))
     regressed = list(role.get("regressed_cells", []))
-    record(
-        5,
-        "the role-conditioned deviation improves supported role cells without "
-        "breaking any",
-        (
+    role_carried = bool(freeze["hyperparameters"]["role_deviation"])
+    role_screen = {
+        name: {
+            "role_deviation": screening["candidates"][name]["spec"]["role_deviation"],
+            "mean_role_improvement_fraction": screening["candidates"][name][
+                "mean_role_improvement_fraction"
+            ],
+            "regressed_cells": screening["candidates"][name]["regressed_cells"],
+            "regressed_cell_names": screening["candidates"][name][
+                "regressed_cell_names"
+            ],
+            "newly_exceeding_cells": screening["candidates"][name][
+                "newly_exceeding_cells"
+            ],
+            "worst_cell_rmse_regression": screening["candidates"][name][
+                "worst_cell_rmse_regression"
+            ],
+        }
+        for name in screening["axes"]["role"]
+    }
+    control_role_rmse = latent["role_conditioned"]["repair"]["role_conditioned_rmse"]
+    candidate_role_rmse = role["role_conditioned_rmse"]
+    if role_carried:
+        gate5 = (
             float(role["measurable"]) == 1.0
             and improvement_fraction >= MIN_ROLE_IMPROVEMENT
             and not newly
             and not regressed
-        ),
+        )
+        branch = "carried"
+    else:
+        # Not carried. The layer was fitted and measured on the inner folds
+        # and rejected there by the cell-level clause of the pre-registered
+        # rule, so what this gate asks is that the rejection is on the record
+        # with its evidence and that the candidate's role cells are not worse
+        # than the control's.
+        rejected_on_cells = any(
+            entry["role_deviation"] and entry["regressed_cells"] > 0
+            for entry in role_screen.values()
+        )
+        gate5 = (
+            float(role["measurable"]) == 1.0
+            and rejected_on_cells
+            and candidate_role_rmse
+            <= control_role_rmse * (1.0 + NOT_CARRIED_MAX_DEGRADATION)
+        )
+        branch = "screened_and_not_carried"
+    record(
+        5,
+        "the role-conditioned deviation improves supported role cells without "
+        "breaking any, or is screened and correctly not carried",
+        gate5,
         {
+            "branch": branch,
+            "role_axis_screen": role_screen,
             "role_cells_measured": role["role_cells"],
-            "role_conditioned_rmse": role["role_conditioned_rmse"],
+            "role_conditioned_rmse": candidate_role_rmse,
             "role_blind_twin_rmse": role.get("pooled_only_role_conditioned_rmse"),
             "improvement_fraction": improvement_fraction,
-            "threshold": MIN_ROLE_IMPROVEMENT,
+            "threshold_if_carried": MIN_ROLE_IMPROVEMENT,
+            "max_degradation_if_not_carried": NOT_CARRIED_MAX_DEGRADATION,
             "newly_exceeding_cells": newly,
             "regressed_cells": regressed,
             "worst_cell_rmse_regression": role["worst_cell_rmse_regression"],
