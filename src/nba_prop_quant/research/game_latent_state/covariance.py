@@ -69,6 +69,44 @@ he receives the additive factors plus his own share of the zero-sum term
 rather than the negative share a distinct teammate receives. When ``Q = 0``
 this reduces to ``L_i L_i^T = A + B = S``.
 
+The symmetric same-team subspace
+-------------------------------
+``A`` and ``B`` are each realised by a loading block, and the two observable
+combinations read them differently: ``X = A - B`` differences the blocks while
+``S = A + B - Q`` sums them. A loading column appended to *both* blocks
+therefore enters ``S`` twice and cancels from ``X`` exactly::
+
+    A_new = A + U U',  B_new = B + U U'
+    X_new = A_new - B_new = A - B = X        (per pair, not just in expectation)
+    S_new = A_new + B_new - Q = S + 2 U U'
+
+``symmetric`` holds that ``U``. It is the construction that lets a same-team
+deficiency be repaired without any collateral movement in the cross-team
+block: no hyperparameter governing ``U`` can reach ``X`` at all, because ``U``
+is algebraically absent from it. PSD is preserved because ``A_new`` and
+``B_new`` remain Grams.
+
+Role-conditioned deviations
+---------------------------
+``role_scale`` is a *multiplicative* layer, and because ``fit_role_scales``
+renormalises it so ``sum_r p_r s_r == 1``, the pair-weighted mean of
+``s_a s_b`` is exactly 1 and the pooled block is untouched -- which also means
+the layer cannot express role heterogeneity in the pooled buckets at all.
+
+``role_deviation`` is the additive alternative. The symmetric block becomes
+player-specific, ``U_i = U + h(role_i) W``, so for a same-team pair
+
+    S(a, b) = A + B - Q + 2 (U + h_a W)(U + h_b W)'
+            = S + 2 [h_b U W' + h_a W U' + h_a h_b W W']
+
+The linear terms are what let a role cell sit *below* the pooled value, which
+a purely quadratic form could not do. With ``h`` weighted-centred so
+``sum_r p_r h_r == 0`` and roles independent across distinct players, both
+``E[h_a]`` and ``E[h_a h_b]`` vanish and the pooled block is exactly ``S``
+again: the role layer explains heterogeneity without moving the pooled target.
+Because the deviation lives in the symmetric subspace it is likewise absent
+from ``X``. A role the fit never saw gets ``h = 0``, i.e. the pooled loading.
+
 No parameter in ``L`` or ``Q`` is indexed by a player or a player pair, so the
 layer extends to unseen players and new roster combinations without refitting.
 """
@@ -157,6 +195,9 @@ class SharedFactorLoadings:
     team_contrast: np.ndarray
     competition: np.ndarray | None = None
     role_scale: Mapping[str, float] = field(default_factory=dict)
+    symmetric: np.ndarray | None = None
+    role_deviation: np.ndarray | None = None
+    role_offset: Mapping[str, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.game.ndim != 2 or self.game.shape[0] != len(self.stats):
@@ -172,6 +213,19 @@ class SharedFactorLoadings:
             self.competition.ndim != 2 or self.competition.shape[0] != len(self.stats)
         ):
             raise ValueError("competition loadings must have shape (n_stats, r_comp)")
+        if self.symmetric is not None and (
+            self.symmetric.ndim != 2 or self.symmetric.shape[0] != len(self.stats)
+        ):
+            raise ValueError("symmetric loadings must have shape (n_stats, r_sym)")
+        if self.role_deviation is not None:
+            if self.symmetric is None:
+                raise ValueError(
+                    "role_deviation needs a symmetric block to deviate from"
+                )
+            if self.role_deviation.shape != self.symmetric.shape:
+                raise ValueError(
+                    "role_deviation must have the same shape as symmetric"
+                )
 
     @property
     def k_game(self) -> int:
@@ -192,55 +246,137 @@ class SharedFactorLoadings:
     def r_contrast(self) -> int:
         return int(self.contrast_matrix.shape[1])
 
+    @property
+    def r_symmetric(self) -> int:
+        return 0 if self.symmetric is None else int(self.symmetric.shape[1])
+
+    @property
+    def design_width(self) -> int:
+        """Columns in :meth:`design`, i.e. the shared-factor rank per player."""
+        return self.k_game + self.r_contrast + 2 * self.r_symmetric
+
+    def symmetric_block(self, role: str | None = None) -> np.ndarray:
+        """``U + h(role) W``: this role's symmetric loading block.
+
+        An unseen role gets ``h = 0``, which is the pooled block.
+        """
+        if self.symmetric is None:
+            return np.zeros((len(self.stats), 0), dtype=float)
+        if self.role_deviation is None:
+            return self.symmetric
+        return self.symmetric + self.offset_for_role(role) * self.role_deviation
+
+    def symmetric_gram(self, role_a: str | None = None, role_b: str | None = None):
+        """``U_a U_b'``: the symmetric subspace's contribution for a role pair."""
+        return self.symmetric_block(role_a) @ self.symmetric_block(role_b).T
+
     def competition_gram(self) -> np.ndarray:
         """``Q``: the within-team zero-sum Gram."""
         if self.competition is None:
             return np.zeros((len(self.stats), len(self.stats)), dtype=float)
         return self.competition @ self.competition.T
 
+    def game_gram(self) -> np.ndarray:
+        """``A``: the team-blind Gram, including the symmetric subspace."""
+        return self.game @ self.game.T + self.symmetric_gram()
+
+    def contrast_gram(self) -> np.ndarray:
+        """``B``: the team-contrast Gram, including the symmetric subspace."""
+        contrast = self.contrast_matrix
+        return contrast @ contrast.T + self.symmetric_gram()
+
     def additive_gram(self) -> np.ndarray:
         """``A + B``: the team-blind plus team-contrast Gram."""
         contrast = self.contrast_matrix
-        return self.game @ self.game.T + contrast @ contrast.T
+        return (
+            self.game @ self.game.T
+            + contrast @ contrast.T
+            + 2.0 * self.symmetric_gram()
+        )
 
     def same_team_correlation(self) -> np.ndarray:
-        """``S = A + B - Q``: distinct players, same team."""
+        """``S = A + B - Q``: distinct players, same team, roles pooled."""
         return self.additive_gram() - self.competition_gram()
 
+    def same_team_correlation_for_roles(
+        self,
+        role_a: str | None,
+        role_b: str | None,
+    ) -> np.ndarray:
+        """``S`` for one ordered role pair, symmetrised over the pair order.
+
+        Both role layers enter: the multiplicative ``role_scale`` as
+        ``s_a s_b`` and the additive ``role_deviation`` through ``U_a U_b'``.
+        """
+        contrast = self.contrast_matrix
+        scale = self.scale_for_role(role_a) * self.scale_for_role(role_b)
+        cross = self.symmetric_gram(role_a, role_b)
+        base = self.game @ self.game.T + contrast @ contrast.T
+        same = base + (cross + cross.T)
+        return scale * (same - self.competition_gram())
+
     def cross_team_correlation(self) -> np.ndarray:
-        """``X = A - B``: distinct players, opposite teams."""
+        """``X = A - B``: distinct players, opposite teams.
+
+        The symmetric subspace cancels here identically, so neither it nor any
+        role deviation built on it can move this block.
+        """
         contrast = self.contrast_matrix
         return self.game @ self.game.T - contrast @ contrast.T
 
-    def within_player_shared_gram(self, team_size: int) -> np.ndarray:
+    def within_player_shared_gram(
+        self,
+        team_size: int,
+        role: str | None = None,
+    ) -> np.ndarray:
         """``A + B + (n - 1) Q``: shared contribution to a player's own block."""
-        return self.additive_gram() + max(int(team_size) - 1, 0) * self.competition_gram()
+        contrast = self.contrast_matrix
+        own = self.symmetric_gram(role, role)
+        additive = (
+            self.game @ self.game.T + contrast @ contrast.T + 2.0 * own
+        )
+        scale = self.scale_for_role(role) ** 2
+        return scale * (
+            additive + max(int(team_size) - 1, 0) * self.competition_gram()
+        )
 
     def design(self, side: int, role: str | None = None) -> np.ndarray:
         """Additive shared-factor design rows for one player.
 
-        Shape ``(n_stats, k_game + r_contrast)``. ``side`` is ``+1`` for one
-        team and ``-1`` for the other; it flips the sign of every team-contrast
-        loading and nothing else. The competition family is absent here because
-        it is not an independent per-player factor: it enters through the team
-        projection in :func:`build_game_covariance`.
+        Shape ``(n_stats, design_width)``. ``side`` is ``+1`` for one team and
+        ``-1`` for the other; it flips the sign of every team-contrast loading
+        and nothing else. The symmetric block appears twice, once unsigned and
+        once signed, which is exactly what makes it double in ``S`` and cancel
+        in ``X``. The competition family is absent here because it is not an
+        independent per-player factor: it enters through the team projection in
+        :func:`build_game_covariance`.
         """
         if side not in (1, -1):
             raise ValueError("side must be +1 or -1")
         scale = self.scale_for_role(role)
-        contrast = (side * scale) * self.contrast_matrix
-        return np.hstack([scale * self.game, contrast])
+        symmetric = self.symmetric_block(role)
+        unsigned = np.hstack([self.game, symmetric])
+        signed = np.hstack([self.contrast_matrix, symmetric])
+        return np.hstack([scale * unsigned, (side * scale) * signed])
 
     def scale_for_role(self, role: str | None) -> float:
         if role is None:
             return 1.0
         return float(self.role_scale.get(role, 1.0))
 
+    def offset_for_role(self, role: str | None) -> float:
+        if role is None:
+            return 0.0
+        return float(self.role_offset.get(role, 0.0))
+
     def to_payload(self) -> dict[str, object]:
         # No ``r_contrast`` key: the contrast rank is recoverable from the
         # shape of ``team_contrast_loadings``, and leaving it out keeps this
-        # payload byte-identical to the accepted shadow V1 artifact.
-        return {
+        # payload byte-identical to the accepted shadow V1 artifact. The
+        # symmetric and role-deviation families are emitted only when present,
+        # for the same reason: a pooled fit must round-trip to the same bytes
+        # the accepted artifacts carry.
+        payload: dict[str, object] = {
             "stats": list(self.stats),
             "k_game": self.k_game,
             "r_competition": self.r_competition,
@@ -251,10 +387,20 @@ class SharedFactorLoadings:
             ),
             "role_scale": {str(key): float(value) for key, value in self.role_scale.items()},
         }
+        if self.symmetric is not None:
+            payload["symmetric_loadings"] = self.symmetric.tolist()
+        if self.role_deviation is not None:
+            payload["role_deviation_loadings"] = self.role_deviation.tolist()
+            payload["role_offset"] = {
+                str(key): float(value) for key, value in self.role_offset.items()
+            }
+        return payload
 
     @classmethod
     def from_payload(cls, payload: Mapping[str, object]) -> SharedFactorLoadings:
         competition = payload.get("competition_loadings")
+        symmetric = payload.get("symmetric_loadings")
+        role_deviation = payload.get("role_deviation_loadings")
         return cls(
             stats=tuple(payload["stats"]),  # type: ignore[arg-type]
             game=np.asarray(payload["game_loadings"], dtype=float),
@@ -265,6 +411,18 @@ class SharedFactorLoadings:
             role_scale={
                 str(key): float(value)
                 for key, value in dict(payload.get("role_scale", {})).items()  # type: ignore[arg-type]
+            },
+            symmetric=(
+                None if symmetric is None else np.asarray(symmetric, dtype=float)
+            ),
+            role_deviation=(
+                None
+                if role_deviation is None
+                else np.asarray(role_deviation, dtype=float)
+            ),
+            role_offset={
+                str(key): float(value)
+                for key, value in dict(payload.get("role_offset", {})).items()  # type: ignore[arg-type]
             },
         )
 
@@ -370,7 +528,7 @@ def build_game_covariance(
         team_sizes[team_id] = team_sizes.get(team_id, 0) + 1
 
     size = len(dimensions)
-    shared = np.zeros((size, loadings.k_game + loadings.r_contrast), dtype=float)
+    shared = np.zeros((size, loadings.design_width), dtype=float)
     competition_gram = loadings.competition_gram()
     has_competition = bool(np.any(competition_gram))
     row_scale = np.ones(size, dtype=float)
