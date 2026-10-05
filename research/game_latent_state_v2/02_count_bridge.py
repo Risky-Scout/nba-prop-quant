@@ -63,7 +63,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from nba_prop_quant.research.game_latent_state.bridge import (  # noqa: E402
+    BRIDGE_METHOD_MEHLER,
     DEFAULT_GAUSS_NODES,
+    DEFAULT_MEHLER_TERMS,
     BridgeNotIdentified,
 )
 from nba_prop_quant.research.game_latent_state.countspace import (  # noqa: E402
@@ -391,6 +393,8 @@ def main() -> None:
         "bootstrap_draws": int(args.bootstrap),
         "seed": int(args.seed),
         "bridge_pairs": int(args.bridge_pairs),
+        "bridge_method": BRIDGE_METHOD_MEHLER,
+        "bridge_series_terms": int(DEFAULT_MEHLER_TERMS),
         "bridge_panels": int(DEFAULT_BRIDGE_PANELS),
         "bridge_nodes": int(DEFAULT_GAUSS_NODES),
         "bridge_rho_max": float(DEFAULT_BRIDGE_RHO_MAX),
