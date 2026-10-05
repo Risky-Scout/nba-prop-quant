@@ -281,6 +281,16 @@ def simulated_pair_moments(
             cross += (outer + outer.T) / simulation.simulations
             cross_pairs += 2.0 * counts[first] * counts[second]
 
+    # Divide through by the pair counts so the returned matrices are mean
+    # correlations, the same units `factors.pair_moments` reports. The
+    # accumulations above are sums over ordered pairs, which are not
+    # comparable with an observed correlation and would be re-weighted by the
+    # pair count a second time by a caller pooling across games.
+    if same_pairs > 0:
+        same = same / same_pairs
+    if cross_pairs > 0:
+        cross = cross / cross_pairs
+
     return same, cross, same_pairs, cross_pairs
 
 

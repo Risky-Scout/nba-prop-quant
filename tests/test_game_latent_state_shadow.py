@@ -59,6 +59,7 @@ from nba_prop_quant.research.game_latent_state.validation import (
     analytic_marginals,
     generate_joint_events,
     marginal_preservation,
+    simulated_pair_moments,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -832,6 +833,68 @@ def test_competition_gate_abstains_without_enough_bootstrap_draws():
     active, evidence = competition_gate(moments, shrunk)
     assert active is False
     assert evidence["available_draws"] == 0.0
+
+
+def test_simulated_pair_moments_are_correlations_not_pair_sums():
+    """The returned matrices must be in the units an observed correlation is in.
+
+    The accumulation inside is a sum over ordered pairs. Returning that sum
+    rather than the mean puts the result a factor of ~900 (the pairs in one
+    game) away from a correlation, and a caller pooling across games would
+    weight it by the pair count a second time. Checked against the direct
+    pairwise computation the fast accumulation stands in for.
+    """
+    roster = make_roster(stats=STATS)
+    fitted = {stat: nb_marginal() for stat in STATS}
+    loadings = make_loadings(STATS)
+    simulation = simulate_game(
+        roster,
+        marginals=fitted,
+        loadings=loadings,
+        within_player=within_player_map(roster),
+        simulations=4000,
+        seed=5,
+    )
+    reference = analytic_marginals(roster, fitted)
+    same, cross, same_pairs, cross_pairs = simulated_pair_moments(
+        simulation, reference
+    )
+
+    standardized = np.empty_like(simulation.draws, dtype=float)
+    for player_index, player_id in enumerate(simulation.player_ids):
+        for stat_index, stat in enumerate(simulation.stats):
+            analytic = reference[(player_id, stat)]
+            standardized[:, player_index, stat_index] = (
+                simulation.draws[:, player_index, stat_index] - analytic.mean()
+            ) / np.sqrt(analytic.variance())
+
+    teams = np.asarray(simulation.team_ids)
+    n_players = len(simulation.player_ids)
+    direct_same = np.zeros_like(same)
+    direct_cross = np.zeros_like(cross)
+    n_same = n_cross = 0
+    for a in range(n_players):
+        for b in range(n_players):
+            if a == b:
+                continue
+            block = np.einsum(
+                "ds,dt->st", standardized[:, a, :], standardized[:, b, :]
+            ) / simulation.simulations
+            if teams[a] == teams[b]:
+                direct_same += block
+                n_same += 1
+            else:
+                direct_cross += block
+                n_cross += 1
+
+    assert same_pairs == n_same
+    assert cross_pairs == n_cross
+    assert np.allclose(same, direct_same / n_same, atol=1e-10)
+    assert np.allclose(cross, direct_cross / n_cross, atol=1e-10)
+
+    # A correlation cannot leave [-1, 1]; a pair-sum would blow straight past it.
+    assert np.all(np.abs(same) <= 1.0)
+    assert np.all(np.abs(cross) <= 1.0)
 
 
 def test_role_scales_are_normalised_to_preserve_the_pooled_level():
