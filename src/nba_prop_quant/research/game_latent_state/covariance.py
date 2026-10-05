@@ -1,0 +1,358 @@
+"""Hierarchical latent-state covariance for one game, PSD by construction.
+
+SHADOW / RESEARCH ONLY.
+
+Contract
+--------
+For a game with player-stat dimensions ``(i, s)``, the shadow layer builds a
+latent Gaussian correlation matrix ``Sigma`` with two properties:
+
+1.  **Within-player block is pinned.**  ``Sigma[(i, s), (i, t)]`` equals the
+    incumbent ``GaussianCopula`` correlation ``R_i[s, t]`` exactly. The new
+    layer therefore induces *identically* the incumbent same-player copula on
+    every single-player margin, so same-player dependence cannot be applied
+    twice. This is integration strategy **B** from the brief: the existing
+    same-player block is preserved and the new factors are added around it.
+
+2.  **Cross-player blocks come only from shared factors.**
+    ``Sigma[(i, s), (j, t)] = c_i c_j * (L_i L_j^T)[s, t]`` for ``i != j``.
+
+The algebra that makes both hold at once::
+
+    Sigma = (C L)(C L)^T + blockdiag_i( R_i - c_i^2 L_i L_i^T )
+
+``L_i L_i^T`` is the shared-factor contribution to player ``i``'s own block,
+so subtracting it from ``R_i`` in the block-diagonal term leaves the within-
+player block at exactly ``R_i``. ``Sigma`` is a sum of a Gram matrix and a
+block-diagonal matrix, hence PSD whenever every residual block
+``D_i = R_i - c_i^2 L_i L_i^T`` is PSD; ``c_i`` is the largest scalar in
+``(0, 1]`` for which that holds, so PSD is guaranteed by construction rather
+than by a post-hoc eigenvalue repair. Because ``diag(R_i) = 1`` and
+``diag(D_i) = 1 - c_i^2 diag(L_i L_i^T)``, the unit diagonal is exact and no
+renormalisation is needed.
+
+Identification
+--------------
+Let ``S`` be the stat-by-stat correlation between two *distinct* players on
+the same team and ``X`` the same between two players on opposite teams. The
+model implies
+
+    S = A + B,    X = A - B,    A = (S + X) / 2,    B = (S - X) / 2
+
+where ``A`` is the game-level (team-blind) Gram and ``B`` the team-contrast
+Gram. A team-state factor that both teams load on *identically* is
+indistinguishable from a game-level factor, so only the antisymmetric part of
+the own-team/opponent-team loadings is separately identified. The canonical
+parameterisation used here is therefore
+
+* ``K`` game-level factors with loadings ``gamma[s, k]`` from a rank-``K``
+  PSD factorisation of ``A`` (factor 1 is the pace/volume factor, factor 2
+  the rebound-environment contrast, fixed by eigenvalue ordering), and
+* one signed team-contrast factor with loading ``+d[s]`` for the player's own
+  team and ``-d[s]`` for the opponent, from the rank-1 PSD factorisation of
+  ``B``.
+
+``L_i L_i^T`` then equals ``A + B = S``: the shared-factor contribution to a
+player's own block is the same-team cross-player correlation, which is the
+right answer because a player is on the same team as himself.
+
+No parameter in ``L`` is indexed by a player or a player pair, so the layer
+extends to unseen players and new roster combinations without refitting.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+
+import numpy as np
+
+# A residual block is accepted as PSD when its smallest eigenvalue is at or
+# above this floor. Tighter than float64 noise on a 6x6 correlation matrix,
+# loose enough that an exactly-singular block is not rejected.
+PSD_EIGENVALUE_FLOOR = -1e-10
+
+# Lower bound for the shared-loading shrink search. A game whose incumbent
+# within-player block cannot absorb even this much shared structure is
+# reported rather than silently simulated.
+MIN_SHARED_SHRINK = 1e-6
+
+
+def min_eigenvalue(matrix: np.ndarray) -> float:
+    return float(np.min(np.linalg.eigvalsh(0.5 * (matrix + matrix.T))))
+
+
+def project_psd_rank(matrix: np.ndarray, rank: int) -> tuple[np.ndarray, np.ndarray]:
+    """Best rank-``rank`` PSD approximation and its loading factor.
+
+    Returns ``(approximation, loadings)`` with
+    ``approximation == loadings @ loadings.T``. Negative eigenvalues are
+    dropped, which is the projection onto the PSD cone, not a clip of the
+    matrix entries.
+    """
+    if rank < 0:
+        raise ValueError("rank must be non-negative")
+
+    symmetric = 0.5 * (np.asarray(matrix, dtype=float) + np.asarray(matrix, dtype=float).T)
+    eigenvalues, eigenvectors = np.linalg.eigh(symmetric)
+
+    order = np.argsort(eigenvalues)[::-1]
+    eigenvalues = eigenvalues[order]
+    eigenvectors = eigenvectors[:, order]
+
+    keep = min(rank, symmetric.shape[0])
+    selected = np.clip(eigenvalues[:keep], 0.0, None)
+    loadings = eigenvectors[:, :keep] * np.sqrt(selected)
+    return loadings @ loadings.T, loadings
+
+
+@dataclass(frozen=True)
+class SharedFactorLoadings:
+    """Per-stat loadings on the identified shared factors.
+
+    ``game`` has shape ``(n_stats, k_game)`` and ``team_contrast`` shape
+    ``(n_stats,)``. ``role_scale`` maps a role label to a multiplicative
+    scalar applied to every shared loading of a player in that role; a role
+    the fit never saw falls back to ``1.0``, which is the pooled estimate.
+    """
+
+    stats: tuple[str, ...]
+    game: np.ndarray
+    team_contrast: np.ndarray
+    role_scale: Mapping[str, float] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.game.ndim != 2 or self.game.shape[0] != len(self.stats):
+            raise ValueError("game loadings must have shape (n_stats, k_game)")
+        if self.team_contrast.shape != (len(self.stats),):
+            raise ValueError("team_contrast must have shape (n_stats,)")
+
+    @property
+    def k_game(self) -> int:
+        return int(self.game.shape[1])
+
+    def same_team_correlation(self) -> np.ndarray:
+        """``S``: distinct players, same team."""
+        return self.game @ self.game.T + np.outer(
+            self.team_contrast, self.team_contrast
+        )
+
+    def cross_team_correlation(self) -> np.ndarray:
+        """``X``: distinct players, opposite teams."""
+        return self.game @ self.game.T - np.outer(
+            self.team_contrast, self.team_contrast
+        )
+
+    def design(self, side: int, role: str | None = None) -> np.ndarray:
+        """Shared-factor design rows for one player, shape ``(n_stats, k+1)``.
+
+        ``side`` is ``+1`` for one team and ``-1`` for the other; it flips the
+        sign of the team-contrast loading and nothing else.
+        """
+        if side not in (1, -1):
+            raise ValueError("side must be +1 or -1")
+        scale = float(self.role_scale.get(role, 1.0)) if role is not None else 1.0
+        contrast = (side * scale) * self.team_contrast.reshape(-1, 1)
+        return np.hstack([scale * self.game, contrast])
+
+    def to_payload(self) -> dict[str, object]:
+        return {
+            "stats": list(self.stats),
+            "k_game": self.k_game,
+            "game_loadings": self.game.tolist(),
+            "team_contrast_loadings": self.team_contrast.tolist(),
+            "role_scale": {str(key): float(value) for key, value in self.role_scale.items()},
+        }
+
+    @classmethod
+    def from_payload(cls, payload: Mapping[str, object]) -> SharedFactorLoadings:
+        return cls(
+            stats=tuple(payload["stats"]),  # type: ignore[arg-type]
+            game=np.asarray(payload["game_loadings"], dtype=float),
+            team_contrast=np.asarray(payload["team_contrast_loadings"], dtype=float),
+            role_scale={
+                str(key): float(value)
+                for key, value in dict(payload.get("role_scale", {})).items()  # type: ignore[arg-type]
+            },
+        )
+
+    @classmethod
+    def independent(cls, stats: Sequence[str], k_game: int = 2) -> SharedFactorLoadings:
+        """Zero shared structure: the conditional-independence baseline.
+
+        Within-player blocks still come from the incumbent copula, so this is
+        BASELINE 1 (cross-player independence, same-player dependence
+        preserved) rather than full independence.
+        """
+        stats = tuple(stats)
+        return cls(
+            stats=stats,
+            game=np.zeros((len(stats), k_game), dtype=float),
+            team_contrast=np.zeros(len(stats), dtype=float),
+        )
+
+
+@dataclass(frozen=True)
+class GameDimension:
+    """One ``(player, stat)`` coordinate of a game's latent vector."""
+
+    player_id: int
+    team_id: int
+    stat: str
+    side: int
+    role: str | None = None
+
+
+@dataclass(frozen=True)
+class GameCovariance:
+    dimensions: tuple[GameDimension, ...]
+    correlation: np.ndarray
+    cholesky: np.ndarray
+    shared_shrink: Mapping[int, float]
+    min_residual_eigenvalue: float
+    min_eigenvalue: float
+
+    @property
+    def size(self) -> int:
+        return len(self.dimensions)
+
+    @property
+    def shrink_applied(self) -> bool:
+        return any(value < 1.0 - 1e-12 for value in self.shared_shrink.values())
+
+
+def _largest_feasible_shrink(
+    within: np.ndarray,
+    shared_gram: np.ndarray,
+    floor: float = PSD_EIGENVALUE_FLOOR,
+) -> float:
+    """Largest ``c`` in (0, 1] with ``within - c^2 * shared_gram`` PSD.
+
+    ``min_eig(within - t * shared_gram)`` is concave and non-increasing in
+    ``t = c^2``, so a bisection on ``t`` is exact up to its tolerance.
+    """
+    if min_eigenvalue(within - shared_gram) >= floor:
+        return 1.0
+
+    low, high = 0.0, 1.0
+    for _ in range(60):
+        mid = 0.5 * (low + high)
+        if min_eigenvalue(within - mid * shared_gram) >= floor:
+            low = mid
+        else:
+            high = mid
+    return float(np.sqrt(low))
+
+
+def build_game_covariance(
+    dimensions: Sequence[GameDimension],
+    loadings: SharedFactorLoadings,
+    within_player: Mapping[int, np.ndarray],
+) -> GameCovariance:
+    """Assemble the PSD latent correlation matrix for one game.
+
+    ``within_player`` maps ``player_id`` to that player's incumbent
+    stat-by-stat correlation matrix, ordered like ``loadings.stats``. A player
+    the incumbent copula never fitted individually must still be present here,
+    carrying the incumbent's global fallback correlation.
+    """
+    dimensions = tuple(dimensions)
+    if not dimensions:
+        raise ValueError("a game needs at least one player-stat dimension")
+
+    stat_index = {stat: position for position, stat in enumerate(loadings.stats)}
+    unknown = sorted({dim.stat for dim in dimensions} - set(stat_index))
+    if unknown:
+        raise ValueError(f"dimensions reference unmodelled stats: {unknown}")
+
+    # Group coordinates by player so the within-player block can be pinned.
+    by_player: dict[int, list[int]] = {}
+    for position, dim in enumerate(dimensions):
+        by_player.setdefault(dim.player_id, []).append(position)
+
+    size = len(dimensions)
+    shared = np.zeros((size, loadings.k_game + 1), dtype=float)
+    shrink: dict[int, float] = {}
+    min_residual = np.inf
+
+    residual_blocks: list[tuple[list[int], np.ndarray]] = []
+
+    for player_id, positions in by_player.items():
+        if player_id not in within_player:
+            raise KeyError(
+                f"no incumbent within-player correlation supplied for player {player_id}"
+            )
+
+        block = np.asarray(within_player[player_id], dtype=float)
+        if block.shape != (len(loadings.stats), len(loadings.stats)):
+            raise ValueError(
+                f"within-player block for player {player_id} has shape "
+                f"{block.shape}, expected "
+                f"{(len(loadings.stats), len(loadings.stats))}"
+            )
+
+        sides = {dimensions[position].side for position in positions}
+        if len(sides) != 1:
+            raise ValueError(f"player {player_id} appears on both teams")
+        side = sides.pop()
+
+        roles = {dimensions[position].role for position in positions}
+        role = roles.pop() if len(roles) == 1 else None
+
+        rows = [stat_index[dimensions[position].stat] for position in positions]
+        design = loadings.design(side=side, role=role)
+
+        full_gram = design @ design.T
+        scale = _largest_feasible_shrink(block, full_gram)
+        if scale < MIN_SHARED_SHRINK:
+            raise ValueError(
+                f"player {player_id} cannot absorb any shared structure; the "
+                "incumbent within-player block is numerically degenerate"
+            )
+        shrink[int(player_id)] = scale
+
+        scaled_design = scale * design
+        shared[positions, :] = scaled_design[rows, :]
+
+        residual = block - (scale**2) * full_gram
+        min_residual = min(min_residual, min_eigenvalue(residual))
+        residual_blocks.append((positions, residual[np.ix_(rows, rows)]))
+
+    correlation = shared @ shared.T
+    for positions, residual in residual_blocks:
+        correlation[np.ix_(positions, positions)] += residual
+
+    correlation = 0.5 * (correlation + correlation.T)
+    np.fill_diagonal(correlation, 1.0)
+
+    observed_min = min_eigenvalue(correlation)
+    # A Gram plus PSD-block-diagonal sum is PSD exactly; the jitter below only
+    # absorbs float64 rounding so Cholesky cannot fail on a valid matrix.
+    jitter = 0.0
+    if observed_min <= 0.0:
+        jitter = abs(observed_min) + 1e-12
+    factor = np.linalg.cholesky(correlation + jitter * np.eye(size))
+
+    return GameCovariance(
+        dimensions=dimensions,
+        correlation=correlation,
+        cholesky=factor,
+        shared_shrink=shrink,
+        min_residual_eigenvalue=float(min_residual),
+        min_eigenvalue=float(observed_min),
+    )
+
+
+def implied_within_player_correlation(
+    covariance: GameCovariance,
+    player_id: int,
+) -> np.ndarray:
+    """Extract the simulated within-player block for a no-double-count check."""
+    positions = [
+        position
+        for position, dim in enumerate(covariance.dimensions)
+        if dim.player_id == player_id
+    ]
+    if not positions:
+        raise KeyError(f"player {player_id} is not in this game")
+    return covariance.correlation[np.ix_(positions, positions)]
