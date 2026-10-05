@@ -11,6 +11,9 @@ another, and no axis has a grid wider than five points.
 
     TEMPORAL         screened by ``01_temporal_diagnostic.py``; its selection
                      is read from that artifact rather than redone here.
+    BASE PATH        accepted V1's cross-team estimator and ranks, or the
+                     accepted repair's. This axis governs the fitted
+                     cross-team block and nothing else.
     SAME-TEAM        ``r_symmetric`` in {0, 1, 2, 3, 6}. Zero is "no symmetric
                      subspace", which leaves the same-team repair unapplied.
     ROLE             centred low-rank role deviation on or off.
@@ -154,6 +157,50 @@ PROTECTED_CROSS_BUCKETS: tuple[str, ...] = (
 #: across all four components.
 MIN_TRAIN_SEASONS = 2
 
+#: The base construction's cross-team path. Two points, both structural:
+#:
+#: ``v1_path``       accepted V1's cross-team estimator and ranks: a
+#:                   fixed-width soft threshold, ``k_game = 2``,
+#:                   ``r_contrast = 1``.
+#: ``repair_path``   the accepted repair's: empirical Bayes on both blocks of
+#:                   the base, ``k_game = 6``, ``r_contrast = 6``.
+#:
+#: This axis exists because the first screening pass pinned the base at
+#: ``v1_path`` on the reasoning that the repair's *coupling* is what moved the
+#: opponent buckets. That reasoning was half right. The coupling is indeed
+#: what let a same-team decision reach the cross-team block, and the symmetric
+#: subspace is what removes it -- but pinning the base to V1 also throws away
+#: the repair's cross-team *accuracy*, which no mission asked for and which
+#: nothing about the same-team repair requires. With the base at ``v1_path``
+#: every candidate's cross-team latent RMSE was V1's 0.00382 against the
+#: control's 0.00224, so every candidate failed the global-accuracy targets on
+#: a block the same-team work does not touch, and the bridge-weight guard --
+#: stated relative to the control -- had no admissible point left and
+#: degenerated into a free choice. Both passes are reported.
+#:
+#: Isolation is unaffected by which point wins: the symmetric subspace cancels
+#: from ``A - B`` algebraically under either base, which is what target B
+#: measures against the candidate's own no-repair twin.
+BASE_PATHS: dict[str, dict[str, object]] = {
+    "v1_path": {
+        "cross_shrinkage": SHRINKAGE_SOFT_THRESHOLD,
+        "k_game": DEFAULT_K_GAME,
+        "r_contrast": DEFAULT_R_CONTRAST,
+    },
+    "repair_path": {
+        "cross_shrinkage": SHRINKAGE_EMPIRICAL_BAYES,
+        "k_game": 6,
+        "r_contrast": 6,
+    },
+}
+BASE_PATH_GRID: tuple[str, ...] = tuple(BASE_PATHS)
+
+#: The base the other axes are held at while they are screened. The control's
+#: own cross-team path, so every other axis is screened against the accuracy
+#: the control actually achieves rather than against V1's handicap on a block
+#: none of those axes can reach.
+BASE_PATH_REFERENCE = "repair_path"
+
 #: Rank of the symmetric same-team subspace. Six matches the repair's own
 #: raised rank, so the grid spans a minimal repair to as much representation
 #: as the control had.
@@ -220,23 +267,27 @@ STRUCTURAL_GAMES = 40
 MIN_EXPECTED_MINUTES = 8.0
 
 
-def v2_base_spec(name: str, **overrides: object) -> V2Spec:
-    """A V2 candidate with the cross-team path held at accepted V1's.
+def v2_base_spec(
+    name: str,
+    base_path: str = BASE_PATH_REFERENCE,
+    **overrides: object,
+) -> V2Spec:
+    """A V2 candidate on one of the two pre-registered base paths.
 
-    The repair coupled the two blocks: one empirical-Bayes estimator and one
-    raised rank for both, which is why the opponent buckets moved. Here the
-    cross-team estimator, the base ranks and the threshold are V1's, so the
-    base construction -- and therefore the fitted cross-team block -- is V1's.
-    The same-team repair arrives only through the symmetric subspace, which
-    cancels from ``A - B``.
+    The same-team estimator is the repair's empirical Bayes in every case --
+    that is the estimator the repair established and this work inherits -- but
+    it reaches the fit only through the symmetric subspace, where it cancels
+    from ``A - B``. ``base_path`` chooses the cross-team estimator and the
+    base ranks, which is the only thing that governs the fitted cross-team
+    block.
     """
+    if base_path not in BASE_PATHS:
+        raise ValueError(f"unknown base path: {base_path}")
     return V2Spec(
         name=name,
         same_shrinkage=SHRINKAGE_EMPIRICAL_BAYES,
         same_eb_family=EB_FAMILY_BLOCK_DIAGONAL,
-        cross_shrinkage=SHRINKAGE_SOFT_THRESHOLD,
-        k_game=DEFAULT_K_GAME,
-        r_contrast=DEFAULT_R_CONTRAST,
+        **BASE_PATHS[base_path],  # type: ignore[arg-type]
         **overrides,  # type: ignore[arg-type]
     )
 
@@ -997,7 +1048,18 @@ def main() -> None:
         "control_repair": REPAIR_CONTROL_SPEC,
         "control_v1": V1_BASE_SPEC,
     }
-    axes: dict[str, list[str]] = {"same_team": [], "role": [], "bridge": []}
+    axes: dict[str, list[str]] = {
+        "base": [],
+        "same_team": [],
+        "role": [],
+        "bridge": [],
+    }
+    for path in BASE_PATH_GRID:
+        name = f"base_{path}"
+        specs[name] = v2_base_spec(
+            name, base_path=path, r_symmetric=R_SYMMETRIC_REFERENCE
+        )
+        axes["base"].append(name)
     for rank in R_SYMMETRIC_GRID:
         name = f"iso_rsym{rank}"
         specs[name] = v2_base_spec(name, r_symmetric=rank)
@@ -1057,23 +1119,51 @@ def main() -> None:
         )
     console.print(table)
 
-    # Axis winners, by each axis's own pre-registered objective. The same-team
-    # axis minimises the error on the two buckets the repair exists to repair,
-    # among ranks that keep global latent RMSE inside the bound; ties go to the
-    # smaller rank, so representation is only bought when it pays.
+    # Axis winners, by each axis's own pre-registered objective.
+    #
+    # The base axis governs exactly one thing -- the fitted cross-team block --
+    # so it is selected on cross-team latent RMSE alone, with ties going to the
+    # smaller rank. Judging it on a global metric would let the same-team work
+    # it cannot reach decide it.
+    selected_base = min(
+        axes["base"],
+        key=lambda name: (
+            summaries[name]["mean_cross_latent_rmse"],
+            summaries[name]["spec"]["k_game"],  # type: ignore[index]
+        ),
+    )
+
+    # The same-team axis minimises the error on the two buckets the repair
+    # exists to repair, among ranks that keep global latent RMSE inside the
+    # bound; ties go to the smaller rank, so representation is only bought
+    # when it pays.
+    #
+    # When *no* grid point satisfies a guard, the axis resolves to its null
+    # value rather than to the best of the inadmissible points. The first
+    # screening pass did the latter and that was wrong: a guard stated
+    # relative to the control, with no admissible point, stops being a guard
+    # and becomes a free optimisation of whatever the tie-break reads. The
+    # honest reading of "nothing clears the bar" is to carry nothing.
     candidate_ranks = [f"iso_rsym{rank}" for rank in R_SYMMETRIC_CANDIDATES]
+    latent_bound = MAX_GLOBAL_RATIO * float(control["mean_global_latent_rmse"])  # type: ignore[arg-type]
     eligible_ranks = [
         name
         for name in candidate_ranks
-        if summaries[name]["mean_global_latent_rmse"]  # type: ignore[operator]
-        <= MAX_GLOBAL_RATIO * control["mean_global_latent_rmse"]
+        if summaries[name]["mean_global_latent_rmse"] <= latent_bound  # type: ignore[operator]
     ]
-    selected_rank = min(
-        eligible_ranks or candidate_ranks,
-        key=lambda name: (
-            summaries[name]["mean_target_abs_error"],
-            summaries[name]["spec"]["r_symmetric"],  # type: ignore[index]
-        ),
+    rank_guard_unsatisfiable = not eligible_ranks
+    selected_rank = (
+        # The null value for this axis is rank zero: no symmetric subspace, so
+        # no same-team repair at all.
+        "iso_rsym0"
+        if rank_guard_unsatisfiable
+        else min(
+            eligible_ranks,
+            key=lambda name: (
+                summaries[name]["mean_target_abs_error"],
+                summaries[name]["spec"]["r_symmetric"],  # type: ignore[index]
+            ),
+        )
     )
     # The role layer is carried only if it clears the improvement bar, breaks
     # no cell the role-blind fit kept inside the z limit, and makes no single
@@ -1089,21 +1179,42 @@ def main() -> None:
             >= MIN_ROLE_IMPROVEMENT
         ):
             selected_role = "role_on"
+    # The bridge axis buys count-space accuracy with latent-space accuracy, so
+    # its guard is the same global bound and its objective is the primary
+    # count bucket. Weight zero is in the grid and is the null value, so this
+    # guard always has at least that point available once the base is not
+    # itself outside the bound.
     eligible_weights = [
         name
         for name in axes["bridge"]
-        if summaries[name]["mean_global_latent_rmse"]  # type: ignore[operator]
-        <= MAX_GLOBAL_RATIO * control["mean_global_latent_rmse"]
+        if summaries[name]["mean_global_latent_rmse"] <= latent_bound  # type: ignore[operator]
     ]
-    selected_weight = min(
-        eligible_weights or axes["bridge"],
-        key=lambda name: summaries[name]["mean_primary_count_abs_error"],  # type: ignore[return-value]
+    bridge_guard_unsatisfiable = not eligible_weights
+    selected_weight = (
+        "bridge_w0"
+        if bridge_guard_unsatisfiable
+        else min(
+            eligible_weights,
+            key=lambda name: summaries[name]["mean_primary_count_abs_error"],  # type: ignore[return-value]
+        )
     )
 
     console.rule("Stage 1 axis selections")
     console.print(
+        f"  base path          : {selected_base} (lowest cross-team latent "
+        f"RMSE {summaries[selected_base]['mean_cross_latent_rmse']:.6f} against "
+        f"the control's {control['mean_cross_latent_rmse']:.6f})"
+    )
+    console.print(
         f"  same-team subspace : {selected_rank} (lowest mean error on "
-        f"{list(REPAIR_TARGET_BUCKETS)}, ties to the smaller rank)"
+        f"{list(REPAIR_TARGET_BUCKETS)}, ties to the smaller rank"
+        + (
+            "; NO rank satisfied the global bound, so the axis resolved to its "
+            "null value"
+            if rank_guard_unsatisfiable
+            else ""
+        )
+        + ")"
     )
     console.print(
         f"  role deviation     : {selected_role} (improvement "
@@ -1117,32 +1228,55 @@ def main() -> None:
     console.print(
         f"  bridge weight      : {selected_weight} (lowest "
         f"{PRIMARY_COUNT_BUCKET} count error among weights inside the "
-        f"{MAX_GLOBAL_RATIO:.2f} latent-RMSE bound)"
+        f"{MAX_GLOBAL_RATIO:.2f} latent-RMSE bound"
+        + (
+            "; NO weight satisfied it, so the axis resolved to zero"
+            if bridge_guard_unsatisfiable
+            else ""
+        )
+        + ")"
     )
 
     # ------------------------------------------------------------------
     # stage 2: the pre-registered combination set
     # ------------------------------------------------------------------
+    base_star = str(summaries[selected_base]["spec"]["name"]).removeprefix("base_")  # type: ignore[index]
     rank_star = int(summaries[selected_rank]["spec"]["r_symmetric"])  # type: ignore[index]
     weight_star = float(summaries[selected_weight]["spec"]["bridge_weight"])  # type: ignore[index]
     role_star = bool(summaries[selected_role]["spec"]["role_deviation"])  # type: ignore[index]
     combinations: dict[str, V2Spec] = {
-        "v2_iso": v2_base_spec("v2_iso", r_symmetric=rank_star),
+        # The twin target B measures isolation against: the selected base with
+        # no symmetric subspace, so the same-team target is never applied. It
+        # is a reference, not a candidate, which is why it is excluded from
+        # the winner selection below.
+        "v2_no_repair_twin": v2_base_spec(
+            "v2_no_repair_twin", base_path=base_star, r_symmetric=0
+        ),
+        "v2_iso": v2_base_spec(
+            "v2_iso", base_path=base_star, r_symmetric=rank_star
+        ),
         "v2_iso_role": v2_base_spec(
             "v2_iso_role",
+            base_path=base_star,
             r_symmetric=rank_star,
             role_deviation=role_star,
         ),
         "v2_iso_bridge": v2_base_spec(
-            "v2_iso_bridge", r_symmetric=rank_star, bridge_weight=weight_star
+            "v2_iso_bridge",
+            base_path=base_star,
+            r_symmetric=rank_star,
+            bridge_weight=weight_star,
         ),
         "v2_full": v2_base_spec(
             "v2_full",
+            base_path=base_star,
             r_symmetric=rank_star,
             role_deviation=role_star,
             bridge_weight=weight_star,
         ),
     }
+    #: The reference above is scored like the others and then excluded.
+    reference_combination = "v2_no_repair_twin"
     console.rule(f"Stage 2: {len(combinations)} pre-registered combinations")
     for name, spec in combinations.items():
         started = time.time()
@@ -1152,15 +1286,17 @@ def main() -> None:
         )
         console.print(f"  {name:20s} ({time.time() - started:5.1f}s)")
 
-    # Every V2 candidate shares one cross-team path, so the no-same-team-repair
-    # twin target B measures against is the same object for all of them: the
-    # zero-rank variant, where the same-team target is never applied.
-    isolation_reference = summaries["iso_rsym0"]
+    # Every candidate in the combination set shares one cross-team path, so
+    # the no-same-team-repair twin target B measures against is the same
+    # object for all of them: the zero-rank variant on the selected base,
+    # where the same-team target is never applied.
+    isolation_reference = summaries[reference_combination]
     verdicts = {
         name: inner_targets(
             summaries[name], control, isolation_reference, temporal_summary
         )
         for name in combinations
+        if name != reference_combination
     }
     console.rule("Inner acceptance targets A-I on the combination set")
     target_table = Table(title="inner targets (A is screened in 01)")
@@ -1199,7 +1335,7 @@ def main() -> None:
             total,
         )
 
-    winner = min(combinations, key=rank_key)
+    winner = min(verdicts, key=rank_key)
     console.print(f"\n[bold green]selected V2 candidate: {winner}[/bold green]")
 
     role_cells = {
@@ -1235,6 +1371,12 @@ def main() -> None:
         "stats": list(STATS),
         "inner_folds": [prep.payload() for prep in preps],
         "pre_registered_grids": {
+            "base_path": list(BASE_PATH_GRID),
+            "base_path_definitions": {
+                name: {key: str(value) for key, value in path.items()}
+                for name, path in BASE_PATHS.items()
+            },
+            "base_path_reference": BASE_PATH_REFERENCE,
             "r_symmetric": list(R_SYMMETRIC_GRID),
             "r_symmetric_candidates": list(R_SYMMETRIC_CANDIDATES),
             "r_symmetric_reference": R_SYMMETRIC_REFERENCE,
@@ -1242,6 +1384,35 @@ def main() -> None:
             "bridge_weight": list(BRIDGE_WEIGHT_GRID),
             "temporal_treatments_screened_in": "01_temporal_diagnostic.py",
             "joint_search": False,
+        },
+        "screening_pass": 2,
+        "first_pass_artifact": "inner_screening_pass1.json",
+        "second_pass_changes": [
+            (
+                "added the base-path axis, which governs the cross-team block "
+                "the same-team work cannot reach; the first pass pinned it at "
+                "accepted V1's, which cost the control's cross-team accuracy "
+                "for no structural reason and put every candidate outside the "
+                "global-accuracy targets on that block alone"
+            ),
+            (
+                "a guard with no admissible grid point now resolves the axis "
+                "to its null value instead of optimising the tie-break over "
+                "the inadmissible points, which is what selected bridge "
+                "weight 1.0 in the first pass"
+            ),
+            (
+                "the isolation twin target B measures against is now fitted "
+                "on the selected base rather than on the reference base"
+            ),
+        ],
+        "guards": {
+            "r_symmetric_guard_unsatisfiable": bool(rank_guard_unsatisfiable),
+            "bridge_guard_unsatisfiable": bool(bridge_guard_unsatisfiable),
+            "global_latent_rmse_bound": latent_bound,
+            "axes_screened_at_the_selected_base": bool(
+                base_star == BASE_PATH_REFERENCE
+            ),
         },
         "inner_target_thresholds": {
             "max_global_ratio": MAX_GLOBAL_RATIO,
@@ -1259,6 +1430,8 @@ def main() -> None:
         "temporal": temporal_summary,
         "axes": axes,
         "axis_selections": {
+            "base": selected_base,
+            "base_path": base_star,
             "same_team": selected_rank,
             "r_symmetric": rank_star,
             "role": selected_role,
@@ -1268,6 +1441,7 @@ def main() -> None:
             "temporal_treatment": temporal_treatment,
         },
         "combination_set": list(combinations),
+        "isolation_reference": reference_combination,
         "candidates": summaries,
         "inner_target_verdicts": verdicts,
         "selected_candidate": winner,
