@@ -1549,6 +1549,13 @@ def main() -> None:
             "axes_screened_at_the_selected_base": bool(
                 base_star == BASE_PATH_REFERENCE
             ),
+            # The role and bridge axes are screened at one declared mode. If
+            # the same-team axis then selects the other one, those two screens
+            # were run on a subspace the candidate does not use, and the
+            # combination stage is the only place they were measured together.
+            "axes_screened_at_the_selected_symmetric_mode": bool(
+                mode_star == SYMMETRIC_MODE_REFERENCE
+            ),
             "selectable_combinations": sorted(
                 name for name, allowed in admissible.items() if allowed
             ),

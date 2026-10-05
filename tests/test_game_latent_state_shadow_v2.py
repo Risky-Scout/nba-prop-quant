@@ -51,6 +51,7 @@ from nba_prop_quant.research.game_latent_state.covariance import (
     project_psd_rank,
 )
 from nba_prop_quant.research.game_latent_state.factors import (
+    COMPETITION_GATE_MIN_DRAWS,
     fit_shared_factors,
     standardize_residuals,
 )
@@ -86,6 +87,13 @@ ROLES: tuple[str, ...] = ("starter", "rotation", "bench")
 #: Same-team loading of the team factor, by role. Deliberately unequal: a
 #: uniform loading would leave the role layer nothing to find, so a test built
 #: on one could not tell a working role layer from a disabled one.
+#: Bootstrap draws for a fit whose base must be *exact*. The competition
+#: family is gated on a bootstrap lower bound and declines below
+#: ``COMPETITION_GATE_MIN_DRAWS`` draws; without it the additive Gram
+#: dominates the same-team target instead of equalling it, so even a
+#: full-rank base overshoots by ``Q`` and nothing below is exact.
+FULL_RANK_BOOTSTRAP = COMPETITION_GATE_MIN_DRAWS + 20
+
 ROLE_TEAMMATE_SD: dict[str, float] = {
     "starter": 0.15,
     "rotation": 0.30,
@@ -280,7 +288,7 @@ def test_a_full_rank_base_represents_both_targets_exactly(standardized):
         standardized,
         STATS,
         spec=v2_full_rank_spec("exact", r_symmetric=0),
-        bootstrap=80,
+        bootstrap=FULL_RANK_BOOTSTRAP,
         seed=73,
     )
     scale = fit.loadings.scale_for_role(None)
@@ -310,7 +318,7 @@ def test_the_residual_subspace_is_vacuous_on_an_exact_base(standardized, rank):
             r_symmetric=rank,
             symmetric_mode=SYMMETRIC_MODE_RESIDUAL,
         ),
-        bootstrap=80,
+        bootstrap=FULL_RANK_BOOTSTRAP,
         seed=73,
     )
     assert fit.loadings.symmetric is None
@@ -326,7 +334,7 @@ def test_the_reserved_subspace_is_a_reparameterisation_at_full_rank(
         standardized,
         STATS,
         spec=v2_full_rank_spec("exact", r_symmetric=0),
-        bootstrap=80,
+        bootstrap=FULL_RANK_BOOTSTRAP,
         seed=73,
     )
     for role_deviation in (False, True):
@@ -339,7 +347,7 @@ def test_the_reserved_subspace_is_a_reparameterisation_at_full_rank(
                 symmetric_mode=SYMMETRIC_MODE_RESERVED,
                 role_deviation=role_deviation,
             ),
-            bootstrap=80,
+            bootstrap=FULL_RANK_BOOTSTRAP,
             seed=73,
             role_moments=role_moments,
         )
@@ -374,7 +382,7 @@ def test_the_reserved_subspace_gives_the_role_layer_a_carrier(
             spec=v2_full_rank_spec(
                 mode, r_symmetric=6, symmetric_mode=mode, role_deviation=True
             ),
-            bootstrap=80,
+            bootstrap=FULL_RANK_BOOTSTRAP,
             seed=73,
             role_moments=role_moments,
         )
@@ -410,7 +418,7 @@ def test_the_reserved_subspace_is_not_an_identity_on_a_truncated_base(
             r_symmetric=6,
             symmetric_mode=SYMMETRIC_MODE_RESERVED,
         ),
-        bootstrap=80,
+        bootstrap=FULL_RANK_BOOTSTRAP,
         seed=73,
     )
     assert fit.cross_team_unchanged_deviation() > 1e-6
