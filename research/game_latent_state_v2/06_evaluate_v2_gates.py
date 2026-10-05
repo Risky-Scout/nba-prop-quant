@@ -168,6 +168,25 @@ def main() -> None:
     def abs_error(implied: dict, bucket: str) -> float:
         return abs(implied[bucket] - observed[bucket])
 
+    def bridge_positive_weights_all_excluded() -> bool:
+        """Whether the bridge axis had *no* positive weight available.
+
+        Prefer the screening run's own guard. A run that predates the guard did
+        not write one, but it wrote every bridge point's latent RMSE and the
+        bound they were compared against, so the answer is recoverable from the
+        artifact exactly, with the bound read from it rather than restated.
+        """
+        guards = screening["guards"]
+        key = "bridge_positive_weights_all_outside_the_latent_bound"
+        if key in guards:
+            return bool(guards[key])
+        bound = float(guards["global_latent_rmse_bound"])
+        return all(
+            float(screening["candidates"][name]["mean_global_latent_rmse"]) > bound
+            for name in screening["axes"]["bridge"]
+            if float(screening["candidates"][name]["spec"]["bridge_weight"]) > 0.0
+        )
+
     gates: list[dict] = []
 
     def record(number: int, name: str, passed: bool, evidence: dict) -> None:
@@ -363,10 +382,7 @@ def main() -> None:
         # candidate does not *lose* count-space accuracy against the control.
         gate4 = (
             len(bridge_screen) == len(screening["pre_registered_grids"]["bridge_weight"])
-            and screening["guards"][
-                "bridge_positive_weights_all_outside_the_latent_bound"
-            ]
-            is True
+            and bridge_positive_weights_all_excluded()
             and improvement >= -NOT_CARRIED_MAX_DEGRADATION
         )
         branch = "screened_and_not_carried"
@@ -396,9 +412,9 @@ def main() -> None:
             "bridge_guard_unsatisfiable": screening["guards"][
                 "bridge_guard_unsatisfiable"
             ],
-            "bridge_positive_weights_all_outside_the_latent_bound": screening[
-                "guards"
-            ]["bridge_positive_weights_all_outside_the_latent_bound"],
+            "bridge_positive_weights_all_outside_the_latent_bound": (
+                bridge_positive_weights_all_excluded()
+            ),
             "screening_latent_rmse_bound": screening["guards"][
                 "global_latent_rmse_bound"
             ],
