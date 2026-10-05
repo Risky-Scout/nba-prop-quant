@@ -945,6 +945,16 @@ def main() -> None:
     role_blind_twin = SharedFactorLoadings.from_payload(
         v2_spec["role_blind_twin_loadings"]
     )
+    # The candidate's own base path with the symmetric subspace switched off:
+    # the reference the cross-team isolation claim is stated against.
+    no_repair_twin_loadings = SharedFactorLoadings.from_payload(
+        v2_spec["no_repair_twin_loadings"]
+    )
+    screening = json.loads(
+        (artifact_dir / "inner_screening.json").read_text(encoding="utf-8")
+    )
+    if screening["holdout_used_for_selection"]:
+        raise SystemExit("the inner screen reports that it used the holdout")
     loadings: dict[str, SharedFactorLoadings] = {
         CANDIDATE: v2_loadings,
         REPAIR: repair_loadings,
@@ -1064,7 +1074,24 @@ def main() -> None:
             # Re-read from the committed loadings rather than from the freeze
             # record, so the artifact the validation consumed is the one
             # audited.
-            "cross_team_blocks_identical_to_v1_path": float(
+            #
+            # The claim is that the *same-team* work does not move the
+            # cross-team block, so the reference is the candidate's own base
+            # path with the symmetric subspace switched off -- the no-repair
+            # twin frozen alongside the candidate -- and not some other model.
+            # Earlier this was measured against accepted V1's block, which is
+            # only the right reference when the candidate is on V1's cross-team
+            # path; the screen selects that path on its own merits and selected
+            # the repair's.
+            "cross_team_block_moved_by_the_same_team_work": float(
+                np.max(
+                    np.abs(
+                        v2_loadings.cross_team_correlation()
+                        - no_repair_twin_loadings.cross_team_correlation()
+                    )
+                )
+            ),
+            "cross_team_block_versus_v1_path": float(
                 np.max(
                     np.abs(
                         v2_loadings.cross_team_correlation()
@@ -1076,11 +1103,28 @@ def main() -> None:
                     )
                 )
             ),
+            "cross_team_block_versus_repair_control": float(
+                np.max(
+                    np.abs(
+                        v2_loadings.cross_team_correlation()
+                        - repair_loadings.cross_team_correlation()
+                    )
+                )
+            ),
             "symmetric_subspace_rank": int(v2_loadings.r_symmetric),
+            "symmetric_mode": freeze["hyperparameters"]["symmetric_mode"],
             "role_deviation_carried": bool(
                 v2_loadings.role_deviation is not None
             ),
             "role_quadratic_share": v2_loadings.role_quadratic_share(),
+            # Where the identity has content: every same-team grid point the
+            # inner screen fitted, not just the one the freeze took.
+            "screened_same_team_points": {
+                name: screening["candidates"][name][
+                    "max_cross_team_unchanged_deviation"
+                ]
+                for name in screening["axes"]["same_team"]
+            },
         },
         "production_surface": {
             "modified_paths": modified_production_paths(PROJECT_ROOT),

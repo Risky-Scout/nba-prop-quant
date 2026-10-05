@@ -261,8 +261,27 @@ def main() -> None:
         else fit
     )
 
+    # And the same candidate with the symmetric subspace switched off, so the
+    # same-team target is never applied at all. This is the reference the
+    # cross-team isolation claim is stated against: whatever the same-team work
+    # does, ``A - B`` has to come back as this twin's. Also never simulated.
+    no_repair_twin = (
+        fit_v2_factors(
+            standardized,
+            STATS,
+            spec=replace(spec, r_symmetric=0, role_deviation=False),
+            bootstrap=args.bootstrap,
+            seed=args.seed,
+            bridge_targets=targets if spec.bridge_weight > 0 else None,
+            role_moments=role_moments,
+        )
+        if spec.r_symmetric > 0 or spec.role_deviation
+        else fit
+    )
+
     diagnostics = fit.diagnostics()
     diagnostics["role_blind_twin"] = role_blind_twin.diagnostics()
+    diagnostics["no_repair_twin"] = no_repair_twin.diagnostics()
     diagnostics["standardization_moments"] = {
         stat: {"mean": value[0], "sd": value[1]}
         for stat, value in moment_constants.items()
@@ -282,6 +301,7 @@ def main() -> None:
         "k_game": int(fit.loadings.k_game),
         "r_contrast": int(fit.loadings.r_contrast),
         "r_symmetric": int(fit.loadings.r_symmetric),
+        "symmetric_mode": spec.symmetric_mode,
         "role_deviation": bool(spec.role_deviation),
         "shrink_z": float(spec.shrink_z),
         "same_shrinkage": spec.same_shrinkage,
@@ -296,6 +316,9 @@ def main() -> None:
         # Diagnostic only: the role-blind twin is the comparison the role
         # layer is measured against on the holdout. Nothing simulates it.
         "role_blind_twin_loadings": role_blind_twin.loadings.to_payload(),
+        # Diagnostic only: the no-symmetric-subspace twin the cross-team
+        # isolation identity is measured against. Nothing simulates it either.
+        "no_repair_twin_loadings": no_repair_twin.loadings.to_payload(),
         "v2_candidate": spec.payload(),
         "parent_shadow_v1_sha": PARENT_V1_SHA,
         "parent_bucket_repair_sha": PARENT_REPAIR_SHA,

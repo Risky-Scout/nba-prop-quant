@@ -222,39 +222,68 @@ def main() -> None:
     )
 
     # ---- GATE 2: cross-team isolation ------------------------------
-    identity = float(report["structural_identities"]["cross_team_blocks_identical_to_v1_path"])
+    #
+    # The claim is that the same-team work cannot move the cross-team block, so
+    # the reference is the candidate's own base path with the symmetric
+    # subspace switched off -- not accepted V1's block, which is only the right
+    # reference if the candidate happens to sit on V1's cross-team path. The
+    # inner screen selects that path on cross-team accuracy alone and selected
+    # the repair's, so the candidate's opponent buckets are the *repair's*, and
+    # a gate that demanded V1's would be asking the branch to give back a
+    # cross-team improvement the same-team work never touched.
+    #
+    # Read in two places. At the frozen fit, where it is one number, and across
+    # every same-team grid point the inner screen fitted, which is where the
+    # identity has content: the frozen candidate may carry no subspace at all.
+    identities = report["structural_identities"]
+    frozen_identity = float(identities["cross_team_block_moved_by_the_same_team_work"])
+    screened = identities["screened_same_team_points"]
+    worst_screened = max((abs(float(value)) for value in screened.values()), default=0.0)
     protected: dict[str, dict] = {}
-    cross_unchanged = True
     for name in PROTECTED_CROSS_BUCKETS:
-        gap = abs(candidate_implied[name] - v1_implied[name])
-        cross_unchanged = cross_unchanged and gap <= CROSS_TEAM_IDENTITY_TOLERANCE
         protected[name] = {
             "observed": observed[name],
+            "observed_se": se[name],
             "v1_implied": v1_implied[name],
             "repair_implied": repair_implied[name],
             "candidate_implied": candidate_implied[name],
             "v1_z": z(v1_implied, name),
             "repair_z": z(repair_implied, name),
             "candidate_z": z(candidate_implied, name),
-            "candidate_minus_v1": gap,
+            "candidate_minus_repair": abs(
+                candidate_implied[name] - repair_implied[name]
+            ),
+            "candidate_minus_v1": abs(candidate_implied[name] - v1_implied[name]),
         }
     record(
         2,
-        "the same-team repair is algebraically unable to move the cross-team "
-        "block, and does not",
-        identity <= CROSS_TEAM_IDENTITY_TOLERANCE and cross_unchanged,
+        "the same-team work is algebraically unable to move the cross-team "
+        "block, and does not, at the frozen fit or at any screened point",
+        frozen_identity <= CROSS_TEAM_IDENTITY_TOLERANCE
+        and worst_screened <= CROSS_TEAM_IDENTITY_TOLERANCE,
         {
-            "max_abs_cross_team_block_difference_from_v1_path": identity,
+            "frozen_fit_cross_team_block_moved": frozen_identity,
+            "worst_screened_point_cross_team_block_moved": worst_screened,
+            "screened_same_team_points": screened,
             "tolerance": CROSS_TEAM_IDENTITY_TOLERANCE,
-            "protected_buckets": protected,
-            "symmetric_subspace_rank": report["structural_identities"][
-                "symmetric_subspace_rank"
+            "symmetric_subspace_rank": identities["symmetric_subspace_rank"],
+            "symmetric_mode": identities["symmetric_mode"],
+            "cross_team_block_versus_v1_path": identities[
+                "cross_team_block_versus_v1_path"
             ],
+            "cross_team_block_versus_repair_control": identities[
+                "cross_team_block_versus_repair_control"
+            ],
+            # Reported, not gated. The repair moved these three buckets while
+            # it was raising the cross-team rank; whether that was collateral
+            # damage or part of a net cross-team gain is a cross-team question,
+            # and the numbers for it are here rather than in a threshold.
+            "opponent_buckets_reported_not_gated": protected,
             "note": (
-                "the repair moved these three buckets as collateral because it "
-                "coupled one estimator and one raised rank across both blocks; "
-                "V2 reaches the same-team block through a subspace that "
-                "cancels from A - B, so the opponent buckets are V1's exactly"
+                "a loading column appended to both the game and the "
+                "team-contrast block enters S = A + B - Q twice and cancels "
+                "from X = A - B term by term, so this is an identity and its "
+                "tolerance is float64 noise rather than a confidence interval"
             ),
         },
     )
@@ -327,13 +356,17 @@ def main() -> None:
         gate4 = improvement >= MIN_COUNT_IMPROVEMENT
         branch = "carried"
     else:
-        # Not carried. The gate then asks that the component was screened over
-        # its whole grid, that the reason it was rejected is measured rather
-        # than asserted, and that the candidate does not *lose* count-space
-        # accuracy relative to the control.
+        # Not carried. The gate then asks three things: that the component was
+        # screened over its whole pre-registered grid, that the rule had no
+        # positive weight available rather than merely preferring zero -- so
+        # that "not carried" is a measurement and not a choice -- and that the
+        # candidate does not *lose* count-space accuracy against the control.
         gate4 = (
             len(bridge_screen) == len(screening["pre_registered_grids"]["bridge_weight"])
-            and screening["guards"]["bridge_guard_unsatisfiable"] is True
+            and screening["guards"][
+                "bridge_positive_weights_all_outside_the_latent_bound"
+            ]
+            is True
             and improvement >= -NOT_CARRIED_MAX_DEGRADATION
         )
         branch = "screened_and_not_carried"
@@ -362,6 +395,12 @@ def main() -> None:
             "bridge_weight_screen": bridge_screen,
             "bridge_guard_unsatisfiable": screening["guards"][
                 "bridge_guard_unsatisfiable"
+            ],
+            "bridge_positive_weights_all_outside_the_latent_bound": screening[
+                "guards"
+            ]["bridge_positive_weights_all_outside_the_latent_bound"],
+            "screening_latent_rmse_bound": screening["guards"][
+                "global_latent_rmse_bound"
             ],
             "latent_versus_count_target_disagreement": {
                 "same_team_mean": bridge["same_team_mean_disagreement"],

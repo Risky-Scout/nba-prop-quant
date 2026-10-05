@@ -259,6 +259,17 @@ SYMMETRIC_MODE_REFERENCE = SYMMETRIC_MODE_RESERVED
 #: and the point of screening it is to let the data say which is which.
 CROSS_TEAM_IDENTITY_TOLERANCE = 1e-12
 
+#: Relative difference below which two grid points on one axis are treated as
+#: the same point, so the axis resolves to its null value instead of letting a
+#: tie-break choose. Needed because the symmetric subspace can be an exact
+#: reparameterisation: at the repair's full-rank base every mode and every rank
+#: reproduced the control's fold metrics to the sixteenth significant digit,
+#: and the ordinary tie-break then selected a rank-2 subspace -- twelve
+#: stat-indexed parameters -- on a 1e-15 difference that is float reassociation
+#: and nothing else. Carrying parameters that provably change no fitted
+#: quantity is strictly worse by the parsimony rule the screen already uses.
+AXIS_INDIFFERENCE_TOLERANCE = 1e-9
+
 #: The role axis is on or off, with no weight between. There was a weight
 #: grid here, screened as a hierarchical dial between the role layer's gains
 #: and its costs; it was removed because the dial is not well defined. The
@@ -503,7 +514,15 @@ def prepare_fold(
             panels=DEFAULT_BRIDGE_PANELS,
         )
 
-    score_role_moments = role_pair_moments(score_counts, STATS)
+    # Bootstrapped, because half the role axis's pre-registered rule is stated
+    # in standard errors: a cell may not be newly pushed past |z| = 3 and may
+    # not have its worst z made materially worse. Without per-cell standard
+    # errors both of those clauses silently evaluate to "no cells", and only
+    # the RMSE clause does any work. The earlier passes ran that way.
+    console.print("  bootstrapping the scoring season role cells")
+    score_role_moments = role_pair_moments(
+        score_counts, STATS, bootstrap=bootstrap, seed=seed
+    )
 
     # One pooled same-player block stands in for the incumbent copula's
     # per-player blocks. The two structural checks are identities -- whatever
@@ -1205,13 +1224,37 @@ def main() -> None:
         <= CROSS_TEAM_IDENTITY_TOLERANCE
     ]
     rank_guard_unsatisfiable = not eligible_ranks
+
+    # Indifference. Every admissible point is compared with the axis's own null
+    # value on the metrics the axis is judged by, and a point that matches it to
+    # within :data:`AXIS_INDIFFERENCE_TOLERANCE` relatively is not a different
+    # model -- it is the same model written differently -- so it cannot earn its
+    # parameters and the axis resolves to the null value.
+    judged_on = (
+        "mean_target_abs_error",
+        "mean_global_latent_rmse",
+        "mean_global_count_rmse",
+    )
+
+    def indistinguishable_from_null(name: str) -> bool:
+        null = summaries["iso_rsym0"]
+        return all(
+            abs(float(summaries[name][key]) - float(null[key]))  # type: ignore[arg-type]
+            <= AXIS_INDIFFERENCE_TOLERANCE * max(abs(float(null[key])), 1e-30)  # type: ignore[arg-type]
+            for key in judged_on
+        )
+
+    distinguishable_ranks = [
+        name for name in eligible_ranks if not indistinguishable_from_null(name)
+    ]
+    rank_axis_indifferent = bool(eligible_ranks) and not distinguishable_ranks
     selected_rank = (
         # The null value for this axis is rank zero: no symmetric subspace, so
         # no same-team repair at all.
         "iso_rsym0"
-        if rank_guard_unsatisfiable
+        if rank_guard_unsatisfiable or rank_axis_indifferent
         else min(
-            eligible_ranks,
+            distinguishable_ranks,
             key=lambda name: (
                 summaries[name]["mean_target_abs_error"],
                 summaries[name]["spec"]["r_symmetric"],  # type: ignore[index]
@@ -1270,6 +1313,13 @@ def main() -> None:
             "; NO point satisfied the global bound and the cross-team "
             "identity, so the axis resolved to its null value"
             if rank_guard_unsatisfiable
+            else ""
+        )
+        + (
+            "; every admissible point reproduced rank zero to within "
+            f"{AXIS_INDIFFERENCE_TOLERANCE:g} relatively, so the subspace is a "
+            "reparameterisation here and the axis resolved to its null value"
+            if rank_axis_indifferent
             else ""
         )
         + ")"
@@ -1483,10 +1533,11 @@ def main() -> None:
             "temporal_treatments_screened_in": "01_temporal_diagnostic.py",
             "joint_search": False,
         },
-        "screening_pass": 3,
+        "screening_pass": 4,
         "earlier_pass_artifacts": [
             "inner_screening_pass1.json",
             "inner_screening_pass2.json",
+            "inner_screening_pass3.json",
         ],
         "second_pass_changes": [
             (
@@ -1541,9 +1592,43 @@ def main() -> None:
                 "their own axis rejected them"
             ),
         ],
+        "fourth_pass_changes": [
+            (
+                "the scoring season's role cells are now bootstrapped. Half "
+                "the role axis's pre-registered rule is stated in standard "
+                "errors -- no cell newly past |z| = 3, no cell's worst z made "
+                "materially worse -- and without per-cell standard errors both "
+                "clauses silently evaluated to 'no cells'. Passes one to three "
+                "rejected the role layer on the RMSE clause alone"
+            ),
+            (
+                "an axis whose admissible points all reproduce its null value "
+                "to within 1e-9 relatively now resolves to the null value. The "
+                "third pass measured the symmetric subspace to be an exact "
+                "reparameterisation at the selected base -- every mode and "
+                "rank matched the control to the sixteenth significant digit "
+                "-- and the ordinary tie-break then bought a rank-2 subspace, "
+                "twelve stat-indexed parameters, on a 1e-15 difference that is "
+                "float reassociation"
+            ),
+        ],
         "guards": {
             "r_symmetric_guard_unsatisfiable": bool(rank_guard_unsatisfiable),
+            "r_symmetric_axis_indifferent": bool(rank_axis_indifferent),
+            "r_symmetric_eligible_points": sorted(eligible_ranks),
+            "r_symmetric_distinguishable_points": sorted(distinguishable_ranks),
+            "axis_indifference_tolerance": AXIS_INDIFFERENCE_TOLERANCE,
+            "axis_indifference_metrics": list(judged_on),
             "bridge_guard_unsatisfiable": bool(bridge_guard_unsatisfiable),
+            # Why the bridge axis resolved to zero: whether any positive weight
+            # was admissible at all, as distinct from zero simply winning.
+            "bridge_positive_weights_all_outside_the_latent_bound": bool(
+                all(
+                    summaries[name]["mean_global_latent_rmse"] > latent_bound  # type: ignore[operator]
+                    for name in axes["bridge"]
+                    if float(summaries[name]["spec"]["bridge_weight"]) > 0.0  # type: ignore[index]
+                )
+            ),
             "global_latent_rmse_bound": latent_bound,
             "cross_team_identity_tolerance": CROSS_TEAM_IDENTITY_TOLERANCE,
             "axes_screened_at_the_selected_base": bool(
