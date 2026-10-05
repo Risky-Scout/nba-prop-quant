@@ -38,6 +38,7 @@ data/cache/
 data/tmp/
 data/**/*.parquet
 data/**/*.feather
+data/**/*.pkl
 data/**/*.arrow
 
 # Local model binaries: distribute via GitHub Release assets, not ordinary Git history.
