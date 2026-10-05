@@ -96,6 +96,8 @@ from nba_prop_quant.research.game_latent_state.simulator import GameRoster  # no
 from nba_prop_quant.research.game_latent_state.v2 import (  # noqa: E402
     MIN_ROLE_PAIRS,
     REPAIR_CONTROL_SPEC,
+    ROLE_CELL_REGRESSION_LIMIT,
+    ROLE_CELL_Z_LIMIT,
     V1_BASE_SPEC,
     V2Spec,
     fit_v2_factors,
@@ -175,6 +177,16 @@ R_SYMMETRIC_CANDIDATES: tuple[int, ...] = tuple(
 #: screen whose job is to reject.
 R_SYMMETRIC_REFERENCE = 6
 
+#: The role axis is on or off, with no weight between. There was a weight
+#: grid here, screened as a hierarchical dial between the role layer's gains
+#: and its costs; it was removed because the dial is not well defined. The
+#: layer's scores and its loading enter only as the product ``h_r W``, so
+#: scaling the scores is a statement about a quantity the data does not
+#: identify, and the amount of shrinkage the layer deserves is already decided
+#: inside the fit by the support of the weakest cell it rests on. What is left
+#: to screen is whether to carry the layer at all.
+ROLE_DEVIATION_GRID: tuple[bool, ...] = (False, True)
+
 #: Weight on the bridge-implied same-team target. One scalar for the whole
 #: fit, applied to every same-team entry, never to one bucket.
 BRIDGE_WEIGHT_GRID: tuple[float, ...] = (0.0, 0.25, 0.5, 0.75, 1.0)
@@ -251,8 +263,8 @@ class FoldPrep:
         return {
             "score_season": int(self.score_season),
             "train_seasons": [int(season) for season in self.train_seasons],
-            "train_rows": int(len(self.train)),
-            "score_rows": int(len(self.score)),
+            "train_rows": len(self.train),
+            "score_rows": len(self.score),
             "train_games": self.train["game_id"].nunique(),
             "score_games": self.score["game_id"].nunique(),
             "bridge_targets": {
@@ -498,7 +510,10 @@ def score_variant(
         else fit
     )
 
-    fitted_same = fit.loadings.same_team_correlation()
+    # The pair-share average, not the role-blind block: once the loadings are
+    # role-conditioned, the simulator draws every pair with its own roles, so
+    # that average is what a pooled same-team bucket measures.
+    fitted_same = fit.loadings.pooled_same_team_correlation()
     fitted_cross = fit.loadings.cross_team_correlation()
     latent_predicted = bucket_values(STATS, fitted_same, fitted_cross)
     latent_observed = bucket_values(
@@ -590,6 +605,14 @@ def score_variant(
         "role": role,
         "structural": structural,
         "cross_team_unchanged_deviation": fit.cross_team_unchanged_deviation(),
+        "role_quadratic_share": fit.loadings.role_quadratic_share(),
+        "pooled_leak_after_absorption": float(
+            np.max(
+                np.abs(
+                    fit.loadings.pooled_same_team_correlation() - fit.same_target
+                )
+            )
+        ),
         "pairwise_parameter_count": int(counts["pairwise"]),
         "player_indexed_parameter_count": int(counts["player_indexed"]),
         "r_symmetric": int(fit.loadings.r_symmetric),
@@ -654,6 +677,48 @@ def summarize(spec: V2Spec, folds: list[dict[str, object]]) -> dict[str, object]
         ),
         "min_role_cells": min(
             float(fold["role"]["role_cells"]) for fold in folds  # type: ignore[index]
+        ),
+        "worst_role_abs_z": max(
+            float(fold["role"]["worst_role_abs_z"]) for fold in folds  # type: ignore[index]
+        ),
+        "worst_pooled_abs_z": max(
+            float(fold["role"]["worst_pooled_abs_z"]) for fold in folds  # type: ignore[index]
+        ),
+        # Cells the role layer breaks that the pooled fit did not, counted over
+        # every fold. This is the gate's second clause, so it has to be zero,
+        # not small.
+        "newly_exceeding_cells": float(
+            sum(len(fold["role"]["newly_exceeding_cells"]) for fold in folds)  # type: ignore[index,arg-type]
+        ),
+        "newly_exceeding_cell_names": sorted(
+            {
+                name
+                for fold in folds
+                for name in fold["role"]["newly_exceeding_cells"]  # type: ignore[index]
+            }
+        ),
+        # Cells the role layer makes materially worse than the role-blind fit.
+        # One shared low-rank deviation is expected to trade a little accuracy
+        # in one cell for much more in another, so what is counted is a
+        # *material* regression, against the declared relative limit.
+        "regressed_cells": float(
+            sum(len(fold["role"]["regressed_cells"]) for fold in folds)  # type: ignore[index,arg-type]
+        ),
+        "regressed_cell_names": sorted(
+            {
+                name
+                for fold in folds
+                for name in fold["role"]["regressed_cells"]  # type: ignore[index]
+            }
+        ),
+        "worst_cell_rmse_regression": max(
+            float(fold["role"]["worst_cell_rmse_regression"]) for fold in folds  # type: ignore[index]
+        ),
+        "worst_cell_z_regression": max(
+            float(fold["role"]["worst_cell_z_regression"]) for fold in folds  # type: ignore[index]
+        ),
+        "role_quadratic_leak": max(
+            abs(float(fold["role_quadratic_share"])) for fold in folds  # type: ignore[arg-type]
         ),
         "max_cross_team_unchanged_deviation": max(
             float(fold["cross_team_unchanged_deviation"]) for fold in folds  # type: ignore[arg-type]
@@ -742,11 +807,27 @@ def inner_targets(
             "passed": bool(
                 summary["role_measurable_folds"] == len(summary["folds"])  # type: ignore[arg-type]
                 and role_improvement >= MIN_ROLE_IMPROVEMENT  # type: ignore[operator]
+                and summary["newly_exceeding_cells"] == 0.0
+                and summary["regressed_cells"] == 0.0
             ),
             "role_improvement_fraction": float(role_improvement),  # type: ignore[arg-type]
             "threshold": MIN_ROLE_IMPROVEMENT,
             "measurable_folds": float(summary["role_measurable_folds"]),  # type: ignore[arg-type]
             "min_supported_cells": float(summary["min_role_cells"]),  # type: ignore[arg-type]
+            "newly_exceeding_cells": float(summary["newly_exceeding_cells"]),  # type: ignore[arg-type]
+            "newly_exceeding_cell_names": summary["newly_exceeding_cell_names"],
+            "regressed_cells": float(summary["regressed_cells"]),  # type: ignore[arg-type]
+            "regressed_cell_names": summary["regressed_cell_names"],
+            "worst_cell_rmse_regression": float(
+                summary["worst_cell_rmse_regression"]  # type: ignore[arg-type]
+            ),
+            "worst_cell_z_regression": float(
+                summary["worst_cell_z_regression"]  # type: ignore[arg-type]
+            ),
+            "cell_regression_limit": ROLE_CELL_REGRESSION_LIMIT,
+            "worst_role_abs_z": float(summary["worst_role_abs_z"]),  # type: ignore[arg-type]
+            "worst_pooled_abs_z": float(summary["worst_pooled_abs_z"]),  # type: ignore[arg-type]
+            "z_limit": ROLE_CELL_Z_LIMIT,
         },
         "D_primary_count_improves": {
             "passed": bool(count_improvement >= MIN_COUNT_IMPROVEMENT),
@@ -921,10 +1002,12 @@ def main() -> None:
         name = f"iso_rsym{rank}"
         specs[name] = v2_base_spec(name, r_symmetric=rank)
         axes["same_team"].append(name)
-    for enabled in (False, True):
+    for enabled in ROLE_DEVIATION_GRID:
         name = f"role_{'on' if enabled else 'off'}"
         specs[name] = v2_base_spec(
-            name, r_symmetric=R_SYMMETRIC_REFERENCE, role_deviation=enabled
+            name,
+            r_symmetric=R_SYMMETRIC_REFERENCE,
+            role_deviation=enabled,
         )
         axes["role"].append(name)
     for weight in BRIDGE_WEIGHT_GRID:
@@ -992,8 +1075,20 @@ def main() -> None:
             summaries[name]["spec"]["r_symmetric"],  # type: ignore[index]
         ),
     )
-    role_on = summaries["role_on"]["mean_role_improvement_fraction"]
-    role_selected = bool(role_on >= MIN_ROLE_IMPROVEMENT)  # type: ignore[operator]
+    # The role layer is carried only if it clears the improvement bar, breaks
+    # no cell the role-blind fit kept inside the z limit, and makes no single
+    # supported cell materially worse. Otherwise the axis resolves to off,
+    # which is the role-blind fit exactly.
+    selected_role = "role_off"
+    if "role_on" in axes["role"]:
+        candidate = summaries["role_on"]
+        if (
+            candidate["newly_exceeding_cells"] == 0.0
+            and candidate["regressed_cells"] == 0.0
+            and candidate["mean_role_improvement_fraction"]  # type: ignore[operator]
+            >= MIN_ROLE_IMPROVEMENT
+        ):
+            selected_role = "role_on"
     eligible_weights = [
         name
         for name in axes["bridge"]
@@ -1011,8 +1106,13 @@ def main() -> None:
         f"{list(REPAIR_TARGET_BUCKETS)}, ties to the smaller rank)"
     )
     console.print(
-        f"  role deviation     : {'ON' if role_selected else 'OFF'} "
-        f"(improvement {role_on:+.1%} against the {MIN_ROLE_IMPROVEMENT:.0%} bar)"  # type: ignore[arg-type]
+        f"  role deviation     : {selected_role} (improvement "
+        f"{summaries['role_on']['mean_role_improvement_fraction']:+.1%} against "
+        f"the {MIN_ROLE_IMPROVEMENT:.0%} bar, "
+        f"{summaries['role_on']['newly_exceeding_cells']:.0f} cells newly past "
+        f"|z| = {ROLE_CELL_Z_LIMIT:g}, "
+        f"{summaries['role_on']['regressed_cells']:.0f} cells worse by more "
+        f"than {ROLE_CELL_REGRESSION_LIMIT:.0%})"
     )
     console.print(
         f"  bridge weight      : {selected_weight} (lowest "
@@ -1025,10 +1125,13 @@ def main() -> None:
     # ------------------------------------------------------------------
     rank_star = int(summaries[selected_rank]["spec"]["r_symmetric"])  # type: ignore[index]
     weight_star = float(summaries[selected_weight]["spec"]["bridge_weight"])  # type: ignore[index]
+    role_star = bool(summaries[selected_role]["spec"]["role_deviation"])  # type: ignore[index]
     combinations: dict[str, V2Spec] = {
         "v2_iso": v2_base_spec("v2_iso", r_symmetric=rank_star),
         "v2_iso_role": v2_base_spec(
-            "v2_iso_role", r_symmetric=rank_star, role_deviation=True
+            "v2_iso_role",
+            r_symmetric=rank_star,
+            role_deviation=role_star,
         ),
         "v2_iso_bridge": v2_base_spec(
             "v2_iso_bridge", r_symmetric=rank_star, bridge_weight=weight_star
@@ -1036,7 +1139,7 @@ def main() -> None:
         "v2_full": v2_base_spec(
             "v2_full",
             r_symmetric=rank_star,
-            role_deviation=True,
+            role_deviation=role_star,
             bridge_weight=weight_star,
         ),
     }
@@ -1135,7 +1238,7 @@ def main() -> None:
             "r_symmetric": list(R_SYMMETRIC_GRID),
             "r_symmetric_candidates": list(R_SYMMETRIC_CANDIDATES),
             "r_symmetric_reference": R_SYMMETRIC_REFERENCE,
-            "role_deviation": [False, True],
+            "role_deviation": list(ROLE_DEVIATION_GRID),
             "bridge_weight": list(BRIDGE_WEIGHT_GRID),
             "temporal_treatments_screened_in": "01_temporal_diagnostic.py",
             "joint_search": False,
@@ -1144,6 +1247,8 @@ def main() -> None:
             "max_global_ratio": MAX_GLOBAL_RATIO,
             "min_count_improvement": MIN_COUNT_IMPROVEMENT,
             "min_role_improvement": MIN_ROLE_IMPROVEMENT,
+            "role_cell_z_limit": ROLE_CELL_Z_LIMIT,
+            "role_cell_regression_limit": ROLE_CELL_REGRESSION_LIMIT,
             "same_player_tolerance": SAME_PLAYER_TOLERANCE,
             "min_role_pairs": MIN_ROLE_PAIRS,
         },
@@ -1156,7 +1261,8 @@ def main() -> None:
         "axis_selections": {
             "same_team": selected_rank,
             "r_symmetric": rank_star,
-            "role_deviation": role_selected,
+            "role": selected_role,
+            "role_deviation": role_star,
             "bridge": selected_weight,
             "bridge_weight": weight_star,
             "temporal_treatment": temporal_treatment,

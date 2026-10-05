@@ -102,6 +102,20 @@ DEFAULT_RHO_MAX = 0.60
 DEFAULT_RHO_PANELS = 30
 DEFAULT_GAUSS_NODES = 5
 
+#: Terms kept in the Mehler series (see :func:`build_bridge_curve`). The term
+#: of order ``j`` carries ``rho ** (j + 1)``, so at the tabulated
+#: ``rho_max`` of 0.6 the first dropped term is below ``0.6 ** 48``, which is
+#: 1e-11 of a quantity whose leading term is order 0.05 -- far under float64
+#: noise in the pooled mean. The scores themselves are bounded by the
+#: orthonormal Hermite recurrence, so a high order costs accuracy nothing.
+DEFAULT_MEHLER_TERMS = 48
+
+#: How a bridge curve's values are computed. Both are exact statements of the
+#: same integral and agree to float64 noise; the series is thousands of times
+#: cheaper, and the quadrature is kept as the independent check that says so.
+BRIDGE_METHOD_MEHLER = "mehler_series"
+BRIDGE_METHOD_QUADRATURE = "gauss_legendre"
+
 
 @dataclass(frozen=True)
 class DiscreteMarginal:
@@ -269,6 +283,12 @@ class BridgeCurve:
     pairs: int
     panels: int
     nodes: int
+    method: str = BRIDGE_METHOD_MEHLER
+    terms: int = 0
+    #: Pooled Mehler coefficients, so that ``T(rho) = sum_j c_j rho ** (j + 1)``.
+    #: Present only for the series method, where they make :meth:`evaluate`
+    #: exact instead of piecewise linear.
+    coefficients: np.ndarray | None = None
 
     @property
     def rho_max(self) -> float:
@@ -293,10 +313,13 @@ class BridgeCurve:
     def slope_at_zero(self) -> float:
         """``dT/drho`` at the origin: the bridge's attenuation factor.
 
-        A central difference across the two panels either side of zero, so a
+        Exactly the leading series coefficient when there is one. Otherwise a
+        central difference across the two panels either side of zero, so a
         skewed margin's asymmetry about the origin does not bias it toward
         whichever side happened to be measured.
         """
+        if self.coefficients is not None and self.coefficients.size:
+            return float(self.coefficients[0])
         zero = self.zero_index
         return float(
             (self.values[zero + 1] - self.values[zero - 1])
@@ -304,8 +327,20 @@ class BridgeCurve:
         )
 
     def evaluate(self, rho: float) -> float:
-        """The observable implied by ``rho``, by piecewise-linear interpolation."""
+        """The observable implied by ``rho``.
+
+        Exact when the curve carries its series coefficients, and piecewise
+        linear on the tabulated grid otherwise. The tabulation is accurate to
+        about 1e-5 in absolute correlation, which is small but not negligible
+        against the bucket quantities this is inverted for, so the series is
+        evaluated rather than interpolated wherever it exists.
+        """
         clipped = float(np.clip(float(rho), self.rho_min, self.rho_max))
+        if self.coefficients is not None and self.coefficients.size:
+            total = 0.0
+            for coefficient in self.coefficients[::-1]:
+                total = total * clipped + float(coefficient)
+            return total * clipped
         return float(np.interp(clipped, self.grid, self.values))
 
     def invert(self, target: float, tolerance: float = 1e-12) -> float:
@@ -345,6 +380,11 @@ class BridgeCurve:
         return {
             "space": self.space,
             "pairs": int(self.pairs),
+            "method": self.method,
+            "series_terms": int(self.terms),
+            "series_coefficients": (
+                [] if self.coefficients is None else self.coefficients.tolist()
+            ),
             "quadrature_panels": int(self.panels),
             "quadrature_nodes": int(self.nodes),
             "rho_max": self.rho_max,
@@ -360,12 +400,59 @@ class BridgeNotIdentified(ValueError):
     """A bridge target is outside the range the latent grid can produce."""
 
 
+def mehler_scores(
+    marginal: DiscreteMarginal,
+    space: str,
+    terms: int = DEFAULT_MEHLER_TERMS,
+) -> np.ndarray:
+    """``d_j = sum_x w_x phi(z_x) h_j(z_x)`` for ``j = 0 .. terms - 1``.
+
+    ``h_j`` is the *orthonormal* Hermite polynomial ``He_j / sqrt(j!)``,
+    evaluated by its own three-term recurrence
+    ``h_j = (z h_{j-1} - sqrt(j - 1) h_{j-2}) / sqrt(j)``. Taking the
+    normalisation into the recurrence is what keeps this stable: ``He_j`` and
+    ``sqrt(j!)`` both overflow long before ``j = 48``, while their ratio stays
+    small.
+
+    These scores are everything a margin contributes to any bridge it appears
+    in, at every ``rho`` at once, so they are computed once per margin and
+    reused across stat pairs.
+    """
+    if terms < 1:
+        raise ValueError("terms must be positive")
+    weights = (
+        marginal.count_weights if space == "count" else marginal.latent_weights
+    )
+    if space not in ("count", "latent"):
+        raise ValueError(f"unknown bridge space {space!r}")
+    thresholds = marginal.thresholds
+    density = norm.pdf(thresholds)
+    weighted = weights * density
+
+    out = np.empty(terms, dtype=float)
+    previous = np.ones_like(thresholds)
+    out[0] = float(weighted @ previous)
+    if terms == 1:
+        return out
+    current = thresholds.copy()
+    out[1] = float(weighted @ current)
+    for order in range(2, terms):
+        following = (
+            thresholds * current - np.sqrt(order - 1.0) * previous
+        ) / np.sqrt(float(order))
+        previous, current = current, following
+        out[order] = float(weighted @ current)
+    return out
+
+
 def build_bridge_curve(
     pairs: Sequence[tuple[DiscreteMarginal, DiscreteMarginal]],
     space: str = "count",
     rho_max: float = DEFAULT_RHO_MAX,
     panels: int = DEFAULT_RHO_PANELS,
     nodes: int = DEFAULT_GAUSS_NODES,
+    method: str = BRIDGE_METHOD_MEHLER,
+    terms: int = DEFAULT_MEHLER_TERMS,
 ) -> BridgeCurve:
     """Pool the bridge over a deterministic sample of marginal pairs.
 
@@ -375,23 +462,88 @@ def build_bridge_curve(
     two margins and the single latent correlation between them. So the pooled
     bridge is the mean of the per-pair bridges, with no approximation beyond
     the sample of pairs it is pooled over.
+
+    Two ways of evaluating the same integral:
+
+    ``BRIDGE_METHOD_QUADRATURE``
+        integrate ``w_a' Phi_2(rho) w_b`` on a composite Gauss-Legendre grid.
+        Direct, and the reference the series is checked against, but it costs
+        one ``exp`` over the whole threshold outer product per pair *per
+        quadrature node*: for the screening's eight bridges that is tens of
+        billions of exponentials.
+
+    ``BRIDGE_METHOD_MEHLER``
+        use Mehler's expansion of the kernel,
+        ``phi_2(u, v; rho) = phi(u) phi(v) sum_j h_j(u) h_j(v) rho ** j``, which
+        makes the derivative ``sum_j d_j^a d_j^b rho ** j`` for the margin
+        scores of :func:`mehler_scores`. Integrating term by term gives the
+        bridge in closed form::
+
+            T(rho) = sum_j d_j^a d_j^b rho ** (j + 1) / (j + 1)
+
+        already pinned to zero at ``rho = 0``, which is where it has to be.
+        The pooled bridge is then the mean of the per-pair coefficients, so
+        each margin is touched once rather than once per node per stat pair.
+
+    Both are exact; the series is the default because it is thousands of times
+    cheaper, and the test suite asserts the two agree.
     """
     if not pairs:
         raise ValueError("a bridge needs at least one marginal pair")
 
     edges, node_grid, weight_grid = _gauss_legendre_panels(rho_max, panels, nodes)
-    derivative = np.zeros_like(node_grid)
 
+    if method == BRIDGE_METHOD_MEHLER:
+        # Keyed by object identity, which is safe here because ``pairs``
+        # holds a reference to every margin for the whole call: the same
+        # player-game-stat margin appears in hundreds of pairs, and its scores
+        # do not depend on which pair it is in.
+        scores: dict[int, np.ndarray] = {}
+
+        def score_of(marginal: DiscreteMarginal) -> np.ndarray:
+            key = id(marginal)
+            cached = scores.get(key)
+            if cached is None:
+                cached = mehler_scores(marginal, space, terms)
+                scores[key] = cached
+            return cached
+
+        total = np.zeros(terms, dtype=float)
+        for first, second in pairs:
+            product = score_of(first) * score_of(second)
+            if space == "count":
+                product = product / (first.sd * second.sd)
+            total += product
+        order = np.arange(terms, dtype=float)
+        coefficients = total / (len(pairs) * (order + 1.0))
+        powers = edges[:, None] ** (order + 1.0)
+        values = powers @ coefficients
+        return BridgeCurve(
+            space=space,
+            grid=edges,
+            values=values,
+            pairs=len(pairs),
+            panels=int(panels),
+            nodes=int(nodes),
+            method=method,
+            terms=int(terms),
+            coefficients=coefficients,
+        )
+
+    if method != BRIDGE_METHOD_QUADRATURE:
+        raise ValueError(f"unknown bridge method {method!r}")
+
+    derivative = np.zeros_like(node_grid)
     for panel in range(node_grid.shape[0]):
         for node in range(node_grid.shape[1]):
             rho = float(node_grid[panel, node])
-            total = 0.0
+            total_kernel = 0.0
             for first, second in pairs:
                 kernel = _weighted_kernel(first, second, rho, space)
                 if space == "count":
                     kernel /= first.sd * second.sd
-                total += kernel
-            derivative[panel, node] = total / len(pairs)
+                total_kernel += kernel
+            derivative[panel, node] = total_kernel / len(pairs)
 
     panel_integrals = np.sum(derivative * weight_grid, axis=1)
     antiderivative = np.concatenate(([0.0], np.cumsum(panel_integrals)))
@@ -408,6 +560,8 @@ def build_bridge_curve(
         pairs=len(pairs),
         panels=int(panels),
         nodes=int(nodes),
+        method=method,
+        terms=0,
     )
 
 
