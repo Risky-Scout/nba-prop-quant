@@ -60,6 +60,21 @@ def git_sha(project_root: Path, ref: str = "HEAD") -> str | None:
     return result.stdout.strip() or None
 
 
+def git_branch(project_root: Path) -> str | None:
+    """Current branch name, or ``None`` on a detached head or outside a repo."""
+    try:
+        result = subprocess.run(
+            ["git", "symbolic-ref", "--quiet", "--short", "HEAD"],
+            cwd=str(project_root),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+    return result.stdout.strip() or None
+
+
 def directory_fingerprint(root: Path, pattern: str = "**/*.parquet") -> dict[str, str]:
     """Per-file digests for an input tree, so data drift is detectable."""
     root = Path(root)

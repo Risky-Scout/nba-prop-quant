@@ -49,6 +49,7 @@ from nba_prop_quant.research.game_latent_state import DEPENDENCE_MODEL_VERSION
 from nba_prop_quant.research.game_latent_state.artifacts import (
     ArtifactManifest,
     finalize_manifest,
+    git_branch,
     git_sha,
     sha256_file,
     write_json,
@@ -836,7 +837,10 @@ def write_validation_manifest(
         ),
         source_production_ref="origin/production/wizardofodds-integration",
         code_sha=git_sha(PROJECT_ROOT),
-        branch="research/nba-game-latent-state-shadow-v1",
+        # Read rather than hard-coded: this driver is also pointed at other
+        # artifact roots on research branches derived from this one, and a
+        # constant would then record provenance for the wrong branch.
+        branch=git_branch(PROJECT_ROOT) or "research/nba-game-latent-state-shadow-v1",
         seed=int(args.seed),
         # Walk-forward validation has one cutoff per season rather than a
         # single date, so record the earliest: every fit behind every reported
