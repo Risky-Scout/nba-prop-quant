@@ -198,6 +198,10 @@ class SharedFactorLoadings:
     symmetric: np.ndarray | None = None
     role_deviation: np.ndarray | None = None
     role_offset: Mapping[str, float] = field(default_factory=dict)
+    #: Share of same-team ordered pairs falling in each ordered role pair.
+    #: Carried so the pair-share average is computable from the loadings
+    #: alone, without the frame they were fitted on.
+    role_pair_shares: Mapping[tuple[str, str], float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.game.ndim != 2 or self.game.shape[0] != len(self.stats):
@@ -315,6 +319,45 @@ class SharedFactorLoadings:
         same = base + (cross + cross.T)
         return scale * (same - self.competition_gram())
 
+    def role_quadratic_share(self) -> float:
+        """``sum_{r, r'} p_{r r'} h_r h_{r'}``: the role layer's pooled leak.
+
+        Weighted centring makes the *linear* term average to zero over same-
+        team ordered pairs, but it does not make the quadratic one vanish:
+        ``sum_r p_r h_r = 0`` says nothing about ``sum p_{r r'} h_r h_{r'}``
+        unless the two ends of a pair are independent, and they are not --
+        players of the same role share a roster slot pattern, so same-role
+        pairs are over-represented. This is the coefficient of that leak, and
+        :func:`v2.fit_v2_factors` absorbs it into the symmetric block so the
+        pair-share average lands on the same-team target regardless.
+        """
+        if self.role_deviation is None or not self.role_pair_shares:
+            return 0.0
+        return float(
+            sum(
+                share
+                * self.offset_for_role(first)
+                * self.offset_for_role(second)
+                for (first, second), share in self.role_pair_shares.items()
+            )
+        )
+
+    def pooled_same_team_correlation(self) -> np.ndarray:
+        """``S`` averaged over same-team ordered pairs with their role shares.
+
+        This is the quantity a pooled same-team bucket actually measures once
+        the loadings are role-conditioned, because the simulator draws every
+        pair with its own roles. With no role layer it is
+        :meth:`same_team_correlation` exactly.
+        """
+        pooled = self.same_team_correlation()
+        if self.role_deviation is None or not self.role_pair_shares:
+            return pooled
+        deviation = self.role_deviation
+        return pooled + 2.0 * self.role_quadratic_share() * (
+            deviation @ deviation.T
+        )
+
     def cross_team_correlation(self) -> np.ndarray:
         """``X = A - B``: distinct players, opposite teams.
 
@@ -394,6 +437,10 @@ class SharedFactorLoadings:
             payload["role_offset"] = {
                 str(key): float(value) for key, value in self.role_offset.items()
             }
+            payload["role_pair_shares"] = {
+                f"{first}__{second}": float(value)
+                for (first, second), value in self.role_pair_shares.items()
+            }
         return payload
 
     @classmethod
@@ -424,6 +471,9 @@ class SharedFactorLoadings:
                 str(key): float(value)
                 for key, value in dict(payload.get("role_offset", {})).items()  # type: ignore[arg-type]
             },
+            role_pair_shares=_parse_role_pair_shares(
+                payload.get("role_pair_shares", {})
+            ),
         )
 
     @classmethod
@@ -440,6 +490,17 @@ class SharedFactorLoadings:
             game=np.zeros((len(stats), k_game), dtype=float),
             team_contrast=np.zeros(len(stats), dtype=float),
         )
+
+
+def _parse_role_pair_shares(
+    payload: object,
+) -> dict[tuple[str, str], float]:
+    """Read back the ``"role_a__role_b"`` keys ``to_payload`` writes."""
+    out: dict[tuple[str, str], float] = {}
+    for key, value in dict(payload).items():  # type: ignore[arg-type]
+        first, _, second = str(key).partition("__")
+        out[(first, second)] = float(value)
+    return out
 
 
 @dataclass(frozen=True)
