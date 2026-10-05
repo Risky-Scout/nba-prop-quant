@@ -834,6 +834,35 @@ def test_competition_gate_abstains_without_enough_bootstrap_draws():
     assert evidence["available_draws"] == 0.0
 
 
+def test_role_scales_are_normalised_to_preserve_the_pooled_level():
+    """Role modulation redistributes dependence; it must not inflate it.
+
+    Each bucket's ratio is measured on within-bucket pairs, which are more
+    correlated than cross-bucket pairs, so every raw ratio reads above 1.0.
+    Applied multiplicatively without a constraint that would lift the whole
+    correlation level well above what the base loadings were fitted to.
+    """
+    frame = synthetic_residual_frame(games=400, seed=11)
+    standardized, _ = standardize_residuals(frame, STATS)
+    fit = fit_shared_factors(
+        standardized, STATS, bootstrap=200, seed=3, role_column="role_bucket"
+    )
+
+    scales = fit.loadings.role_scale
+    assert scales, "the fit saw labelled roles and should report scales"
+
+    counts = standardized["role_bucket"].value_counts()
+    total = float(counts.sum())
+    weighted_mean = sum(
+        counts[role] / total * scale for role, scale in scales.items()
+    )
+    assert weighted_mean == pytest.approx(1.0, abs=1e-9)
+
+    # An unseen role falls back to the pooled value rather than to a bucket.
+    assert fit.loadings.scale_for_role("role-that-never-existed") == 1.0
+    assert fit.loadings.scale_for_role(None) == 1.0
+
+
 def test_soft_threshold_zeroes_insignificant_entries():
     estimate = np.array([[0.10, 0.01], [0.01, -0.20]])
     error = np.array([[0.01, 0.02], [0.02, 0.01]])

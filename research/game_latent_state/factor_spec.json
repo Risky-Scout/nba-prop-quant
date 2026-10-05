@@ -1,4 +1,5 @@
 {
+  "competition_rank_note": "The competition Gram is Q = (A + B) - S by construction, so it is carried at whatever rank represents that difference exactly; truncating it would stop the model from reproducing the observed same-team block. Its eigenvalue spectrum reports the effective rank. The family is activated only when the bias-corrected bootstrap bound on min eig(S_hat) is negative.",
   "dependence_model_version": "game-latent-state-shadow-v1",
   "factor_families": [
     "game_pace_volume",
@@ -90,9 +91,9 @@
     "k_game": 2,
     "r_competition": 6,
     "role_scale": {
-      "bench": 1.669632978263081,
-      "rotation": 1.1442159544624548,
-      "starter": 1.261090577525369
+      "bench": 1.2265879211931596,
+      "rotation": 0.8405928052763975,
+      "starter": 0.9264541908679231
     },
     "stats": [
       "pts",
@@ -113,7 +114,7 @@
   },
   "role_column": "role_bucket",
   "shrink_z": 1.96,
-  "spec_hash": "2e4fa0953b6e92483a400cb0d7e226a19530c3898589df0c28c255d8d5601369",
+  "spec_hash": "e575024c01c0a9812e5ac3fa3d6b2cadb73d1c909388b552d0165b5070dc07bf",
   "standardization_moments": {
     "ast": {
       "mean": -0.0010324282522954516,

@@ -34,30 +34,43 @@ renormalisation is needed.
 Identification
 --------------
 Let ``S`` be the stat-by-stat correlation between two *distinct* players on
-the same team and ``X`` the same between two players on opposite teams. The
-model implies
+the same team and ``X`` the same between two players on opposite teams. With
+the game-level Gram ``A``, the team-contrast Gram ``B`` and the zero-sum
+competition Gram ``Q``, the model implies
 
-    S = A + B,    X = A - B,    A = (S + X) / 2,    B = (S - X) / 2
+    S = A + B - Q,    X = A - B
 
-where ``A`` is the game-level (team-blind) Gram and ``B`` the team-contrast
-Gram. A team-state factor that both teams load on *identically* is
+so the two observable blocks pin down two combinations of three Grams:
+
+    A + B = S + Q,    A - B = X
+
+A team-state factor that both teams load on *identically* is
 indistinguishable from a game-level factor, so only the antisymmetric part of
-the own-team/opponent-team loadings is separately identified. The canonical
-parameterisation used here is therefore
+the own-team/opponent-team loadings is separately identified; its symmetric
+part is absorbed into ``A``. ``Q`` is separately identified only through the
+constraint that ``A``, ``B`` and ``Q`` are each PSD: a purely additive model
+forces ``S`` to be PSD, so an indefinite ``S`` is the *only* evidence that
+``Q`` is non-zero, and ``factors.competition_gate`` requires that evidence to
+survive a bias-corrected bootstrap before the family is admitted. The
+canonical parameterisation is therefore
 
 * ``K`` game-level factors with loadings ``gamma[s, k]`` from a rank-``K``
   PSD factorisation of ``A`` (factor 1 is the pace/volume factor, factor 2
-  the rebound-environment contrast, fixed by eigenvalue ordering), and
+  the rebound-environment contrast, fixed by eigenvalue ordering),
 * one signed team-contrast factor with loading ``+d[s]`` for the player's own
   team and ``-d[s]`` for the opponent, from the rank-1 PSD factorisation of
-  ``B``.
+  ``B``, and
+* the within-team zero-sum family ``Q``, applied through the team projection
+  rather than as a per-player loading.
 
-``L_i L_i^T`` then equals ``A + B = S``: the shared-factor contribution to a
-player's own block is the same-team cross-player correlation, which is the
-right answer because a player is on the same team as himself.
+The shared-factor contribution to a player's *own* block is then
+``A + B + (n - 1) Q``, not ``S``: a player is on the same team as himself, so
+he receives the additive factors plus his own share of the zero-sum term
+rather than the negative share a distinct teammate receives. When ``Q = 0``
+this reduces to ``L_i L_i^T = A + B = S``.
 
-No parameter in ``L`` is indexed by a player or a player pair, so the layer
-extends to unseen players and new roster combinations without refitting.
+No parameter in ``L`` or ``Q`` is indexed by a player or a player pair, so the
+layer extends to unseen players and new roster combinations without refitting.
 """
 
 from __future__ import annotations

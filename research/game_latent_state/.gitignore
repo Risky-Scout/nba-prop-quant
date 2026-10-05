@@ -1,0 +1,7 @@
+# The OOF residual dataset is ~70 MB of derived data. Its SHA256 is recorded
+# in SHA256SUMS.residuals.txt and residual_manifest.json, together with the
+# raw-input fingerprints, seed and code SHA needed to rebuild it byte-for-byte
+# with 02_build_oof_residuals.py, so the hash is committed and the bytes are
+# not. Every small artifact -- the factor spec, loadings, diagnostics,
+# validation report and manifests -- is committed.
+oof_gaussian_residuals.parquet

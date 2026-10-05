@@ -483,6 +483,20 @@ def fit_role_scales(
     is shrunk toward the pooled value of 1.0 by the number of games the bucket
     was seen in. A role the fit never saw is absent from the mapping and
     therefore falls back to 1.0.
+
+    The raw bucket ratios are then **renormalised** so the player-weighted mean
+    scale is 1.0. Without that constraint the role layer is unidentified
+    against the base loadings and systematically inflates the level: each
+    bucket ratio is measured on *within*-bucket pairs, which are more
+    correlated than cross-bucket pairs, so every bucket reads above 1.0 even
+    though the pooled fit already matched the pooled correlation. Since the
+    implied correlation for a pair is ``s_a * s_b`` times the base, and the
+    pair-weighted mean of ``s_a * s_b`` is ``(sum_r p_r s_r)^2`` for role
+    shares ``p_r``, requiring ``sum_r p_r s_r == 1`` leaves the pooled level
+    exactly where the base loadings put it while keeping the *relative*
+    ordering of the roles. (Measured before this constraint was added, the
+    unnormalised scales inflated achieved cross-player correlation to 1.41x
+    the fitted target.)
     """
     stats = tuple(stats)
     implied = base.same_team_correlation()
@@ -490,8 +504,10 @@ def fit_role_scales(
     if denominator <= 0:
         return {}
 
+    labelled = frame.dropna(subset=[role_column])
     scales: dict[str, float] = {}
-    for role, group in frame.dropna(subset=[role_column]).groupby(role_column):
+    shares: dict[str, float] = {}
+    for role, group in labelled.groupby(role_column):
         try:
             observed = pair_moments(group, stats, value_prefix=value_prefix)
         except ValueError:
@@ -502,7 +518,16 @@ def fit_role_scales(
         raw = float(np.sqrt(max(numerator / denominator, 0.0)))
         weight = observed.games / (observed.games + ROLE_POOLING_GAMES)
         scales[str(role)] = float(weight * raw + (1.0 - weight) * 1.0)
-    return scales
+        shares[str(role)] = float(len(group))
+
+    if not scales:
+        return {}
+
+    total = sum(shares.values())
+    mean_scale = sum(shares[role] / total * scale for role, scale in scales.items())
+    if mean_scale <= 0:
+        return {}
+    return {role: scale / mean_scale for role, scale in scales.items()}
 
 
 def incumbent_within_player_blocks(

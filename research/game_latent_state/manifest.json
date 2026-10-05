@@ -1,8 +1,8 @@
 {
   "artifact_name": "game_latent_state_factor_model",
   "branch": "research/nba-game-latent-state-shadow-v1",
-  "code_sha": "bf52a7eadca96d1ec90833fa0f277d7502f3cc25",
-  "created_at": "2026-10-05T01:45:50Z",
+  "code_sha": "418424f017e67f6a70b7a33ca5793f14ed7bbb98",
+  "created_at": "2026-10-05T02:25:55Z",
   "dependence_model_version": "game-latent-state-shadow-v1",
   "input_fingerprints": {
     "oof_gaussian_residuals.parquet": "d0005f0e4996670266bfb5f9cf5cd25d8cbf9189c305fdc009f0f805ac921174"
@@ -14,7 +14,7 @@
   "outputs": {
     "covariance_diagnostics.json": "fef7751131a1ad1afd61e2cbfce5c4abea17786bf35ce86f1b562973a7e00cf3",
     "factor_loadings.parquet": "e93de5731ac17f79c0f72f222caf80b0dd0cf44da69a7505ba448c005b286500",
-    "factor_spec.json": "d761de1cea447a27d84b8fde3be8b72b168cdde5de54abc30377371a198b89b1"
+    "factor_spec.json": "553f02cc5865d124cf58b14e514ad2862b413061818092b1e3a8e42b8b71fe4d"
   },
   "parameters": {
     "bootstrap_draws": 400,
@@ -29,7 +29,7 @@
     "k_game": 2,
     "role_column": "role_bucket",
     "shrink_z": 1.96,
-    "spec_hash": "2e4fa0953b6e92483a400cb0d7e226a19530c3898589df0c28c255d8d5601369",
+    "spec_hash": "e575024c01c0a9812e5ac3fa3d6b2cadb73d1c909388b552d0165b5070dc07bf",
     "stats": [
       "pts",
       "reb",
