@@ -184,9 +184,12 @@ def test_control_spec_keeps_the_rank_one_contrast_wire_format(standardized_synth
     )
     payload = control.loadings.to_payload()
     assert np.shape(payload["team_contrast_loadings"]) == (len(STATS),)
-    assert payload["r_contrast"] == 1
+    # The rank is carried by the array shape rather than its own key, which is
+    # what keeps the serialised form identical to the committed V1 artifact.
+    assert "r_contrast" not in payload
     restored = SharedFactorLoadings.from_payload(payload)
     assert np.array_equal(restored.team_contrast, control.loadings.team_contrast)
+    assert restored.r_contrast == 1
 
 
 @pytest.mark.skipif(
@@ -869,7 +872,13 @@ def test_repair_changes_live_only_in_research_and_test_namespaces():
     reason="candidate not frozen yet",
 )
 def test_a_repair_candidate_cannot_promote_even_when_every_gate_passes():
+    """A frozen, fully passing repair candidate is still not promotable.
+
+    The repair widens the dependence structure, so the thing to guard is that
+    it inherits V1's refusal rather than acquiring a path of its own.
+    """
     from nba_prop_quant.research.game_latent_state.gates import (
+        GateResult,
         ShadowPromotionRefused,
         assert_promotable,
     )
@@ -877,5 +886,11 @@ def test_a_repair_candidate_cannot_promote_even_when_every_gate_passes():
     freeze = json.loads(
         (REPAIR_DIR / "bucket_repair_candidate.json").read_text(encoding="utf-8")
     )
-    with pytest.raises(ShadowPromotionRefused):
-        assert_promotable({"verdict": "anything", "frozen_candidate": freeze})
+    assert freeze["frozen"] is True
+
+    all_passing = [
+        GateResult(gate=gate, name=f"gate {gate}", passed=True, evidence={})
+        for gate in "ABCDEFGH"
+    ]
+    with pytest.raises(ShadowPromotionRefused, match="no promotion path"):
+        assert_promotable(all_passing)

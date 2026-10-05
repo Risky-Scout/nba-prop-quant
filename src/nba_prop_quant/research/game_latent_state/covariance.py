@@ -237,10 +237,12 @@ class SharedFactorLoadings:
         return float(self.role_scale.get(role, 1.0))
 
     def to_payload(self) -> dict[str, object]:
+        # No ``r_contrast`` key: the contrast rank is recoverable from the
+        # shape of ``team_contrast_loadings``, and leaving it out keeps this
+        # payload byte-identical to the accepted shadow V1 artifact.
         return {
             "stats": list(self.stats),
             "k_game": self.k_game,
-            "r_contrast": self.r_contrast,
             "r_competition": self.r_competition,
             "game_loadings": self.game.tolist(),
             "team_contrast_loadings": self.team_contrast.tolist(),

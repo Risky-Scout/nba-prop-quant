@@ -3,9 +3,9 @@
   "branch": "research/nba-game-latent-state-shadow-v1-bucket-repair",
   "candidate_family": "C_rank",
   "candidate_name": "C_rank_k6_r6_eb_block_diagonal",
-  "code_sha": "1c5b8c93569ee25afd4eb4222158300702bd9471",
+  "code_sha": "9184f94ea7bad820d669fb4faffe2c1924fd57fe",
   "diagnosis": "The attenuation is two independent mechanisms measured on pre-2024 data: a fixed-width soft threshold that costs 1.96/|z| of the signal (52.9% for teammate_reb_reb at z=3.70, 56.4% for teammate_ast_ast at z=3.47, against 6.3% for passer_ast_teammate_pts at z=31.15), and rank truncation that costs a further ~24-25%. The two targets lose through different rank channels: reb_reb through the rank-1 contrast factor, ast_ast through k_game=2.",
-  "factor_spec_hash": "56f9a4609f2addbd64f4acb3695476dc739bc8617119f7f175e4651fc2db94bb",
+  "factor_spec_hash": "c9b46e3a7497cfee52832f29397397b843aafb8e5f770a39157ce508f8157bc0",
   "frozen": true,
   "holdout_seasons": [
     2024,

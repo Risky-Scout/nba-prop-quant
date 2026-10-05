@@ -114,7 +114,6 @@
     ],
     "k_game": 6,
     "r_competition": 6,
-    "r_contrast": 6,
     "role_scale": {
       "bench": 1.2409340597688043,
       "rotation": 0.8338972224232034,
@@ -195,7 +194,7 @@
   "role_column": "role_bucket",
   "shrink_z": 1.96,
   "shrinkage": "empirical_bayes",
-  "spec_hash": "56f9a4609f2addbd64f4acb3695476dc739bc8617119f7f175e4651fc2db94bb",
+  "spec_hash": "c9b46e3a7497cfee52832f29397397b843aafb8e5f770a39157ce508f8157bc0",
   "standardization_moments": {
     "ast": {
       "mean": -0.0010324282522954516,
