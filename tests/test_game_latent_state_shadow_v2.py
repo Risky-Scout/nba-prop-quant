@@ -71,6 +71,7 @@ from nba_prop_quant.research.game_latent_state.v2 import (
     SYMMETRIC_MODE_RESIDUAL,
     V1_BASE_SPEC,
     V2Spec,
+    build_base_loadings,
     canonical_role_split,
     effective_symmetric_block,
     fit_role_layer,
@@ -79,6 +80,7 @@ from nba_prop_quant.research.game_latent_state.v2 import (
     role_conditioned_rmse,
     role_pair_moments,
     role_pair_shares,
+    symmetric_lift,
 )
 
 STATS: tuple[str, ...] = ("pts", "reb", "ast", "stl", "blk", "fg3m")
@@ -275,61 +277,113 @@ def test_the_controls_carry_no_symmetric_subspace_or_role_deviation():
 # ----------------------------------------------------------------------
 
 
-def test_a_full_rank_base_represents_both_targets_exactly(standardized):
-    """The premise the reserved mode rests on, asserted rather than assumed.
+def representable_blocks(seed: int = 19) -> tuple[np.ndarray, np.ndarray]:
+    """A same-team and cross-team pair the three-family model can fit exactly.
 
-    At six game and six contrast factors the three-family construction is an
-    exact solution of ``S = A + B - Q`` and ``X = A - B`` for six stats, so
-    there is no residual at all. Everything below follows from this: the
-    residual subspace has nothing to carry here, and reserving a piece of the
-    target out of the base is free.
+    Built the way the model reads them -- ``S = A + B - Q`` and ``X = A - B``
+    from three PSD Grams -- so ``S`` is genuinely indefinite, which is the case
+    the competition family exists for and the case the real moments are in. The
+    synthetic residual frame is not in that case: its same-team block is PSD,
+    the competition gate correctly declines, and then the additive Gram
+    dominates the target instead of equalling it. So the exactness premise is
+    asserted here, on the algebra, rather than on a frame that does not have
+    the property.
     """
-    fit = fit_v2_factors(
-        standardized,
-        STATS,
-        spec=v2_full_rank_spec("exact", r_symmetric=0),
-        bootstrap=FULL_RANK_BOOTSTRAP,
-        seed=73,
-    )
-    scale = fit.loadings.scale_for_role(None)
-    assert np.allclose(
-        fit.loadings.pooled_same_team_correlation() / scale,
-        fit.same_target,
-        atol=1e-12,
-    )
-    assert np.allclose(
-        fit.loadings.cross_team_correlation(), fit.cross_target, atol=1e-12
-    )
+    rng = np.random.default_rng(seed)
+    n = len(STATS)
+
+    def gram(scale: float) -> np.ndarray:
+        factor = rng.normal(size=(n, n)) * scale
+        return factor @ factor.T
+
+    a, b, q = gram(0.30), gram(0.20), gram(0.15)
+    return a + b - q, a - b
 
 
 @pytest.mark.parametrize("rank", [1, 2, 6])
-def test_the_residual_subspace_is_vacuous_on_an_exact_base(standardized, rank):
+def test_a_full_rank_base_represents_both_targets_exactly(rank):
+    """The premise the reserved mode rests on, asserted rather than assumed.
+
+    At six game and six contrast factors the construction is an exact solution
+    of ``S = A + B - Q`` and ``X = A - B`` for six stats, so there is no
+    residual at all. Everything else about the two modes follows from this: the
+    residual subspace has nothing to carry here, and reserving a piece of the
+    target out of the base is free.
+    """
+    same, cross = representable_blocks()
+    assert np.min(np.linalg.eigvalsh(same)) < 0.0, "S must be indefinite"
+    base = build_base_loadings(
+        STATS,
+        same,
+        cross,
+        v2_full_rank_spec("exact", r_symmetric=rank),
+        competition_allowed=True,
+    )
+    assert np.allclose(base.same_team_correlation(), same, atol=1e-12)
+    assert np.allclose(base.cross_team_correlation(), cross, atol=1e-12)
+
+
+def test_the_residual_subspace_is_vacuous_on_an_exact_base():
     """No residual, no subspace -- and no role layer riding on rounding error.
 
     This is why the reserved mode exists. Before the eigenvalue floor, the
     1e-17 gap left by an exact base still produced a carrier out of whichever
-    of its eigenvalues landed positive.
+    of its eigenvalues landed positive, and the role layer fitted onto it: the
+    quadratic leak reached 4.4e5 before the layer's own drop rule caught it.
     """
-    fit = fit_v2_factors(
-        standardized,
-        STATS,
-        spec=v2_full_rank_spec(
-            f"residual{rank}",
-            r_symmetric=rank,
-            symmetric_mode=SYMMETRIC_MODE_RESIDUAL,
-        ),
-        bootstrap=FULL_RANK_BOOTSTRAP,
-        seed=73,
-    )
-    assert fit.loadings.symmetric is None
-    assert np.max(np.abs(fit.symmetric_gap)) < 1e-10
+    same, cross = representable_blocks()
+    spec = v2_full_rank_spec("exact", r_symmetric=6)
+    base = build_base_loadings(STATS, same, cross, spec, competition_allowed=True)
+    gap = same - base.same_team_correlation()
+    assert np.max(np.abs(gap)) < 1e-12
+    scale = float(np.max(np.abs(same)))
+    assert effective_symmetric_block(0.5 * gap, 6, scale=scale) is None
+    # Without the scale the noise still yields a carrier, which is the bug the
+    # floor fixes and the reason the argument is not optional in the fit.
+    assert effective_symmetric_block(0.5 * gap, 6) is not None
 
 
 @pytest.mark.parametrize("rank", [1, 2, 6])
-def test_the_reserved_subspace_is_a_reparameterisation_at_full_rank(
+def test_the_reserved_subspace_is_free_at_full_rank(rank):
+    """It carries a real loading and leaves both fitted blocks where they were.
+
+    This is the reparameterisation claim, and it is stated against the base's
+    own fit rather than against the target so that it does not quietly depend
+    on the base being exact.
+    """
+    same, cross = representable_blocks()
+    spec = v2_full_rank_spec("reserved", r_symmetric=rank)
+    reference = build_base_loadings(
+        STATS, same, cross, spec, competition_allowed=True
+    )
+    symmetric = effective_symmetric_block(
+        0.5 * same, rank, scale=float(np.max(np.abs(same)))
+    )
+    assert symmetric is not None
+    assert symmetric.shape[1] >= 1
+    # A real loading, not rounding error.
+    assert np.max(np.abs(symmetric)) > 1e-4
+    lift = symmetric_lift(symmetric)
+    reserved = build_base_loadings(
+        STATS, same - lift, cross, spec, competition_allowed=True
+    )
+    assert np.allclose(
+        reserved.same_team_correlation() + lift,
+        reference.same_team_correlation(),
+        atol=1e-12,
+    )
+    assert np.allclose(
+        reserved.cross_team_correlation(),
+        reference.cross_team_correlation(),
+        atol=1e-12,
+    )
+
+
+@pytest.mark.parametrize("rank", [1, 2, 6])
+def test_the_reserved_subspace_leaves_the_cross_team_block_alone_on_real_shapes(
     standardized, role_moments, rank
 ):
-    """It carries a real loading and changes neither fitted block."""
+    """And the same through the whole fit, where the gate decides for itself."""
     reference = fit_v2_factors(
         standardized,
         STATS,
@@ -351,18 +405,7 @@ def test_the_reserved_subspace_is_a_reparameterisation_at_full_rank(
             seed=73,
             role_moments=role_moments,
         )
-        symmetric = fit.loadings.symmetric
-        assert symmetric is not None
-        assert symmetric.shape[1] >= 1
-        # A real loading, not rounding error: the floor is 1e-8 of the
-        # target's scale, so anything that survives it is orders above noise.
-        assert np.max(np.abs(symmetric)) > 1e-4
-        scale = fit.loadings.scale_for_role(None)
-        assert np.allclose(
-            fit.loadings.pooled_same_team_correlation() / scale,
-            fit.same_target,
-            atol=1e-10,
-        )
+        assert fit.loadings.symmetric is not None
         assert np.allclose(
             fit.loadings.cross_team_correlation(),
             reference.loadings.cross_team_correlation(),
