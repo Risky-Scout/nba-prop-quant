@@ -48,6 +48,7 @@ from nba_prop_quant.research.game_latent_state.bridge import (
 )
 from nba_prop_quant.research.game_latent_state.covariance import (
     SharedFactorLoadings,
+    project_psd_rank,
 )
 from nba_prop_quant.research.game_latent_state.factors import (
     fit_shared_factors,
@@ -67,6 +68,7 @@ from nba_prop_quant.research.game_latent_state.v2 import (
     V1_BASE_SPEC,
     V2Spec,
     canonical_role_split,
+    effective_symmetric_block,
     fit_role_layer,
     fit_v2_factors,
     initial_role_scores,
@@ -865,3 +867,193 @@ def test_design_rows_reproduce_the_role_conditioned_blocks(
                 * loadings.scale_for_role(second),
                 atol=1e-12,
             )
+
+
+# ----------------------------------------------------------------------
+# the rank the symmetric block claims is the rank it uses
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("requested", [2, 3, 6])
+def test_the_symmetric_block_is_trimmed_to_its_positive_rank(requested):
+    """A requested rank above the gap's positive rank yields no extra columns.
+
+    ``project_psd_rank`` pads with structurally zero columns, which the role
+    deviation would then carry as unidentified directions of ``W``.
+    """
+    basis = np.linalg.qr(np.random.default_rng(11).normal(size=(len(STATS), 2)))[0]
+    # Two positive eigenvalues, the rest strictly negative, so the positive
+    # rank is two whatever rank is asked for.
+    gap = (
+        basis[:, [0]] @ basis[:, [0]].T * 3.0
+        + basis[:, [1]] @ basis[:, [1]].T * 1.0
+        - np.eye(len(STATS)) * 0.0
+    )
+    gap = gap - 0.5 * (np.eye(len(STATS)) - basis @ basis.T)
+
+    block = effective_symmetric_block(gap, requested)
+    assert block is not None
+    assert block.shape == (len(STATS), 2)
+    assert np.all(np.any(np.abs(block) > 0.0, axis=0))
+    # Trimming drops zeros, so the Gram is untouched by it.
+    _, padded = project_psd_rank(gap, rank=requested)
+    assert np.allclose(block @ block.T, padded @ padded.T, atol=1e-12)
+
+
+def test_the_symmetric_block_declines_a_gap_it_cannot_represent():
+    """Rank zero and a negative-definite gap both give no block at all."""
+    gap = np.eye(len(STATS)) * 2.0
+    assert effective_symmetric_block(gap, 0) is None
+    assert effective_symmetric_block(gap, -1) is None
+    assert effective_symmetric_block(-gap, 6) is None
+
+
+# ----------------------------------------------------------------------
+# the bridge is a same-team dial with an exact null
+# ----------------------------------------------------------------------
+
+
+def bridge_target_probe() -> dict[tuple[str, str], float]:
+    """Bridge-implied latent targets, deliberately far from the moments.
+
+    Chosen large and of both signs so that a weight that is meant to be
+    ignored cannot be ignored by accident.
+    """
+    return {
+        ("ast", "pts"): 0.40,
+        ("reb", "reb"): -0.20,
+        ("pts", "fg3m"): 0.35,
+    }
+
+
+def test_bridge_weight_zero_is_the_no_bridge_fit_exactly(standardized, role_moments):
+    """The bridge's null is an identity, not a small perturbation."""
+    kwargs = {"bootstrap": 80, "seed": 73, "role_moments": role_moments}
+    spec = v2_spec("bridge0", r_symmetric=4, role_deviation=True, bridge_weight=0.0)
+    without = fit_v2_factors(standardized, STATS, spec=spec, **kwargs)
+    with_targets = fit_v2_factors(
+        standardized,
+        STATS,
+        spec=spec,
+        bridge_targets=bridge_target_probe(),
+        **kwargs,
+    )
+    assert np.array_equal(with_targets.same_target, without.same_target)
+    assert with_targets.loadings.to_payload() == without.loadings.to_payload()
+
+
+def test_the_bridge_moves_the_same_team_target_and_only_its_own_entries(
+    standardized, role_moments
+):
+    """At weight one the named entries land on the target; the rest do not move."""
+    kwargs = {"bootstrap": 80, "seed": 73, "role_moments": role_moments}
+    targets = bridge_target_probe()
+    reference = fit_v2_factors(
+        standardized,
+        STATS,
+        spec=v2_spec("nobridge", r_symmetric=4),
+        **kwargs,
+    )
+    bridged = fit_v2_factors(
+        standardized,
+        STATS,
+        spec=v2_spec("bridge1", r_symmetric=4, bridge_weight=1.0),
+        bridge_targets=targets,
+        **kwargs,
+    )
+    named = {
+        tuple(sorted((STATS.index(first), STATS.index(second))))
+        for first, second in targets
+    }
+    for (first, second), required in targets.items():
+        i, j = STATS.index(first), STATS.index(second)
+        assert bridged.same_target[i, j] == pytest.approx(required, abs=1e-12)
+        assert bridged.same_target[j, i] == pytest.approx(required, abs=1e-12)
+    for i in range(len(STATS)):
+        for j in range(len(STATS)):
+            if tuple(sorted((i, j))) in named:
+                continue
+            assert bridged.same_target[i, j] == reference.same_target[i, j]
+
+
+@pytest.mark.parametrize("weight", [0.25, 1.0])
+def test_the_bridge_cannot_reach_the_cross_team_block(
+    standardized, role_moments, weight
+):
+    """A same-team target is a same-team target: ``A - B`` is bitwise unchanged."""
+    kwargs = {"bootstrap": 80, "seed": 73, "role_moments": role_moments}
+    reference = fit_v2_factors(
+        standardized,
+        STATS,
+        spec=v2_spec("nobridge", r_symmetric=4),
+        **kwargs,
+    )
+    bridged = fit_v2_factors(
+        standardized,
+        STATS,
+        spec=v2_spec(
+            f"bridge{weight}",
+            r_symmetric=4,
+            role_deviation=True,
+            bridge_weight=weight,
+        ),
+        bridge_targets=bridge_target_probe(),
+        **kwargs,
+    )
+    assert np.array_equal(bridged.cross_target, reference.cross_target)
+    assert np.array_equal(
+        bridged.loadings.cross_team_correlation(),
+        reference.loadings.cross_team_correlation(),
+    )
+    assert bridged.cross_team_unchanged_deviation() == 0.0
+
+
+# ----------------------------------------------------------------------
+# the temporal treatment replaces named entries and nothing else
+# ----------------------------------------------------------------------
+
+
+def test_temporal_overrides_replace_only_the_entries_they_name(
+    standardized, role_moments
+):
+    """One stat pair is substituted, symmetrically, and the rest is the control."""
+    kwargs = {"bootstrap": 80, "seed": 73, "role_moments": role_moments}
+    spec = v2_spec("temporal", r_symmetric=4, role_deviation=True)
+    reference = fit_v2_factors(standardized, STATS, spec=spec, **kwargs)
+    index = STATS.index("ast")
+    posterior = float(reference.same_target[index, index]) + 0.05
+    overridden = fit_v2_factors(
+        standardized,
+        STATS,
+        spec=spec,
+        temporal_overrides={("ast", "ast"): posterior},
+        **kwargs,
+    )
+    assert overridden.same_target[index, index] == pytest.approx(posterior, abs=1e-12)
+    others = np.ones((len(STATS), len(STATS)), dtype=bool)
+    others[index, index] = False
+    assert np.array_equal(overridden.same_target[others], reference.same_target[others])
+    # The override is a same-team statement; the cross-team block is untouched.
+    assert np.array_equal(overridden.cross_target, reference.cross_target)
+    assert np.array_equal(
+        overridden.loadings.cross_team_correlation(),
+        reference.loadings.cross_team_correlation(),
+    )
+    # And the base construction, which reads the cross-team estimator on both
+    # blocks, is upstream of the override.
+    assert np.array_equal(overridden.base_same_target, reference.base_same_target)
+
+
+def test_temporal_overrides_ignore_a_stat_outside_the_model(standardized, role_moments):
+    """An override naming a stat the fit does not carry is dropped, not an error."""
+    kwargs = {"bootstrap": 80, "seed": 73, "role_moments": role_moments}
+    spec = v2_spec("temporal_unknown", r_symmetric=4)
+    reference = fit_v2_factors(standardized, STATS, spec=spec, **kwargs)
+    overridden = fit_v2_factors(
+        standardized,
+        STATS,
+        spec=spec,
+        temporal_overrides={("ast", "tov"): 0.5},
+        **kwargs,
+    )
+    assert np.array_equal(overridden.same_target, reference.same_target)
