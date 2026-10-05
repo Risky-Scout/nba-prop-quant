@@ -814,6 +814,71 @@ def latent_dependence_summary(
     return out
 
 
+def write_validation_manifest(
+    *,
+    artifact_dir: Path,
+    outputs: Mapping[str, Path],
+    args: argparse.Namespace,
+    validation_seasons: Sequence[int],
+    training_seasons: Sequence[int] | None,
+    residual_path: Path,
+    spec_path: Path,
+) -> None:
+    """Record provenance and hashes for the validation artifacts.
+
+    Kept separate from :func:`main` so the manifest can be regenerated from an
+    existing report without repeating the multi-hour simulation.
+    """
+    manifest = ArtifactManifest(
+        artifact_name="game_latent_state_validation",
+        source_production_sha=git_sha(
+            PROJECT_ROOT, "origin/production/wizardofodds-integration"
+        ),
+        source_production_ref="origin/production/wizardofodds-integration",
+        code_sha=git_sha(PROJECT_ROOT),
+        branch="research/nba-game-latent-state-shadow-v1",
+        seed=int(args.seed),
+        # Walk-forward validation has one cutoff per season rather than a
+        # single date, so record the earliest: every fit behind every reported
+        # number used only games from seasons strictly before this one.
+        training_cutoff=f"season<{min(validation_seasons)}",
+        seasons_used=list(validation_seasons),
+        training_seasons=list(training_seasons or []),
+        validation_seasons=list(validation_seasons),
+        input_fingerprints={
+            RESIDUAL_DATASET_NAME: sha256_file(residual_path),
+            FACTOR_SPEC_NAME: sha256_file(spec_path),
+        },
+        parameters={
+            "simulations_per_game": int(args.simulations),
+            "games_per_season": int(args.games_per_season),
+            "bootstrap_draws": int(args.bootstrap),
+            "min_expected_minutes": float(args.min_expected_minutes),
+            "marginal_probe_games_per_season": int(args.marginal_probe_games),
+            "marginal_probe_simulations": int(args.marginal_probe_simulations),
+            "variance_ratio_min_variance": VARIANCE_RATIO_MIN_VARIANCE,
+            "models": list(MODELS),
+        },
+        notes=[
+            (
+                "Marginals and the incumbent copula are refitted per "
+                "validation season on seasons strictly before it."
+            ),
+            (
+                "Joint-event lines come from the predictive marginal only; "
+                "realized values are used solely for grading."
+            ),
+        ],
+    )
+    finalize_manifest(
+        manifest,
+        artifact_dir,
+        outputs=dict(outputs),
+        manifest_name=MANIFEST_NAME.replace(".json", ".validation.json"),
+        checksum_name="SHA256SUMS.validation.txt",
+    )
+
+
 def main() -> None:
     args = parse_args()
     artifact_dir = Path(args.artifact_root)
@@ -956,52 +1021,20 @@ def main() -> None:
     report["verdict"] = shadow_verdict(gates)
 
     report_path = write_json(report, artifact_dir / VALIDATION_REPORT_NAME)
+    outputs = {VALIDATION_REPORT_NAME: report_path}
     if not events.empty:
-        events.to_parquet(artifact_dir / "joint_event_grades.parquet", index=False)
+        grades_path = artifact_dir / "joint_event_grades.parquet"
+        events.to_parquet(grades_path, index=False)
+        outputs[grades_path.name] = grades_path
 
-    manifest = ArtifactManifest(
-        artifact_name="game_latent_state_validation",
-        source_production_sha=git_sha(
-            PROJECT_ROOT, "origin/production/wizardofodds-integration"
-        ),
-        source_production_ref="origin/production/wizardofodds-integration",
-        code_sha=git_sha(PROJECT_ROOT),
-        branch="research/nba-game-latent-state-shadow-v1",
-        seed=int(args.seed),
-        seasons_used=validation_seasons,
-        training_seasons=spec.get("training_seasons"),
+    write_validation_manifest(
+        artifact_dir=artifact_dir,
+        outputs=outputs,
+        args=args,
         validation_seasons=validation_seasons,
-        input_fingerprints={
-            RESIDUAL_DATASET_NAME: sha256_file(residual_path),
-            FACTOR_SPEC_NAME: sha256_file(spec_path),
-        },
-        parameters={
-            "simulations_per_game": int(args.simulations),
-            "games_per_season": int(args.games_per_season),
-            "bootstrap_draws": int(args.bootstrap),
-            "min_expected_minutes": float(args.min_expected_minutes),
-            "marginal_probe_games_per_season": int(args.marginal_probe_games),
-            "marginal_probe_simulations": int(args.marginal_probe_simulations),
-            "variance_ratio_min_variance": VARIANCE_RATIO_MIN_VARIANCE,
-            "models": list(MODELS),
-        },
-        notes=[
-            (
-                "Marginals and the incumbent copula are refitted per "
-                "validation season on seasons strictly before it."
-            ),
-            (
-                "Joint-event lines come from the predictive marginal only; "
-                "realized values are used solely for grading."
-            ),
-        ],
-    )
-    finalize_manifest(
-        manifest,
-        artifact_dir,
-        outputs={VALIDATION_REPORT_NAME: report_path},
-        manifest_name=MANIFEST_NAME.replace(".json", ".validation.json"),
-        checksum_name="SHA256SUMS.validation.txt",
+        training_seasons=spec.get("training_seasons"),
+        residual_path=residual_path,
+        spec_path=spec_path,
     )
 
     console.rule("Verdict")
