@@ -1,7 +1,13 @@
-# The OOF residual dataset is ~70 MB of derived data. Its SHA256 is recorded
-# in SHA256SUMS.residuals.txt and residual_manifest.json, together with the
+# The OOF residual dataset is ~70 MB of derived data, more than twenty times
+# the largest blob this repository otherwise tracks, so it is excluded here and
+# identified by hash instead. Its SHA256 is recorded in
+# SHA256SUMS.residuals.txt and residual_manifest.json, together with the
 # raw-input fingerprints, seed and code SHA needed to rebuild it byte-for-byte
-# with 02_build_oof_residuals.py, so the hash is committed and the bytes are
-# not. Every small artifact -- the factor spec, loadings, diagnostics,
-# validation report and manifests -- is committed.
+# with 02_build_oof_residuals.py. Every small artifact -- the factor spec,
+# loadings, diagnostics, validation report and manifests -- is committed.
+#
+# The bytes were committed once, in 43e4d2a, before this exclusion landed, so
+# they remain in this branch's history and cannot be removed without a force
+# push. Because the file is untracked at the branch head, a squash merge
+# carries only the hash into the target branch, not the blob.
 oof_gaussian_residuals.parquet
