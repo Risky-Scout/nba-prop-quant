@@ -8,6 +8,7 @@ that need real history are exercised separately and are not imported here.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
@@ -30,6 +31,7 @@ from nba_prop_quant.research.game_latent_state.covariance import (
     project_psd_rank,
 )
 from nba_prop_quant.research.game_latent_state.factors import (
+    competition_gate,
     fit_shared_factors,
     incumbent_within_player_blocks,
     pair_moments,
@@ -657,8 +659,21 @@ def synthetic_residual_frame(
     seed: int = 17,
     game_sd: float = 0.3,
     contrast_sd: float = 0.2,
+    competition_sd: float = 0.0,
+    competition_stats: Sequence[str] = ("reb",),
+    team_size: int = 8,
 ) -> pd.DataFrame:
-    """Residuals generated from a known shared-factor structure."""
+    """Residuals generated from a known shared-factor structure.
+
+    ``competition_sd`` injects the within-team zero-sum family: each team draws
+    one value per slot, centers them, and rescales by ``sqrt(team_size)`` so the
+    induced teammate covariance is ``-competition_sd ** 2`` regardless of roster
+    size. It loads only on ``competition_stats`` -- the rebound-competition
+    story -- because a loading spread evenly over every stat leaves the
+    same-team block rank-one positive and therefore still PSD. Concentrating it
+    on one stat is what drives that stat's teammate correlation negative, and
+    that is the only thing here that can make the same-team block indefinite.
+    """
     rng = np.random.default_rng(seed)
     records = []
     for game in range(games):
@@ -666,7 +681,14 @@ def synthetic_residual_frame(
         contrast = rng.normal()
         for team_index, team in enumerate((1, 2)):
             side = 1.0 if team_index == 0 else -1.0
-            for slot in range(8):
+            if competition_sd > 0.0:
+                draw = rng.normal(size=team_size)
+                competition = (
+                    competition_sd * np.sqrt(team_size) * (draw - draw.mean())
+                )
+            else:
+                competition = np.zeros(team_size)
+            for slot in range(team_size):
                 base = {
                     "game_id": 1000 + game,
                     "season": 2018 + game % 5,
@@ -675,9 +697,11 @@ def synthetic_residual_frame(
                     "role_bucket": "starter" if slot < 5 else "bench",
                 }
                 for stat in STATS:
+                    loading = 1.0 if stat in competition_stats else 0.0
                     base[f"z_{stat}"] = (
                         game_sd * shared
                         + side * contrast_sd * contrast
+                        + loading * competition[slot]
                         + rng.normal()
                     )
                 records.append(base)
@@ -732,15 +756,82 @@ def test_fitted_loadings_reproduce_the_shrunk_pair_matrices():
     assert fit.loadings.k_game == 2
     assert fit.loadings.game.shape == (len(STATS), 2)
 
-    # The structural PSD requirements are on the identified Grams
-    # A = (S + X) / 2 and B = (S - X) / 2, which are what an arbitrarily large
-    # roster on each side forces to be non-negative definite. The cross-team
-    # block X is an off-diagonal block and is not itself required to be PSD.
-    same = fit.loadings.same_team_correlation()
-    cross = fit.loadings.cross_team_correlation()
-    assert min_eigenvalue(0.5 * (same + cross)) >= -1e-10
-    assert min_eigenvalue(0.5 * (same - cross)) >= -1e-10
-    assert min_eigenvalue(same) >= -1e-10
+    # The structural PSD requirements sit on the three factor Grams A, B and
+    # Q, each of which is a loading matrix times its transpose and so is PSD
+    # by construction. The observable blocks S = A + B - Q and X = A - B are
+    # not themselves required to be PSD: S is a cross-player block bounded
+    # below by the roster-size constraint, and X is an off-diagonal block.
+    game_gram = fit.loadings.game @ fit.loadings.game.T
+    contrast_gram = np.outer(fit.loadings.team_contrast, fit.loadings.team_contrast)
+    assert min_eigenvalue(game_gram) >= -1e-10
+    assert min_eigenvalue(contrast_gram) >= -1e-10
+    assert min_eigenvalue(fit.loadings.competition_gram()) >= -1e-10
+
+
+def test_competition_family_stays_off_when_teammates_do_not_compete():
+    """A purely additive structure must not be given a competition factor.
+
+    The same-team block's smallest eigenvalue reads as negative here purely
+    from estimation noise, so a naive `min eig(S_hat) < 0` test would activate
+    the family and then fit the noise exactly. The bias-corrected bound has to
+    see through that.
+    """
+    frame = synthetic_residual_frame(games=500, seed=21, competition_sd=0.0)
+    standardized, _ = standardize_residuals(frame, STATS)
+    moments = pair_moments(standardized, STATS, bootstrap=200, seed=5)
+    shrunk = soft_threshold(moments.same_team, moments.same_team_se)
+
+    active, evidence = competition_gate(moments, shrunk)
+
+    assert evidence["min_eigenvalue_point_estimate"] < 0.0
+    assert evidence["min_eigenvalue_pivotal_upper_bound"] > 0.0
+    assert active is False
+
+    fit = fit_shared_factors(standardized, STATS, bootstrap=200, seed=5)
+    assert fit.r_competition == 0
+    assert np.allclose(fit.loadings.competition_gram(), 0.0, atol=1e-12)
+    assert fit.diagnostics()["competition_family_active"] is False
+
+
+def test_competition_family_activates_on_genuine_rebound_competition():
+    """Negative teammate rebound correlation must be representable."""
+    frame = synthetic_residual_frame(
+        games=500, seed=21, competition_sd=0.55, competition_stats=("reb",)
+    )
+    standardized, _ = standardize_residuals(frame, STATS)
+    moments = pair_moments(standardized, STATS, bootstrap=200, seed=5)
+    reb = STATS.index("reb")
+
+    # The injected structure really does make teammate rebounds compete.
+    assert moments.same_team[reb, reb] < 0.0
+
+    shrunk = soft_threshold(moments.same_team, moments.same_team_se)
+    active, evidence = competition_gate(moments, shrunk)
+    assert evidence["min_eigenvalue_pivotal_upper_bound"] < 0.0
+    assert active is True
+
+    fit = fit_shared_factors(standardized, STATS, bootstrap=200, seed=5)
+    assert fit.r_competition > 0
+    assert min_eigenvalue(fit.loadings.competition_gram()) >= -1e-10
+
+    # A purely additive model cannot produce a negative same-team entry, so
+    # reproducing this block is exactly what the competition family buys.
+    assert fit.loadings.same_team_correlation()[reb, reb] < 0.0
+    assert fit.diagnostics()["same_team_fit_rmse"] < 0.01
+
+
+def test_competition_gate_abstains_without_enough_bootstrap_draws():
+    """Too few draws is not evidence; the family stays off."""
+    frame = synthetic_residual_frame(
+        games=200, seed=21, competition_sd=0.55, competition_stats=("reb",)
+    )
+    standardized, _ = standardize_residuals(frame, STATS)
+    moments = pair_moments(standardized, STATS, bootstrap=0)
+    shrunk = soft_threshold(moments.same_team, moments.same_team_se)
+
+    active, evidence = competition_gate(moments, shrunk)
+    assert active is False
+    assert evidence["available_draws"] == 0.0
 
 
 def test_soft_threshold_zeroes_insignificant_entries():
@@ -768,13 +859,17 @@ def test_no_dependence_parameter_is_indexed_by_player_or_pair():
     assert set(payload) == {
         "stats",
         "k_game",
+        "r_competition",
         "game_loadings",
         "team_contrast_loadings",
+        "competition_loadings",
         "role_scale",
     }
     assert np.shape(payload["game_loadings"]) == (len(STATS), 2)
     assert np.shape(payload["team_contrast_loadings"]) == (len(STATS),)
     assert payload["role_scale"] == {}
+    if payload["competition_loadings"] is not None:
+        assert np.shape(payload["competition_loadings"])[0] == len(STATS)
 
 
 def test_unseen_and_sparse_players_fall_back_without_refitting(marginals):

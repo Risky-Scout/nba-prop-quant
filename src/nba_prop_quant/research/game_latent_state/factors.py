@@ -34,7 +34,7 @@ players by construction.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -53,6 +53,15 @@ DEFAULT_SHRINK_Z = 1.96
 # and half the pooled value of 1.0.
 ROLE_POOLING_GAMES = 400.0
 
+# One-sided confidence level the same-team block's smallest eigenvalue must
+# clear before the within-team competition family is activated.
+COMPETITION_GATE_LEVEL = 0.975
+
+# Minimum number of bootstrap draws before the gate is allowed to decide. With
+# fewer draws the tail quantile is too coarse to be read as evidence, so the
+# family stays off.
+COMPETITION_GATE_MIN_DRAWS = 100
+
 
 @dataclass(frozen=True)
 class PairMoments:
@@ -66,6 +75,10 @@ class PairMoments:
     games: int
     same_team_se: np.ndarray
     cross_team_se: np.ndarray
+    #: Bootstrap draws of ``min eig(S_hat)``. Used to decide whether the
+    #: observed same-team block is *significantly* indefinite, which is the
+    #: only evidence that justifies activating the competition family.
+    same_team_min_eigenvalue_draws: np.ndarray | None = None
 
 
 def standardize_residuals(
@@ -166,6 +179,7 @@ def pair_moments(
 
     same_se = np.full((n_stats, n_stats), np.nan)
     cross_se = np.full((n_stats, n_stats), np.nan)
+    min_eigenvalue_draws: np.ndarray | None = None
 
     if bootstrap > 0:
         rng = np.random.default_rng(seed)
@@ -186,6 +200,12 @@ def pair_moments(
             )
         same_se = same_draws.std(axis=0, ddof=1)
         cross_se = cross_draws.std(axis=0, ddof=1)
+        min_eigenvalue_draws = np.array(
+            [
+                float(np.min(np.linalg.eigvalsh(0.5 * (draw + draw.T))))
+                for draw in same_draws
+            ]
+        )
 
     return PairMoments(
         stats=stats,
@@ -196,6 +216,7 @@ def pair_moments(
         games=len(per_game),
         same_team_se=0.5 * (same_se + same_se.T),
         cross_team_se=0.5 * (cross_se + cross_se.T),
+        same_team_min_eigenvalue_draws=min_eigenvalue_draws,
     )
 
 
@@ -219,6 +240,95 @@ def soft_threshold(
     return np.sign(estimate) * magnitude
 
 
+def psd_part(matrix: np.ndarray) -> np.ndarray:
+    """``Pi_+(M)``: the projection of ``M`` onto the PSD cone."""
+    return project_psd_rank(matrix, rank=np.asarray(matrix).shape[0])[0]
+
+
+def dominating_additive_gram(
+    same_team: np.ndarray,
+    cross_team: np.ndarray,
+) -> np.ndarray:
+    """The additive Gram ``M = A + B`` implied by observed ``S`` and ``X``.
+
+    The model constrains ``X = A - B`` and ``S = A + B - Q`` with
+    ``A, B, Q`` all PSD, so ``M = A + B`` must dominate ``S``, ``X`` and
+    ``-X`` in the Löwner order. The explicit construction
+
+        M0 = Pi_+(S)
+        M  = M0 + Pi_+(X - M0) + Pi_+(-X - M0)
+
+    satisfies all three: ``Q = M - S`` is PSD because ``M >= M0 >= S``, and
+    ``A = (M + X) / 2``, ``B = (M - X) / 2`` are PSD because the two
+    correction terms dominate ``-X - M0`` and ``X - M0`` respectively.
+
+    When ``S`` is already PSD and both ``(S + X) / 2`` and ``(S - X) / 2`` are
+    PSD -- the case where teammates show no net competition effect -- all
+    three correction terms vanish, ``Q = 0`` and the construction collapses to
+    the plain additive two-family model. The competition family is therefore
+    introduced only when the data require it.
+    """
+    base = psd_part(same_team)
+    return base + psd_part(cross_team - base) + psd_part(-cross_team - base)
+
+
+def competition_gate(
+    moments: PairMoments,
+    shrunk_same_team: np.ndarray,
+    level: float = COMPETITION_GATE_LEVEL,
+) -> tuple[bool, dict[str, float]]:
+    """Decide whether the data require the within-team competition family.
+
+    The family is only justified if the *true* same-team block is indefinite,
+    i.e. if some direction ``v`` has ``v' S v < 0``. The obvious test -- check
+    whether ``min eig(S_hat)`` is negative -- does not work, because
+    ``min eig`` is a concave function of its argument, so by Jensen's
+    inequality ``E[min eig(S_hat)] <= min eig(S)``: the point estimate is
+    biased downward and reads as indefinite even when the truth is PSD. The
+    minimizing direction is itself selected by the noise, which is the same
+    winner's-curse effect seen from the other side.
+
+    The bootstrap *percentile* of the draws inherits that bias, so this uses
+    the basic (pivotal) bootstrap instead. The draws approximate the
+    distribution of ``theta_hat - theta``, giving the one-sided bound
+
+        theta <= 2 * theta_hat - quantile(theta_star, 1 - level)
+
+    which is bias-corrected: a downward-biased point estimate is paired with a
+    correspondingly low lower quantile and the two shifts cancel. The family is
+    activated only when that bound is still negative.
+
+    Both the point estimate and the draws are taken from the *unshrunk* block,
+    since the draws are unshrunk and a pivotal bound is only valid when the two
+    are the same functional. The shrunk block's eigenvalue is reported as a
+    diagnostic.
+    """
+    draws = moments.same_team_min_eigenvalue_draws
+    if draws is None or len(draws) < COMPETITION_GATE_MIN_DRAWS:
+        return False, {
+            "available_draws": 0.0 if draws is None else float(len(draws)),
+            "required_draws": float(COMPETITION_GATE_MIN_DRAWS),
+        }
+
+    observed = 0.5 * (moments.same_team + moments.same_team.T)
+    point = float(np.min(np.linalg.eigvalsh(observed)))
+    lower_quantile = float(np.quantile(draws, 1.0 - level))
+    upper_bound = 2.0 * point - lower_quantile
+
+    evidence = {
+        "min_eigenvalue_point_estimate": point,
+        "min_eigenvalue_shrunk_estimate": float(
+            np.min(np.linalg.eigvalsh(0.5 * (shrunk_same_team + shrunk_same_team.T)))
+        ),
+        "min_eigenvalue_bootstrap_mean": float(np.mean(draws)),
+        "min_eigenvalue_bootstrap_lower_quantile": lower_quantile,
+        "min_eigenvalue_pivotal_upper_bound": upper_bound,
+        "gate_level": float(level),
+        "available_draws": float(len(draws)),
+    }
+    return upper_bound < 0.0, evidence
+
+
 @dataclass(frozen=True)
 class FactorFit:
     loadings: SharedFactorLoadings
@@ -227,8 +337,11 @@ class FactorFit:
     cross_team_shrunk: np.ndarray
     game_gram_eigenvalues: np.ndarray
     contrast_gram_eigenvalues: np.ndarray
+    competition_gram_eigenvalues: np.ndarray
     k_game: int
+    r_competition: int
     shrink_z: float
+    competition_evidence: Mapping[str, float] = field(default_factory=dict)
 
     def diagnostics(self) -> dict[str, object]:
         fitted_same = self.loadings.same_team_correlation()
@@ -239,6 +352,7 @@ class FactorFit:
             "same_team_pairs": float(self.moments.same_team_pairs),
             "cross_team_pairs": float(self.moments.cross_team_pairs),
             "k_game": int(self.k_game),
+            "r_competition": int(self.r_competition),
             "shrink_z": float(self.shrink_z),
             "observed_same_team_correlation": self.moments.same_team.tolist(),
             "observed_cross_team_correlation": self.moments.cross_team.tolist(),
@@ -248,8 +362,12 @@ class FactorFit:
             "shrunk_cross_team_correlation": self.cross_team_shrunk.tolist(),
             "fitted_same_team_correlation": fitted_same.tolist(),
             "fitted_cross_team_correlation": fitted_cross.tolist(),
+            "fitted_competition_gram": self.loadings.competition_gram().tolist(),
             "game_gram_eigenvalues": self.game_gram_eigenvalues.tolist(),
             "contrast_gram_eigenvalues": self.contrast_gram_eigenvalues.tolist(),
+            "competition_gram_eigenvalues": self.competition_gram_eigenvalues.tolist(),
+            "competition_activation_evidence": dict(self.competition_evidence),
+            "competition_family_active": bool(self.r_competition > 0),
             "same_team_fit_rmse": float(
                 np.sqrt(np.mean((fitted_same - self.same_team_shrunk) ** 2))
             ),
@@ -268,6 +386,7 @@ def fit_shared_factors(
     seed: int = 73,
     value_prefix: str = "zs_",
     role_column: str | None = None,
+    r_competition: int | None = None,
 ) -> FactorFit:
     """Estimate the shared latent-factor loadings from OOF residuals."""
     stats = tuple(stats)
@@ -282,16 +401,35 @@ def fit_shared_factors(
     same = soft_threshold(moments.same_team, moments.same_team_se, shrink_z)
     cross = soft_threshold(moments.cross_team, moments.cross_team_se, shrink_z)
 
-    game_gram = 0.5 * (same + cross)
-    contrast_gram = 0.5 * (same - cross)
+    competition_allowed, competition_evidence = competition_gate(moments, same)
 
+    # The additive Gram is the same either way; what the gate decides is
+    # whether the gap between it and the observed same-team block is modelled
+    # as a zero-sum competition factor or left as fit error.
+    additive = dominating_additive_gram(same, cross)
+    competition = (additive - same) if competition_allowed else np.zeros_like(same)
+
+    game_gram = 0.5 * (additive + cross)
+    contrast_gram = 0.5 * (additive - cross)
+
+    rank_competition = len(stats) if r_competition is None else int(r_competition)
     _, game_loadings = project_psd_rank(game_gram, rank=k_game)
     _, contrast_loadings = project_psd_rank(contrast_gram, rank=1)
+    _, competition_loadings = project_psd_rank(competition, rank=rank_competition)
 
     team_contrast = (
         contrast_loadings[:, 0]
         if contrast_loadings.shape[1] == 1
         else np.zeros(len(stats), dtype=float)
+    )
+    if not np.any(competition_loadings):
+        competition_loadings = None
+
+    base = SharedFactorLoadings(
+        stats=stats,
+        game=game_loadings,
+        team_contrast=team_contrast,
+        competition=competition_loadings,
     )
 
     role_scale: dict[str, float] = {}
@@ -299,17 +437,16 @@ def fit_shared_factors(
         role_scale = fit_role_scales(
             frame,
             stats,
-            base=SharedFactorLoadings(
-                stats=stats, game=game_loadings, team_contrast=team_contrast
-            ),
+            base=base,
             role_column=role_column,
             value_prefix=value_prefix,
         )
 
     loadings = SharedFactorLoadings(
         stats=stats,
-        game=game_loadings,
-        team_contrast=team_contrast,
+        game=base.game,
+        team_contrast=base.team_contrast,
+        competition=base.competition,
         role_scale=role_scale,
     )
 
@@ -322,8 +459,13 @@ def fit_shared_factors(
         contrast_gram_eigenvalues=np.linalg.eigvalsh(
             0.5 * (contrast_gram + contrast_gram.T)
         )[::-1],
+        competition_gram_eigenvalues=np.linalg.eigvalsh(
+            0.5 * (competition + competition.T)
+        )[::-1],
         k_game=int(k_game),
+        r_competition=0 if loadings.competition is None else loadings.r_competition,
         shrink_z=float(shrink_z),
+        competition_evidence=competition_evidence,
     )
 
 

@@ -110,15 +110,33 @@ def project_psd_rank(matrix: np.ndarray, rank: int) -> tuple[np.ndarray, np.ndar
 class SharedFactorLoadings:
     """Per-stat loadings on the identified shared factors.
 
-    ``game`` has shape ``(n_stats, k_game)`` and ``team_contrast`` shape
-    ``(n_stats,)``. ``role_scale`` maps a role label to a multiplicative
-    scalar applied to every shared loading of a player in that role; a role
-    the fit never saw falls back to ``1.0``, which is the pooled estimate.
+    ``game`` has shape ``(n_stats, k_game)``, ``team_contrast`` shape
+    ``(n_stats,)`` and ``competition`` shape ``(n_stats, r_comp)``.
+    ``role_scale`` maps a role label to a multiplicative scalar applied to
+    every shared loading of a player in that role; a role the fit never saw
+    falls back to ``1.0``, which is the pooled estimate.
+
+    The competition family is the within-team zero-sum factor. A purely
+    additive factor model can only produce non-negative same-team same-stat
+    correlation, which is the wrong sign if teammates compete for a finite
+    resource (rebounds to collect, shots to take, assists to distribute).
+    Writing the within-team effect as a zero-sum allocation over the ``n``
+    usable players on that team,
+
+        Cov_shared[(i, s), (j, t)] += n * Q[s, t] * (delta_ij - 1 / n)
+
+    gives ``-Q[s, t]`` between distinct teammates and ``(n - 1) * Q[s, t]`` on
+    a player's own block. That term is ``kron(I - 11'/n, n * Q)``, a Kronecker
+    product of two PSD matrices, so the shared covariance stays PSD while
+    negative teammate correlation becomes representable. The ``n`` scaling
+    makes the pairwise effect independent of roster size, so a short rotation
+    and a deep one carry the same teammate correlation.
     """
 
     stats: tuple[str, ...]
     game: np.ndarray
     team_contrast: np.ndarray
+    competition: np.ndarray | None = None
     role_scale: Mapping[str, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -126,50 +144,88 @@ class SharedFactorLoadings:
             raise ValueError("game loadings must have shape (n_stats, k_game)")
         if self.team_contrast.shape != (len(self.stats),):
             raise ValueError("team_contrast must have shape (n_stats,)")
+        if self.competition is not None and (
+            self.competition.ndim != 2 or self.competition.shape[0] != len(self.stats)
+        ):
+            raise ValueError("competition loadings must have shape (n_stats, r_comp)")
 
     @property
     def k_game(self) -> int:
         return int(self.game.shape[1])
 
-    def same_team_correlation(self) -> np.ndarray:
-        """``S``: distinct players, same team."""
+    @property
+    def r_competition(self) -> int:
+        return 0 if self.competition is None else int(self.competition.shape[1])
+
+    def competition_gram(self) -> np.ndarray:
+        """``Q``: the within-team zero-sum Gram."""
+        if self.competition is None:
+            return np.zeros((len(self.stats), len(self.stats)), dtype=float)
+        return self.competition @ self.competition.T
+
+    def additive_gram(self) -> np.ndarray:
+        """``A + B``: the team-blind plus team-contrast Gram."""
         return self.game @ self.game.T + np.outer(
             self.team_contrast, self.team_contrast
         )
 
+    def same_team_correlation(self) -> np.ndarray:
+        """``S = A + B - Q``: distinct players, same team."""
+        return self.additive_gram() - self.competition_gram()
+
     def cross_team_correlation(self) -> np.ndarray:
-        """``X``: distinct players, opposite teams."""
+        """``X = A - B``: distinct players, opposite teams."""
         return self.game @ self.game.T - np.outer(
             self.team_contrast, self.team_contrast
         )
 
-    def design(self, side: int, role: str | None = None) -> np.ndarray:
-        """Shared-factor design rows for one player, shape ``(n_stats, k+1)``.
+    def within_player_shared_gram(self, team_size: int) -> np.ndarray:
+        """``A + B + (n - 1) Q``: shared contribution to a player's own block."""
+        return self.additive_gram() + max(int(team_size) - 1, 0) * self.competition_gram()
 
-        ``side`` is ``+1`` for one team and ``-1`` for the other; it flips the
-        sign of the team-contrast loading and nothing else.
+    def design(self, side: int, role: str | None = None) -> np.ndarray:
+        """Additive shared-factor design rows for one player.
+
+        Shape ``(n_stats, k_game + 1)``. ``side`` is ``+1`` for one team and
+        ``-1`` for the other; it flips the sign of the team-contrast loading
+        and nothing else. The competition family is absent here because it is
+        not an independent per-player factor: it enters through the team
+        projection in :func:`build_game_covariance`.
         """
         if side not in (1, -1):
             raise ValueError("side must be +1 or -1")
-        scale = float(self.role_scale.get(role, 1.0)) if role is not None else 1.0
+        scale = self.scale_for_role(role)
         contrast = (side * scale) * self.team_contrast.reshape(-1, 1)
         return np.hstack([scale * self.game, contrast])
+
+    def scale_for_role(self, role: str | None) -> float:
+        if role is None:
+            return 1.0
+        return float(self.role_scale.get(role, 1.0))
 
     def to_payload(self) -> dict[str, object]:
         return {
             "stats": list(self.stats),
             "k_game": self.k_game,
+            "r_competition": self.r_competition,
             "game_loadings": self.game.tolist(),
             "team_contrast_loadings": self.team_contrast.tolist(),
+            "competition_loadings": (
+                None if self.competition is None else self.competition.tolist()
+            ),
             "role_scale": {str(key): float(value) for key, value in self.role_scale.items()},
         }
 
     @classmethod
     def from_payload(cls, payload: Mapping[str, object]) -> SharedFactorLoadings:
+        competition = payload.get("competition_loadings")
         return cls(
             stats=tuple(payload["stats"]),  # type: ignore[arg-type]
             game=np.asarray(payload["game_loadings"], dtype=float),
             team_contrast=np.asarray(payload["team_contrast_loadings"], dtype=float),
+            competition=(
+                None if competition is None else np.asarray(competition, dtype=float)
+            ),
             role_scale={
                 str(key): float(value)
                 for key, value in dict(payload.get("role_scale", {})).items()  # type: ignore[arg-type]
@@ -265,17 +321,28 @@ def build_game_covariance(
     if unknown:
         raise ValueError(f"dimensions reference unmodelled stats: {unknown}")
 
-    # Group coordinates by player so the within-player block can be pinned.
+    # Group coordinates by player so the within-player block can be pinned,
+    # and by team so the zero-sum competition projection knows its roster size.
     by_player: dict[int, list[int]] = {}
+    team_of_player: dict[int, int] = {}
     for position, dim in enumerate(dimensions):
         by_player.setdefault(dim.player_id, []).append(position)
+        team_of_player[dim.player_id] = dim.team_id
+
+    team_sizes: dict[int, int] = {}
+    for player_id, team_id in team_of_player.items():
+        team_sizes[team_id] = team_sizes.get(team_id, 0) + 1
 
     size = len(dimensions)
     shared = np.zeros((size, loadings.k_game + 1), dtype=float)
+    competition_gram = loadings.competition_gram()
+    has_competition = bool(np.any(competition_gram))
+    row_scale = np.ones(size, dtype=float)
     shrink: dict[int, float] = {}
     min_residual = np.inf
 
     residual_blocks: list[tuple[list[int], np.ndarray]] = []
+    player_rows: dict[int, list[int]] = {}
 
     for player_id, positions in by_player.items():
         if player_id not in within_player:
@@ -300,9 +367,17 @@ def build_game_covariance(
         role = roles.pop() if len(roles) == 1 else None
 
         rows = [stat_index[dimensions[position].stat] for position in positions]
+        player_rows[player_id] = rows
         design = loadings.design(side=side, role=role)
+        role_factor = loadings.scale_for_role(role)
+        team_size = team_sizes[team_of_player[player_id]]
 
-        full_gram = design @ design.T
+        # The shared contribution to this player's own block: the additive
+        # factors plus the zero-sum term's diagonal share.
+        full_gram = design @ design.T + max(team_size - 1, 0) * (
+            role_factor**2
+        ) * competition_gram
+
         scale = _largest_feasible_shrink(block, full_gram)
         if scale < MIN_SHARED_SHRINK:
             raise ValueError(
@@ -311,14 +386,38 @@ def build_game_covariance(
             )
         shrink[int(player_id)] = scale
 
-        scaled_design = scale * design
-        shared[positions, :] = scaled_design[rows, :]
+        shared[positions, :] = (scale * design)[rows, :]
+        for position in positions:
+            row_scale[position] = scale * role_factor
 
         residual = block - (scale**2) * full_gram
         min_residual = min(min_residual, min_eigenvalue(residual))
         residual_blocks.append((positions, residual[np.ix_(rows, rows)]))
 
     correlation = shared @ shared.T
+
+    if has_competition:
+        # kron(I - 11'/n, n * Q) per team, then a congruence by the per-player
+        # shrink and role scales. Both factors are PSD, so the sum stays PSD.
+        for team_id, team_size in team_sizes.items():
+            members = [
+                player_id
+                for player_id, member_team in team_of_player.items()
+                if member_team == team_id
+            ]
+            for first in members:
+                for second in members:
+                    positions_a = by_player[first]
+                    positions_b = by_player[second]
+                    rows_a = player_rows[first]
+                    rows_b = player_rows[second]
+                    weight = team_size * (1.0 if first == second else 0.0) - 1.0
+                    patch = weight * competition_gram[np.ix_(rows_a, rows_b)]
+                    patch = patch * np.outer(
+                        row_scale[positions_a], row_scale[positions_b]
+                    )
+                    correlation[np.ix_(positions_a, positions_b)] += patch
+
     for positions, residual in residual_blocks:
         correlation[np.ix_(positions, positions)] += residual
 
