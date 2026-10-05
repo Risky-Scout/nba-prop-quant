@@ -24,6 +24,7 @@ from nba_prop_quant.research.game_latent_state.gates import (
     GateThresholds,
     ShadowPromotionRefused,
     assert_promotable,
+    bonferroni_z,
     evaluate_gates,
     shadow_verdict,
 )
@@ -275,8 +276,11 @@ def passing_report() -> dict:
     return {
         "marginal_preservation": {
             "candidate": {
-                "max_abs_over_z": 2.1,
-                "max_abs_mean_z": 2.4,
+                "max_abs_over_z": 4.1,
+                "max_abs_mean_z": 3.8,
+                "z_probe_count": 800_000,
+                "three_sigma_exceedance_fraction": 0.0030,
+                "max_abs_over_probability_error": 0.004,
                 "max_abs_variance_relative_error": 0.01,
             }
         },
@@ -324,7 +328,24 @@ def test_all_gates_pass_on_a_passing_report():
 @pytest.mark.parametrize(
     ("gate", "mutate"),
     [
-        ("A", lambda r: r["marginal_preservation"]["candidate"].update(max_abs_over_z=9.0)),
+        (
+            "A",
+            lambda r: r["marginal_preservation"]["candidate"].update(
+                max_abs_over_z=9.0
+            ),
+        ),
+        (
+            "A",
+            lambda r: r["marginal_preservation"]["candidate"].update(
+                three_sigma_exceedance_fraction=0.05
+            ),
+        ),
+        (
+            "A",
+            lambda r: r["marginal_preservation"]["candidate"].update(
+                max_abs_over_probability_error=0.2
+            ),
+        ),
         (
             "B",
             lambda r: r["residual_dependence"]["cross_player_rmse"].update(
@@ -374,10 +395,37 @@ def test_even_a_passing_candidate_cannot_promote():
 def test_gate_thresholds_are_declared_not_derived():
     """Thresholds are constants of the module, not functions of the data."""
     defaults = GateThresholds()
-    assert defaults.max_marginal_over_z == 5.0
+    assert defaults.marginal_family_wise_alpha == 0.01
+    assert defaults.max_three_sigma_exceedance_ratio == 3.0
+    assert defaults.max_over_probability_error == 0.01
     assert defaults.min_cross_player_rmse_reduction == 0.50
     assert defaults.max_same_player_block_deviation == 1e-9
     assert defaults.require_clean_production_surface is True
+
+
+def test_gate_a_critical_value_scales_with_the_declared_probe_count():
+    """The only data-dependent part of gate A is the probe count it corrects for.
+
+    The family-wise alpha is fixed in code; the critical z is derived from the
+    number of probes the report declares, so a larger validation run earns a
+    wider bound by arithmetic rather than by a post-hoc threshold change.
+    """
+    alpha = GateThresholds().marginal_family_wise_alpha
+    small = bonferroni_z(1_000, alpha)
+    large = bonferroni_z(800_000, alpha)
+    assert 3.0 < small < large < 7.0
+
+    # Absent or nonsensical probe counts yield no bound, which fails the gate.
+    assert bonferroni_z(None, alpha) is None
+    assert bonferroni_z(0, alpha) is None
+
+
+def test_gate_a_rejects_a_report_that_hides_its_probe_count():
+    """A report cannot earn a pass by omitting the multiplicity evidence."""
+    report = passing_report()
+    del report["marginal_preservation"]["candidate"]["z_probe_count"]
+    results = evaluate_gates(report)
+    assert {result.gate for result in results if not result.passed} == {"A"}
 
 
 def test_every_shadow_manifest_declares_itself_non_promotable():

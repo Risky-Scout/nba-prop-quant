@@ -19,9 +19,29 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from scipy.stats import norm
+
 VERDICT_ACCEPTED = "SHADOW V1 ACCEPTED FOR PRODUCTION-INTEGRATION DESIGN."
 
 VERDICT_REJECTED_PREFIX = "SHADOW V1 REJECTED:"
+
+#: Two-sided tail mass beyond 3 sigma for a standard normal. The expected
+#: exceedance fraction of the marginal-preservation probes under the null.
+NULL_THREE_SIGMA_FRACTION = 2.0 * norm.sf(3.0)
+
+
+def bonferroni_z(probe_count: Any, family_wise_alpha: float) -> float | None:
+    """Two-sided Bonferroni critical z for ``probe_count`` simultaneous probes.
+
+    Returns ``None`` when the probe count is missing or not positive, which
+    makes the gate fail rather than silently pass on absent evidence.
+    """
+    if probe_count is None:
+        return None
+    count = int(probe_count)
+    if count < 1:
+        return None
+    return float(norm.isf(family_wise_alpha / (2.0 * count)))
 
 
 class ShadowPromotionRefused(RuntimeError):
@@ -34,10 +54,31 @@ class GateThresholds:
 
     # GATE A: marginal preservation. The simulated margin is the production
     # margin by construction, so the only admissible discrepancy is Monte
-    # Carlo noise. A z-score against the Monte Carlo standard error is the
-    # right currency; 5 sigma on the worst dimension of the worst game.
-    max_marginal_over_z: float = 5.0
-    max_marginal_mean_z: float = 5.0
+    # Carlo noise, and a z-score against the Monte Carlo standard error is the
+    # right currency. A *fixed* z ceiling would be wrong here: the validation
+    # run probes every player-stat of every held-out game, so hundreds of
+    # thousands of z-scores are drawn and the largest of them is far from
+    # standard normal. At n probes the null expectation of max |z| is already
+    # about 4.9 for n = 800k, so a flat 5.0 ceiling would be a coin flip on
+    # noise alone.
+    #
+    # The worst-case probe is therefore judged against a Bonferroni bound
+    # derived from the probe count the report declares,
+    # ``z_crit = Phi^-1(1 - alpha / (2n))``, at this family-wise alpha. That
+    # bound is computed from the report, so it cannot be tuned after the
+    # numbers exist.
+    marginal_family_wise_alpha: float = 0.01
+
+    # A Bonferroni bound only constrains the single worst probe, so it is
+    # paired with a bulk check: the fraction of probes beyond 3 sigma must not
+    # exceed this multiple of the 0.0027 expected under the null. A systematic
+    # bias shows up here even when no single probe is extreme.
+    max_three_sigma_exceedance_ratio: float = 3.0
+
+    # And with a floor in absolute probability units, so that an enormous
+    # probe count can never license an economically meaningful miss.
+    max_over_probability_error: float = 0.01
+
     max_variance_relative_error: float = 0.05
 
     # GATE B: cross-player dependence reproduction must beat conditional
@@ -97,29 +138,50 @@ def evaluate_gates(
     results: list[GateResult] = []
 
     # ---- GATE A: marginal preservation ------------------------------
-    over_z = _get(report, "marginal_preservation", "candidate", "max_abs_over_z")
-    mean_z = _get(report, "marginal_preservation", "candidate", "max_abs_mean_z")
-    variance_error = _get(
-        report, "marginal_preservation", "candidate", "max_abs_variance_relative_error"
+    marginal = _get(report, "marginal_preservation", "candidate", default={}) or {}
+    over_z = marginal.get("max_abs_over_z")
+    mean_z = marginal.get("max_abs_mean_z")
+    variance_error = marginal.get("max_abs_variance_relative_error")
+    probes = marginal.get("z_probe_count")
+    exceedance = marginal.get("three_sigma_exceedance_fraction")
+    probability_error = marginal.get("max_abs_over_probability_error")
+
+    z_critical = bonferroni_z(probes, limits.marginal_family_wise_alpha)
+    exceedance_limit = (
+        limits.max_three_sigma_exceedance_ratio * NULL_THREE_SIGMA_FRACTION
     )
     results.append(
         GateResult(
             gate="A",
             name="marginal calibration preserved within Monte Carlo tolerance",
             passed=(
-                over_z is not None
-                and mean_z is not None
-                and variance_error is not None
-                and over_z <= limits.max_marginal_over_z
-                and mean_z <= limits.max_marginal_mean_z
+                None
+                not in (
+                    over_z,
+                    mean_z,
+                    variance_error,
+                    probes,
+                    exceedance,
+                    probability_error,
+                    z_critical,
+                )
+                and over_z <= z_critical
+                and mean_z <= z_critical
+                and exceedance <= exceedance_limit
+                and probability_error <= limits.max_over_probability_error
                 and variance_error <= limits.max_variance_relative_error
             ),
             evidence={
                 "max_abs_over_z": over_z,
                 "max_abs_mean_z": mean_z,
+                "z_probe_count": probes,
+                "bonferroni_z_critical": z_critical,
+                "family_wise_alpha": limits.marginal_family_wise_alpha,
+                "three_sigma_exceedance_fraction": exceedance,
+                "limit_three_sigma_exceedance_fraction": exceedance_limit,
+                "max_abs_over_probability_error": probability_error,
+                "limit_over_probability_error": limits.max_over_probability_error,
                 "max_abs_variance_relative_error": variance_error,
-                "limit_over_z": limits.max_marginal_over_z,
-                "limit_mean_z": limits.max_marginal_mean_z,
                 "limit_variance_relative_error": limits.max_variance_relative_error,
             },
         )

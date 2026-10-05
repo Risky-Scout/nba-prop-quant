@@ -55,6 +55,7 @@ FACTOR_FAMILIES = (
     "game_pace_volume",
     "game_rebound_environment",
     "team_contrast_own_minus_opponent",
+    "within_team_zero_sum_competition",
     "player_within_block_incumbent",
     "idiosyncratic_residual",
 )
@@ -91,7 +92,9 @@ def main() -> None:
 
     residuals = pd.read_parquet(residual_path)
     residuals["season"] = residuals["season"].astype(int)
-    seasons = sorted(residuals["season"].unique())
+    # Plain ints, not numpy scalars: a list of numpy scalars renders as a rich
+    # markup tag and is swallowed by the console.
+    seasons = [int(season) for season in sorted(residuals["season"].unique())]
     if len(seasons) <= args.holdout_seasons:
         raise SystemExit("not enough residual seasons for a chronological split")
 
@@ -127,9 +130,7 @@ def main() -> None:
     diagnostics["standardization_moments"] = {
         stat: {"mean": value[0], "sd": value[1]} for stat, value in moments.items()
     }
-    diagnostics["rank_selection"] = _rank_sweep(
-        standardized, int(args.shrink_z and args.k_game), fit
-    )
+    diagnostics["rank_selection"] = _rank_sweep(fit)
 
     console.rule("Observed cross-player correlation (training)")
     _print_matrix("same team", fit.moments.same_team)
@@ -162,6 +163,14 @@ def main() -> None:
         "within_player_block_source": (
             "incumbent nba_prop_quant.copula.GaussianCopula; pinned, not refitted"
         ),
+        "competition_rank_note": (
+            "The competition Gram is Q = (A + B) - S by construction, so it is "
+            "carried at whatever rank represents that difference exactly; "
+            "truncating it would stop the model from reproducing the observed "
+            "same-team block. Its eigenvalue spectrum reports the effective "
+            "rank. The family is activated only when the bias-corrected "
+            "bootstrap bound on min eig(S_hat) is negative."
+        ),
     }
     spec["spec_hash"] = sha256_canonical(spec)
 
@@ -170,6 +179,7 @@ def main() -> None:
         diagnostics, artifact_dir / COVARIANCE_DIAGNOSTICS_NAME
     )
 
+    competition = fit.loadings.competition
     loadings_frame = pd.DataFrame(
         {
             "stat": list(SUPPORTED_STATS),
@@ -178,6 +188,14 @@ def main() -> None:
                 for index in range(fit.loadings.k_game)
             },
             "team_contrast": fit.loadings.team_contrast,
+            **(
+                {
+                    f"competition_factor_{index + 1}": competition[:, index]
+                    for index in range(competition.shape[1])
+                }
+                if competition is not None
+                else {}
+            ),
         }
     )
     loadings_path = artifact_dir / FACTOR_LOADINGS_NAME
@@ -234,7 +252,7 @@ def main() -> None:
     console.rule("Factor model written")
 
 
-def _rank_sweep(standardized: pd.DataFrame, _unused: int, fit) -> dict[str, object]:
+def _rank_sweep(fit) -> dict[str, object]:
     """Report how much of the game-level Gram each rank explains."""
     eigenvalues = np.clip(fit.game_gram_eigenvalues, 0.0, None)
     total = float(np.sum(eigenvalues))

@@ -143,7 +143,10 @@ class GameSimulation:
     draws: np.ndarray
     simulations: int
     seed: int
-    covariance: GameCovariance
+    #: ``None`` for baselines that do not build a joint game covariance, such
+    #: as the incumbent per-player copula path. The query engine only counts
+    #: draws, so it does not need one.
+    covariance: GameCovariance | None = None
 
     def values(self, player_id: int, stat: str) -> np.ndarray:
         try:
