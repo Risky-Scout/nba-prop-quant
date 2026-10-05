@@ -1,0 +1,8 @@
+# A symlink to the accepted V1 branch's OOF residual dataset. The repair
+# candidate is fitted and validated on exactly the same residuals as the
+# control, so pointing at that one file is what makes the comparison paired
+# rather than a re-derivation. The dataset itself is excluded from version
+# control on the parent branch and identified by hash; see
+# ../game_latent_state/.gitignore and residual_manifest.json there.
+oof_gaussian_residuals.parquet
+__pycache__/

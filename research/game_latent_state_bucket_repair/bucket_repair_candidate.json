@@ -1,0 +1,143 @@
+{
+  "bootstrap_draws": 400,
+  "branch": "research/nba-game-latent-state-shadow-v1-bucket-repair",
+  "candidate_family": "C_rank",
+  "candidate_name": "C_rank_k6_r6_eb_block_diagonal",
+  "code_sha": "1c5b8c93569ee25afd4eb4222158300702bd9471",
+  "diagnosis": "The attenuation is two independent mechanisms measured on pre-2024 data: a fixed-width soft threshold that costs 1.96/|z| of the signal (52.9% for teammate_reb_reb at z=3.70, 56.4% for teammate_ast_ast at z=3.47, against 6.3% for passer_ast_teammate_pts at z=31.15), and rank truncation that costs a further ~24-25%. The two targets lose through different rank channels: reb_reb through the rank-1 contrast factor, ast_ast through k_game=2.",
+  "factor_spec_hash": "56f9a4609f2addbd64f4acb3695476dc739bc8617119f7f175e4651fc2db94bb",
+  "frozen": true,
+  "holdout_seasons": [
+    2024,
+    2025
+  ],
+  "holdout_used_for_selection": false,
+  "hyperparameters": {
+    "eb_family": "block_diagonal",
+    "family": "C_rank",
+    "k_game": 6,
+    "name": "C_rank_k6_r6_eb_block_diagonal",
+    "r_contrast": 6,
+    "role_column": "role_bucket",
+    "shrink_z": 1.96,
+    "shrinkage": "empirical_bayes"
+  },
+  "inner_metrics": {
+    "mean_bucket_error": {
+      "opponent_ast_ast": -0.002076778706044662,
+      "opponent_fg3m_reb": 0.0010781882655662633,
+      "opponent_pts_pts": -0.00023752064895312883,
+      "opponent_pts_reb": 0.001594032590882799,
+      "opponent_reb_reb": 0.0007112258743500917,
+      "opponent_stl_pts": 0.0008634203150869225,
+      "passer_ast_teammate_pts": 0.0033850124798979705,
+      "teammate_ast_ast": 0.0012526667471354353,
+      "teammate_fg3m_fg3m": 0.00028018260896306245,
+      "teammate_pts_pts": 0.0023859876139772107,
+      "teammate_pts_reb": 0.0016783965000744065,
+      "teammate_reb_reb": -0.0035223154524647977
+    },
+    "mean_bucket_z_error": {
+      "opponent_ast_ast": -0.739244018775347,
+      "opponent_fg3m_reb": 0.5131507699618381,
+      "opponent_pts_pts": -0.02876218280308736,
+      "opponent_pts_reb": 0.6689614344071853,
+      "opponent_reb_reb": 0.24144355680514396,
+      "opponent_stl_pts": 0.4462612930700324,
+      "passer_ast_teammate_pts": 1.5213963285564127,
+      "teammate_ast_ast": 0.5412177352861386,
+      "teammate_fg3m_fg3m": 0.13600687555809593,
+      "teammate_pts_pts": 0.8260300187829076,
+      "teammate_pts_reb": 0.7411974313906513,
+      "teammate_reb_reb": -1.0781243463696768
+    },
+    "mean_global_rms_z": 1.2987685945975807,
+    "mean_global_rmse": 0.0035175064951428314,
+    "mean_target_abs_error": 0.004068380402984055,
+    "mean_target_abs_z": 1.3071861633068906,
+    "target_overshoot_z": {
+      "teammate_ast_ast": 0.5412177352861386,
+      "teammate_reb_reb": -1.0781243463696768
+    },
+    "target_overshoot_z_max_fold": {
+      "teammate_ast_ast": 3.1161985732953648,
+      "teammate_reb_reb": -0.26728851752470745
+    }
+  },
+  "inner_metrics_control": {
+    "mean_bucket_error": {
+      "opponent_ast_ast": -0.007173893587417389,
+      "opponent_fg3m_reb": 0.0029368025465637895,
+      "opponent_pts_pts": -0.005079365125343258,
+      "opponent_pts_reb": 0.00443496233757107,
+      "opponent_reb_reb": -0.0019875839970975163,
+      "opponent_stl_pts": 0.0012526933328161761,
+      "passer_ast_teammate_pts": 0.0011926186467008197,
+      "teammate_ast_ast": -0.0029836384582789172,
+      "teammate_fg3m_fg3m": -0.0015603677575819336,
+      "teammate_pts_pts": 0.0008426902750714332,
+      "teammate_pts_reb": -0.0020882109149640993,
+      "teammate_reb_reb": -0.007436511555916636
+    },
+    "mean_global_rmse": 0.005033645886078939,
+    "mean_target_abs_error": 0.006849644506109784,
+    "mean_target_abs_z": 2.144365851124347
+  },
+  "inner_selection_rule": {
+    "max_global_rmse_ratio": 1.05,
+    "max_protected_z_degradation": 1.0,
+    "overshoot_aggregation": "mean over inner folds",
+    "overshoot_aggregation_correction": "An earlier draft aggregated the overshoot by the per-fold maximum. That was corrected to the fold mean before the holdout was ever run, because REPAIR GATE 2 is a single pooled number and the maximum measures between-season dispersion in the truth rather than model bias. See the OVERSHOOT_Z docstring for the numbers behind the correction.",
+    "overshoot_z": 1.96,
+    "primary_objective": "minimise the mean absolute inner-fold error of teammate_reb_reb and teammate_ast_ast",
+    "protected_buckets": [
+      "passer_ast_teammate_pts",
+      "teammate_pts_reb"
+    ],
+    "tie_breakers": [
+      "mean_global_rmse",
+      "stat_indexed_parameter_count"
+    ]
+  },
+  "inner_temporal_folds": [
+    {
+      "label": "fit[2020]->score2021",
+      "score_season": 2021,
+      "train_seasons": [
+        2020
+      ]
+    },
+    {
+      "label": "fit[2020, 2021]->score2022",
+      "score_season": 2022,
+      "train_seasons": [
+        2020,
+        2021
+      ]
+    },
+    {
+      "label": "fit[2020, 2021, 2022]->score2023",
+      "score_season": 2023,
+      "train_seasons": [
+        2020,
+        2021,
+        2022
+      ]
+    }
+  ],
+  "note": "Frozen before the 2024-2025 holdout was run. Retuning against holdout results after this point would invalidate the evaluation.",
+  "parameter_counts": {
+    "pairwise": 0,
+    "player_indexed": 0,
+    "role_indexed": 3,
+    "scalar_hyperparameters": 2,
+    "stat_indexed_competition": 21,
+    "stat_indexed_contrast": 36,
+    "stat_indexed_game": 36
+  },
+  "parent_shadow_v1_sha": "1c5b8c93569ee25afd4eb4222158300702bd9471",
+  "promotion_eligibility": "SHADOW_RESEARCH_ONLY__NOT_ELIGIBLE_FOR_PROMOTION",
+  "seed": 73,
+  "selection_rationale": "Selected mechanically by the pre-registered rule in 02_inner_validation.py from 11 candidates scored on three strictly temporal pre-2024 folds. The winner minimises the mean absolute inner-fold error of the two target buckets among candidates that keep global latent bucket RMSE within 1.05x the control, keep both protected buckets within 1.0 z of the control, and do not overshoot either target bucket by more than 1.96 fold-averaged z.",
+  "source_production_sha": "a30ed672001f8774b6cfec9ad7a3ccb382506c4b"
+}

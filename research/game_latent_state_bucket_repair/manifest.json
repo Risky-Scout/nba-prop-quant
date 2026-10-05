@@ -1,0 +1,66 @@
+{
+  "artifact_name": "game_latent_state_bucket_repair_factor_model",
+  "branch": "research/nba-game-latent-state-shadow-v1-bucket-repair",
+  "code_sha": "1c5b8c93569ee25afd4eb4222158300702bd9471",
+  "created_at": "2026-10-05T07:36:26Z",
+  "dependence_model_version": "game-latent-state-shadow-v1",
+  "input_fingerprints": {
+    "oof_gaussian_residuals.parquet": "d0005f0e4996670266bfb5f9cf5cd25d8cbf9189c305fdc009f0f805ac921174"
+  },
+  "notes": [
+    "Candidate selected on pre-2024 inner folds only.",
+    "Loadings estimated from cross-player pairs only; the incumbent same-player block is never re-estimated."
+  ],
+  "outputs": {
+    "bucket_repair_candidate.json": "5d3af12a380af1ca1c70c9a43782ee1156e807bfc3fcbbf9446493e2d5b10307",
+    "covariance_diagnostics.json": "27ccb0864e093f21d2d40b51e33c984038bb01de6c1775767fc20fc159ef362b",
+    "factor_loadings.parquet": "7852605cf8d74278bb4715c4758e302ff9cc4318f5bb58ec476437f3c5ddaadc",
+    "factor_spec.json": "f2b22437a2b4cb4a4d04aad192a191b529149c2874a8a4c141523348c4e227c3"
+  },
+  "parameters": {
+    "bootstrap_draws": 400,
+    "parameter_counts": {
+      "pairwise": 0,
+      "player_indexed": 0,
+      "role_indexed": 3,
+      "scalar_hyperparameters": 2,
+      "stat_indexed_competition": 21,
+      "stat_indexed_contrast": 36,
+      "stat_indexed_game": 36
+    },
+    "parent_shadow_v1_sha": "1c5b8c93569ee25afd4eb4222158300702bd9471",
+    "repair_spec": {
+      "eb_family": "block_diagonal",
+      "family": "C_rank",
+      "k_game": 6,
+      "name": "C_rank_k6_r6_eb_block_diagonal",
+      "r_contrast": 6,
+      "role_column": "role_bucket",
+      "shrink_z": 1.96,
+      "shrinkage": "empirical_bayes"
+    },
+    "spec_hash": "56f9a4609f2addbd64f4acb3695476dc739bc8617119f7f175e4651fc2db94bb"
+  },
+  "promotion_eligibility": "SHADOW_RESEARCH_ONLY__NOT_ELIGIBLE_FOR_PROMOTION",
+  "schema_version": 1,
+  "seasons_used": [
+    2020,
+    2021,
+    2022,
+    2023
+  ],
+  "seed": 73,
+  "source_production_ref": "origin/production/wizardofodds-integration",
+  "source_production_sha": "a30ed672001f8774b6cfec9ad7a3ccb382506c4b",
+  "training_cutoff": "season<2024",
+  "training_seasons": [
+    2020,
+    2021,
+    2022,
+    2023
+  ],
+  "validation_seasons": [
+    2024,
+    2025
+  ]
+}
