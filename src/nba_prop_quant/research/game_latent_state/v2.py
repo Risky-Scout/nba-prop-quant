@@ -539,6 +539,28 @@ def role_layer_diagnostics(
     }
 
 
+def effective_symmetric_block(gap: np.ndarray, rank: int) -> np.ndarray | None:
+    """The rank-``rank`` PSD factor of ``gap``, trimmed to the columns it uses.
+
+    ``project_psd_rank`` returns a loading with one column per requested
+    factor and fills the columns whose eigenvalue is not positive with zeros.
+    Those columns are not free parameters -- they are structurally zero -- but
+    leaving them in place gives the role deviation ``W`` columns that enter
+    ``U W' + W U'`` not at all and ``W W'`` only through the small quadratic
+    term, so they are barely identified: two starting points agreed on the
+    fitted model and the role scores and disagreed on those columns of ``W``
+    by a factor of two. Dropping them makes ``r_symmetric`` an upper bound on
+    the rank rather than a claim about it, and leaves nothing under-identified.
+    """
+    if rank <= 0:
+        return None
+    _, loadings = project_psd_rank(gap, rank=rank)
+    used = np.any(np.abs(loadings) > 0.0, axis=0)
+    if not np.any(used):
+        return None
+    return np.ascontiguousarray(loadings[:, used])
+
+
 def canonical_role_split(
     scores: Mapping[str, float],
     deviation: np.ndarray,
@@ -1182,11 +1204,7 @@ def fit_v2_factors(
     # the base construction cannot represent. Halved because appending ``U``
     # to both loading blocks lifts the same-team block by ``2 U U'``.
     gap = same_target - base_same_fitted
-    symmetric: np.ndarray | None = None
-    if spec.r_symmetric > 0:
-        _, symmetric = project_psd_rank(0.5 * gap, rank=spec.r_symmetric)
-        if not np.any(symmetric):
-            symmetric = None
+    symmetric = effective_symmetric_block(0.5 * gap, spec.r_symmetric)
 
     # V1's multiplicative role layer, estimated on the role-blind pooled block
     # exactly as ``factors.fit_shared_factors`` does, and then held fixed. The
@@ -1230,7 +1248,9 @@ def fit_v2_factors(
         # the dependence is weak enough that it has converged by then. Reported
         # either way as ``pooled_leak_absorbed``.
         leak = 0.0
+        rank_moved = False
         for _ in range(ROLE_ABSORPTION_PASSES):
+            fitted_against = symmetric
             pooled = SharedFactorLoadings(
                 stats=stats,
                 game=base.game,
@@ -1246,13 +1266,21 @@ def fit_v2_factors(
                 for (first, second), share in role_shares.items()
             )
             absorbed = 0.5 * gap - leak * (role_deviation @ role_deviation.T)
-            _, symmetric = project_psd_rank(absorbed, rank=spec.r_symmetric)
-            if not np.any(symmetric):
-                symmetric = None
+            symmetric = effective_symmetric_block(absorbed, spec.r_symmetric)
+            if symmetric is None:
+                break
+            # Absorbing the leak can in principle change how many eigenvalues
+            # of the gap are positive, which would leave ``W`` shaped for a
+            # subspace that no longer exists. It has not been observed, and a
+            # half-absorbed leak is worse than no role layer, so the layer is
+            # dropped and the event reported rather than patched over.
+            if symmetric.shape[1] != fitted_against.shape[1]:
+                rank_moved = True
                 break
         role_diagnostics = {
             **role_diagnostics,
             "pooled_leak_absorbed": float(leak),
+            "symmetric_rank_moved_during_absorption": float(rank_moved),
             # What V1's multiplicative layer alone does to the pooled level.
             # Renormalisation sets the *player*-weighted mean scale to one, so
             # the pair-weighted mean of ``s_a s_b`` is near one but not equal
@@ -1267,7 +1295,12 @@ def fit_v2_factors(
                 )
             ),
         }
-        if role_deviation is None or not np.any(role_deviation) or symmetric is None:
+        if (
+            rank_moved
+            or role_deviation is None
+            or not np.any(role_deviation)
+            or symmetric is None
+        ):
             role_deviation = None
             role_scores = {}
             role_shares = {}
