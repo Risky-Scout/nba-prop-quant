@@ -2,4 +2,8 @@
 # a derived artifact of 02_build_oof_residuals.py, reproducible from the
 # committed manifest, and production history must not inherit it.
 oof_gaussian_residuals.parquet
-*.parquet
+
+# Fitted-marginal and moment caches. Hundreds of megabytes of pickle that
+# belong to the machine that produced them.
+*.pkl
+*.pickle
