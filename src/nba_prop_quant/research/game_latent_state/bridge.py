@@ -453,6 +453,7 @@ def build_bridge_curve(
     nodes: int = DEFAULT_GAUSS_NODES,
     method: str = BRIDGE_METHOD_MEHLER,
     terms: int = DEFAULT_MEHLER_TERMS,
+    score_cache: dict[tuple[int, str, int], np.ndarray] | None = None,
 ) -> BridgeCurve:
     """Pool the bridge over a deterministic sample of marginal pairs.
 
@@ -487,6 +488,14 @@ def build_bridge_curve(
 
     Both are exact; the series is the default because it is thousands of times
     cheaper, and the test suite asserts the two agree.
+
+    ``score_cache`` lets a caller share the per-margin scores across stat
+    pairs. The same player-game-stat margin appears in every stat pair it is
+    an end of, and its scores do not depend on the pair, so a caller building
+    the twenty-one pooled curves of a block saves twenty-one-fold by passing
+    one dictionary through. It is keyed by object identity, so the caller must
+    keep the margins alive for as long as it reuses the cache -- which a
+    caller holding the prepared-margin table does by construction.
     """
     if not pairs:
         raise ValueError("a bridge needs at least one marginal pair")
@@ -498,10 +507,12 @@ def build_bridge_curve(
         # holds a reference to every margin for the whole call: the same
         # player-game-stat margin appears in hundreds of pairs, and its scores
         # do not depend on which pair it is in.
-        scores: dict[int, np.ndarray] = {}
+        scores = {} if score_cache is None else score_cache
 
         def score_of(marginal: DiscreteMarginal) -> np.ndarray:
-            key = id(marginal)
+            # The space and the term count are part of the key, so one cache
+            # can be shared across both bridge spaces without collision.
+            key = (id(marginal), space, int(terms))
             cached = scores.get(key)
             if cached is None:
                 cached = mehler_scores(marginal, space, terms)

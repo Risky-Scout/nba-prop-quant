@@ -272,6 +272,10 @@ def pooled_bridge_curves(
     stats = tuple(stats)
     out: dict[tuple[str, str], BridgeCurve] = {}
     started = time.time()
+    # Shared across the twenty-one stat pairs: a margin's Mehler scores are a
+    # property of the margin, and every margin appears in six of the pairs.
+    # ``prepared`` holds the margins, so the identity keys stay valid.
+    score_cache: dict[tuple[int, str, int], np.ndarray] = {}
     for position, first_stat in enumerate(stats):
         for second_stat in stats[position:]:
             marginal_pairs: list[tuple[DiscreteMarginal, DiscreteMarginal]] = []
@@ -289,6 +293,7 @@ def pooled_bridge_curves(
                 rho_max=rho_max,
                 panels=panels,
                 nodes=nodes,
+                score_cache=score_cache,
             )
             out[(first_stat, second_stat)] = curve
             out[(second_stat, first_stat)] = curve
