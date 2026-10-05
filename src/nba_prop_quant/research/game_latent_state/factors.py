@@ -79,6 +79,12 @@ class PairMoments:
     #: observed same-team block is *significantly* indefinite, which is the
     #: only evidence that justifies activating the competition family.
     same_team_min_eigenvalue_draws: np.ndarray | None = None
+    #: Full game-clustered bootstrap draws, retained only when asked for.
+    #: A normal interval from the standard error is enough for shrinkage, but
+    #: a single season's bucket has a visibly asymmetric sampling distribution
+    #: and reading how much of it sits across zero needs the draws themselves.
+    same_team_draws: np.ndarray | None = None
+    cross_team_draws: np.ndarray | None = None
 
 
 def standardize_residuals(
@@ -119,13 +125,15 @@ def pair_moments(
     value_prefix: str = "zs_",
     bootstrap: int = 0,
     seed: int = 73,
+    keep_draws: bool = False,
 ) -> PairMoments:
     """Pool cross-player second moments over games.
 
     ``frame`` needs ``game_id``, ``team_id`` and one ``{value_prefix}{stat}``
     column per stat, with one row per usable player-game. Standard errors are
     game-clustered: games are the independent unit, so the bootstrap resamples
-    whole games.
+    whole games. ``keep_draws`` retains the resampled blocks so a percentile
+    interval can be taken from them; it changes no fitted quantity.
     """
     stats = tuple(stats)
     n_stats = len(stats)
@@ -180,6 +188,8 @@ def pair_moments(
     same_se = np.full((n_stats, n_stats), np.nan)
     cross_se = np.full((n_stats, n_stats), np.nan)
     min_eigenvalue_draws: np.ndarray | None = None
+    retained_same: np.ndarray | None = None
+    retained_cross: np.ndarray | None = None
 
     if bootstrap > 0:
         rng = np.random.default_rng(seed)
@@ -206,6 +216,9 @@ def pair_moments(
                 for draw in same_draws
             ]
         )
+        if keep_draws:
+            retained_same = same_draws
+            retained_cross = cross_draws
 
     return PairMoments(
         stats=stats,
@@ -217,6 +230,8 @@ def pair_moments(
         same_team_se=0.5 * (same_se + same_se.T),
         cross_team_se=0.5 * (cross_se + cross_se.T),
         same_team_min_eigenvalue_draws=min_eigenvalue_draws,
+        same_team_draws=retained_same,
+        cross_team_draws=retained_cross,
     )
 
 
