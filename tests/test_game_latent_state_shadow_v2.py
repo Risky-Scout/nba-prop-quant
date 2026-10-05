@@ -65,6 +65,9 @@ from nba_prop_quant.research.game_latent_state.repair import (
 from nba_prop_quant.research.game_latent_state.v2 import (
     MIN_ROLE_PAIRS,
     REPAIR_CONTROL_SPEC,
+    SYMMETRIC_EIGENVALUE_FLOOR_FRACTION,
+    SYMMETRIC_MODE_RESERVED,
+    SYMMETRIC_MODE_RESIDUAL,
     V1_BASE_SPEC,
     V2Spec,
     canonical_role_split,
@@ -155,7 +158,12 @@ def role_moments(standardized: pd.DataFrame):
 
 
 def v2_spec(name: str, **overrides: object) -> V2Spec:
-    """A V2 candidate with the cross-team path held at accepted V1's."""
+    """A V2 candidate with the cross-team path held at accepted V1's.
+
+    Accepted V1's ranks are ``k_game = 2`` and one contrast factor, which for
+    six stats is a *truncated* base. That is the regime the residual symmetric
+    subspace is defined for, so it is the default here.
+    """
     return V2Spec(
         name=name,
         same_shrinkage=SHRINKAGE_EMPIRICAL_BAYES,
@@ -163,6 +171,26 @@ def v2_spec(name: str, **overrides: object) -> V2Spec:
         cross_shrinkage=SHRINKAGE_SOFT_THRESHOLD,
         k_game=2,
         r_contrast=DEFAULT_R_CONTRAST,
+        **overrides,  # type: ignore[arg-type]
+    )
+
+
+def v2_full_rank_spec(name: str, **overrides: object) -> V2Spec:
+    """A V2 candidate on the accepted bucket repair's cross-team path.
+
+    Six game factors and six contrast factors is full rank for six stats, so
+    the base represents both targets exactly. That is the regime the *reserved*
+    symmetric subspace is defined for, and the regime in which the residual one
+    is vacuous.
+    """
+    return V2Spec(
+        name=name,
+        same_shrinkage=SHRINKAGE_EMPIRICAL_BAYES,
+        same_eb_family=EB_FAMILY_BLOCK_DIAGONAL,
+        cross_shrinkage=SHRINKAGE_EMPIRICAL_BAYES,
+        cross_eb_family=EB_FAMILY_BLOCK_DIAGONAL,
+        k_game=len(STATS),
+        r_contrast=len(STATS),
         **overrides,  # type: ignore[arg-type]
     )
 
@@ -231,6 +259,172 @@ def test_the_controls_carry_no_symmetric_subspace_or_role_deviation():
         assert spec.r_symmetric == 0
         assert spec.role_deviation is False
         assert spec.bridge_weight == 0.0
+        assert spec.symmetric_mode == SYMMETRIC_MODE_RESIDUAL
+
+
+# ----------------------------------------------------------------------
+# 1b. the two symmetric modes, and which base each one is for
+# ----------------------------------------------------------------------
+
+
+def test_a_full_rank_base_represents_both_targets_exactly(standardized):
+    """The premise the reserved mode rests on, asserted rather than assumed.
+
+    At six game and six contrast factors the three-family construction is an
+    exact solution of ``S = A + B - Q`` and ``X = A - B`` for six stats, so
+    there is no residual at all. Everything below follows from this: the
+    residual subspace has nothing to carry here, and reserving a piece of the
+    target out of the base is free.
+    """
+    fit = fit_v2_factors(
+        standardized,
+        STATS,
+        spec=v2_full_rank_spec("exact", r_symmetric=0),
+        bootstrap=80,
+        seed=73,
+    )
+    scale = fit.loadings.scale_for_role(None)
+    assert np.allclose(
+        fit.loadings.pooled_same_team_correlation() / scale,
+        fit.same_target,
+        atol=1e-12,
+    )
+    assert np.allclose(
+        fit.loadings.cross_team_correlation(), fit.cross_target, atol=1e-12
+    )
+
+
+@pytest.mark.parametrize("rank", [1, 2, 6])
+def test_the_residual_subspace_is_vacuous_on_an_exact_base(standardized, rank):
+    """No residual, no subspace -- and no role layer riding on rounding error.
+
+    This is why the reserved mode exists. Before the eigenvalue floor, the
+    1e-17 gap left by an exact base still produced a carrier out of whichever
+    of its eigenvalues landed positive.
+    """
+    fit = fit_v2_factors(
+        standardized,
+        STATS,
+        spec=v2_full_rank_spec(
+            f"residual{rank}",
+            r_symmetric=rank,
+            symmetric_mode=SYMMETRIC_MODE_RESIDUAL,
+        ),
+        bootstrap=80,
+        seed=73,
+    )
+    assert fit.loadings.symmetric is None
+    assert np.max(np.abs(fit.symmetric_gap)) < 1e-10
+
+
+@pytest.mark.parametrize("rank", [1, 2, 6])
+def test_the_reserved_subspace_is_a_reparameterisation_at_full_rank(
+    standardized, role_moments, rank
+):
+    """It carries a real loading and changes neither fitted block."""
+    reference = fit_v2_factors(
+        standardized,
+        STATS,
+        spec=v2_full_rank_spec("exact", r_symmetric=0),
+        bootstrap=80,
+        seed=73,
+    )
+    for role_deviation in (False, True):
+        fit = fit_v2_factors(
+            standardized,
+            STATS,
+            spec=v2_full_rank_spec(
+                f"reserved{rank}",
+                r_symmetric=rank,
+                symmetric_mode=SYMMETRIC_MODE_RESERVED,
+                role_deviation=role_deviation,
+            ),
+            bootstrap=80,
+            seed=73,
+            role_moments=role_moments,
+        )
+        symmetric = fit.loadings.symmetric
+        assert symmetric is not None
+        assert symmetric.shape[1] >= 1
+        # A real loading, not rounding error: the floor is 1e-8 of the
+        # target's scale, so anything that survives it is orders above noise.
+        assert np.max(np.abs(symmetric)) > 1e-4
+        scale = fit.loadings.scale_for_role(None)
+        assert np.allclose(
+            fit.loadings.pooled_same_team_correlation() / scale,
+            fit.same_target,
+            atol=1e-10,
+        )
+        assert np.allclose(
+            fit.loadings.cross_team_correlation(),
+            reference.loadings.cross_team_correlation(),
+            atol=1e-12,
+        )
+        assert fit.cross_team_unchanged_deviation() < 1e-12
+
+
+def test_the_reserved_subspace_gives_the_role_layer_a_carrier(
+    standardized, role_moments
+):
+    """On an exact base the role deviation exists in reserved mode only."""
+    fits = {
+        mode: fit_v2_factors(
+            standardized,
+            STATS,
+            spec=v2_full_rank_spec(
+                mode, r_symmetric=6, symmetric_mode=mode, role_deviation=True
+            ),
+            bootstrap=80,
+            seed=73,
+            role_moments=role_moments,
+        )
+        for mode in (SYMMETRIC_MODE_RESIDUAL, SYMMETRIC_MODE_RESERVED)
+    }
+    assert fits[SYMMETRIC_MODE_RESIDUAL].loadings.role_deviation is None
+    reserved = fits[SYMMETRIC_MODE_RESERVED]
+    assert reserved.loadings.role_deviation is not None
+    assert reserved.role_scores
+    # Centred, and the leak taken out of the base rather than the subspace.
+    shares = reserved.loadings.role_pair_shares
+    assert shares
+    assert reserved.role_diagnostics["leak_absorbed_into_base"] == 1.0
+    assert abs(reserved.role_diagnostics["pooled_leak_absorbed"]) < 1.0
+
+
+def test_the_reserved_subspace_is_not_an_identity_on_a_truncated_base(
+    standardized,
+):
+    """And the screen must therefore guard the identity rather than assume it.
+
+    Reserving a piece of the same-team target changes the additive Gram the
+    base is built from, and a *truncated* ``A - B`` depends on that Gram. The
+    accepted V1 ranks are truncated, so the mode is not admissible there --
+    recorded as a test because it is the reason the same-team axis screens the
+    cross-team identity directly instead of trusting the mode's name.
+    """
+    fit = fit_v2_factors(
+        standardized,
+        STATS,
+        spec=v2_spec(
+            "reserved_truncated",
+            r_symmetric=6,
+            symmetric_mode=SYMMETRIC_MODE_RESERVED,
+        ),
+        bootstrap=80,
+        seed=73,
+    )
+    assert fit.cross_team_unchanged_deviation() > 1e-6
+
+
+def test_an_unknown_symmetric_mode_is_refused(standardized):
+    with pytest.raises(ValueError, match="unknown symmetric_mode"):
+        fit_v2_factors(
+            standardized,
+            STATS,
+            spec=v2_spec("bogus", r_symmetric=2, symmetric_mode="halfway"),
+            bootstrap=80,
+            seed=73,
+        )
 
 
 # ----------------------------------------------------------------------
@@ -906,6 +1100,19 @@ def test_the_symmetric_block_declines_a_gap_it_cannot_represent():
     assert effective_symmetric_block(gap, 0) is None
     assert effective_symmetric_block(gap, -1) is None
     assert effective_symmetric_block(-gap, 6) is None
+
+
+def test_the_symmetric_block_declines_a_gap_that_is_only_rounding_error():
+    """The floor is relative to the target's scale, so it is scale-free."""
+    scale = 0.03
+    noise = np.eye(len(STATS)) * (0.1 * SYMMETRIC_EIGENVALUE_FLOOR_FRACTION * scale)
+    assert effective_symmetric_block(noise, 6) is not None
+    assert effective_symmetric_block(noise, 6, scale=scale) is None
+    # An order above the floor survives it.
+    real = np.eye(len(STATS)) * (10.0 * SYMMETRIC_EIGENVALUE_FLOOR_FRACTION * scale)
+    block = effective_symmetric_block(real, 6, scale=scale)
+    assert block is not None
+    assert block.shape == (len(STATS), len(STATS))
 
 
 # ----------------------------------------------------------------------

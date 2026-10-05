@@ -141,6 +141,39 @@ ROLE_ABSORPTION_PASSES = 2
 #: over the whole objective.
 WEIGHT_FLOOR_FRACTION = 0.1
 
+#: The symmetric subspace carries whatever the base construction leaves of the
+#: same-team target. There are two ways to obtain it, and which one is
+#: available is decided by the base's rank rather than by preference.
+#:
+#: ``residual``
+#:     ``2 U U' = Pi_+(S - S_base_fitted)``: the subspace carries the part of
+#:     the target the base *cannot* represent. This is the only option when the
+#:     base is rank-truncated, and it is the accepted V1 geometry. Its limits
+#:     are structural: the lift is PSD, so a target the base *overshoots*
+#:     cannot be corrected at all, and when the base is exact there is no
+#:     residual, so the subspace collapses to float64 noise and the role
+#:     deviation has no carrier to ride on.
+#: ``reserved``
+#:     ``2 U U' = Pi_+^r(S)``: a rank-``r`` piece of the target is held out of
+#:     the base deliberately and carried in the subspace, and the base is
+#:     solved against ``S - 2 U U'``. At full rank this is a *reparameterisation*
+#:     -- the fitted same-team block is still exactly ``S`` and the fitted
+#:     cross-team block is still exactly the cross-team target, because
+#:     ``A - B`` does not depend on the same-team target once both Grams are
+#:     represented exactly -- and it is what gives the role deviation a real
+#:     carrier. Below full rank it is not an identity and must not be used:
+#:     changing the same-team target then moves the truncated ``A - B``.
+SYMMETRIC_MODE_RESIDUAL = "residual"
+SYMMETRIC_MODE_RESERVED = "reserved"
+SYMMETRIC_MODES = (SYMMETRIC_MODE_RESIDUAL, SYMMETRIC_MODE_RESERVED)
+
+#: Smallest eigenvalue the symmetric subspace will carry, as a fraction of the
+#: largest entry of the same-team target. Eight orders of magnitude below a
+#: correlation of order 1e-2 is 1e-10, which is far below any dependence the
+#: moments can resolve and far above the 1e-17 that an exactly represented
+#: target leaves behind.
+SYMMETRIC_EIGENVALUE_FLOOR_FRACTION = 1e-8
+
 
 @dataclass(frozen=True)
 class V2Spec:
@@ -166,6 +199,8 @@ class V2Spec:
     r_contrast: int = DEFAULT_R_CONTRAST
     #: Rank of the symmetric same-team subspace. ``0`` disables it.
     r_symmetric: int = 0
+    #: How that subspace is obtained. See :data:`SYMMETRIC_MODES`.
+    symmetric_mode: str = SYMMETRIC_MODE_RESIDUAL
     #: Whether a centred role deviation is fitted inside that subspace. There
     #: is deliberately no weight on it: ``h`` and ``W`` are identified only up
     #: to reciprocal scaling, so a weight on the scores would not be a
@@ -188,6 +223,7 @@ class V2Spec:
             "k_game": int(self.k_game),
             "r_contrast": int(self.r_contrast),
             "r_symmetric": int(self.r_symmetric),
+            "symmetric_mode": self.symmetric_mode,
             "role_deviation": bool(self.role_deviation),
             "role_column": self.role_column,
             "bridge_weight": float(self.bridge_weight),
@@ -539,7 +575,9 @@ def role_layer_diagnostics(
     }
 
 
-def effective_symmetric_block(gap: np.ndarray, rank: int) -> np.ndarray | None:
+def effective_symmetric_block(
+    gap: np.ndarray, rank: int, scale: float | None = None
+) -> np.ndarray | None:
     """The rank-``rank`` PSD factor of ``gap``, trimmed to the columns it uses.
 
     ``project_psd_rank`` returns a loading with one column per requested
@@ -551,11 +589,26 @@ def effective_symmetric_block(gap: np.ndarray, rank: int) -> np.ndarray | None:
     fitted model and the role scores and disagreed on those columns of ``W``
     by a factor of two. Dropping them makes ``r_symmetric`` an upper bound on
     the rank rather than a claim about it, and leaves nothing under-identified.
+
+    ``scale`` is the magnitude the block is meant to be read against -- the
+    largest entry of the same-team target -- and columns below
+    :data:`SYMMETRIC_EIGENVALUE_FLOOR_FRACTION` of it are dropped as well.
+    Without that floor a gap that is *entirely* rounding error still comes back
+    with whichever of its order-1e-17 eigenvalues happened to land positive,
+    and the role layer then fits a deviation onto rounding error: observed
+    once, on a base that represented the same-team target exactly, where the
+    role scores diverged and the quadratic leak reached 4.4e5 before the
+    layer's own drop rule caught it.
     """
     if rank <= 0:
         return None
     _, loadings = project_psd_rank(gap, rank=rank)
-    used = np.any(np.abs(loadings) > 0.0, axis=0)
+    # ``project_psd_rank`` scales each unit eigenvector by the square root of
+    # its eigenvalue, so a column's squared norm *is* its eigenvalue.
+    eigenvalues = np.sum(loadings**2, axis=0)
+    used = eigenvalues > 0.0
+    if scale is not None and scale > 0.0:
+        used = used & (eigenvalues > SYMMETRIC_EIGENVALUE_FLOOR_FRACTION * float(scale))
     if not np.any(used):
         return None
     return np.ascontiguousarray(loadings[:, used])
@@ -1009,11 +1062,19 @@ class V2Fit:
         )
 
     def cross_team_unchanged_deviation(self) -> float:
-        """Largest entry by which the fitted cross-team block moved.
+        """Largest entry by which the same-team work moved the cross-team block.
 
-        The symmetric subspace and the role deviation cancel from ``A - B``
-        algebraically, so this is a float64-noise check on an identity, not a
-        tolerance on an estimate.
+        Measured against :attr:`base_cross_fitted`, the block the cross-team
+        path produces on its own with no same-team work of any kind, because
+        that is exactly the claim being made.
+
+        In ``residual`` mode this is an algebraic identity -- the subspace and
+        the role deviation cancel from ``A - B`` term by term -- so the value
+        is float64 noise or a bug, never a small estimate. In ``reserved`` mode
+        it is an identity only while the base represents both Grams exactly;
+        below full rank the reservation moves the truncated ``A - B`` and this
+        is the number that says so. It is a diagnostic in both modes and is
+        gated, not corrected.
         """
         return float(
             np.max(
@@ -1068,6 +1129,56 @@ class V2Fit:
                 np.sqrt(np.mean((fitted_cross - self.cross_target) ** 2))
             ),
         }
+
+
+def symmetric_lift(symmetric: np.ndarray | None) -> np.ndarray | float:
+    """``2 U U'``: what appending ``U`` to both loading blocks adds to ``S``."""
+    if symmetric is None:
+        return 0.0
+    return 2.0 * symmetric @ symmetric.T
+
+
+def build_base_loadings(
+    stats: Sequence[str],
+    same_target: np.ndarray,
+    cross_target: np.ndarray,
+    spec: V2Spec,
+    competition_allowed: bool,
+) -> SharedFactorLoadings:
+    """The three-family base that represents ``(same_target, cross_target)``.
+
+    Exactly ``factors.fit_shared_factors``'s construction, lifted out so the
+    same code can be run twice: once on the target the cross-team path alone
+    implies, which fixes the cross-team reference every identity on this branch
+    is asserted against, and once on whatever the symmetric subspace leaves.
+
+    ``competition_allowed`` is decided once, on the data, and passed in rather
+    than re-gated here: the gate is a statement about whether the *observed*
+    same-team block is indefinite, and reserving a piece of the target into the
+    symmetric subspace must not be able to change that answer.
+    """
+    stats = tuple(stats)
+    additive = dominating_additive_gram(same_target, cross_target)
+    competition = (
+        (additive - same_target) if competition_allowed else np.zeros_like(same_target)
+    )
+    _, game_loadings = project_psd_rank(0.5 * (additive + cross_target), rank=spec.k_game)
+    _, contrast_loadings = project_psd_rank(
+        0.5 * (additive - cross_target), rank=spec.r_contrast
+    )
+    _, competition_loadings = project_psd_rank(competition, rank=len(stats))
+    if not np.any(competition_loadings):
+        competition_loadings = None
+    return SharedFactorLoadings(
+        stats=stats,
+        game=game_loadings,
+        team_contrast=(
+            contrast_loadings[:, 0]
+            if contrast_loadings.shape[1] == 1
+            else contrast_loadings
+        ),
+        competition=competition_loadings,
+    )
 
 
 def _apply_entry_overrides(
@@ -1147,35 +1258,17 @@ def fit_v2_factors(
     competition_allowed, competition_evidence = competition_gate(
         moments, base_same_target
     )
-    additive = dominating_additive_gram(base_same_target, cross_target)
-    competition = (
-        (additive - base_same_target)
-        if competition_allowed
-        else np.zeros_like(base_same_target)
-    )
 
-    game_gram = 0.5 * (additive + cross_target)
-    contrast_gram = 0.5 * (additive - cross_target)
-    _, game_loadings = project_psd_rank(game_gram, rank=spec.k_game)
-    _, contrast_loadings = project_psd_rank(contrast_gram, rank=spec.r_contrast)
-    _, competition_loadings = project_psd_rank(competition, rank=len(stats))
-    if not np.any(competition_loadings):
-        competition_loadings = None
-
-    team_contrast = (
-        contrast_loadings[:, 0]
-        if contrast_loadings.shape[1] == 1
-        else contrast_loadings
+    # The cross-team reference: what the cross-team path produces with no
+    # same-team work of any kind on top. Every cross-team identity reported by
+    # this module is asserted against *this* block, because that is the claim
+    # -- the same-team work does not move the cross-team block -- and not
+    # against some other model's.
+    reference_base = build_base_loadings(
+        stats, base_same_target, cross_target, spec, competition_allowed
     )
-
-    base = SharedFactorLoadings(
-        stats=stats,
-        game=game_loadings,
-        team_contrast=team_contrast,
-        competition=competition_loadings,
-    )
-    base_same_fitted = base.same_team_correlation()
-    base_cross_fitted = base.cross_team_correlation()
+    base_same_fitted = reference_base.same_team_correlation()
+    base_cross_fitted = reference_base.cross_team_correlation()
 
     same_target, same_diagnostics = shrink_block(
         moments.same_team,
@@ -1200,11 +1293,31 @@ def fit_v2_factors(
             blended[j, i] = value
         same_target = blended
 
-    # The symmetric subspace carries exactly the part of the same-team target
-    # the base construction cannot represent. Halved because appending ``U``
-    # to both loading blocks lifts the same-team block by ``2 U U'``.
+    # The symmetric subspace. Halved in both modes because appending ``U`` to
+    # both loading blocks lifts the same-team block by ``2 U U'``.
     gap = same_target - base_same_fitted
-    symmetric = effective_symmetric_block(0.5 * gap, spec.r_symmetric)
+    target_scale = float(np.max(np.abs(same_target)))
+    if spec.symmetric_mode == SYMMETRIC_MODE_RESERVED:
+        symmetric = effective_symmetric_block(
+            0.5 * same_target, spec.r_symmetric, scale=target_scale
+        )
+        base = build_base_loadings(
+            stats,
+            same_target - symmetric_lift(symmetric),
+            cross_target,
+            spec,
+            competition_allowed,
+        )
+    elif spec.symmetric_mode == SYMMETRIC_MODE_RESIDUAL:
+        symmetric = effective_symmetric_block(
+            0.5 * gap, spec.r_symmetric, scale=target_scale
+        )
+        base = reference_base
+    else:
+        raise ValueError(
+            f"unknown symmetric_mode {spec.symmetric_mode!r}; "
+            f"expected one of {SYMMETRIC_MODES}"
+        )
 
     # V1's multiplicative role layer, estimated on the role-blind pooled block
     # exactly as ``factors.fit_shared_factors`` does, and then held fixed. The
@@ -1241,14 +1354,22 @@ def fit_v2_factors(
                 seed=seed,
             )
         role_shares = dict(role_moments.pair_shares)
-        # Fit the role layer, then re-solve the symmetric block against a gap
-        # reduced by the role layer's quadratic leak, so the pair-share average
-        # lands on the same-team target rather than ``2 Q W W'`` away from it.
-        # Two passes: the leak depends on ``W``, which depends on ``U``, and
-        # the dependence is weak enough that it has converged by then. Reported
-        # either way as ``pooled_leak_absorbed``.
+        # Fit the role layer, then absorb its quadratic leak so that the
+        # pair-share average of the role-conditioned blocks lands on the
+        # same-team target rather than ``2 Q W W'`` above it. Where the leak is
+        # absorbed differs by mode, and that is the whole difference between
+        # them: ``residual`` has only the gap to give, so the subspace itself
+        # is re-solved and can change rank; ``reserved`` holds the subspace
+        # fixed and takes the leak out of the base's target, which is exact at
+        # full rank and leaves ``W`` resting on a carrier that does not move.
+        #
+        # Two passes in both cases: the leak depends on ``W``, which depends on
+        # the block the absorption moves. The coupling is weak and two passes
+        # close it to float64 noise. Reported as ``pooled_leak_absorbed``.
         leak = 0.0
         rank_moved = False
+        reserved = spec.symmetric_mode == SYMMETRIC_MODE_RESERVED
+        lift = symmetric_lift(symmetric)
         for _ in range(ROLE_ABSORPTION_PASSES):
             fitted_against = symmetric
             pooled = SharedFactorLoadings(
@@ -1265,8 +1386,19 @@ def fit_v2_factors(
                 share * role_scores[first] * role_scores[second]
                 for (first, second), share in role_shares.items()
             )
-            absorbed = 0.5 * gap - leak * (role_deviation @ role_deviation.T)
-            symmetric = effective_symmetric_block(absorbed, spec.r_symmetric)
+            quadratic = role_deviation @ role_deviation.T
+            if reserved:
+                base = build_base_loadings(
+                    stats,
+                    same_target - lift - 2.0 * leak * quadratic,
+                    cross_target,
+                    spec,
+                    competition_allowed,
+                )
+                continue
+            symmetric = effective_symmetric_block(
+                0.5 * gap - leak * quadratic, spec.r_symmetric, scale=target_scale
+            )
             if symmetric is None:
                 break
             # Absorbing the leak can in principle change how many eigenvalues
@@ -1280,6 +1412,7 @@ def fit_v2_factors(
         role_diagnostics = {
             **role_diagnostics,
             "pooled_leak_absorbed": float(leak),
+            "leak_absorbed_into_base": float(reserved),
             "symmetric_rank_moved_during_absorption": float(rank_moved),
             # What V1's multiplicative layer alone does to the pooled level.
             # Renormalisation sets the *player*-weighted mean scale to one, so
@@ -1304,6 +1437,13 @@ def fit_v2_factors(
             role_deviation = None
             role_scores = {}
             role_shares = {}
+            # Dropping the layer has to undo the absorption that was made for
+            # it, or the pooled block would keep a correction for a deviation
+            # that is no longer there.
+            if reserved:
+                base = build_base_loadings(
+                    stats, same_target - lift, cross_target, spec, competition_allowed
+                )
 
     loadings = SharedFactorLoadings(
         stats=stats,

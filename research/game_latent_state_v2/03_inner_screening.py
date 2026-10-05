@@ -101,6 +101,8 @@ from nba_prop_quant.research.game_latent_state.v2 import (  # noqa: E402
     REPAIR_CONTROL_SPEC,
     ROLE_CELL_REGRESSION_LIMIT,
     ROLE_CELL_Z_LIMIT,
+    SYMMETRIC_MODE_RESERVED,
+    SYMMETRIC_MODES,
     V1_BASE_SPEC,
     V2Spec,
     fit_v2_factors,
@@ -223,6 +225,39 @@ R_SYMMETRIC_CANDIDATES: tuple[int, ...] = tuple(
 #: gives it the most room to be wrong in -- the conservative choice for a
 #: screen whose job is to reject.
 R_SYMMETRIC_REFERENCE = 6
+
+#: How the symmetric subspace is obtained. Both modes keep the same-team work
+#: out of ``A - B``, but they do it at different ranks, and which one is
+#: *available* is decided by the base rather than by preference:
+#:
+#: ``residual`` carries the part of the same-team target the base cannot
+#: represent. It is the only legitimate mode when the base is truncated, and it
+#: is vacuous when the base is exact -- which the second screening pass
+#: measured directly: on the repair's own base path, ``k_game = 6`` and
+#: ``r_contrast = 6`` is full rank for six stats, the base reproduces the
+#: shrunk same-team target to 1.8e-17, and every ``residual`` rank came back
+#: numerically identical to the control because the only thing left to carry
+#: was rounding error.
+#:
+#: ``reserved`` holds a rank-``r`` piece of the target out of the base on
+#: purpose. At full rank that is a reparameterisation rather than a change --
+#: the fitted same-team block stays exact and ``A - B`` stays bitwise the
+#: cross-team target -- and it is the only way the role deviation gets a
+#: carrier to ride on when the base is already exact. Below full rank it is not
+#: an identity, so the same-team axis's guard tests the identity directly and
+#: refuses any point that violates it.
+SYMMETRIC_MODE_GRID: tuple[str, ...] = SYMMETRIC_MODES
+
+#: The mode the role and bridge axes are held at while they are screened. Both
+#: of those layers live inside the symmetric subspace, so they are screened at
+#: the mode that actually yields one under :data:`BASE_PATH_REFERENCE`.
+SYMMETRIC_MODE_REFERENCE = SYMMETRIC_MODE_RESERVED
+
+#: Largest entry by which a same-team grid point may move the fitted cross-team
+#: block away from its own no-repair twin's. Float64 noise: this is an identity
+#: in ``residual`` mode and an identity only at full rank in ``reserved`` mode,
+#: and the point of screening it is to let the data say which is which.
+CROSS_TEAM_IDENTITY_TOLERANCE = 1e-12
 
 #: The role axis is on or off, with no weight between. There was a weight
 #: grid here, screened as a hierarchical dial between the role layer's gains
@@ -1060,22 +1095,32 @@ def main() -> None:
             name, base_path=path, r_symmetric=R_SYMMETRIC_REFERENCE
         )
         axes["base"].append(name)
-    for rank in R_SYMMETRIC_GRID:
-        name = f"iso_rsym{rank}"
-        specs[name] = v2_base_spec(name, r_symmetric=rank)
-        axes["same_team"].append(name)
+    # Rank zero is the axis's null value and the mode cannot mean anything
+    # there -- no subspace is built at all -- so it is screened once rather
+    # than once per mode.
+    specs["iso_rsym0"] = v2_base_spec("iso_rsym0", r_symmetric=0)
+    axes["same_team"].append("iso_rsym0")
+    for mode in SYMMETRIC_MODE_GRID:
+        for rank in R_SYMMETRIC_CANDIDATES:
+            name = f"iso_{mode}_rsym{rank}"
+            specs[name] = v2_base_spec(name, r_symmetric=rank, symmetric_mode=mode)
+            axes["same_team"].append(name)
     for enabled in ROLE_DEVIATION_GRID:
         name = f"role_{'on' if enabled else 'off'}"
         specs[name] = v2_base_spec(
             name,
             r_symmetric=R_SYMMETRIC_REFERENCE,
+            symmetric_mode=SYMMETRIC_MODE_REFERENCE,
             role_deviation=enabled,
         )
         axes["role"].append(name)
     for weight in BRIDGE_WEIGHT_GRID:
         name = f"bridge_w{weight:g}"
         specs[name] = v2_base_spec(
-            name, r_symmetric=R_SYMMETRIC_REFERENCE, bridge_weight=weight
+            name,
+            r_symmetric=R_SYMMETRIC_REFERENCE,
+            symmetric_mode=SYMMETRIC_MODE_REFERENCE,
+            bridge_weight=weight,
         )
         axes["bridge"].append(name)
 
@@ -1144,12 +1189,20 @@ def main() -> None:
     # relative to the control, with no admissible point, stops being a guard
     # and becomes a free optimisation of whatever the tie-break reads. The
     # honest reading of "nothing clears the bar" is to carry nothing.
-    candidate_ranks = [f"iso_rsym{rank}" for rank in R_SYMMETRIC_CANDIDATES]
+    # The axis carries two things at once -- how the subspace is obtained and
+    # how wide it is -- and both guards apply to every point. The identity
+    # guard is what keeps ``reserved`` honest: it is a reparameterisation only
+    # while the base represents both Grams exactly, and a point that moves
+    # ``A - B`` away from its own no-repair twin's is not a same-team change at
+    # all, whatever it does to the same-team target.
+    candidate_ranks = [name for name in axes["same_team"] if name != "iso_rsym0"]
     latent_bound = MAX_GLOBAL_RATIO * float(control["mean_global_latent_rmse"])  # type: ignore[arg-type]
     eligible_ranks = [
         name
         for name in candidate_ranks
         if summaries[name]["mean_global_latent_rmse"] <= latent_bound  # type: ignore[operator]
+        and summaries[name]["max_cross_team_unchanged_deviation"]  # type: ignore[operator]
+        <= CROSS_TEAM_IDENTITY_TOLERANCE
     ]
     rank_guard_unsatisfiable = not eligible_ranks
     selected_rank = (
@@ -1162,6 +1215,10 @@ def main() -> None:
             key=lambda name: (
                 summaries[name]["mean_target_abs_error"],
                 summaries[name]["spec"]["r_symmetric"],  # type: ignore[index]
+                # Ties go to the accepted geometry before the new one.
+                SYMMETRIC_MODES.index(
+                    str(summaries[name]["spec"]["symmetric_mode"])  # type: ignore[index]
+                ),
             ),
         )
     )
@@ -1207,10 +1264,11 @@ def main() -> None:
     )
     console.print(
         f"  same-team subspace : {selected_rank} (lowest mean error on "
-        f"{list(REPAIR_TARGET_BUCKETS)}, ties to the smaller rank"
+        f"{list(REPAIR_TARGET_BUCKETS)}, ties to the smaller rank, then to "
+        "the residual mode"
         + (
-            "; NO rank satisfied the global bound, so the axis resolved to its "
-            "null value"
+            "; NO point satisfied the global bound and the cross-team "
+            "identity, so the axis resolved to its null value"
             if rank_guard_unsatisfiable
             else ""
         )
@@ -1242,6 +1300,7 @@ def main() -> None:
     # ------------------------------------------------------------------
     base_star = str(summaries[selected_base]["spec"]["name"]).removeprefix("base_")  # type: ignore[index]
     rank_star = int(summaries[selected_rank]["spec"]["r_symmetric"])  # type: ignore[index]
+    mode_star = str(summaries[selected_rank]["spec"]["symmetric_mode"])  # type: ignore[index]
     weight_star = float(summaries[selected_weight]["spec"]["bridge_weight"])  # type: ignore[index]
     role_star = bool(summaries[selected_role]["spec"]["role_deviation"])  # type: ignore[index]
     combinations: dict[str, V2Spec] = {
@@ -1253,24 +1312,42 @@ def main() -> None:
             "v2_no_repair_twin", base_path=base_star, r_symmetric=0
         ),
         "v2_iso": v2_base_spec(
-            "v2_iso", base_path=base_star, r_symmetric=rank_star
+            "v2_iso",
+            base_path=base_star,
+            r_symmetric=rank_star,
+            symmetric_mode=mode_star,
         ),
+        # The two single-component combinations carry their component *on*,
+        # whatever the axis selected, so that the combination set still says
+        # what the component does on top of the isolation fit. Reading the
+        # axis selection here instead would silently collapse them onto
+        # ``v2_iso`` whenever an axis resolved to its null value, which is how
+        # the second pass produced four identical rows.
         "v2_iso_role": v2_base_spec(
             "v2_iso_role",
             base_path=base_star,
             r_symmetric=rank_star,
-            role_deviation=role_star,
+            symmetric_mode=mode_star,
+            role_deviation=True,
         ),
         "v2_iso_bridge": v2_base_spec(
             "v2_iso_bridge",
             base_path=base_star,
             r_symmetric=rank_star,
-            bridge_weight=weight_star,
+            symmetric_mode=mode_star,
+            bridge_weight=(
+                weight_star
+                if weight_star > 0.0
+                else max(weight for weight in BRIDGE_WEIGHT_GRID)
+            ),
         ),
+        # The full candidate is the one that reads the axis selections, because
+        # it is the one the freeze may take.
         "v2_full": v2_base_spec(
             "v2_full",
             base_path=base_star,
             r_symmetric=rank_star,
+            symmetric_mode=mode_star,
             role_deviation=role_star,
             bridge_weight=weight_star,
         ),
@@ -1319,8 +1396,27 @@ def main() -> None:
             + ("all inner targets pass" if not failures else f"fails {failures}")
         )
 
-    # The candidate that passes the most inner targets wins; ties break on the
-    # count-space objective the brief names, then on parsimony.
+    # A combination that turns on a component its own axis rejected is scored
+    # and reported -- that is the measurement of what the component does on top
+    # of the isolation fit -- but it cannot be selected, because the axis rule
+    # was pre-registered and the combination stage is not a second chance to
+    # overturn it.
+    admissible = {
+        name: not (
+            (combinations[name].role_deviation and not role_star)
+            or (combinations[name].bridge_weight > 0.0 and weight_star == 0.0)
+        )
+        for name in verdicts
+    }
+    for name, allowed in admissible.items():
+        if not allowed:
+            console.print(
+                f"  {name:16s} reported only: it carries a component its axis "
+                "rejected, so it is not selectable"
+            )
+
+    # Among those, the candidate that passes the most inner targets wins; ties
+    # break on the count-space objective the brief names, then on parsimony.
     def rank_key(name: str) -> tuple[int, float, int]:
         passed = sum(not entry["passed"] for entry in verdicts[name].values())
         counts = summaries[name]["parameter_count"]
@@ -1335,7 +1431,7 @@ def main() -> None:
             total,
         )
 
-    winner = min(verdicts, key=rank_key)
+    winner = min((name for name in verdicts if admissible[name]), key=rank_key)
     console.print(f"\n[bold green]selected V2 candidate: {winner}[/bold green]")
 
     role_cells = {
@@ -1380,13 +1476,18 @@ def main() -> None:
             "r_symmetric": list(R_SYMMETRIC_GRID),
             "r_symmetric_candidates": list(R_SYMMETRIC_CANDIDATES),
             "r_symmetric_reference": R_SYMMETRIC_REFERENCE,
+            "symmetric_mode": list(SYMMETRIC_MODE_GRID),
+            "symmetric_mode_reference": SYMMETRIC_MODE_REFERENCE,
             "role_deviation": list(ROLE_DEVIATION_GRID),
             "bridge_weight": list(BRIDGE_WEIGHT_GRID),
             "temporal_treatments_screened_in": "01_temporal_diagnostic.py",
             "joint_search": False,
         },
-        "screening_pass": 2,
-        "first_pass_artifact": "inner_screening_pass1.json",
+        "screening_pass": 3,
+        "earlier_pass_artifacts": [
+            "inner_screening_pass1.json",
+            "inner_screening_pass2.json",
+        ],
         "second_pass_changes": [
             (
                 "added the base-path axis, which governs the cross-team block "
@@ -1406,12 +1507,53 @@ def main() -> None:
                 "on the selected base rather than on the reference base"
             ),
         ],
+        "third_pass_changes": [
+            (
+                "added the symmetric-mode axis. The second pass measured that "
+                "every residual-mode rank on the selected base path came back "
+                "numerically identical to the control: at k_game = 6 and "
+                "r_contrast = 6 the base is full rank for six stats and "
+                "reproduces the shrunk same-team target to 1.8e-17, so the "
+                "residual the subspace is defined to carry is rounding error. "
+                "The reserved mode holds a rank-r piece of the target out of "
+                "the base instead, which at full rank keeps the same-team fit "
+                "exact and A - B bitwise the cross-team target, and is the "
+                "only way the role deviation gets a carrier"
+            ),
+            (
+                "the same-team axis now guards the cross-team identity "
+                "directly, which is what makes the reserved mode admissible "
+                "only where it is actually an identity"
+            ),
+            (
+                "the symmetric subspace now drops columns whose eigenvalue is "
+                "below 1e-8 of the same-team target's scale. Without that "
+                "floor an exactly represented target still yielded whichever "
+                "of its 1e-17 eigenvalues landed positive, and the role layer "
+                "fitted a deviation onto rounding error: the quadratic leak "
+                "reached 4.4e5 before the layer's own drop rule caught it"
+            ),
+            (
+                "the single-component combinations now carry their component "
+                "on regardless of the axis selection, so the combination set "
+                "measures what each component does on top of the isolation "
+                "fit; they are reported and excluded from selection when "
+                "their own axis rejected them"
+            ),
+        ],
         "guards": {
             "r_symmetric_guard_unsatisfiable": bool(rank_guard_unsatisfiable),
             "bridge_guard_unsatisfiable": bool(bridge_guard_unsatisfiable),
             "global_latent_rmse_bound": latent_bound,
+            "cross_team_identity_tolerance": CROSS_TEAM_IDENTITY_TOLERANCE,
             "axes_screened_at_the_selected_base": bool(
                 base_star == BASE_PATH_REFERENCE
+            ),
+            "selectable_combinations": sorted(
+                name for name, allowed in admissible.items() if allowed
+            ),
+            "reported_only_combinations": sorted(
+                name for name, allowed in admissible.items() if not allowed
             ),
         },
         "inner_target_thresholds": {
@@ -1434,6 +1576,7 @@ def main() -> None:
             "base_path": base_star,
             "same_team": selected_rank,
             "r_symmetric": rank_star,
+            "symmetric_mode": mode_star,
             "role": selected_role,
             "role_deviation": role_star,
             "bridge": selected_weight,
