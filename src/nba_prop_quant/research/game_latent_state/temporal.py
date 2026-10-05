@@ -809,3 +809,43 @@ def screen_temporal_treatments(
         detail=tuple(detail),
     )
 
+
+def pooled_uncertainty_inflation(
+    screenings: Sequence[TemporalScreening],
+    treatment: str,
+) -> dict[str, float]:
+    """One variance-inflation scalar for a treatment's predictive SD.
+
+    A treatment's own posterior arithmetic gives a predictive standard
+    deviation, and ``screen_temporal_treatments`` records ``mean(z^2)`` for
+    it: the fold error over that claimed SD combined with the fold's own
+    sampling error. If the arithmetic were calibrated that would average one.
+
+    It does not. The random-effects posterior treats the seasons as
+    exchangeable draws around a fixed level, which understates how far the
+    *next* season can sit from the pooled mean once the level itself is only
+    estimated from four seasons. ``sqrt(mean(z^2))`` is the multiplier that
+    repairs it, and it is pooled over every screened bucket because two folds
+    per bucket cannot support a per-bucket factor: pooling trades a little
+    bucket specificity for an estimate that is not itself mostly noise.
+
+    Estimated on inner folds only, so it carries no holdout information.
+    """
+    squared: list[float] = []
+    weights: list[float] = []
+    for screening in screenings:
+        scores = screening.scores.get(treatment)
+        if scores is None or not np.isfinite(scores["mean_squared_z"]):
+            continue
+        squared.append(float(scores["mean_squared_z"]))
+        weights.append(float(scores["folds"]))
+    if not squared:
+        return {"inflation": 1.0, "mean_squared_z": float("nan"), "observations": 0.0}
+    total = float(np.sum(weights))
+    mean_squared = float(np.sum(np.array(squared) * np.array(weights)) / total)
+    return {
+        "inflation": float(np.sqrt(max(mean_squared, 1.0))),
+        "mean_squared_z": mean_squared,
+        "observations": total,
+        "buckets": float(len(squared)),
+    }

@@ -226,18 +226,28 @@ def _gauss_legendre_panels(
     panels: int,
     nodes: int,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Composite Gauss-Legendre nodes, weights and panel edges on ``[0, rho_max]``.
+    """Composite Gauss-Legendre quadrature on ``[-rho_max, rho_max]``.
 
     Returns ``(edges, node_grid, weight_grid)`` with the node and weight grids
-    shaped ``(panels, nodes)`` so a cumulative sum over panels gives the
+    shaped ``(2 * panels, nodes)`` so a cumulative sum over panels gives the
     antiderivative at every edge.
+
+    The interval is two-sided rather than ``[0, rho_max]`` reflected, because
+    the bridge is *not* an odd function of ``rho``. Its derivative is
+    ``w_a' Phi_2(rho) w_b`` and ``phi_2(z, w; -rho) = phi_2(z, -w; rho)``, so
+    reflecting the curve is only exact when both margins are symmetric. Count
+    margins are strongly skewed, and the cross-team block is where the
+    negative entries live, so the negative half is integrated directly. ``0``
+    is a panel edge by construction, which is what lets the antiderivative be
+    pinned to zero there exactly.
     """
     if rho_max <= 0:
         raise ValueError("rho_max must be positive")
     if panels < 1 or nodes < 1:
         raise ValueError("panels and nodes must be positive")
     base_nodes, base_weights = np.polynomial.legendre.leggauss(nodes)
-    edges = np.linspace(0.0, float(rho_max), panels + 1)
+    positive = np.linspace(0.0, float(rho_max), panels + 1)
+    edges = np.concatenate((-positive[::-1][:-1], positive))
     half = np.diff(edges)[:, None] / 2.0
     middle = (edges[:-1] + edges[1:])[:, None] / 2.0
     return edges, middle + half * base_nodes[None, :], half * base_weights[None, :]
@@ -247,9 +257,10 @@ def _gauss_legendre_panels(
 class BridgeCurve:
     """A tabulated, strictly increasing map from latent ``rho`` to an observable.
 
-    ``values[i]`` is the bridge evaluated at ``grid[i]``, with ``grid[0] == 0``
-    and ``values[0] == 0``: a zero latent correlation produces a zero
-    correlation in either space, exactly, for any margins.
+    ``values[i]`` is the bridge evaluated at ``grid[i]``. The grid spans
+    ``[-rho_max, rho_max]`` with zero as an exact edge where the value is
+    exactly zero: a zero latent correlation produces a zero correlation in
+    either space, for any margins.
     """
 
     space: str
@@ -264,6 +275,14 @@ class BridgeCurve:
         return float(self.grid[-1])
 
     @property
+    def rho_min(self) -> float:
+        return float(self.grid[0])
+
+    @property
+    def zero_index(self) -> int:
+        return int(np.argmin(np.abs(self.grid)))
+
+    @property
     def feasible_range(self) -> tuple[float, float]:
         """Observable values reachable by a ``rho`` inside the tabulated grid."""
         return float(self.values[0]), float(self.values[-1])
@@ -272,15 +291,22 @@ class BridgeCurve:
         return bool(np.all(np.diff(self.values) > 0.0))
 
     def slope_at_zero(self) -> float:
-        """``dT/drho`` at the origin: the bridge's attenuation factor."""
-        return float((self.values[1] - self.values[0]) / (self.grid[1] - self.grid[0]))
+        """``dT/drho`` at the origin: the bridge's attenuation factor.
+
+        A central difference across the two panels either side of zero, so a
+        skewed margin's asymmetry about the origin does not bias it toward
+        whichever side happened to be measured.
+        """
+        zero = self.zero_index
+        return float(
+            (self.values[zero + 1] - self.values[zero - 1])
+            / (self.grid[zero + 1] - self.grid[zero - 1])
+        )
 
     def evaluate(self, rho: float) -> float:
-        """The observable implied by ``rho``, by monotone cubic interpolation."""
-        rho = float(rho)
-        sign = -1.0 if rho < 0 else 1.0
-        magnitude = min(abs(rho), self.rho_max)
-        return sign * float(np.interp(magnitude, self.grid, self.values))
+        """The observable implied by ``rho``, by piecewise-linear interpolation."""
+        clipped = float(np.clip(float(rho), self.rho_min, self.rho_max))
+        return float(np.interp(clipped, self.grid, self.values))
 
     def invert(self, target: float, tolerance: float = 1e-12) -> float:
         """``T^{-1}(target)``.
@@ -291,29 +317,29 @@ class BridgeCurve:
         clip to the end of the grid.
         """
         target = float(target)
-        sign = -1.0 if target < 0 else 1.0
-        magnitude = abs(target)
         low, high = self.feasible_range
-        if magnitude > high:
+        if target > high:
             raise BridgeNotIdentified(
-                f"count-space target {target!r} exceeds the largest value the "
-                f"bridge can reach ({sign * high!r}) at |rho| <= {self.rho_max}"
+                f"{self.space}-space target {target!r} exceeds the largest "
+                f"value the bridge can reach ({high!r}) at rho <= "
+                f"{self.rho_max}"
             )
-        if magnitude < low:
+        if target < low:
             raise BridgeNotIdentified(
-                f"target {target!r} is below the bridge's reachable floor {low!r}"
+                f"{self.space}-space target {target!r} is below the smallest "
+                f"value the bridge can reach ({low!r}) at rho >= {self.rho_min}"
             )
 
-        left, right = 0.0, self.rho_max
+        left, right = self.rho_min, self.rho_max
         for _ in range(200):
             middle = 0.5 * (left + right)
-            if self.evaluate(middle) < magnitude:
+            if self.evaluate(middle) < target:
                 left = middle
             else:
                 right = middle
             if right - left < tolerance:
                 break
-        return sign * 0.5 * (left + right)
+        return 0.5 * (left + right)
 
     def payload(self) -> dict[str, object]:
         return {
@@ -322,6 +348,7 @@ class BridgeCurve:
             "quadrature_panels": int(self.panels),
             "quadrature_nodes": int(self.nodes),
             "rho_max": self.rho_max,
+            "rho_min": self.rho_min,
             "monotone": self.is_monotone(),
             "slope_at_zero": self.slope_at_zero(),
             "grid": self.grid.tolist(),
@@ -367,7 +394,12 @@ def build_bridge_curve(
             derivative[panel, node] = total / len(pairs)
 
     panel_integrals = np.sum(derivative * weight_grid, axis=1)
-    values = np.concatenate(([0.0], np.cumsum(panel_integrals)))
+    antiderivative = np.concatenate(([0.0], np.cumsum(panel_integrals)))
+    # A zero latent correlation gives a zero correlation in either space for
+    # any margins, so the antiderivative is pinned at the zero edge rather
+    # than at the left end of the grid.
+    zero = int(np.argmin(np.abs(edges)))
+    values = antiderivative - antiderivative[zero]
 
     return BridgeCurve(
         space=space,
