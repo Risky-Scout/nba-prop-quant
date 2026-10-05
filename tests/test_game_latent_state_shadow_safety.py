@@ -28,42 +28,30 @@ from nba_prop_quant.research.game_latent_state.gates import (
     evaluate_gates,
     shadow_verdict,
 )
+from nba_prop_quant.research.game_latent_state.safety import (
+    PRODUCTION_REF,
+    PROTECTED_PRODUCTION_PREFIXES,
+    PROTECTED_PRODUCTION_SOURCES,
+    modified_production_paths,
+    production_merge_base,
+)
 
 PROJECT = Path(__file__).resolve().parents[1]
-
-PRODUCTION_REF = "production/wizardofodds-integration"
 
 SHADOW_PACKAGE = PROJECT / "src" / "nba_prop_quant" / "research" / "game_latent_state"
 
 SHADOW_SCRIPTS = PROJECT / "research" / "game_latent_state"
 
-#: Every path whose bytes decide production behaviour. The shadow branch must
-#: leave all of them exactly as the production ref has them.
-PROTECTED_PREFIXES: tuple[str, ...] = (
-    ".github/workflows/",
-    "configs/",
-    "models/",
-    "ops/",
-    "scripts/",
-    "docs/",
-    "release/",
-    "review/",
-)
+#: The protected-path definition is imported rather than restated, so the
+#: containment the validation report claims and the containment these tests
+#: check cannot drift apart.
+PROTECTED_PREFIXES = PROTECTED_PRODUCTION_PREFIXES
+PROTECTED_SOURCE_FILES = PROTECTED_PRODUCTION_SOURCES
 
-#: Production modules the shadow layer reads but must never edit.
-PROTECTED_SOURCE_FILES: tuple[str, ...] = (
-    "src/nba_prop_quant/adaptive_fit_registry.py",
-    "src/nba_prop_quant/adaptive_training.py",
-    "src/nba_prop_quant/copula.py",
-    "src/nba_prop_quant/distributions.py",
-    "src/nba_prop_quant/features.py",
-    "src/nba_prop_quant/gate3_v2.py",
-    "src/nba_prop_quant/model.py",
-    "src/nba_prop_quant/pipeline.py",
-    "src/nba_prop_quant/pricing.py",
-    "src/nba_prop_quant/production.py",
-    "src/nba_prop_quant/slate.py",
-)
+#: ``safety.py`` is the module that *declares* the protected production paths,
+#: so it necessarily contains those path literals. They are a read-only guard
+#: list, not write targets, which is why the literal scan below skips it.
+PATH_DECLARATION_MODULE = "safety.py"
 
 
 def git(*args: str) -> str:
@@ -77,12 +65,7 @@ def git(*args: str) -> str:
 
 
 def production_base() -> str | None:
-    for ref in (f"origin/{PRODUCTION_REF}", PRODUCTION_REF):
-        try:
-            return git("merge-base", "HEAD", ref)
-        except subprocess.CalledProcessError:
-            continue
-    return None
+    return production_merge_base(PROJECT)
 
 
 def changed_paths() -> list[str]:
@@ -110,6 +93,20 @@ def test_no_protected_production_path_is_modified():
         if path.startswith(PROTECTED_PREFIXES) or path in PROTECTED_SOURCE_FILES
     ]
     assert offenders == [], f"shadow branch modified production paths: {offenders}"
+
+
+def test_gate_h_evidence_comes_from_the_shared_protected_path_declaration():
+    """The validation report's gate H evidence is this same computation.
+
+    The report cannot claim a clean production surface by using a narrower
+    definition of "production" than these tests enforce, because both sides
+    call the same function over the same declared path lists.
+    """
+    if production_base() is None:
+        pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
+    assert modified_production_paths(PROJECT) == []
+    assert "src/nba_prop_quant/copula.py" in PROTECTED_PRODUCTION_SOURCES
+    assert ".github/workflows/" in PROTECTED_PRODUCTION_PREFIXES
 
 
 def test_production_automation_workflows_are_unchanged():
@@ -239,6 +236,8 @@ READ_ONLY_PRODUCTION_LITERALS = frozenset({"models", "dynamic_params.json"})
 def test_shadow_package_references_no_production_write_target():
     offenders: list[str] = []
     for path in python_sources():
+        if path.name == PATH_DECLARATION_MODULE:
+            continue
         for literal in code_string_literals(path):
             lowered = literal.lower()
             if "promotion_state" in lowered or "current_good_fit_id" in lowered:
@@ -278,10 +277,11 @@ def passing_report() -> dict:
             "candidate": {
                 "max_abs_over_z": 4.1,
                 "max_abs_mean_z": 3.8,
+                "max_abs_variance_z": 3.9,
                 "z_probe_count": 800_000,
                 "three_sigma_exceedance_fraction": 0.0030,
                 "max_abs_over_probability_error": 0.004,
-                "max_abs_variance_relative_error": 0.01,
+                "max_abs_variance_relative_error_well_conditioned": 0.01,
             }
         },
         "residual_dependence": {
@@ -344,6 +344,12 @@ def test_all_gates_pass_on_a_passing_report():
             "A",
             lambda r: r["marginal_preservation"]["candidate"].update(
                 max_abs_over_probability_error=0.2
+            ),
+        ),
+        (
+            "A",
+            lambda r: r["marginal_preservation"]["candidate"].update(
+                max_abs_variance_z=9.0
             ),
         ),
         (

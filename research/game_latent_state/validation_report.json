@@ -1,0 +1,995 @@
+{
+  "acceptance_gates": [
+    {
+      "evidence": {
+        "bonferroni_z_critical": 4.608028955108095,
+        "family_wise_alpha": 0.01,
+        "limit_over_probability_error": 0.01,
+        "limit_three_sigma_exceedance_fraction": 0.00809938818978056,
+        "limit_variance_relative_error": 0.05,
+        "max_abs_mean_z": 3.1677109900934783,
+        "max_abs_over_probability_error": 0.011751812906578174,
+        "max_abs_over_z": 3.662251929729907,
+        "max_abs_variance_relative_error_well_conditioned": 0.03421294756941859,
+        "max_abs_variance_z": 3.1501418819688687,
+        "three_sigma_exceedance_fraction": 0.0032520325203252032,
+        "variance_relative_error_min_variance": 1.0,
+        "z_probe_count": 2460
+      },
+      "gate": "A",
+      "name": "marginal calibration preserved within Monte Carlo tolerance",
+      "passed": false
+    },
+    {
+      "evidence": {
+        "baseline_independence_rmse": 0.01631847608331577,
+        "candidate_rmse": 0.004333624692735095,
+        "limit_rmse_reduction": 0.5,
+        "rmse_reduction": 0.7344344735005095
+      },
+      "gate": "B",
+      "name": "held-out cross-player dependence beats conditional independence",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "best_baseline_brier": 0.16273497526041666,
+        "candidate_brier": 0.16462294010416667,
+        "limit_regression": 0.0005
+      },
+      "gate": "C",
+      "name": "2-leg joint calibration no worse than baseline",
+      "passed": false
+    },
+    {
+      "evidence": {
+        "3_leg_best_baseline_brier": 0.0341759140625,
+        "3_leg_candidate_brier": 0.03414583333333334,
+        "4_leg_best_baseline_brier": 0.0764458828125,
+        "4_leg_candidate_brier": 0.076830107421875,
+        "limit_regression": 0.002
+      },
+      "gate": "D",
+      "name": "3-leg / 4-leg calibration shows no material degradation",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "games_checked": 8,
+        "limit_block_deviation": 1e-09,
+        "max_block_deviation": 1.6653345369377348e-16
+      },
+      "gate": "E",
+      "name": "no same-player dependence double counting",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "games_tested": 8,
+        "limit_min_eigenvalue": -1e-10,
+        "min_covariance_eigenvalue": 0.04781797861391075,
+        "numerical_failures": 0
+      },
+      "gate": "F",
+      "name": "PSD and numerical stability on every held-out game tested",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "pairwise_parameter_count": 0,
+        "unseen_player_simulation_ok": true
+      },
+      "gate": "G",
+      "name": "unseen / sparse player fallback without pair-specific overfitting",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "modified_production_paths": []
+      },
+      "gate": "H",
+      "name": "production model remains untouched",
+      "passed": true
+    }
+  ],
+  "dependence_model_version": "game-latent-state-shadow-v1",
+  "factor_spec_hash": "2e4fa0953b6e92483a400cb0d7e226a19530c3898589df0c28c255d8d5601369",
+  "games_simulated": 8,
+  "games_skipped": 0,
+  "joint_events": {
+    "by_family": {
+      "2leg_cross_team": {
+        "base_rate": 0.25,
+        "brier_baseline_independence": 0.20726844140625,
+        "brier_baseline_production": 0.2032885859375,
+        "brier_candidate": 0.20678643359374999,
+        "events": 16
+      },
+      "2leg_same_player": {
+        "base_rate": 0.1875,
+        "brier_baseline_independence": 0.12592256640625,
+        "brier_baseline_production": 0.12510898437499998,
+        "brier_candidate": 0.12609991796875,
+        "events": 16
+      },
+      "2leg_same_team": {
+        "base_rate": 0.1875,
+        "brier_baseline_independence": 0.1603924609375,
+        "brier_baseline_production": 0.15980735546875002,
+        "brier_candidate": 0.16098246875,
+        "events": 16
+      },
+      "3leg_cross_team": {
+        "base_rate": 0.0625,
+        "brier_baseline_independence": 0.032667875,
+        "brier_baseline_production": 0.03236532812500001,
+        "brier_candidate": 0.0320514765625,
+        "events": 16
+      },
+      "3leg_mixed": {
+        "base_rate": 0.0,
+        "brier_baseline_independence": 0.008328988281250001,
+        "brier_baseline_production": 0.00825415625,
+        "brier_candidate": 0.00815406640625,
+        "events": 16
+      },
+      "3leg_same_team": {
+        "base_rate": 0.0625,
+        "brier_baseline_independence": 0.06239134374999999,
+        "brier_baseline_production": 0.0619082578125,
+        "brier_candidate": 0.06223195703125,
+        "events": 16
+      },
+      "4leg_cross_team": {
+        "base_rate": 0.0625,
+        "brier_baseline_independence": 0.05109519140624999,
+        "brier_baseline_production": 0.05136666796875,
+        "brier_candidate": 0.05122326953125,
+        "events": 16
+      },
+      "4leg_mixed": {
+        "base_rate": 0.125,
+        "brier_baseline_independence": 0.10230946093749999,
+        "brier_baseline_production": 0.10152509765625001,
+        "brier_candidate": 0.1024369453125,
+        "events": 16
+      }
+    },
+    "by_legs": {
+      "2": {
+        "base_rate": 0.20833333333333334,
+        "baseline_independence": {
+          "brier": 0.16452782291666665,
+          "brier_ci95": [
+            0.12841197513020833,
+            0.21822159599609373
+          ],
+          "log_loss": 0.5031178861263298,
+          "log_loss_floor_binding_fraction": 0.0,
+          "log_loss_numerically_stable": true,
+          "mean_predicted": 0.23790624999999999,
+          "reliability": [
+            {
+              "bucket_high": 0.05,
+              "bucket_low": 0.0,
+              "count": 1,
+              "mean_predicted": 0.0335,
+              "observed_rate": 0.0
+            },
+            {
+              "bucket_high": 0.1,
+              "bucket_low": 0.05,
+              "count": 2,
+              "mean_predicted": 0.070125,
+              "observed_rate": 0.0
+            },
+            {
+              "bucket_high": 0.2,
+              "bucket_low": 0.1,
+              "count": 19,
+              "mean_predicted": 0.1475,
+              "observed_rate": 0.15789473684210525
+            },
+            {
+              "bucket_high": 0.3,
+              "bucket_low": 0.2,
+              "count": 11,
+              "mean_predicted": 0.25031818181818183,
+              "observed_rate": 0.2727272727272727
+            },
+            {
+              "bucket_high": 0.45,
+              "bucket_low": 0.3,
+              "count": 13,
+              "mean_predicted": 0.3564615384615385,
+              "observed_rate": 0.23076923076923078
+            },
+            {
+              "bucket_high": 0.6,
+              "bucket_low": 0.45,
+              "count": 2,
+              "mean_predicted": 0.5278750000000001,
+              "observed_rate": 0.5
+            }
+          ]
+        },
+        "baseline_production": {
+          "brier": 0.16273497526041666,
+          "brier_ci95": [
+            0.12807100576171876,
+            0.21587713085937496
+          ],
+          "log_loss": 0.49748274573062573,
+          "log_loss_floor_binding_fraction": 0.0,
+          "log_loss_numerically_stable": true,
+          "mean_predicted": 0.2375260416666667,
+          "reliability": [
+            {
+              "bucket_high": 0.05,
+              "bucket_low": 0.0,
+              "count": 2,
+              "mean_predicted": 0.040125,
+              "observed_rate": 0.0
+            },
+            {
+              "bucket_high": 0.1,
+              "bucket_low": 0.05,
+              "count": 1,
+              "mean_predicted": 0.08325,
+              "observed_rate": 0.0
+            },
+            {
+              "bucket_high": 0.2,
+              "bucket_low": 0.1,
+              "count": 18,
+              "mean_predicted": 0.14638888888888887,
+              "observed_rate": 0.16666666666666666
+            },
+            {
+              "bucket_high": 0.3,
+              "bucket_low": 0.2,
+              "count": 12,
+              "mean_predicted": 0.24602083333333333,
+              "observed_rate": 0.25
+            },
+            {
+              "bucket_high": 0.45,
+              "bucket_low": 0.3,
+              "count": 13,
+              "mean_predicted": 0.35375,
+              "observed_rate": 0.23076923076923078
+            },
+            {
+              "bucket_high": 0.6,
+              "bucket_low": 0.45,
+              "count": 2,
+              "mean_predicted": 0.5258750000000001,
+              "observed_rate": 0.5
+            }
+          ]
+        },
+        "candidate": {
+          "brier": 0.16462294010416667,
+          "brier_ci95": [
+            0.12808131354166669,
+            0.21805507988281247
+          ],
+          "log_loss": 0.5029560583907285,
+          "log_loss_floor_binding_fraction": 0.0,
+          "log_loss_numerically_stable": true,
+          "mean_predicted": 0.2381875,
+          "reliability": [
+            {
+              "bucket_high": 0.05,
+              "bucket_low": 0.0,
+              "count": 1,
+              "mean_predicted": 0.03525,
+              "observed_rate": 0.0
+            },
+            {
+              "bucket_high": 0.1,
+              "bucket_low": 0.05,
+              "count": 2,
+              "mean_predicted": 0.071375,
+              "observed_rate": 0.0
+            },
+            {
+              "bucket_high": 0.2,
+              "bucket_low": 0.1,
+              "count": 19,
+              "mean_predicted": 0.14743421052631578,
+              "observed_rate": 0.15789473684210525
+            },
+            {
+              "bucket_high": 0.3,
+              "bucket_low": 0.2,
+              "count": 12,
+              "mean_predicted": 0.2565,
+              "observed_rate": 0.25
+            },
+            {
+              "bucket_high": 0.45,
+              "bucket_low": 0.3,
+              "count": 12,
+              "mean_predicted": 0.36025,
+              "observed_rate": 0.25
+            },
+            {
+              "bucket_high": 0.6,
+              "bucket_low": 0.45,
+              "count": 2,
+              "mean_predicted": 0.526375,
+              "observed_rate": 0.5
+            }
+          ]
+        },
+        "candidate_minus_independence_brier": 9.511718750002118e-05,
+        "candidate_minus_independence_brier_ci95": [
+          -0.0006332216796875103,
+          0.0007578832031249898
+        ],
+        "events": 48,
+        "games": 8
+      },
+      "3": {
+        "base_rate": 0.041666666666666664,
+        "baseline_independence": {
+          "brier": 0.034462735677083335,
+          "brier_ci95": [
+            0.010420566992187501,
+            0.07001973046874999
+          ],
+          "log_loss": 0.15519766152976291,
+          "log_loss_floor_binding_fraction": 0.0,
+          "log_loss_numerically_stable": true,
+          "mean_predicted": 0.09635937499999998,
+          "reliability": [
+            {
+              "bucket_high": 0.05,
+              "bucket_low": 0.0,
+              "count": 13,
+              "mean_predicted": 0.02601923076923077,
+              "observed_rate": 0.0
+            },
+            {
+              "bucket_high": 0.1,
+              "bucket_low": 0.05,
+              "count": 15,
+              "mean_predicted": 0.07160000000000001,
+              "observed_rate": 0.0
+            },
+            {
+              "bucket_high": 0.2,
+              "bucket_low": 0.1,
+              "count": 17,
+              "mean_predicted": 0.1397205882352941,
+              "observed_rate": 0.058823529411764705
+            },
+            {
+              "bucket_high": 0.3,
+              "bucket_low": 0.2,
+              "count": 2,
+              "mean_predicted": 0.219875,
+              "observed_rate": 0.0
+            },
+            {
+              "bucket_high": 0.45,
+              "bucket_low": 0.3,
+              "count": 1,
+              "mean_predicted": 0.398,
+              "observed_rate": 1.0
+            }
+          ]
+        },
+        "baseline_production": {
+          "brier": 0.0341759140625,
+          "brier_ci95": [
+            0.010246736523437501,
+            0.07003200703124998
+          ],
+          "log_loss": 0.15383768687516744,
+          "log_loss_floor_binding_fraction": 0.0,
+          "log_loss_numerically_stable": true,
+          "mean_predicted": 0.09533333333333333,
+          "reliability": [
+            {
+              "bucket_high": 0.05,
+              "bucket_low": 0.0,
+              "count": 14,
+              "mean_predicted": 0.028214285714285713,
+              "observed_rate": 0.0
+            },
+            {
+              "bucket_high": 0.1,
+              "bucket_low": 0.05,
+              "count": 15,
+              "mean_predicted": 0.07611666666666667,
+              "observed_rate": 0.0
+            },
+            {
+              "bucket_high": 0.2,
+              "bucket_low": 0.1,
+              "count": 16,
+              "mean_predicted": 0.137859375,
+              "observed_rate": 0.0625
+            },
+            {
+              "bucket_high": 0.3,
+              "bucket_low": 0.2,
+              "count": 2,
+              "mean_predicted": 0.22112500000000002,
+              "observed_rate": 0.0
+            },
+            {
+              "bucket_high": 0.45,
+              "bucket_low": 0.3,
+              "count": 1,
+              "mean_predicted": 0.39125,
+              "observed_rate": 1.0
+            }
+          ]
+        },
+        "candidate": {
+          "brier": 0.03414583333333334,
+          "brier_ci95": [
+            0.00995657900390625,
+            0.06974116217447916
+          ],
+          "log_loss": 0.1544522236127762,
+          "log_loss_floor_binding_fraction": 0.0,
+          "log_loss_numerically_stable": true,
+          "mean_predicted": 0.09583333333333333,
+          "reliability": [
+            {
+              "bucket_high": 0.05,
+              "bucket_low": 0.0,
+              "count": 13,
+              "mean_predicted": 0.02642307692307692,
+              "observed_rate": 0.0
+            },
+            {
+              "bucket_high": 0.1,
+              "bucket_low": 0.05,
+              "count": 15,
+              "mean_predicted": 0.07246666666666667,
+              "observed_rate": 0.0
+            },
+            {
+              "bucket_high": 0.2,
+              "bucket_low": 0.1,
+              "count": 17,
+              "mean_predicted": 0.1373676470588235,
+              "observed_rate": 0.058823529411764705
+            },
+            {
+              "bucket_high": 0.3,
+              "bucket_low": 0.2,
+              "count": 2,
+              "mean_predicted": 0.216,
+              "observed_rate": 0.0
+            },
+            {
+              "bucket_high": 0.45,
+              "bucket_low": 0.3,
+              "count": 1,
+              "mean_predicted": 0.40225,
+              "observed_rate": 1.0
+            }
+          ]
+        },
+        "candidate_minus_independence_brier": -0.0003169023437499946,
+        "candidate_minus_independence_brier_ci95": [
+          -0.0005466947591145825,
+          -6.928902994790878e-05
+        ],
+        "events": 48,
+        "games": 8
+      },
+      "4": {
+        "base_rate": 0.09375,
+        "baseline_independence": {
+          "brier": 0.07670232617187499,
+          "brier_ci95": [
+            0.003367777099609375,
+            0.1506182873535156
+          ],
+          "log_loss": 0.24124846135114922,
+          "log_loss_floor_binding_fraction": 0.0,
+          "log_loss_numerically_stable": true,
+          "mean_predicted": 0.04488281250000001,
+          "reliability": [
+            {
+              "bucket_high": 0.05,
+              "bucket_low": 0.0,
+              "count": 23,
+              "mean_predicted": 0.021630434782608697,
+              "observed_rate": 0.0
+            },
+            {
+              "bucket_high": 0.1,
+              "bucket_low": 0.05,
+              "count": 5,
+              "mean_predicted": 0.0669,
+              "observed_rate": 0.2
+            },
+            {
+              "bucket_high": 0.2,
+              "bucket_low": 0.1,
+              "count": 3,
+              "mean_predicted": 0.12366666666666666,
+              "observed_rate": 0.6666666666666666
+            },
+            {
+              "bucket_high": 0.3,
+              "bucket_low": 0.2,
+              "count": 1,
+              "mean_predicted": 0.23325,
+              "observed_rate": 0.0
+            }
+          ]
+        },
+        "baseline_production": {
+          "brier": 0.0764458828125,
+          "brier_ci95": [
+            0.002992473095703125,
+            0.15051512314453128
+          ],
+          "log_loss": 0.2395335263121823,
+          "log_loss_floor_binding_fraction": 0.0,
+          "log_loss_numerically_stable": true,
+          "mean_predicted": 0.044234375,
+          "reliability": [
+            {
+              "bucket_high": 0.05,
+              "bucket_low": 0.0,
+              "count": 23,
+              "mean_predicted": 0.021750000000000002,
+              "observed_rate": 0.0
+            },
+            {
+              "bucket_high": 0.1,
+              "bucket_low": 0.05,
+              "count": 5,
+              "mean_predicted": 0.0685,
+              "observed_rate": 0.2
+            },
+            {
+              "bucket_high": 0.2,
+              "bucket_low": 0.1,
+              "count": 3,
+              "mean_predicted": 0.11908333333333333,
+              "observed_rate": 0.6666666666666666
+            },
+            {
+              "bucket_high": 0.3,
+              "bucket_low": 0.2,
+              "count": 1,
+              "mean_predicted": 0.2155,
+              "observed_rate": 0.0
+            }
+          ]
+        },
+        "candidate": {
+          "brier": 0.076830107421875,
+          "brier_ci95": [
+            0.003222764208984375,
+            0.15105103862304686
+          ],
+          "log_loss": 0.2417724475709127,
+          "log_loss_floor_binding_fraction": 0.0,
+          "log_loss_numerically_stable": true,
+          "mean_predicted": 0.0444921875,
+          "reliability": [
+            {
+              "bucket_high": 0.05,
+              "bucket_low": 0.0,
+              "count": 23,
+              "mean_predicted": 0.021717391304347827,
+              "observed_rate": 0.0
+            },
+            {
+              "bucket_high": 0.1,
+              "bucket_low": 0.05,
+              "count": 5,
+              "mean_predicted": 0.06695,
+              "observed_rate": 0.2
+            },
+            {
+              "bucket_high": 0.2,
+              "bucket_low": 0.1,
+              "count": 3,
+              "mean_predicted": 0.12075000000000001,
+              "observed_rate": 0.6666666666666666
+            },
+            {
+              "bucket_high": 0.3,
+              "bucket_low": 0.2,
+              "count": 1,
+              "mean_predicted": 0.22725,
+              "observed_rate": 0.0
+            }
+          ]
+        },
+        "candidate_minus_independence_brier": 0.00012778125000001417,
+        "candidate_minus_independence_brier_ci95": [
+          -0.00047134667968748537,
+          0.0009915958984374924
+        ],
+        "events": 32,
+        "games": 8
+      }
+    },
+    "total_events": 128
+  },
+  "latent_dependence": {
+    "by_model": {
+      "baseline_independence": {
+        "implied_buckets": {
+          "opponent_ast_ast": 0.0,
+          "opponent_fg3m_reb": 0.0,
+          "opponent_pts_pts": 0.0,
+          "opponent_pts_reb": 0.0,
+          "opponent_reb_reb": 0.0,
+          "opponent_stl_pts": 0.0,
+          "passer_ast_teammate_pts": 0.0,
+          "teammate_ast_ast": 0.0,
+          "teammate_fg3m_fg3m": 0.0,
+          "teammate_pts_pts": 0.0,
+          "teammate_pts_reb": 0.0,
+          "teammate_reb_reb": 0.0
+        },
+        "max_abs_error": 0.04701135502623302,
+        "rms_z_error": 8.481160751600193,
+        "rmse": 0.01631847608331577
+      },
+      "candidate": {
+        "implied_buckets": {
+          "opponent_ast_ast": 0.004838420867529496,
+          "opponent_fg3m_reb": -0.0029036643381710244,
+          "opponent_pts_pts": 0.01212316479506658,
+          "opponent_pts_reb": -0.002459580687614912,
+          "opponent_reb_reb": 0.01046748365433485,
+          "opponent_stl_pts": 0.00019807679375208028,
+          "passer_ast_teammate_pts": 0.042799798361597786,
+          "teammate_ast_ast": 0.0009374772272764849,
+          "teammate_fg3m_fg3m": -0.003588192021672725,
+          "teammate_pts_pts": -0.002645739759020528,
+          "teammate_pts_reb": 0.011624107591980425,
+          "teammate_reb_reb": 0.0012898703250657628
+        },
+        "max_abs_error": 0.008127328602571805,
+        "rms_z_error": 2.0144123716571722,
+        "rmse": 0.004333624692735095
+      }
+    },
+    "cross_team_pairs": 617472.0,
+    "games": 2643,
+    "observed_bucket_se": {
+      "opponent_ast_ast": 0.001980434420237239,
+      "opponent_fg3m_reb": 0.001527357050261172,
+      "opponent_pts_pts": 0.0019901646166080125,
+      "opponent_pts_reb": 0.0015412274399484137,
+      "opponent_reb_reb": 0.0018716086010590791,
+      "opponent_stl_pts": 0.0015172575097494154,
+      "passer_ast_teammate_pts": 0.0019048951442790002,
+      "teammate_ast_ast": 0.0024058949970296086,
+      "teammate_fg3m_fg3m": 0.0018896624617405085,
+      "teammate_pts_pts": 0.0020037770050642867,
+      "teammate_pts_reb": 0.0018650364907563392,
+      "teammate_reb_reb": 0.002460458975731373
+    },
+    "observed_buckets": {
+      "opponent_ast_ast": 0.005341368590022398,
+      "opponent_fg3m_reb": -0.001518008220700275,
+      "opponent_pts_pts": 0.016008373578163027,
+      "opponent_pts_reb": -0.002643665457434456,
+      "opponent_reb_reb": 0.015928005526501563,
+      "opponent_stl_pts": -0.0006447135500236283,
+      "passer_ast_teammate_pts": 0.04701135502623302,
+      "teammate_ast_ast": 0.008971395319402322,
+      "teammate_fg3m_fg3m": -0.0017159555455812522,
+      "teammate_pts_pts": -0.0006200938532631293,
+      "teammate_pts_reb": 0.016270749051048704,
+      "teammate_reb_reb": 0.009417198927637567
+    },
+    "observed_cross_team": [
+      [
+        0.016008373578163027,
+        -0.002643665457434456,
+        0.00899000566962824,
+        -0.0006447135500236283,
+        0.0007807729159076607,
+        0.0077937344128106096
+      ],
+      [
+        -0.002643665457434456,
+        0.015928005526501563,
+        -0.0027764674226747384,
+        0.006627018595474165,
+        0.01388354965717848,
+        -0.001518008220700275
+      ],
+      [
+        0.00899000566962824,
+        -0.0027764674226747384,
+        0.005341368590022398,
+        -0.001223458005918835,
+        -8.457410494776378e-05,
+        0.004569503731024723
+      ],
+      [
+        -0.0006447135500236283,
+        0.006627018595474165,
+        -0.001223458005918835,
+        0.0047356050024649045,
+        0.0033293823412312,
+        -0.0013123222838870717
+      ],
+      [
+        0.0007807729159076607,
+        0.01388354965717848,
+        -8.457410494776378e-05,
+        0.0033293823412312,
+        0.006633252011146616,
+        -0.0009544927378434549
+      ],
+      [
+        0.0077937344128106096,
+        -0.001518008220700275,
+        0.004569503731024723,
+        -0.0013123222838870717,
+        -0.0009544927378434549,
+        0.0057647753332391374
+      ]
+    ],
+    "observed_same_team": [
+      [
+        -0.0006200938532631293,
+        0.016270749051048704,
+        0.04701135502623302,
+        0.010172709617371255,
+        0.004369515053933131,
+        -0.00478477285049842
+      ],
+      [
+        0.016270749051048704,
+        0.009417198927637567,
+        0.01153826676717715,
+        -0.0003337452765062137,
+        0.011394012478143629,
+        0.0057502520548107635
+      ],
+      [
+        0.04701135502623302,
+        0.01153826676717715,
+        0.008971395319402322,
+        0.008909166199300865,
+        0.002440644508679619,
+        0.0353320319743984
+      ],
+      [
+        0.010172709617371255,
+        -0.0003337452765062137,
+        0.008909166199300865,
+        0.0013299146009568374,
+        0.00035936534791808497,
+        0.003982600643593165
+      ],
+      [
+        0.004369515053933131,
+        0.011394012478143629,
+        0.002440644508679619,
+        0.00035936534791808497,
+        0.00788534777729686,
+        0.004405518870840847
+      ],
+      [
+        -0.00478477285049842,
+        0.0057502520548107635,
+        0.0353320319743984,
+        0.003982600643593165,
+        0.004405518870840847,
+        -0.0017159555455812522
+      ]
+    ],
+    "same_team_pairs": 567636.0
+  },
+  "marginal_preservation": {
+    "baseline_independence": {
+      "dimensions_probed": 492,
+      "max_abs_mean_z": 3.0968239558067077,
+      "max_abs_over_probability_error": 0.010581936978496409,
+      "max_abs_over_z": 3.2834031905514944,
+      "max_abs_quantile_error": 1.0,
+      "max_abs_variance_relative_error_all_dimensions": 0.07696538778411481,
+      "max_abs_variance_relative_error_well_conditioned": 0.03756075417880623,
+      "max_abs_variance_z": 3.4814024990329573,
+      "mean_abs_mean_error": 0.011787481775125177,
+      "median_abs_over_probability_error": 0.003287631129567009,
+      "three_sigma_exceedance_fraction": 0.0024390243902439024,
+      "variance_ratio_min_variance": 1.0,
+      "well_conditioned_variance_dimensions": 323,
+      "z_probe_count": 2460
+    },
+    "baseline_production": {
+      "dimensions_probed": 492,
+      "max_abs_mean_z": 2.9446914909869455,
+      "max_abs_over_probability_error": 0.009960647258141109,
+      "max_abs_over_z": 3.562301116960198,
+      "max_abs_quantile_error": 1.0,
+      "max_abs_variance_relative_error_all_dimensions": 0.22716116408338086,
+      "max_abs_variance_relative_error_well_conditioned": 0.03744011552491803,
+      "max_abs_variance_z": 3.1587427431,
+      "mean_abs_mean_error": 0.012570967269300942,
+      "median_abs_over_probability_error": 0.003377343407829844,
+      "three_sigma_exceedance_fraction": 0.003658536585365854,
+      "variance_ratio_min_variance": 1.0,
+      "well_conditioned_variance_dimensions": 323,
+      "z_probe_count": 2460
+    },
+    "candidate": {
+      "dimensions_probed": 492,
+      "max_abs_mean_z": 3.1677109900934783,
+      "max_abs_over_probability_error": 0.011751812906578174,
+      "max_abs_over_z": 3.662251929729907,
+      "max_abs_quantile_error": 1.0,
+      "max_abs_variance_relative_error_all_dimensions": 0.11335495424124278,
+      "max_abs_variance_relative_error_well_conditioned": 0.03421294756941859,
+      "max_abs_variance_z": 3.1501418819688687,
+      "mean_abs_mean_error": 0.011642528213500468,
+      "median_abs_over_probability_error": 0.003338400683662507,
+      "three_sigma_exceedance_fraction": 0.0032520325203252032,
+      "variance_ratio_min_variance": 1.0,
+      "well_conditioned_variance_dimensions": 323,
+      "z_probe_count": 2460
+    }
+  },
+  "production_surface": {
+    "modified_paths": []
+  },
+  "residual_dependence": {
+    "by_model": {
+      "baseline_independence": {
+        "bucket_errors": {
+          "opponent_ast_ast": -0.006532312753259946,
+          "opponent_fg3m_reb": 0.12741965098715616,
+          "opponent_pts_pts": 0.08692933001305059,
+          "opponent_pts_reb": 0.06533937747226576,
+          "opponent_reb_reb": 0.014697949322617341,
+          "opponent_stl_pts": -0.019706971584779985,
+          "passer_ast_teammate_pts": -0.010042736125992144,
+          "teammate_ast_ast": -0.1387317806809409,
+          "teammate_fg3m_fg3m": -0.02673936799569043,
+          "teammate_pts_pts": 0.11385428572826355,
+          "teammate_pts_reb": 0.06909828281842224,
+          "teammate_reb_reb": 0.16110845733091508
+        },
+        "buckets": {
+          "opponent_ast_ast": 0.05727899908733227,
+          "opponent_fg3m_reb": 0.12236484586909888,
+          "opponent_pts_pts": 0.10805552193240198,
+          "opponent_pts_reb": 0.04554370704403269,
+          "opponent_reb_reb": -0.00815280807144933,
+          "opponent_stl_pts": -0.052276470490440465,
+          "passer_ast_teammate_pts": 0.07679157487037193,
+          "teammate_ast_ast": -0.04404202556950828,
+          "teammate_fg3m_fg3m": -5.8513940690274266e-05,
+          "teammate_pts_pts": 0.07939507235487629,
+          "teammate_pts_reb": 0.03796128643243943,
+          "teammate_reb_reb": 0.10284692583759099
+        }
+      },
+      "baseline_production": {
+        "bucket_errors": {
+          "opponent_ast_ast": -0.054553629509796385,
+          "opponent_fg3m_reb": 0.028483370430462,
+          "opponent_pts_pts": 0.17613249178764145,
+          "opponent_pts_reb": 0.05252174680791769,
+          "opponent_reb_reb": -0.008093117662360559,
+          "opponent_stl_pts": 0.0894002742946216,
+          "passer_ast_teammate_pts": -0.10029083477154616,
+          "teammate_ast_ast": -0.072515890126225,
+          "teammate_fg3m_fg3m": -0.23546736739521706,
+          "teammate_pts_pts": 0.032377395141362564,
+          "teammate_pts_reb": 0.013588186488901016,
+          "teammate_reb_reb": -0.12696729987150707
+        },
+        "buckets": {
+          "opponent_ast_ast": 0.00925768233079583,
+          "opponent_fg3m_reb": 0.023428565312404726,
+          "opponent_pts_pts": 0.19725868370699284,
+          "opponent_pts_reb": 0.03272607637968462,
+          "opponent_reb_reb": -0.03094387505642723,
+          "opponent_stl_pts": 0.05683077538896112,
+          "passer_ast_teammate_pts": -0.01345652377518209,
+          "teammate_ast_ast": 0.022173864985207622,
+          "teammate_fg3m_fg3m": -0.20878651334021692,
+          "teammate_pts_pts": -0.0020818182320246925,
+          "teammate_pts_reb": -0.0175488098970818,
+          "teammate_reb_reb": -0.18522883136483115
+        }
+      },
+      "candidate": {
+        "bucket_errors": {
+          "opponent_ast_ast": 1.1655958721529274,
+          "opponent_fg3m_reb": -0.6333125180962511,
+          "opponent_pts_pts": 3.5540382849730405,
+          "opponent_pts_reb": -0.6945958862480734,
+          "opponent_reb_reb": 3.00019739205099,
+          "opponent_stl_pts": 0.09461622940833306,
+          "passer_ast_teammate_pts": 10.82316145228059,
+          "teammate_ast_ast": 0.0513484049715304,
+          "teammate_fg3m_fg3m": -0.6976857190848299,
+          "teammate_pts_pts": -0.5126549180856783,
+          "teammate_pts_reb": 3.1502641012435193,
+          "teammate_reb_reb": 0.5184311109943094
+        },
+        "buckets": {
+          "opponent_ast_ast": 1.2294071839935197,
+          "opponent_fg3m_reb": -0.6383673232143083,
+          "opponent_pts_pts": 3.575164476892392,
+          "opponent_pts_reb": -0.7143915566763065,
+          "opponent_reb_reb": 2.9773466346569233,
+          "opponent_stl_pts": 0.062046730502672585,
+          "passer_ast_teammate_pts": 10.909995763276955,
+          "teammate_ast_ast": 0.14603816008296303,
+          "teammate_fg3m_fg3m": -0.6710048650298297,
+          "teammate_pts_pts": -0.5471141314590656,
+          "teammate_pts_reb": 3.1191271048575366,
+          "teammate_reb_reb": 0.4601695795009853
+        }
+      }
+    },
+    "count_space_cross_player_rmse": {
+      "baseline_independence": 0.08778023652243458,
+      "baseline_production": 0.10557059792904966,
+      "candidate": 3.5586685515096983
+    },
+    "cross_player_rmse": {
+      "baseline_independence": 0.01631847608331577,
+      "candidate": 0.004333624692735095
+    },
+    "observed_buckets": {
+      "opponent_ast_ast": 0.06381131184059222,
+      "opponent_fg3m_reb": -0.005054805118057273,
+      "opponent_pts_pts": 0.021126191919351382,
+      "opponent_pts_reb": -0.019795670428233075,
+      "opponent_reb_reb": -0.02285075739406667,
+      "opponent_stl_pts": -0.03256949890566048,
+      "passer_ast_teammate_pts": 0.08683431099636407,
+      "teammate_ast_ast": 0.09468975511143263,
+      "teammate_fg3m_fg3m": 0.026680854055000154,
+      "teammate_pts_pts": -0.034459213373387254,
+      "teammate_pts_reb": -0.031136996385982815,
+      "teammate_reb_reb": -0.05826153149332409
+    }
+  },
+  "same_player_contract": {
+    "games_checked": 8,
+    "integration_strategy": "B: the incumbent within-player block is pinned exactly and orthogonal shared factors are added around it",
+    "max_block_deviation": 1.6653345369377348e-16
+  },
+  "seed": 73,
+  "simulations_per_game": 4000,
+  "stability": {
+    "failure_detail": [],
+    "games_tested": 8,
+    "max_dimensions": 132,
+    "min_covariance_eigenvalue": 0.04781797861391075,
+    "numerical_failures": 0,
+    "pairwise_parameter_count": 0,
+    "shared_shrink_engaged_on_any_game": true,
+    "unseen_player_simulation_ok": true
+  },
+  "training_seasons": [
+    2020,
+    2021,
+    2022,
+    2023
+  ],
+  "validation_seasons": [
+    2024,
+    2025
+  ],
+  "verdict": "SHADOW V1 REJECTED: GATE A (marginal calibration preserved within Monte Carlo tolerance) evidence={'max_abs_over_z': 3.662251929729907, 'max_abs_mean_z': 3.1677109900934783, 'max_abs_variance_z': 3.1501418819688687, 'z_probe_count': 2460, 'bonferroni_z_critical': 4.608028955108095, 'family_wise_alpha': 0.01, 'three_sigma_exceedance_fraction': 0.0032520325203252032, 'limit_three_sigma_exceedance_fraction': np.float64(0.00809938818978056), 'max_abs_over_probability_error': 0.011751812906578174, 'limit_over_probability_error': 0.01, 'max_abs_variance_relative_error_well_conditioned': 0.03421294756941859, 'limit_variance_relative_error': 0.05, 'variance_relative_error_min_variance': 1.0}; GATE C (2-leg joint calibration no worse than baseline) evidence={'candidate_brier': 0.16462294010416667, 'best_baseline_brier': 0.16273497526041666, 'limit_regression': 0.0005}"
+}

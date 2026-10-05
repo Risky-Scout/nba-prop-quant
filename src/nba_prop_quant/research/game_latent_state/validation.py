@@ -125,6 +125,12 @@ def marginal_preservation(
     standard error of the sample mean; ``max_abs_over_z`` the same for the
     over-probability at the probe lines. Both are the quantities the Gate A
     tolerance is stated in.
+
+    Each row also reports how many z-probes it contributed and how many of
+    them exceeded 3 sigma. Gate A corrects its critical value for the total
+    probe count, so that count has to be carried rather than reconstructed:
+    only the per-row *maxima* survive aggregation otherwise, and a maximum
+    cannot tell you how many comparisons produced it.
     """
     records = []
     for player_index, player_id in enumerate(simulation.player_ids):
@@ -139,6 +145,16 @@ def marginal_preservation(
             analytic_var = analytic.variance()
             mean_se = float(np.sqrt(max(simulated_var, 1e-12) / n))
 
+            # Monte Carlo standard error of the sample variance,
+            # ``sqrt((mu4 - sigma^4) / n)``. Box-score counts are far from
+            # normal -- a bench player's blocks are nearly Bernoulli -- so the
+            # Gaussian ``sigma^2 sqrt(2/n)`` form would be badly wrong, and the
+            # fourth central moment has to be taken from the draws.
+            fourth = float(np.mean((draws - simulated_mean) ** 4))
+            variance_se = float(
+                np.sqrt(max(fourth - simulated_var**2, 1e-24) / n)
+            )
+
             record: dict[str, object] = {
                 "game_id": simulation.game_id,
                 "player_id": player_id,
@@ -150,6 +166,11 @@ def marginal_preservation(
                 "mean_z": (simulated_mean - analytic_mean) / mean_se if mean_se > 0 else 0.0,
                 "simulated_variance": simulated_var,
                 "analytic_variance": analytic_var,
+                "variance_z": (
+                    (simulated_var - analytic_var) / variance_se
+                    if variance_se > 0
+                    else 0.0
+                ),
                 "variance_relative_error": (
                     (simulated_var - analytic_var) / analytic_var
                     if analytic_var > 1e-9
@@ -177,6 +198,12 @@ def marginal_preservation(
                 over_z.append(abs(simulated_over - analytic_over) / se if se > 0 else 0.0)
             record["max_abs_over_error"] = float(max(over_errors))
             record["max_abs_over_z"] = float(max(over_z))
+
+            all_z = [abs(float(record["mean_z"])), abs(float(record["variance_z"])), *over_z]
+            record["z_probe_count"] = len(all_z)
+            record["z_probes_beyond_3sigma"] = int(
+                sum(1 for value in all_z if value > 3.0)
+            )
             records.append(record)
 
     return pd.DataFrame(records)

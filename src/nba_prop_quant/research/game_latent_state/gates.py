@@ -27,7 +27,7 @@ VERDICT_REJECTED_PREFIX = "SHADOW V1 REJECTED:"
 
 #: Two-sided tail mass beyond 3 sigma for a standard normal. The expected
 #: exceedance fraction of the marginal-preservation probes under the null.
-NULL_THREE_SIGMA_FRACTION = 2.0 * norm.sf(3.0)
+NULL_THREE_SIGMA_FRACTION = float(2.0 * norm.sf(3.0))
 
 
 def bonferroni_z(probe_count: Any, family_wise_alpha: float) -> float | None:
@@ -76,10 +76,20 @@ class GateThresholds:
     max_three_sigma_exceedance_ratio: float = 3.0
 
     # And with a floor in absolute probability units, so that an enormous
-    # probe count can never license an economically meaningful miss.
+    # probe count can never license an economically meaningful miss. The
+    # validation run has to draw enough simulations for Monte Carlo noise to
+    # sit well inside this; it is an economic tolerance, not a noise budget.
     max_over_probability_error: float = 0.01
 
+    # Variance is judged in the same z currency, against the Monte Carlo
+    # standard error of the sample variance. A *relative* variance tolerance
+    # cannot work across these dimensions: a bench player's three-pointers
+    # have an analytic variance near 0.02, so the ratio's denominator
+    # vanishes and the relative error is dominated by noise even when the
+    # absolute agreement is excellent. The relative check is therefore kept
+    # only where the ratio is well conditioned.
     max_variance_relative_error: float = 0.05
+    variance_relative_error_min_variance: float = 1.0
 
     # GATE B: cross-player dependence reproduction must beat conditional
     # independence materially. Independence predicts exactly zero for every
@@ -141,7 +151,8 @@ def evaluate_gates(
     marginal = _get(report, "marginal_preservation", "candidate", default={}) or {}
     over_z = marginal.get("max_abs_over_z")
     mean_z = marginal.get("max_abs_mean_z")
-    variance_error = marginal.get("max_abs_variance_relative_error")
+    variance_z = marginal.get("max_abs_variance_z")
+    variance_error = marginal.get("max_abs_variance_relative_error_well_conditioned")
     probes = marginal.get("z_probe_count")
     exceedance = marginal.get("three_sigma_exceedance_fraction")
     probability_error = marginal.get("max_abs_over_probability_error")
@@ -159,6 +170,7 @@ def evaluate_gates(
                 not in (
                     over_z,
                     mean_z,
+                    variance_z,
                     variance_error,
                     probes,
                     exceedance,
@@ -167,6 +179,7 @@ def evaluate_gates(
                 )
                 and over_z <= z_critical
                 and mean_z <= z_critical
+                and variance_z <= z_critical
                 and exceedance <= exceedance_limit
                 and probability_error <= limits.max_over_probability_error
                 and variance_error <= limits.max_variance_relative_error
@@ -174,6 +187,7 @@ def evaluate_gates(
             evidence={
                 "max_abs_over_z": over_z,
                 "max_abs_mean_z": mean_z,
+                "max_abs_variance_z": variance_z,
                 "z_probe_count": probes,
                 "bonferroni_z_critical": z_critical,
                 "family_wise_alpha": limits.marginal_family_wise_alpha,
@@ -181,8 +195,11 @@ def evaluate_gates(
                 "limit_three_sigma_exceedance_fraction": exceedance_limit,
                 "max_abs_over_probability_error": probability_error,
                 "limit_over_probability_error": limits.max_over_probability_error,
-                "max_abs_variance_relative_error": variance_error,
+                "max_abs_variance_relative_error_well_conditioned": variance_error,
                 "limit_variance_relative_error": limits.max_variance_relative_error,
+                "variance_relative_error_min_variance": (
+                    limits.variance_relative_error_min_variance
+                ),
             },
         )
     )
