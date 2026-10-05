@@ -123,8 +123,14 @@ def project_psd_rank(matrix: np.ndarray, rank: int) -> tuple[np.ndarray, np.ndar
 class SharedFactorLoadings:
     """Per-stat loadings on the identified shared factors.
 
-    ``game`` has shape ``(n_stats, k_game)``, ``team_contrast`` shape
-    ``(n_stats,)`` and ``competition`` shape ``(n_stats, r_comp)``.
+    ``game`` has shape ``(n_stats, k_game)`` and ``competition`` shape
+    ``(n_stats, r_comp)``. ``team_contrast`` is either a single signed factor
+    of shape ``(n_stats,)`` or ``(n_stats, r_contrast)`` signed factors; the
+    1-D form is canonical for ``r_contrast == 1`` so that existing rank-1
+    artifacts round-trip byte-for-byte. Nothing in the identification argument
+    pins ``B`` to rank 1 -- only the antisymmetric part ``A - B`` is
+    identified, and ``B`` is a full PSD Gram in general -- so the rank is a
+    parsimony parameter rather than a structural constraint.
     ``role_scale`` maps a role label to a multiplicative scalar applied to
     every shared loading of a player in that role; a role the fit never saw
     falls back to ``1.0``, which is the pooled estimate.
@@ -155,8 +161,13 @@ class SharedFactorLoadings:
     def __post_init__(self) -> None:
         if self.game.ndim != 2 or self.game.shape[0] != len(self.stats):
             raise ValueError("game loadings must have shape (n_stats, k_game)")
-        if self.team_contrast.shape != (len(self.stats),):
-            raise ValueError("team_contrast must have shape (n_stats,)")
+        if self.team_contrast.shape not in {
+            (len(self.stats),),
+            *((len(self.stats), rank) for rank in range(1, len(self.stats) + 1)),
+        }:
+            raise ValueError(
+                "team_contrast must have shape (n_stats,) or (n_stats, r_contrast)"
+            )
         if self.competition is not None and (
             self.competition.ndim != 2 or self.competition.shape[0] != len(self.stats)
         ):
@@ -170,6 +181,17 @@ class SharedFactorLoadings:
     def r_competition(self) -> int:
         return 0 if self.competition is None else int(self.competition.shape[1])
 
+    @property
+    def contrast_matrix(self) -> np.ndarray:
+        """``team_contrast`` as a ``(n_stats, r_contrast)`` matrix."""
+        if self.team_contrast.ndim == 1:
+            return self.team_contrast.reshape(-1, 1)
+        return self.team_contrast
+
+    @property
+    def r_contrast(self) -> int:
+        return int(self.contrast_matrix.shape[1])
+
     def competition_gram(self) -> np.ndarray:
         """``Q``: the within-team zero-sum Gram."""
         if self.competition is None:
@@ -178,9 +200,8 @@ class SharedFactorLoadings:
 
     def additive_gram(self) -> np.ndarray:
         """``A + B``: the team-blind plus team-contrast Gram."""
-        return self.game @ self.game.T + np.outer(
-            self.team_contrast, self.team_contrast
-        )
+        contrast = self.contrast_matrix
+        return self.game @ self.game.T + contrast @ contrast.T
 
     def same_team_correlation(self) -> np.ndarray:
         """``S = A + B - Q``: distinct players, same team."""
@@ -188,9 +209,8 @@ class SharedFactorLoadings:
 
     def cross_team_correlation(self) -> np.ndarray:
         """``X = A - B``: distinct players, opposite teams."""
-        return self.game @ self.game.T - np.outer(
-            self.team_contrast, self.team_contrast
-        )
+        contrast = self.contrast_matrix
+        return self.game @ self.game.T - contrast @ contrast.T
 
     def within_player_shared_gram(self, team_size: int) -> np.ndarray:
         """``A + B + (n - 1) Q``: shared contribution to a player's own block."""
@@ -199,16 +219,16 @@ class SharedFactorLoadings:
     def design(self, side: int, role: str | None = None) -> np.ndarray:
         """Additive shared-factor design rows for one player.
 
-        Shape ``(n_stats, k_game + 1)``. ``side`` is ``+1`` for one team and
-        ``-1`` for the other; it flips the sign of the team-contrast loading
-        and nothing else. The competition family is absent here because it is
-        not an independent per-player factor: it enters through the team
+        Shape ``(n_stats, k_game + r_contrast)``. ``side`` is ``+1`` for one
+        team and ``-1`` for the other; it flips the sign of every team-contrast
+        loading and nothing else. The competition family is absent here because
+        it is not an independent per-player factor: it enters through the team
         projection in :func:`build_game_covariance`.
         """
         if side not in (1, -1):
             raise ValueError("side must be +1 or -1")
         scale = self.scale_for_role(role)
-        contrast = (side * scale) * self.team_contrast.reshape(-1, 1)
+        contrast = (side * scale) * self.contrast_matrix
         return np.hstack([scale * self.game, contrast])
 
     def scale_for_role(self, role: str | None) -> float:
@@ -220,6 +240,7 @@ class SharedFactorLoadings:
         return {
             "stats": list(self.stats),
             "k_game": self.k_game,
+            "r_contrast": self.r_contrast,
             "r_competition": self.r_competition,
             "game_loadings": self.game.tolist(),
             "team_contrast_loadings": self.team_contrast.tolist(),
@@ -347,7 +368,7 @@ def build_game_covariance(
         team_sizes[team_id] = team_sizes.get(team_id, 0) + 1
 
     size = len(dimensions)
-    shared = np.zeros((size, loadings.k_game + 1), dtype=float)
+    shared = np.zeros((size, loadings.k_game + loadings.r_contrast), dtype=float)
     competition_gram = loadings.competition_gram()
     has_competition = bool(np.any(competition_gram))
     row_scale = np.ones(size, dtype=float)
