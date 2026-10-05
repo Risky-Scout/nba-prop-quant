@@ -1,0 +1,355 @@
+{
+  "axis_indifference_resolution": {
+    "admissible_points": [
+      "iso_reserved_rsym1",
+      "iso_reserved_rsym2",
+      "iso_reserved_rsym3",
+      "iso_reserved_rsym6",
+      "iso_residual_rsym1",
+      "iso_residual_rsym2",
+      "iso_residual_rsym3",
+      "iso_residual_rsym6"
+    ],
+    "admissible_points_source": "reconstructed by applying the guard thresholds the screening run recorded (latent bound 0.00374964218, cross-team identity tolerance 1e-12) to the metrics it recorded",
+    "axis_is_indifferent": true,
+    "code_sha": "d51eae726cc99da04f4597e29f8ae83eee8beed6",
+    "distinguishable_from_null": [],
+    "holdout_seasons": [
+      2024,
+      2025
+    ],
+    "holdout_used_for_selection": false,
+    "indistinguishable_from_null": [
+      "iso_reserved_rsym1",
+      "iso_reserved_rsym2",
+      "iso_reserved_rsym3",
+      "iso_reserved_rsym6",
+      "iso_residual_rsym1",
+      "iso_residual_rsym2",
+      "iso_residual_rsym3",
+      "iso_residual_rsym6"
+    ],
+    "promotion_eligibility": "SHADOW_RESEARCH_ONLY__NOT_ELIGIBLE_FOR_PROMOTION",
+    "reason": "every admissible point reproduced iso_rsym0 to within 1e-09 relatively on ['mean_target_abs_error', 'mean_global_latent_rmse', 'mean_global_count_rmse'], so the subspace is a reparameterisation at this base and cannot earn its parameters",
+    "recorded_selection": "iso_reserved_rsym2",
+    "recorded_winner_spec": {
+      "bridge_weight": 0.0,
+      "cross_eb_family": "block_diagonal",
+      "cross_shrinkage": "empirical_bayes",
+      "k_game": 6,
+      "r_contrast": 6,
+      "r_symmetric": 2,
+      "role_column": "role_bucket",
+      "role_deviation": false,
+      "same_eb_family": "block_diagonal",
+      "same_shrinkage": "empirical_bayes",
+      "shrink_z": 1.96,
+      "symmetric_mode": "reserved",
+      "temporal_treatment": "T0_pooled_empirical_bayes"
+    },
+    "refitted_anything": false,
+    "relative_deviation_from_null": {
+      "iso_reserved_rsym1": 4.62846850367478e-15,
+      "iso_reserved_rsym2": 6.479855905144693e-15,
+      "iso_reserved_rsym3": 5.322738779225998e-15,
+      "iso_reserved_rsym6": 5.322738779225998e-15,
+      "iso_residual_rsym1": 0.0,
+      "iso_residual_rsym2": 0.0,
+      "iso_residual_rsym3": 0.0,
+      "iso_residual_rsym6": 0.0
+    },
+    "residual_data_read": false,
+    "resolved_r_symmetric": 0,
+    "resolved_selection": "iso_rsym0",
+    "resolved_symmetric_mode": "residual",
+    "resolved_winner_already_scored_as": [
+      "control_repair",
+      "iso_rsym0",
+      "v2_no_repair_twin"
+    ],
+    "resolved_winner_spec": {
+      "bridge_weight": 0.0,
+      "cross_eb_family": "block_diagonal",
+      "cross_shrinkage": "empirical_bayes",
+      "k_game": 6,
+      "r_contrast": 6,
+      "r_symmetric": 0,
+      "role_column": "role_bucket",
+      "role_deviation": false,
+      "same_eb_family": "block_diagonal",
+      "same_shrinkage": "empirical_bayes",
+      "shrink_z": 1.96,
+      "symmetric_mode": "residual",
+      "temporal_treatment": "T0_pooled_empirical_bayes"
+    },
+    "resolves": {
+      "artifact": "inner_screening.json",
+      "artifact_sha256": "7b36d1031fe0a6196531f06c080e3736cf062fa3085baf185541d6c8cbe67d63",
+      "axis": "same_team",
+      "screening_pass": 3
+    },
+    "rule": {
+      "judged_metrics": [
+        "mean_target_abs_error",
+        "mean_global_latent_rmse",
+        "mean_global_count_rmse"
+      ],
+      "null_point": "iso_rsym0",
+      "statement": "An admissible grid point that reproduces the axis's null value on every judged metric to within the tolerance relatively is the same model written differently, so it cannot buy parameters and the axis resolves to its null value.",
+      "tolerance": 1e-09
+    },
+    "selection_changed": true,
+    "stage_two_winner": "v2_iso"
+  },
+  "axis_selections": {
+    "base": "base_repair_path",
+    "base_path": "repair_path",
+    "bridge": "bridge_w0",
+    "bridge_weight": 0.0,
+    "r_symmetric": 0,
+    "role": "role_off",
+    "role_deviation": false,
+    "same_team": "iso_rsym0",
+    "symmetric_mode": "residual",
+    "temporal_treatment": "T0_pooled_empirical_bayes"
+  },
+  "axis_selections_as_the_screen_recorded_them": {
+    "base": "base_repair_path",
+    "base_path": "repair_path",
+    "bridge": "bridge_w0",
+    "bridge_weight": 0.0,
+    "r_symmetric": 2,
+    "role": "role_off",
+    "role_deviation": false,
+    "same_team": "iso_reserved_rsym2",
+    "symmetric_mode": "reserved",
+    "temporal_treatment": "T0_pooled_empirical_bayes"
+  },
+  "bootstrap_draws": 400,
+  "branch": "research/nba-game-latent-state-shadow-v2-structural",
+  "candidate_name": "v2_iso",
+  "code_sha": "d51eae726cc99da04f4597e29f8ae83eee8beed6",
+  "factor_spec_hash": "700fc17723d11ba96a0842e39ec2b5d69bddffd2c27920297de09f78e292aa22",
+  "fitted_on": {
+    "cross_team_ordered_pairs": 1163906.0,
+    "games": 5133,
+    "same_team_ordered_pairs": 1068528.0,
+    "seasons": [
+      2020,
+      2021,
+      2022,
+      2023
+    ]
+  },
+  "frozen": true,
+  "holdout_seasons": [
+    2024,
+    2025
+  ],
+  "holdout_used_for_selection": false,
+  "hyperparameters": {
+    "bridge_weight": 0.0,
+    "cross_eb_family": "block_diagonal",
+    "cross_shrinkage": "empirical_bayes",
+    "k_game": 6,
+    "name": "v2_iso",
+    "r_contrast": 6,
+    "r_symmetric": 0,
+    "role_column": "role_bucket",
+    "role_deviation": false,
+    "same_eb_family": "block_diagonal",
+    "same_shrinkage": "empirical_bayes",
+    "shrink_z": 1.96,
+    "symmetric_mode": "residual",
+    "temporal_treatment": "T0_pooled_empirical_bayes"
+  },
+  "inner_folds": [
+    {
+      "bridge_target_rejections": {},
+      "bridge_targets": {
+        "ast_ast": 0.01580298614244384,
+        "ast_blk": 0.014173891749305766,
+        "ast_fg3m": 0.05747562610740716,
+        "ast_stl": 0.011562546492132245,
+        "blk_blk": 0.012402451645539263,
+        "blk_fg3m": 0.008561562953764224,
+        "fg3m_fg3m": 0.0017137689716037133,
+        "pts_ast": 0.06398167955449027,
+        "pts_blk": 0.01113317494200601,
+        "pts_fg3m": -0.0015220063851302257,
+        "pts_pts": 0.005041659330527182,
+        "pts_reb": 0.022081782672103145,
+        "pts_stl": 0.013686950398187035,
+        "reb_ast": 0.01795582679224026,
+        "reb_blk": 0.0205437436921784,
+        "reb_fg3m": 0.011377763170821707,
+        "reb_reb": 0.008425168352187032,
+        "reb_stl": 0.0003760143383260585,
+        "stl_blk": 0.001806520537866163,
+        "stl_fg3m": 0.004942499973185478,
+        "stl_stl": 0.002389009614489623
+      },
+      "score_games": 1320,
+      "score_rows": 27638,
+      "score_season": 2022,
+      "structural_games": 40,
+      "train_games": 2494,
+      "train_rows": 52897,
+      "train_seasons": [
+        2020,
+        2021
+      ]
+    },
+    {
+      "bridge_target_rejections": {},
+      "bridge_targets": {
+        "ast_ast": 0.015626091202648233,
+        "ast_blk": 0.013219482550994146,
+        "ast_fg3m": 0.057360960861478814,
+        "ast_stl": 0.010939835588578717,
+        "blk_blk": 0.01210628400986025,
+        "blk_fg3m": 0.007476632941325079,
+        "fg3m_fg3m": 0.0023834855001041433,
+        "pts_ast": 0.06290867116804294,
+        "pts_blk": 0.01100599331293779,
+        "pts_fg3m": -0.00268941064387036,
+        "pts_pts": 0.005511681116695401,
+        "pts_reb": 0.023223556965604075,
+        "pts_stl": 0.012900217012429495,
+        "reb_ast": 0.018179780030550312,
+        "reb_blk": 0.02119892205046199,
+        "reb_fg3m": 0.01068441983043158,
+        "reb_reb": 0.010678416236987684,
+        "reb_stl": 0.0012860174410889154,
+        "stl_blk": 0.00017605607172299645,
+        "stl_fg3m": 0.003549484178438434,
+        "stl_stl": 0.003715425172049436
+      },
+      "score_games": 1319,
+      "score_rows": 28168,
+      "score_season": 2023,
+      "structural_games": 40,
+      "train_games": 3814,
+      "train_rows": 80535,
+      "train_seasons": [
+        2020,
+        2021,
+        2022
+      ]
+    }
+  ],
+  "inner_metrics": {
+    "max_cross_team_unchanged_deviation": 0.0,
+    "max_same_player_block_deviation": 2.220446049250313e-16,
+    "mean_cross_latent_rmse": 0.0022438021035178675,
+    "mean_global_count_rmse": 0.004415374070097097,
+    "mean_global_latent_rmse": 0.0036404293041508496,
+    "mean_pooled_only_role_rmse": 0.02320479076643738,
+    "mean_primary_count_abs_error": 0.00797220269483635,
+    "mean_role_conditioned_rmse": 0.02320479076643738,
+    "mean_role_improvement_fraction": 0.0,
+    "mean_same_latent_rmse": 0.0045332086250941235,
+    "mean_target_abs_error": 0.0037479427041569374,
+    "min_eigenvalue": 0.14668955119265825
+  },
+  "inner_metrics_control_repair": {
+    "mean_cross_latent_rmse": 0.0022438021035178675,
+    "mean_global_count_rmse": 0.004415374070097097,
+    "mean_global_latent_rmse": 0.0036404293041508496,
+    "mean_primary_count_abs_error": 0.00797220269483635,
+    "mean_same_latent_rmse": 0.0045332086250941235,
+    "mean_target_abs_error": 0.0037479427041569374
+  },
+  "inner_metrics_scored_as": "control_repair",
+  "inner_target_verdicts": {
+    "A_temporal": {
+      "detail": "T0_pooled_empirical_bayes won the walk-forward point comparison, so the point estimate is the control's and the improvement is in the uncertainty: the static repair reports none at all, while the selected treatment reports a predictive SD calibrated on the inner folds by a factor of 1.7659.",
+      "passed": true
+    },
+    "B_cross_team_not_worsened": {
+      "cross_latent_rmse": 0.002243802103517873,
+      "cross_latent_rmse_without_same_team_repair": 0.0022438021035178675,
+      "isolation_gap": 5.637851296924623e-18,
+      "max_cross_team_unchanged_deviation": 2.5153490401663703e-17,
+      "passed": true,
+      "repair_control_ratio_diagnostic": 1.0000000000000024,
+      "tolerance": 1e-12
+    },
+    "C_role_rmse_improves": {
+      "cell_regression_limit": 0.05,
+      "measurable_folds": 2.0,
+      "min_supported_cells": 6.0,
+      "newly_exceeding_cell_names": [],
+      "newly_exceeding_cells": 0.0,
+      "passed": false,
+      "regressed_cell_names": [],
+      "regressed_cells": 0.0,
+      "role_improvement_fraction": 0.0,
+      "threshold": 0.2,
+      "worst_cell_rmse_regression": 0.0,
+      "worst_cell_z_regression": 0.0,
+      "worst_pooled_abs_z": 0.0,
+      "worst_role_abs_z": 0.0,
+      "z_limit": 3.0
+    },
+    "D_primary_count_improves": {
+      "count_improvement_fraction": 2.220446049250313e-15,
+      "passed": false,
+      "threshold": 0.2
+    },
+    "E_global_latent_within_3pct": {
+      "latent_rmse_ratio": 1.0000000000000002,
+      "passed": true
+    },
+    "F_global_count_within_3pct": {
+      "count_rmse_ratio": 0.999999999999999,
+      "passed": true
+    },
+    "G_same_player_block_pinned": {
+      "max_deviation": 2.220446049250313e-16,
+      "passed": true
+    },
+    "H_no_psd_failures": {
+      "min_eigenvalue": 0.1448686120463194,
+      "numerical_failures": 0.0,
+      "passed": true
+    },
+    "I_no_pairwise_parameters": {
+      "pairwise": 0,
+      "passed": true,
+      "player_indexed": 0
+    }
+  },
+  "note": "Frozen before the 2024-2025 holdout was run. Retuning against holdout results after this point would invalidate the evaluation.",
+  "parameter_counts": {
+    "pairwise": 0,
+    "player_indexed": 0,
+    "role_indexed": 3,
+    "scalar_hyperparameters": 4,
+    "stat_indexed_competition": 21,
+    "stat_indexed_contrast": 36,
+    "stat_indexed_game": 36,
+    "stat_indexed_role_deviation": 0,
+    "stat_indexed_symmetric": 0
+  },
+  "parent_bucket_repair_sha": "c965451de2662b953f45c791157f3826207f753f",
+  "parent_shadow_v1_sha": "1c5b8c93569ee25afd4eb4222158300702bd9471",
+  "production_integration_started": false,
+  "promotion_eligibility": "SHADOW_RESEARCH_ONLY__NOT_ELIGIBLE_FOR_PROMOTION",
+  "seed": 73,
+  "selection_rationale": "Selected mechanically by the pre-registered rule in 03_inner_screening.py: each structural axis screened on its own over two strictly temporal pre-2024 folds, then one pre-registered combination set scored on inner targets A-I. No axis was searched jointly with another and no grid was wider than five points. The same-team axis's selection was then resolved by 03b_resolve_axis_indifference.py, which re-applied the indifference rule to the fold metrics the screening run had already written down. It refitted nothing and could only substitute a point from that axis's own grid.",
+  "source_production_sha": "a30ed672001f8774b6cfec9ad7a3ccb382506c4b",
+  "structural_components": {
+    "bridge_weight": 0.0,
+    "role_deviation_carried": false,
+    "role_scores": {},
+    "symmetric_same_team_subspace_rank": 0,
+    "temporal_predictive_sd_inflation": 1.7658707871961534,
+    "temporal_treatment": "T0_pooled_empirical_bayes"
+  },
+  "structural_identities_at_the_frozen_fit": {
+    "cross_team_unchanged_deviation": 0.0,
+    "pooled_same_team_vs_target_max_abs": 3.903127820947816e-17,
+    "role_quadratic_share": 0.0
+  }
+}

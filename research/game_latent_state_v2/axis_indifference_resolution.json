@@ -11,7 +11,7 @@
   ],
   "admissible_points_source": "reconstructed by applying the guard thresholds the screening run recorded (latent bound 0.00374964218, cross-team identity tolerance 1e-12) to the metrics it recorded",
   "axis_is_indifferent": true,
-  "code_sha": "d6e97dc95126a5ace3704b72280937aa4c77ecef",
+  "code_sha": "d51eae726cc99da04f4597e29f8ae83eee8beed6",
   "distinguishable_from_null": [],
   "holdout_seasons": [
     2024,
