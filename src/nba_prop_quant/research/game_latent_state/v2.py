@@ -884,12 +884,24 @@ def role_conditioned_rmse(
             weight_total += support
             cells += 1
 
+    # No supported cell means the data cannot measure the role layer at all,
+    # which is a reportable outcome rather than a missing key: the caller still
+    # needs the comparison fields to say "not measurable here".
     if weight_total <= 0:
-        return {"role_cells": 0.0, "role_conditioned_rmse": float("nan")}
+        out = {
+            "role_cells": 0.0,
+            "role_conditioned_rmse": float("nan"),
+            "measurable": 0.0,
+        }
+        if pooled_only is not None:
+            out["pooled_only_role_conditioned_rmse"] = float("nan")
+            out["role_rmse_improvement_fraction"] = 0.0
+        return out
 
     out = {
         "role_cells": float(cells),
         "role_conditioned_rmse": float(np.sqrt(numerator / weight_total)),
+        "measurable": 1.0,
     }
     if pooled_only is not None:
         pooled_rmse = float(np.sqrt(pooled_numerator / weight_total))

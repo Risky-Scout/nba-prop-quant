@@ -1,0 +1,5 @@
+# Generated validation inputs. Never committed: the 68 MB residual parquet is
+# a derived artifact of 02_build_oof_residuals.py, reproducible from the
+# committed manifest, and production history must not inherit it.
+oof_gaussian_residuals.parquet
+*.parquet

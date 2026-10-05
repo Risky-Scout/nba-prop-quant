@@ -1,0 +1,1603 @@
+{
+  "bootstrap_draws": 800,
+  "buckets": {
+    "passer_ast_teammate_pts": {
+      "block": "same_team",
+      "pooled_control_by_fold": {
+        "2022": 0.04794656137614278,
+        "2023": 0.046594661815700544
+      },
+      "prediction_for_first_holdout_season": {
+        "T0_pooled_empirical_bayes": {
+          "fallback_reason": "",
+          "fell_back_to_pooled": false,
+          "prediction": 0.046594661815700544,
+          "prediction_sd": 0.005772948251472409,
+          "stability_classification": "STABLE_POSITIVE",
+          "target_season": 2024,
+          "training_seasons": [
+            2020,
+            2021,
+            2022,
+            2023
+          ],
+          "treatment": "T0_pooled_empirical_bayes"
+        },
+        "T1_random_effects": {
+          "fallback_reason": "",
+          "fell_back_to_pooled": false,
+          "prediction": 0.04430410809677484,
+          "prediction_sd": 0.005772948251472409,
+          "stability_classification": "STABLE_POSITIVE",
+          "target_season": 2024,
+          "training_seasons": [
+            2020,
+            2021,
+            2022,
+            2023
+          ],
+          "treatment": "T1_random_effects"
+        },
+        "T2_recency_weighted_random_effects": {
+          "fallback_reason": "",
+          "fell_back_to_pooled": false,
+          "prediction": 0.04254695521448027,
+          "prediction_sd": 0.005875430668281043,
+          "stability_classification": "STABLE_POSITIVE",
+          "target_season": 2024,
+          "training_seasons": [
+            2020,
+            2021,
+            2022,
+            2023
+          ],
+          "treatment": "T2_recency_weighted_random_effects"
+        },
+        "T3_random_walk_state": {
+          "fallback_reason": "4 training seasons is below the 6 a one-state walk needs",
+          "fell_back_to_pooled": true,
+          "prediction": 0.04430410809677484,
+          "prediction_sd": 0.005772948251472409,
+          "stability_classification": "STABLE_POSITIVE",
+          "target_season": 2024,
+          "training_seasons": [
+            2020,
+            2021,
+            2022,
+            2023
+          ],
+          "treatment": "T3_random_walk_state"
+        }
+      },
+      "random_effects": {
+        "degrees_of_freedom": 3,
+        "estimates": [
+          0.04748572220533583,
+          0.049683416654590945,
+          0.04409534290194642,
+          0.036807056459376056
+        ],
+        "i_squared": 0.7960748260756225,
+        "lag1_autocorrelation": 0.17482108396961718,
+        "posterior_mean": 0.04430410809677484,
+        "posterior_probability_positive": 1.0,
+        "posterior_sd": 0.0028651054747074432,
+        "predictive_probability_positive": 0.9999999999999917,
+        "predictive_sd": 0.005772948251472409,
+        "q_p_value": 0.002080767319248155,
+        "q_statistic": 14.71127836876336,
+        "recency_half_life_seasons": null,
+        "seasons": [
+          2020,
+          2021,
+          2022,
+          2023
+        ],
+        "stability_classification": "STABLE_POSITIVE",
+        "standard_errors": [
+          0.0027890126872496404,
+          0.003050891781763034,
+          0.0029725860092327597,
+          0.002292595360961904
+        ],
+        "tau2": 2.511810213297978e-05,
+        "tau2_dersimonian_laird": 2.9533889337494232e-05,
+        "tau_time": 0.005011796298033249,
+        "weights": [
+          0.24953356727877674,
+          0.23844824191968295,
+          0.24176061726475853,
+          0.27025757353678187
+        ]
+      },
+      "random_walk": {
+        "filtered_mean": 0.037800761116162686,
+        "filtered_sd": 0.002150067901749896,
+        "predictive_log_likelihood": 11.099254177669575,
+        "seasons": [
+          2020,
+          2021,
+          2022,
+          2023
+        ],
+        "signal_variance": 3.117879350505907e-05,
+        "support_reason": "4 training seasons is below the 6 a one-state walk needs",
+        "supported": false
+      },
+      "recency_weighted": {
+        "degrees_of_freedom": 3,
+        "estimates": [
+          0.04748572220533583,
+          0.049683416654590945,
+          0.04409534290194642,
+          0.036807056459376056
+        ],
+        "i_squared": 0.7960748260756225,
+        "lag1_autocorrelation": 0.3239738219546596,
+        "posterior_mean": 0.04254695521448027,
+        "posterior_probability_positive": 1.0,
+        "posterior_sd": 0.0030663632212765747,
+        "predictive_probability_positive": 0.9999999999997782,
+        "predictive_sd": 0.005875430668281043,
+        "q_p_value": 0.002080767319248155,
+        "q_statistic": 14.71127836876336,
+        "recency_half_life_seasons": 2.0,
+        "seasons": [
+          2020,
+          2021,
+          2022,
+          2023
+        ],
+        "stability_classification": "STABLE_POSITIVE",
+        "standard_errors": [
+          0.0027890126872496404,
+          0.003050891781763034,
+          0.0029725860092327597,
+          0.002292595360961904
+        ],
+        "tau2": 2.511810213297978e-05,
+        "tau2_dersimonian_laird": 2.9533889337494232e-05,
+        "tau_time": 0.005011796298033249,
+        "weights": [
+          0.1360096551614906,
+          0.1838018536030841,
+          0.2635459312700298,
+          0.41664255996539545
+        ]
+      },
+      "screening": {
+        "bucket": "passer_ast_teammate_pts",
+        "fold_detail": [
+          {
+            "T0_pooled_empirical_bayes": {
+              "fallback_reason": "",
+              "fell_back_to_pooled": false,
+              "prediction": 0.04794656137614278,
+              "prediction_sd": 0.0020584974117887392,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2022,
+              "training_seasons": [
+                2020,
+                2021
+              ],
+              "treatment": "T0_pooled_empirical_bayes"
+            },
+            "T1_random_effects": {
+              "fallback_reason": "",
+              "fell_back_to_pooled": false,
+              "prediction": 0.04848621589950825,
+              "prediction_sd": 0.0020584974117887392,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2022,
+              "training_seasons": [
+                2020,
+                2021
+              ],
+              "treatment": "T1_random_effects"
+            },
+            "T2_recency_weighted_random_effects": {
+              "fallback_reason": "",
+              "fell_back_to_pooled": false,
+              "prediction": 0.04867615473628065,
+              "prediction_sd": 0.002089267780334969,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2022,
+              "training_seasons": [
+                2020,
+                2021
+              ],
+              "treatment": "T2_recency_weighted_random_effects"
+            },
+            "T3_random_walk_state": {
+              "fallback_reason": "2 training seasons is below the 6 a one-state walk needs",
+              "fell_back_to_pooled": true,
+              "prediction": 0.04848621589950825,
+              "prediction_sd": 0.0020584974117887392,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2022,
+              "training_seasons": [
+                2020,
+                2021
+              ],
+              "treatment": "T3_random_walk_state"
+            },
+            "fold_season": 2022,
+            "realised_estimate": 0.04409534290194642,
+            "realised_standard_error": 0.0029725860092327597
+          },
+          {
+            "T0_pooled_empirical_bayes": {
+              "fallback_reason": "",
+              "fell_back_to_pooled": false,
+              "prediction": 0.046594661815700544,
+              "prediction_sd": 0.0016923330774877272,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2023,
+              "training_seasons": [
+                2020,
+                2021,
+                2022
+              ],
+              "treatment": "T0_pooled_empirical_bayes"
+            },
+            "T1_random_effects": {
+              "fallback_reason": "",
+              "fell_back_to_pooled": false,
+              "prediction": 0.04706305598424813,
+              "prediction_sd": 0.0016923330774877272,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2023,
+              "training_seasons": [
+                2020,
+                2021,
+                2022
+              ],
+              "treatment": "T1_random_effects"
+            },
+            "T2_recency_weighted_random_effects": {
+              "fallback_reason": "",
+              "fell_back_to_pooled": false,
+              "prediction": 0.04663047455435828,
+              "prediction_sd": 0.001760435701472847,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2023,
+              "training_seasons": [
+                2020,
+                2021,
+                2022
+              ],
+              "treatment": "T2_recency_weighted_random_effects"
+            },
+            "T3_random_walk_state": {
+              "fallback_reason": "3 training seasons is below the 6 a one-state walk needs",
+              "fell_back_to_pooled": true,
+              "prediction": 0.04706305598424813,
+              "prediction_sd": 0.0016923330774877272,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2023,
+              "training_seasons": [
+                2020,
+                2021,
+                2022
+              ],
+              "treatment": "T3_random_walk_state"
+            },
+            "fold_season": 2023,
+            "realised_estimate": 0.036807056459376056,
+            "realised_standard_error": 0.002292595360961904
+          }
+        ],
+        "folds": [
+          2022,
+          2023
+        ],
+        "scores": {
+          "T0_pooled_empirical_bayes": {
+            "calibration_gap": 5.466096749217967,
+            "folds": 2.0,
+            "mean_squared_z": 6.466096749217967,
+            "predictive_mse": 5.531455117357158e-05,
+            "predictive_rmse": 0.007437375287934016
+          },
+          "T1_random_effects": {
+            "calibration_gap": 6.214303869242797,
+            "folds": 2.0,
+            "mean_squared_z": 7.214303869242797,
+            "predictive_mse": 6.223264596744687e-05,
+            "predictive_rmse": 0.007888767075243563
+          },
+          "T2_recency_weighted_random_effects": {
+            "calibration_gap": 5.569633265516757,
+            "folds": 2.0,
+            "mean_squared_z": 6.569633265516757,
+            "predictive_mse": 5.8741690065200334e-05,
+            "predictive_rmse": 0.007664312758832349
+          },
+          "T3_random_walk_state": {
+            "calibration_gap": 6.214303869242797,
+            "folds": 2.0,
+            "mean_squared_z": 7.214303869242797,
+            "predictive_mse": 6.223264596744687e-05,
+            "predictive_rmse": 0.007888767075243563
+          }
+        },
+        "selected_treatment": "T0_pooled_empirical_bayes",
+        "selection_reason": "lowest predictive MSE within the 5% parsimony tie band; T0_pooled_empirical_bayes scores 5.531e-05 against 5.531e-05 for the pooled control"
+      },
+      "season_estimates": [
+        {
+          "bootstrap_interval": [
+            0.041797142755467816,
+            0.05274614001130822
+          ],
+          "effective_games": 1171,
+          "effective_pairs": 247580.0,
+          "estimate": 0.04748572220533583,
+          "posterior_sign_probability": 1.0,
+          "season": 2020,
+          "standard_error": 0.0027890126872496404
+        },
+        {
+          "bootstrap_interval": [
+            0.04371170960485295,
+            0.05567725668474161
+          ],
+          "effective_games": 1323,
+          "effective_pairs": 273418.0,
+          "estimate": 0.049683416654590945,
+          "posterior_sign_probability": 1.0,
+          "season": 2021,
+          "standard_error": 0.003050891781763034
+        },
+        {
+          "bootstrap_interval": [
+            0.038266230972509106,
+            0.050108971212850476
+          ],
+          "effective_games": 1320,
+          "effective_pairs": 267420.0,
+          "estimate": 0.04409534290194642,
+          "posterior_sign_probability": 1.0,
+          "season": 2022,
+          "standard_error": 0.0029725860092327597
+        },
+        {
+          "bootstrap_interval": [
+            0.03249806030165439,
+            0.04127870980688391
+          ],
+          "effective_games": 1319,
+          "effective_pairs": 280110.0,
+          "estimate": 0.036807056459376056,
+          "posterior_sign_probability": 1.0,
+          "season": 2023,
+          "standard_error": 0.002292595360961904
+        }
+      ],
+      "seasons_crossing_zero": [],
+      "seasons_opposite_sign": [],
+      "stat_pair": [
+        "ast",
+        "pts"
+      ]
+    },
+    "teammate_ast_ast": {
+      "block": "same_team",
+      "pooled_control_by_fold": {
+        "2022": 0.00711276885581591,
+        "2023": 0.00694809973695228
+      },
+      "prediction_for_first_holdout_season": {
+        "T0_pooled_empirical_bayes": {
+          "fallback_reason": "",
+          "fell_back_to_pooled": false,
+          "prediction": 0.00694809973695228,
+          "prediction_sd": 0.0049687449036962365,
+          "stability_classification": "TIME_VARYING",
+          "target_season": 2024,
+          "training_seasons": [
+            2020,
+            2021,
+            2022,
+            2023
+          ],
+          "treatment": "T0_pooled_empirical_bayes"
+        },
+        "T1_random_effects": {
+          "fallback_reason": "",
+          "fell_back_to_pooled": false,
+          "prediction": 0.005393989171661684,
+          "prediction_sd": 0.0049687449036962365,
+          "stability_classification": "TIME_VARYING",
+          "target_season": 2024,
+          "training_seasons": [
+            2020,
+            2021,
+            2022,
+            2023
+          ],
+          "treatment": "T1_random_effects"
+        },
+        "T2_recency_weighted_random_effects": {
+          "fallback_reason": "",
+          "fell_back_to_pooled": false,
+          "prediction": 0.0038317105809456613,
+          "prediction_sd": 0.005067806153243881,
+          "stability_classification": "UNCERTAIN",
+          "target_season": 2024,
+          "training_seasons": [
+            2020,
+            2021,
+            2022,
+            2023
+          ],
+          "treatment": "T2_recency_weighted_random_effects"
+        },
+        "T3_random_walk_state": {
+          "fallback_reason": "4 training seasons is below the 6 a one-state walk needs",
+          "fell_back_to_pooled": true,
+          "prediction": 0.005393989171661684,
+          "prediction_sd": 0.0049687449036962365,
+          "stability_classification": "TIME_VARYING",
+          "target_season": 2024,
+          "training_seasons": [
+            2020,
+            2021,
+            2022,
+            2023
+          ],
+          "treatment": "T3_random_walk_state"
+        }
+      },
+      "random_effects": {
+        "degrees_of_freedom": 3,
+        "estimates": [
+          0.008133229356437071,
+          0.009308277425028199,
+          0.00691737519473708,
+          -0.0019339780497959422
+        ],
+        "i_squared": 0.6790900503464463,
+        "lag1_autocorrelation": 0.057838449072691395,
+        "posterior_mean": 0.005393989171661684,
+        "posterior_probability_positive": 0.9800446687329724,
+        "posterior_sd": 0.0026252308195195287,
+        "predictive_probability_positive": 0.8611684237040746,
+        "predictive_sd": 0.0049687449036962365,
+        "q_p_value": 0.02499984852671396,
+        "q_statistic": 9.34841691022271,
+        "recency_half_life_seasons": null,
+        "seasons": [
+          2020,
+          2021,
+          2022,
+          2023
+        ],
+        "stability_classification": "TIME_VARYING",
+        "standard_errors": [
+          0.0032277656555571785,
+          0.003256552895574004,
+          0.003270544706776916,
+          0.0027595751318757232
+        ],
+        "tau2": 1.7796589062252146e-05,
+        "tau2_dersimonian_laird": 2.0553943038855977e-05,
+        "tau_time": 0.004218600367687386,
+        "weights": [
+          0.24426093049175768,
+          0.24265556602021657,
+          0.2418778065029373,
+          0.27120569698508834
+        ]
+      },
+      "random_walk": {
+        "filtered_mean": 0.0001197776433024952,
+        "filtered_sd": 0.002440821766993434,
+        "predictive_log_likelihood": 11.16840000995402,
+        "seasons": [
+          2020,
+          2021,
+          2022,
+          2023
+        ],
+        "signal_variance": 1.9667662738179653e-05,
+        "support_reason": "4 training seasons is below the 6 a one-state walk needs",
+        "supported": false
+      },
+      "recency_weighted": {
+        "degrees_of_freedom": 3,
+        "estimates": [
+          0.008133229356437071,
+          0.009308277425028199,
+          0.00691737519473708,
+          -0.0019339780497959422
+        ],
+        "i_squared": 0.6790900503464463,
+        "lag1_autocorrelation": 0.22809110895060214,
+        "posterior_mean": 0.0038317105809456613,
+        "posterior_probability_positive": 0.9137893590513693,
+        "posterior_sd": 0.002808214761125723,
+        "predictive_probability_positive": 0.7752019689474487,
+        "predictive_sd": 0.005067806153243881,
+        "q_p_value": 0.02499984852671396,
+        "q_statistic": 9.34841691022271,
+        "recency_half_life_seasons": 2.0,
+        "seasons": [
+          2020,
+          2021,
+          2022,
+          2023
+        ],
+        "stability_classification": "UNCERTAIN",
+        "standard_errors": [
+          0.0032277656555571785,
+          0.003256552895574004,
+          0.003270544706776916,
+          0.0027595751318757232
+        ],
+        "tau2": 1.7796589062252146e-05,
+        "tau2_dersimonian_laird": 2.0553943038855977e-05,
+        "tau_time": 0.004218600367687386,
+        "weights": [
+          0.1328755180450459,
+          0.18667932375020854,
+          0.2631582445704446,
+          0.417286913634301
+        ]
+      },
+      "screening": {
+        "bucket": "teammate_ast_ast",
+        "fold_detail": [
+          {
+            "T0_pooled_empirical_bayes": {
+              "fallback_reason": "",
+              "fell_back_to_pooled": false,
+              "prediction": 0.00711276885581591,
+              "prediction_sd": 0.0022924850332748134,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2022,
+              "training_seasons": [
+                2020,
+                2021
+              ],
+              "treatment": "T0_pooled_empirical_bayes"
+            },
+            "T1_random_effects": {
+              "fallback_reason": "",
+              "fell_back_to_pooled": false,
+              "prediction": 0.008715536848110075,
+              "prediction_sd": 0.0022924850332748134,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2022,
+              "training_seasons": [
+                2020,
+                2021
+              ],
+              "treatment": "T1_random_effects"
+            },
+            "T2_recency_weighted_random_effects": {
+              "fallback_reason": "",
+              "fell_back_to_pooled": false,
+              "prediction": 0.008816485872063674,
+              "prediction_sd": 0.0023260814554755824,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2022,
+              "training_seasons": [
+                2020,
+                2021
+              ],
+              "treatment": "T2_recency_weighted_random_effects"
+            },
+            "T3_random_walk_state": {
+              "fallback_reason": "2 training seasons is below the 6 a one-state walk needs",
+              "fell_back_to_pooled": true,
+              "prediction": 0.008715536848110075,
+              "prediction_sd": 0.0022924850332748134,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2022,
+              "training_seasons": [
+                2020,
+                2021
+              ],
+              "treatment": "T3_random_walk_state"
+            },
+            "fold_season": 2022,
+            "realised_estimate": 0.00691737519473708,
+            "realised_standard_error": 0.003270544706776916
+          },
+          {
+            "T0_pooled_empirical_bayes": {
+              "fallback_reason": "",
+              "fell_back_to_pooled": false,
+              "prediction": 0.00694809973695228,
+              "prediction_sd": 0.001877239591764378,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2023,
+              "training_seasons": [
+                2020,
+                2021,
+                2022
+              ],
+              "treatment": "T0_pooled_empirical_bayes"
+            },
+            "T1_random_effects": {
+              "fallback_reason": "",
+              "fell_back_to_pooled": false,
+              "prediction": 0.008123119235197328,
+              "prediction_sd": 0.001877239591764378,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2023,
+              "training_seasons": [
+                2020,
+                2021,
+                2022
+              ],
+              "treatment": "T1_random_effects"
+            },
+            "T2_recency_weighted_random_effects": {
+              "fallback_reason": "",
+              "fell_back_to_pooled": false,
+              "prediction": 0.007963542300341376,
+              "prediction_sd": 0.0019492470275667745,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2023,
+              "training_seasons": [
+                2020,
+                2021,
+                2022
+              ],
+              "treatment": "T2_recency_weighted_random_effects"
+            },
+            "T3_random_walk_state": {
+              "fallback_reason": "3 training seasons is below the 6 a one-state walk needs",
+              "fell_back_to_pooled": true,
+              "prediction": 0.008123119235197328,
+              "prediction_sd": 0.001877239591764378,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2023,
+              "training_seasons": [
+                2020,
+                2021,
+                2022
+              ],
+              "treatment": "T3_random_walk_state"
+            },
+            "fold_season": 2023,
+            "realised_estimate": -0.0019339780497959422,
+            "realised_standard_error": 0.0027595751318757232
+          }
+        ],
+        "folds": [
+          2022,
+          2023
+        ],
+        "scores": {
+          "T0_pooled_empirical_bayes": {
+            "calibration_gap": 2.5423268842617825,
+            "folds": 2.0,
+            "mean_squared_z": 3.5423268842617825,
+            "predictive_mse": 3.946474224631799e-05,
+            "predictive_rmse": 0.006282096962505274
+          },
+          "T1_random_effects": {
+            "calibration_gap": 3.6413706574602926,
+            "folds": 2.0,
+            "mean_squared_z": 4.641370657460293,
+            "predictive_mse": 5.218929556574006e-05,
+            "predictive_rmse": 0.007224215913560451
+          },
+          "T2_recency_weighted_random_effects": {
+            "calibration_gap": 3.4029106609229363,
+            "folds": 2.0,
+            "mean_squared_z": 4.402910660922936,
+            "predictive_mse": 5.078376522305911e-05,
+            "predictive_rmse": 0.007126272884408729
+          },
+          "T3_random_walk_state": {
+            "calibration_gap": 3.6413706574602926,
+            "folds": 2.0,
+            "mean_squared_z": 4.641370657460293,
+            "predictive_mse": 5.218929556574006e-05,
+            "predictive_rmse": 0.007224215913560451
+          }
+        },
+        "selected_treatment": "T0_pooled_empirical_bayes",
+        "selection_reason": "lowest predictive MSE within the 5% parsimony tie band; T0_pooled_empirical_bayes scores 3.946e-05 against 3.946e-05 for the pooled control"
+      },
+      "season_estimates": [
+        {
+          "bootstrap_interval": [
+            0.0014983809087338268,
+            0.01443346395812258
+          ],
+          "effective_games": 1171,
+          "effective_pairs": 247580.0,
+          "estimate": 0.008133229356437071,
+          "posterior_sign_probability": 0.9941284348866908,
+          "season": 2020,
+          "standard_error": 0.0032277656555571785
+        },
+        {
+          "bootstrap_interval": [
+            0.0032569959624209593,
+            0.01574664680229949
+          ],
+          "effective_games": 1323,
+          "effective_pairs": 273418.0,
+          "estimate": 0.009308277425028199,
+          "posterior_sign_probability": 0.9978705614405848,
+          "season": 2021,
+          "standard_error": 0.003256552895574004
+        },
+        {
+          "bootstrap_interval": [
+            0.0006075718667232691,
+            0.013828245240443321
+          ],
+          "effective_games": 1320,
+          "effective_pairs": 267420.0,
+          "estimate": 0.00691737519473708,
+          "posterior_sign_probability": 0.9827872822141098,
+          "season": 2022,
+          "standard_error": 0.003270544706776916
+        },
+        {
+          "bootstrap_interval": [
+            -0.007150891028720158,
+            0.003476739520729224
+          ],
+          "effective_games": 1319,
+          "effective_pairs": 280110.0,
+          "estimate": -0.0019339780497959422,
+          "posterior_sign_probability": 0.24170625192814105,
+          "season": 2023,
+          "standard_error": 0.0027595751318757232
+        }
+      ],
+      "seasons_crossing_zero": [
+        2023
+      ],
+      "seasons_opposite_sign": [
+        2023
+      ],
+      "stat_pair": [
+        "ast",
+        "ast"
+      ]
+    },
+    "teammate_pts_reb": {
+      "block": "same_team",
+      "pooled_control_by_fold": {
+        "2022": 0.015311505992119489,
+        "2023": 0.015779378624175486
+      },
+      "prediction_for_first_holdout_season": {
+        "T0_pooled_empirical_bayes": {
+          "fallback_reason": "",
+          "fell_back_to_pooled": false,
+          "prediction": 0.015779378624175486,
+          "prediction_sd": 0.00211063335808322,
+          "stability_classification": "STABLE_POSITIVE",
+          "target_season": 2024,
+          "training_seasons": [
+            2020,
+            2021,
+            2022,
+            2023
+          ],
+          "treatment": "T0_pooled_empirical_bayes"
+        },
+        "T1_random_effects": {
+          "fallback_reason": "",
+          "fell_back_to_pooled": false,
+          "prediction": 0.01430049482372594,
+          "prediction_sd": 0.00211063335808322,
+          "stability_classification": "STABLE_POSITIVE",
+          "target_season": 2024,
+          "training_seasons": [
+            2020,
+            2021,
+            2022,
+            2023
+          ],
+          "treatment": "T1_random_effects"
+        },
+        "T2_recency_weighted_random_effects": {
+          "fallback_reason": "",
+          "fell_back_to_pooled": false,
+          "prediction": 0.01346853745908131,
+          "prediction_sd": 0.002190370955447048,
+          "stability_classification": "STABLE_POSITIVE",
+          "target_season": 2024,
+          "training_seasons": [
+            2020,
+            2021,
+            2022,
+            2023
+          ],
+          "treatment": "T2_recency_weighted_random_effects"
+        },
+        "T3_random_walk_state": {
+          "fallback_reason": "4 training seasons is below the 6 a one-state walk needs",
+          "fell_back_to_pooled": true,
+          "prediction": 0.01430049482372594,
+          "prediction_sd": 0.00211063335808322,
+          "stability_classification": "STABLE_POSITIVE",
+          "target_season": 2024,
+          "training_seasons": [
+            2020,
+            2021,
+            2022,
+            2023
+          ],
+          "treatment": "T3_random_walk_state"
+        }
+      },
+      "random_effects": {
+        "degrees_of_freedom": 3,
+        "estimates": [
+          0.01650977955515559,
+          0.014589081808247738,
+          0.016773592742288207,
+          0.010604263374405598
+        ],
+        "i_squared": 0.2726391864896857,
+        "lag1_autocorrelation": -0.29777298169786487,
+        "posterior_mean": 0.01430049482372594,
+        "posterior_probability_positive": 1.0,
+        "posterior_sd": 0.0015048828100817616,
+        "predictive_probability_positive": 0.9999999999937991,
+        "predictive_sd": 0.00211063335808322,
+        "q_p_value": 0.24833036535618894,
+        "q_statistic": 4.12450044637641,
+        "recency_half_life_seasons": null,
+        "seasons": [
+          2020,
+          2021,
+          2022,
+          2023
+        ],
+        "stability_classification": "STABLE_POSITIVE",
+        "standard_errors": [
+          0.0025771176974077477,
+          0.002816349094144648,
+          0.0029389980689086934,
+          0.0022581631748047485
+        ],
+        "tau2": 2.190100900174071e-06,
+        "tau2_dersimonian_laird": 2.5858363040158042e-06,
+        "tau_time": 0.0014798989493117667,
+        "weights": [
+          0.2564272505206598,
+          0.22373932751433848,
+          0.20915329666920246,
+          0.31068012529579925
+        ]
+      },
+      "random_walk": {
+        "filtered_mean": 0.01278572122418043,
+        "filtered_sd": 0.0017510958500646001,
+        "predictive_log_likelihood": 12.511572392559735,
+        "seasons": [
+          2020,
+          2021,
+          2022,
+          2023
+        ],
+        "signal_variance": 3.5387960524343597e-06,
+        "support_reason": "4 training seasons is below the 6 a one-state walk needs",
+        "supported": false
+      },
+      "recency_weighted": {
+        "degrees_of_freedom": 3,
+        "estimates": [
+          0.01650977955515559,
+          0.014589081808247738,
+          0.016773592742288207,
+          0.010604263374405598
+        ],
+        "i_squared": 0.2726391864896857,
+        "lag1_autocorrelation": -0.10629267338229412,
+        "posterior_mean": 0.01346853745908131,
+        "posterior_probability_positive": 1.0,
+        "posterior_sd": 0.0016148139280709533,
+        "predictive_probability_positive": 0.999999999610075,
+        "predictive_sd": 0.002190370955447048,
+        "q_p_value": 0.24833036535618894,
+        "q_statistic": 4.12450044637641,
+        "recency_half_life_seasons": 2.0,
+        "seasons": [
+          2020,
+          2021,
+          2022,
+          2023
+        ],
+        "stability_classification": "STABLE_POSITIVE",
+        "standard_errors": [
+          0.0025771176974077477,
+          0.002816349094144648,
+          0.0029389980689086934,
+          0.0022581631748047485
+        ],
+        "tau2": 2.190100900174071e-06,
+        "tau2_dersimonian_laird": 2.5858363040158042e-06,
+        "tau_time": 0.0014798989493117667,
+        "weights": [
+          0.13713529594677623,
+          0.169216379411909,
+          0.22370710740560779,
+          0.46994121723570714
+        ]
+      },
+      "screening": {
+        "bucket": "teammate_pts_reb",
+        "fold_detail": [
+          {
+            "T0_pooled_empirical_bayes": {
+              "fallback_reason": "",
+              "fell_back_to_pooled": false,
+              "prediction": 0.015311505992119489,
+              "prediction_sd": 0.0019012574313420493,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2022,
+              "training_seasons": [
+                2020,
+                2021
+              ],
+              "treatment": "T0_pooled_empirical_bayes"
+            },
+            "T1_random_effects": {
+              "fallback_reason": "",
+              "fell_back_to_pooled": false,
+              "prediction": 0.015634457433247016,
+              "prediction_sd": 0.0019012574313420493,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2022,
+              "training_seasons": [
+                2020,
+                2021
+              ],
+              "treatment": "T1_random_effects"
+            },
+            "T2_recency_weighted_random_effects": {
+              "fallback_reason": "",
+              "fell_back_to_pooled": false,
+              "prediction": 0.015468457585132616,
+              "prediction_sd": 0.0019296727622617623,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2022,
+              "training_seasons": [
+                2020,
+                2021
+              ],
+              "treatment": "T2_recency_weighted_random_effects"
+            },
+            "T3_random_walk_state": {
+              "fallback_reason": "2 training seasons is below the 6 a one-state walk needs",
+              "fell_back_to_pooled": true,
+              "prediction": 0.015634457433247016,
+              "prediction_sd": 0.0019012574313420493,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2022,
+              "training_seasons": [
+                2020,
+                2021
+              ],
+              "treatment": "T3_random_walk_state"
+            },
+            "fold_season": 2022,
+            "realised_estimate": 0.016773592742288207,
+            "realised_standard_error": 0.0029389980689086934
+          },
+          {
+            "T0_pooled_empirical_bayes": {
+              "fallback_reason": "",
+              "fell_back_to_pooled": false,
+              "prediction": 0.015779378624175486,
+              "prediction_sd": 0.001596349778474873,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2023,
+              "training_seasons": [
+                2020,
+                2021,
+                2022
+              ],
+              "treatment": "T0_pooled_empirical_bayes"
+            },
+            "T1_random_effects": {
+              "fallback_reason": "",
+              "fell_back_to_pooled": false,
+              "prediction": 0.015970529815758402,
+              "prediction_sd": 0.001596349778474873,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2023,
+              "training_seasons": [
+                2020,
+                2021,
+                2022
+              ],
+              "treatment": "T1_random_effects"
+            },
+            "T2_recency_weighted_random_effects": {
+              "fallback_reason": "",
+              "fell_back_to_pooled": false,
+              "prediction": 0.016007699476526163,
+              "prediction_sd": 0.0016603745859117387,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2023,
+              "training_seasons": [
+                2020,
+                2021,
+                2022
+              ],
+              "treatment": "T2_recency_weighted_random_effects"
+            },
+            "T3_random_walk_state": {
+              "fallback_reason": "3 training seasons is below the 6 a one-state walk needs",
+              "fell_back_to_pooled": true,
+              "prediction": 0.015970529815758402,
+              "prediction_sd": 0.001596349778474873,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2023,
+              "training_seasons": [
+                2020,
+                2021,
+                2022
+              ],
+              "treatment": "T3_random_walk_state"
+            },
+            "fold_season": 2023,
+            "realised_estimate": 0.010604263374405598,
+            "realised_standard_error": 0.0022581631748047485
+          }
+        ],
+        "folds": [
+          2022,
+          2023
+        ],
+        "scores": {
+          "T0_pooled_empirical_bayes": {
+            "calibration_gap": 0.8382225014324625,
+            "folds": 2.0,
+            "mean_squared_z": 1.8382225014324625,
+            "predictive_mse": 1.4459757756709886e-05,
+            "predictive_rmse": 0.003802598816166371
+          },
+          "T1_random_effects": {
+            "calibration_gap": 0.9356809083513755,
+            "folds": 2.0,
+            "mean_squared_z": 1.9356809083513755,
+            "predictive_mse": 1.5047222385946833e-05,
+            "predictive_rmse": 0.0038790749394600295
+          },
+          "T2_recency_weighted_random_effects": {
+            "calibration_gap": 0.9271340849715579,
+            "folds": 2.0,
+            "mean_squared_z": 1.927134084971558,
+            "predictive_mse": 1.5450249744071716e-05,
+            "predictive_rmse": 0.003930680570088559
+          },
+          "T3_random_walk_state": {
+            "calibration_gap": 0.9356809083513755,
+            "folds": 2.0,
+            "mean_squared_z": 1.9356809083513755,
+            "predictive_mse": 1.5047222385946833e-05,
+            "predictive_rmse": 0.0038790749394600295
+          }
+        },
+        "selected_treatment": "T0_pooled_empirical_bayes",
+        "selection_reason": "lowest predictive MSE within the 5% parsimony tie band; T0_pooled_empirical_bayes scores 1.446e-05 against 1.446e-05 for the pooled control"
+      },
+      "season_estimates": [
+        {
+          "bootstrap_interval": [
+            0.011129386972901643,
+            0.021728994735624323
+          ],
+          "effective_games": 1171,
+          "effective_pairs": 247580.0,
+          "estimate": 0.01650977955515559,
+          "posterior_sign_probability": 0.9999999999254514,
+          "season": 2020,
+          "standard_error": 0.0025771176974077477
+        },
+        {
+          "bootstrap_interval": [
+            0.008978961439619217,
+            0.020149816768960577
+          ],
+          "effective_games": 1323,
+          "effective_pairs": 273418.0,
+          "estimate": 0.014589081808247738,
+          "posterior_sign_probability": 0.9999998891401172,
+          "season": 2021,
+          "standard_error": 0.002816349094144648
+        },
+        {
+          "bootstrap_interval": [
+            0.010988501427394898,
+            0.02227734783273504
+          ],
+          "effective_games": 1320,
+          "effective_pairs": 267420.0,
+          "estimate": 0.016773592742288207,
+          "posterior_sign_probability": 0.9999999942591502,
+          "season": 2022,
+          "standard_error": 0.0029389980689086934
+        },
+        {
+          "bootstrap_interval": [
+            0.006237127255268637,
+            0.014646120739175242
+          ],
+          "effective_games": 1319,
+          "effective_pairs": 280110.0,
+          "estimate": 0.010604263374405598,
+          "posterior_sign_probability": 0.9999986732685132,
+          "season": 2023,
+          "standard_error": 0.0022581631748047485
+        }
+      ],
+      "seasons_crossing_zero": [],
+      "seasons_opposite_sign": [],
+      "stat_pair": [
+        "pts",
+        "reb"
+      ]
+    },
+    "teammate_reb_reb": {
+      "block": "same_team",
+      "pooled_control_by_fold": {
+        "2022": 0.004099488026211302,
+        "2023": 0.005278888122800956
+      },
+      "prediction_for_first_holdout_season": {
+        "T0_pooled_empirical_bayes": {
+          "fallback_reason": "",
+          "fell_back_to_pooled": false,
+          "prediction": 0.005278888122800956,
+          "prediction_sd": 0.0015514346009915397,
+          "stability_classification": "STABLE_POSITIVE",
+          "target_season": 2024,
+          "training_seasons": [
+            2020,
+            2021,
+            2022,
+            2023
+          ],
+          "treatment": "T0_pooled_empirical_bayes"
+        },
+        "T1_random_effects": {
+          "fallback_reason": "",
+          "fell_back_to_pooled": false,
+          "prediction": 0.005859661191336782,
+          "prediction_sd": 0.0015514346009915397,
+          "stability_classification": "STABLE_POSITIVE",
+          "target_season": 2024,
+          "training_seasons": [
+            2020,
+            2021,
+            2022,
+            2023
+          ],
+          "treatment": "T1_random_effects"
+        },
+        "T2_recency_weighted_random_effects": {
+          "fallback_reason": "",
+          "fell_back_to_pooled": false,
+          "prediction": 0.006223866296014503,
+          "prediction_sd": 0.0016671810923680522,
+          "stability_classification": "STABLE_POSITIVE",
+          "target_season": 2024,
+          "training_seasons": [
+            2020,
+            2021,
+            2022,
+            2023
+          ],
+          "treatment": "T2_recency_weighted_random_effects"
+        },
+        "T3_random_walk_state": {
+          "fallback_reason": "4 training seasons is below the 6 a one-state walk needs",
+          "fell_back_to_pooled": true,
+          "prediction": 0.005859661191336782,
+          "prediction_sd": 0.0015514346009915397,
+          "stability_classification": "STABLE_POSITIVE",
+          "target_season": 2024,
+          "training_seasons": [
+            2020,
+            2021,
+            2022,
+            2023
+          ],
+          "treatment": "T3_random_walk_state"
+        }
+      },
+      "random_effects": {
+        "degrees_of_freedom": 3,
+        "estimates": [
+          0.0031459870997116914,
+          0.006544151815018613,
+          0.00850966205185341,
+          0.0059100704105731795
+        ],
+        "i_squared": 0.0,
+        "lag1_autocorrelation": -0.00907784839002564,
+        "posterior_mean": 0.005859661191336782,
+        "posterior_probability_positive": 0.9999206136021386,
+        "posterior_sd": 0.0015514346009915397,
+        "predictive_probability_positive": 0.9999206136021386,
+        "predictive_sd": 0.0015514346009915397,
+        "q_p_value": 0.6799001510995069,
+        "q_statistic": 1.5102782689580487,
+        "recency_half_life_seasons": null,
+        "seasons": [
+          2020,
+          2021,
+          2022,
+          2023
+        ],
+        "stability_classification": "STABLE_POSITIVE",
+        "standard_errors": [
+          0.002962406793921434,
+          0.0031755473246885654,
+          0.003353613899748584,
+          0.002969125888737473
+        ],
+        "tau2": 0.0,
+        "tau2_dersimonian_laird": 0.0,
+        "tau_time": 0.0,
+        "weights": [
+          0.2742695260972061,
+          0.2386875504504921,
+          0.21401332981648763,
+          0.27302959363581425
+        ]
+      },
+      "random_walk": {
+        "filtered_mean": 0.005859661191336781,
+        "filtered_sd": 0.0015514346009915397,
+        "predictive_log_likelihood": 13.110702971179382,
+        "seasons": [
+          2020,
+          2021,
+          2022,
+          2023
+        ],
+        "signal_variance": 0.0,
+        "support_reason": "4 training seasons is below the 6 a one-state walk needs",
+        "supported": false
+      },
+      "recency_weighted": {
+        "degrees_of_freedom": 3,
+        "estimates": [
+          0.0031459870997116914,
+          0.006544151815018613,
+          0.00850966205185341,
+          0.0059100704105731795
+        ],
+        "i_squared": 0.0,
+        "lag1_autocorrelation": -0.06904423119762997,
+        "posterior_mean": 0.006223866296014503,
+        "posterior_probability_positive": 0.999905456627041,
+        "posterior_sd": 0.0016671810923680522,
+        "predictive_probability_positive": 0.999905456627041,
+        "predictive_sd": 0.0016671810923680522,
+        "q_p_value": 0.6799001510995069,
+        "q_statistic": 1.5102782689580487,
+        "recency_half_life_seasons": 2.0,
+        "seasons": [
+          2020,
+          2021,
+          2022,
+          2023
+        ],
+        "stability_classification": "STABLE_POSITIVE",
+        "standard_errors": [
+          0.002962406793921434,
+          0.0031755473246885654,
+          0.003353613899748584,
+          0.002969125888737473
+        ],
+        "tau2": 0.0,
+        "tau2_dersimonian_laird": 0.0,
+        "tau_time": 0.0,
+        "weights": [
+          0.15135488228219313,
+          0.1862788910601409,
+          0.23620533277703154,
+          0.4261608938806345
+        ]
+      },
+      "screening": {
+        "bucket": "teammate_reb_reb",
+        "fold_detail": [
+          {
+            "T0_pooled_empirical_bayes": {
+              "fallback_reason": "",
+              "fell_back_to_pooled": false,
+              "prediction": 0.004099488026211302,
+              "prediction_sd": 0.0021661721122208264,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2022,
+              "training_seasons": [
+                2020,
+                2021
+              ],
+              "treatment": "T0_pooled_empirical_bayes"
+            },
+            "T1_random_effects": {
+              "fallback_reason": "",
+              "fell_back_to_pooled": false,
+              "prediction": 0.004727210264391986,
+              "prediction_sd": 0.0021661721122208264,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2022,
+              "training_seasons": [
+                2020,
+                2021
+              ],
+              "treatment": "T1_random_effects"
+            },
+            "T2_recency_weighted_random_effects": {
+              "fallback_reason": "",
+              "fell_back_to_pooled": false,
+              "prediction": 0.005020818365970279,
+              "prediction_sd": 0.002198430536817576,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2022,
+              "training_seasons": [
+                2020,
+                2021
+              ],
+              "treatment": "T2_recency_weighted_random_effects"
+            },
+            "T3_random_walk_state": {
+              "fallback_reason": "2 training seasons is below the 6 a one-state walk needs",
+              "fell_back_to_pooled": true,
+              "prediction": 0.004727210264391986,
+              "prediction_sd": 0.0021661721122208264,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2022,
+              "training_seasons": [
+                2020,
+                2021
+              ],
+              "treatment": "T3_random_walk_state"
+            },
+            "fold_season": 2022,
+            "realised_estimate": 0.00850966205185341,
+            "realised_standard_error": 0.003353613899748584
+          },
+          {
+            "T0_pooled_empirical_bayes": {
+              "fallback_reason": "",
+              "fell_back_to_pooled": false,
+              "prediction": 0.005278888122800956,
+              "prediction_sd": 0.0018195965602014169,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2023,
+              "training_seasons": [
+                2020,
+                2021,
+                2022
+              ],
+              "treatment": "T0_pooled_empirical_bayes"
+            },
+            "T1_random_effects": {
+              "fallback_reason": "",
+              "fell_back_to_pooled": false,
+              "prediction": 0.005840728909467914,
+              "prediction_sd": 0.0018195965602014169,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2023,
+              "training_seasons": [
+                2020,
+                2021,
+                2022
+              ],
+              "treatment": "T1_random_effects"
+            },
+            "T2_recency_weighted_random_effects": {
+              "fallback_reason": "",
+              "fell_back_to_pooled": false,
+              "prediction": 0.00645690641755673,
+              "prediction_sd": 0.0018917530323830714,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2023,
+              "training_seasons": [
+                2020,
+                2021,
+                2022
+              ],
+              "treatment": "T2_recency_weighted_random_effects"
+            },
+            "T3_random_walk_state": {
+              "fallback_reason": "3 training seasons is below the 6 a one-state walk needs",
+              "fell_back_to_pooled": true,
+              "prediction": 0.005840728909467914,
+              "prediction_sd": 0.0018195965602014169,
+              "stability_classification": "STABLE_POSITIVE",
+              "target_season": 2023,
+              "training_seasons": [
+                2020,
+                2021,
+                2022
+              ],
+              "treatment": "T3_random_walk_state"
+            },
+            "fold_season": 2023,
+            "realised_estimate": 0.0059100704105731795,
+            "realised_standard_error": 0.002969125888737473
+          }
+        ],
+        "folds": [
+          2022,
+          2023
+        ],
+        "scores": {
+          "T0_pooled_empirical_bayes": {
+            "calibration_gap": 0.37344758662116107,
+            "folds": 2.0,
+            "mean_squared_z": 0.6265524133788389,
+            "predictive_mse": 9.924013008422846e-06,
+            "predictive_rmse": 0.0031502401509127596
+          },
+          "T1_random_effects": {
+            "calibration_gap": 0.5509995477212393,
+            "folds": 2.0,
+            "mean_squared_z": 0.44900045227876073,
+            "predictive_mse": 7.155874884122828e-06,
+            "predictive_rmse": 0.0026750467069049147
+          },
+          "T2_recency_weighted_random_effects": {
+            "calibration_gap": 0.6094492493131212,
+            "folds": 2.0,
+            "mean_squared_z": 0.3905507506868788,
+            "predictive_mse": 6.235529941530152e-06,
+            "predictive_rmse": 0.002497104311303425
+          },
+          "T3_random_walk_state": {
+            "calibration_gap": 0.5509995477212393,
+            "folds": 2.0,
+            "mean_squared_z": 0.44900045227876073,
+            "predictive_mse": 7.155874884122828e-06,
+            "predictive_rmse": 0.0026750467069049147
+          }
+        },
+        "selected_treatment": "T2_recency_weighted_random_effects",
+        "selection_reason": "lowest predictive MSE within the 5% parsimony tie band; T2_recency_weighted_random_effects scores 6.236e-06 against 9.924e-06 for the pooled control"
+      },
+      "season_estimates": [
+        {
+          "bootstrap_interval": [
+            -0.0027996314300792616,
+            0.00868124980789306
+          ],
+          "effective_games": 1171,
+          "effective_pairs": 247580.0,
+          "estimate": 0.0031459870997116914,
+          "posterior_sign_probability": 0.8558753443586551,
+          "season": 2020,
+          "standard_error": 0.002962406793921434
+        },
+        {
+          "bootstrap_interval": [
+            0.0006602099634581201,
+            0.01291897951487938
+          ],
+          "effective_games": 1323,
+          "effective_pairs": 273418.0,
+          "estimate": 0.006544151815018613,
+          "posterior_sign_probability": 0.980338695632856,
+          "season": 2021,
+          "standard_error": 0.0031755473246885654
+        },
+        {
+          "bootstrap_interval": [
+            0.0019700776251264074,
+            0.01496550953750544
+          ],
+          "effective_games": 1320,
+          "effective_pairs": 267420.0,
+          "estimate": 0.00850966205185341,
+          "posterior_sign_probability": 0.994416998025524,
+          "season": 2022,
+          "standard_error": 0.003353613899748584
+        },
+        {
+          "bootstrap_interval": [
+            0.00018051005703964275,
+            0.011559418750765485
+          ],
+          "effective_games": 1319,
+          "effective_pairs": 280110.0,
+          "estimate": 0.0059100704105731795,
+          "posterior_sign_probability": 0.9767325273996744,
+          "season": 2023,
+          "standard_error": 0.002969125888737473
+        }
+      ],
+      "seasons_crossing_zero": [
+        2020
+      ],
+      "seasons_opposite_sign": [],
+      "stat_pair": [
+        "reb",
+        "reb"
+      ]
+    }
+  },
+  "holdout_seasons_excluded": [
+    2024,
+    2025
+  ],
+  "holdout_used_for_selection": false,
+  "pre_registered_constants": {
+    "ar1_support_threshold": 0.3,
+    "heterogeneity_level": 0.05,
+    "min_seasons_for_dynamic": 6,
+    "min_seasons_for_prediction": 2,
+    "recency_half_life_seasons": 2.0,
+    "selection_tie_band": 0.05,
+    "sign_confidence": 0.95,
+    "time_varying_tau_ratio": 0.5
+  },
+  "primary_bucket": "teammate_ast_ast",
+  "scope": "pre-2024 training history only",
+  "seasons_used": [
+    2020,
+    2021,
+    2022,
+    2023
+  ],
+  "seed": 73,
+  "selected_treatment_applies_to": [
+    "teammate_ast_ast"
+  ],
+  "selected_treatment_for_primary_bucket": "T0_pooled_empirical_bayes",
+  "stats": [
+    "pts",
+    "reb",
+    "ast",
+    "stl",
+    "blk",
+    "fg3m"
+  ],
+  "uncertainty_calibration": {
+    "by_bucket": {
+      "passer_ast_teammate_pts": {
+        "calibrated_prediction_sd": 0.01019428067327024,
+        "inner_fold_mean_squared_z": 6.466096749217967,
+        "prediction": 0.046594661815700544,
+        "raw_prediction_sd": 0.005772948251472409
+      },
+      "teammate_ast_ast": {
+        "calibrated_prediction_sd": 0.00877416147446695,
+        "inner_fold_mean_squared_z": 3.5423268842617825,
+        "prediction": 0.00694809973695228,
+        "raw_prediction_sd": 0.0049687449036962365
+      },
+      "teammate_pts_reb": {
+        "calibrated_prediction_sd": 0.0037271057895208763,
+        "inner_fold_mean_squared_z": 1.8382225014324625,
+        "prediction": 0.015779378624175486,
+        "raw_prediction_sd": 0.00211063335808322
+      },
+      "teammate_reb_reb": {
+        "calibrated_prediction_sd": 0.0027396330401362806,
+        "inner_fold_mean_squared_z": 0.6265524133788389,
+        "prediction": 0.005278888122800956,
+        "raw_prediction_sd": 0.0015514346009915397
+      }
+    },
+    "estimated_on": "pre-2024 inner walk-forward folds only",
+    "pooled": {
+      "buckets": 4.0,
+      "inflation": 1.7658707871961534,
+      "mean_squared_z": 3.118299637072763,
+      "observations": 8.0
+    },
+    "treatment": "T0_pooled_empirical_bayes"
+  }
+}
