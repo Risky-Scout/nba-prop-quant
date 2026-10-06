@@ -1,0 +1,132 @@
+{
+  "bootstrap_draws": 400,
+  "branch": "research/nba-final-upstream-remediation",
+  "bridge_bootstrap_draws": 2000,
+  "candidate_name": "final_upstream_candidate",
+  "code_sha": "f35c07cdd3a247df2cd6d6e60eb3098a9f446889",
+  "control": {
+    "artifact_dir": "research/game_latent_state_bucket_repair",
+    "factor_spec_hash": "c9b46e3a7497cfee52832f29397397b843aafb8e5f770a39157ce508f8157bc0",
+    "name": "accepted bucket repair"
+  },
+  "dependence_temperature_code_sha": "f35c07cdd3a247df2cd6d6e60eb3098a9f446889",
+  "factor_spec_hash": "d1ec90492fe2fba189455fc90ea3f08babc964a2cccc59a5c8edbea61e1f71fb",
+  "frozen": true,
+  "holdout_seasons": [
+    2024,
+    2025
+  ],
+  "holdout_seasons_excluded": [
+    2024,
+    2025
+  ],
+  "holdout_used_for_selection": false,
+  "inner_selection_code_sha": "fc474dd10bf5ae4ca4ec4ba0ad04c23d0412090a",
+  "items": [
+    {
+      "decided_by": "01_inner_selection.py",
+      "item": "1",
+      "layer": "temporal_ast_ast_season_effects",
+      "selected": "A0_pooled_empirical_bayes",
+      "selection_record": null
+    },
+    {
+      "decided_by": "01_inner_selection.py",
+      "item": "2",
+      "layer": "multiplicative_role_scale",
+      "selected": "log_shrunk",
+      "selection_record": "the log-scale form lowers supported-cell RMSE on the forward folds"
+    },
+    {
+      "decided_by": "01_inner_selection.py",
+      "item": "3",
+      "layer": "cross_team_shrinkage_prior",
+      "selected": "gaussian",
+      "selection_record": null
+    },
+    {
+      "decided_by": "01_inner_selection.py",
+      "item": "4",
+      "layer": "latent_to_count_transmission_bridge",
+      "selected": 0.15,
+      "selection_record": "among caps whose pooled forward global latent RMSE and forward global count RMSE stay within 1.03x the cap-0 control and whose protected buckets do not worsen by more than 0.5 z, take the cap with the largest forward improvement in the absolute count-space error of passer_ast_teammate_pts; otherwise keep the control"
+    },
+    {
+      "decided_by": "02_dependence_temperature.py",
+      "item": "5",
+      "layer": "cross_player_dependence_temperature",
+      "selected": 1.0,
+      "selection_record": "the full dependence model has the best game-clustered log loss"
+    },
+    {
+      "decided_by": "01_inner_selection.py",
+      "item": "6",
+      "layer": "predictive_uncertainty_calibration",
+      "selected": "U0_raw",
+      "selection_record": null
+    }
+  ],
+  "note": "Frozen before the 2024-2025 holdout was run. Retuning against holdout results after this point would invalidate the evaluation.",
+  "parameter_counts": {
+    "active_role_deviation_parameters": 0,
+    "active_symmetric_subspace_parameters": 0,
+    "pairwise": 0,
+    "player_indexed": 0,
+    "role_scale_free_parameters": 2,
+    "role_scale_values": 3,
+    "scalar_hyperparameters": 4,
+    "stat_indexed_competition": 21,
+    "stat_indexed_contrast": 36,
+    "stat_indexed_game": 36
+  },
+  "promotion_eligibility": "SHADOW_RESEARCH_ONLY__NOT_ELIGIBLE_FOR_PROMOTION",
+  "remediation_spec": {
+    "bridge_mode": "inverse_variance",
+    "bridge_weight_cap": 0.15,
+    "cross_team_nu": null,
+    "cross_team_prior": "gaussian",
+    "dependence_temperature": 1.0,
+    "eb_family": "block_diagonal",
+    "k_game": 6,
+    "name": "final_upstream_candidate",
+    "r_contrast": 6,
+    "role_column": "role_bucket",
+    "role_scale_mode": "log_shrunk",
+    "role_tau_log": null,
+    "shrinkage": "empirical_bayes"
+  },
+  "role_scale": {
+    "bench": 1.2540295712757752,
+    "rotation": 0.8244614562524518,
+    "starter": 0.914519357927274
+  },
+  "role_scale_weighted_mean_minus_one": 0.0,
+  "seed": 73,
+  "title": "Final upstream remediation: frozen spec",
+  "training_seasons": [
+    2020,
+    2021,
+    2022,
+    2023
+  ],
+  "transmission": {
+    "admissibility": {
+      "admissible": true,
+      "forward_count_rmse_ratio": 0.9927124933020889,
+      "forward_latent_rmse_ratio": 0.9913479327268219,
+      "forward_target_bucket_improvement": 0.00028196794506618605,
+      "worst_protected_z_increase": 0.09629085520124792
+    },
+    "cap": 0.15,
+    "homogeneity_verdict": "REJECTED"
+  },
+  "upstream_choices": {
+    "cross_team_nu": null,
+    "cross_team_prior": "gaussian",
+    "dependence_temperature": 1.0,
+    "role_scale_mode": "log_shrunk",
+    "temporal_treatment": "A0_pooled_empirical_bayes",
+    "transmission_weight_cap": 0.15,
+    "uncertainty_model": "U0_raw"
+  }
+}

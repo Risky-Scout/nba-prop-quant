@@ -39,6 +39,7 @@ from nba_prop_quant.research.game_latent_state.remediation import (
     fit_log_shrunk_role_scales,
     fit_remediated_factors,
     role_scale_components,
+    temper_loadings,
 )
 from nba_prop_quant.research.game_latent_state.transmission import (
     DEFAULT_BRIDGE_ORDER,
@@ -89,7 +90,7 @@ class UpstreamChoices:
     def spec(self, name: str = "final_upstream_candidate") -> RemediationSpec:
         return RemediationSpec(
             name=name,
-            role_scale_mode=ROLE_SCALE_RATIO,
+            role_scale_mode=self.role_scale_mode,
             cross_team_prior=self.cross_team_prior,
             cross_team_nu=self.cross_team_nu,
             bridge_mode=BRIDGE_OFF if self.transmission_cap <= 0.0 else BRIDGE_COMBINED,
@@ -235,6 +236,12 @@ def upstream_fit(
         moments = pair_moments(standardized, stats, bootstrap=bootstrap, seed=seed)
 
     spec = choices.spec()
+    # Everything is estimated at the full dependence model and tempered once,
+    # at the end. Estimating under the temperature instead would feed the
+    # shrunken cross-player loadings back into the role-scale projection, so
+    # lambda would no longer be the one scalar multiplying the cross-player
+    # blocks and nothing else.
+    fit_spec = replace(spec, dependence_temperature=1.0)
     diagnostics: dict[str, object] = {}
 
     combined = None
@@ -257,8 +264,15 @@ def upstream_fit(
 
     role_override = None
     if choices.role_scale_mode == ROLE_SCALE_LOG_SHRUNK:
+        # The projection reads only the pooled same-team block, which carries
+        # no role layer, so the base is fitted without one.
         base = fit_remediated_factors(
-            standardized, stats, spec=spec, moments=moments
+            standardized,
+            stats,
+            spec=replace(
+                fit_spec, role_scale_mode=ROLE_SCALE_RATIO, role_column=None
+            ),
+            moments=moments,
         ).loadings
         raw, log_se, shares = role_scale_components(
             standardized,
@@ -273,7 +287,7 @@ def upstream_fit(
     fit = fit_remediated_factors(
         standardized,
         stats,
-        spec=spec,
+        spec=fit_spec,
         moments=moments,
         role_scale_override=role_override,
     )
@@ -282,7 +296,7 @@ def upstream_fit(
         for stat, (mean, sd) in used_moments.items()
     }
     return UpstreamFit(
-        loadings=fit.loadings,
+        loadings=temper_loadings(fit.loadings, choices.dependence_temperature),
         spec=spec,
         choices=choices,
         moments=moments,

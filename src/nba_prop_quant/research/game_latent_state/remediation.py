@@ -1054,7 +1054,10 @@ class RemediationSpec:
     role_tau_log: float | None = None
     #: 3. cross-team prior
     cross_team_prior: str = CROSS_PRIOR_GAUSSIAN
-    cross_team_nu: float = 5.0
+    #: ``None`` under the Gaussian prior, where there are no degrees of freedom
+    #: to report. Recording a number there would claim a parameter the model
+    #: does not have.
+    cross_team_nu: float | None = 5.0
     #: 4. latent-to-count transmission
     bridge_mode: str = BRIDGE_OFF
     bridge_weight_cap: float = 1.0
@@ -1071,7 +1074,9 @@ class RemediationSpec:
             "role_scale_mode": self.role_scale_mode,
             "role_tau_log": None if self.role_tau_log is None else float(self.role_tau_log),
             "cross_team_prior": self.cross_team_prior,
-            "cross_team_nu": float(self.cross_team_nu),
+            "cross_team_nu": (
+                None if self.cross_team_nu is None else float(self.cross_team_nu)
+            ),
             "bridge_mode": self.bridge_mode,
             "bridge_weight_cap": float(self.bridge_weight_cap),
             "dependence_temperature": float(self.dependence_temperature),
@@ -1128,6 +1133,8 @@ def shrink_blocks_remediated(
             is_same_team=False,
         )
     elif spec.cross_team_prior == CROSS_PRIOR_STUDENT_T:
+        if spec.cross_team_nu is None:
+            raise ValueError("the Student-t cross-team prior needs its nu")
         cross, cross_diagnostics = robust_shrink_block(
             moments.cross_team,
             moments.cross_team_se,

@@ -119,6 +119,7 @@ def test_the_research_residual_dataset_is_ignored_rather_than_merely_absent():
         "research/game_latent_state/oof_gaussian_residuals.parquet",
         "research/game_latent_state_bucket_repair/oof_gaussian_residuals.parquet",
         "research/game_latent_state_v2/oof_gaussian_residuals.parquet",
+        "research/final_upstream_remediation/oof_gaussian_residuals.parquet",
     ):
         result = subprocess.run(
             ["git", "check-ignore", "-q", relative],
@@ -139,6 +140,7 @@ def test_the_regenerated_parquet_exports_are_ignored_too():
     for directory in (
         "research/game_latent_state",
         "research/game_latent_state_bucket_repair",
+        "research/final_upstream_remediation",
     ):
         for name in ("factor_loadings.parquet", "joint_event_grades.parquet"):
             result = subprocess.run(

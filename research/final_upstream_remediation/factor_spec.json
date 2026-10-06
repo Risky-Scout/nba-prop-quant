@@ -1,0 +1,256 @@
+{
+  "control_factor_spec_hash": "c9b46e3a7497cfee52832f29397397b843aafb8e5f770a39157ce508f8157bc0",
+  "dependence_model_version": "game-latent-state-shadow-v1",
+  "dependence_temperature_note": "lambda multiplies every shared cross-player loading by its square root, so every cross-player block is multiplied by exactly lambda while each player's own block stays pinned at the incumbent's.",
+  "eb_family": "block_diagonal",
+  "factor_families": [
+    "game_pace_volume",
+    "game_rebound_environment",
+    "team_contrast_own_minus_opponent",
+    "within_team_zero_sum_competition",
+    "player_within_block_incumbent",
+    "idiosyncratic_residual"
+  ],
+  "identification_note": "Only the antisymmetric part of the own-team/opponent-team loadings is separately identified; the symmetric part is absorbed into the game-level factors. See covariance.py.",
+  "k_game": 6,
+  "loadings": {
+    "competition_loadings": [
+      [
+        -0.15933940189879883,
+        0.03531059340917726,
+        0.0033909277041173956,
+        -0.008582038224857777,
+        0.007975055361873836,
+        0.00037548470477236545
+      ],
+      [
+        0.041478173406232624,
+        -0.12043159766116993,
+        0.03421050887376653,
+        -0.01100784625381752,
+        0.002375356685943636,
+        0.0009182758417759429
+      ],
+      [
+        0.14859149954943285,
+        0.06792725261981897,
+        0.011460268436923073,
+        0.005100876955981045,
+        0.004518767447741166,
+        0.001567005498537469
+      ],
+      [
+        0.01720358331352698,
+        -0.06158617652315944,
+        -0.028070950722666143,
+        0.020946816914676262,
+        0.006094300853410118,
+        -0.000764359485181748
+      ],
+      [
+        0.0075741856255619674,
+        -0.021831493323157484,
+        -0.07805773871543406,
+        -0.008955911753378738,
+        -0.0007602554914116587,
+        0.0012435687369130883
+      ],
+      [
+        -0.11189366138010687,
+        -0.015667535398388725,
+        0.013472029950797892,
+        0.017528651629323953,
+        -0.003589829509247045,
+        0.001853294359646671
+      ]
+    ],
+    "game_loadings": [
+      [
+        -0.13222761328408078,
+        0.01639784196088812,
+        -0.04778405678420924,
+        -0.010753638020386714,
+        -0.009624481452225431,
+        -0.00034118520817063967
+      ],
+      [
+        -0.012624927327995993,
+        -0.13045490939873,
+        -0.0020166399065523507,
+        0.0033018787275453125,
+        0.0004142412968295192,
+        -0.0025791532871718087
+      ],
+      [
+        -0.13619122096451242,
+        0.0026835499113448823,
+        0.03484286591243432,
+        -0.0065753308275056516,
+        0.020819194158364557,
+        5.380946840684994e-05
+      ],
+      [
+        -0.012703409163166689,
+        -0.048815963754831555,
+        0.029560316501196733,
+        -0.022761925640385264,
+        -0.0221798498238822,
+        0.0013647719726478408
+      ],
+      [
+        -0.020166974121453206,
+        -0.08060209955118501,
+        -0.01859510328421762,
+        0.012688783889224094,
+        0.007363162062033,
+        0.0032444002150298053
+      ],
+      [
+        -0.0764874792201814,
+        0.01776617476750556,
+        0.020892693168351014,
+        0.03018799869187764,
+        -0.018757736986018105,
+        -0.00016237481879350762
+      ]
+    ],
+    "k_game": 6,
+    "r_competition": 6,
+    "role_scale": {
+      "bench": 1.2540295712757752,
+      "rotation": 0.8244614562524518,
+      "starter": 0.914519357927274
+    },
+    "stats": [
+      "pts",
+      "reb",
+      "ast",
+      "stl",
+      "blk",
+      "fg3m"
+    ],
+    "team_contrast_loadings": [
+      [
+        -0.060302874947701444,
+        -0.011229701847551789,
+        0.022332667853383652,
+        -0.0029842379481779496,
+        -0.002334261414410276,
+        3.5179589732326206e-11
+      ],
+      [
+        -0.06596356572077423,
+        -0.028760304471132547,
+        -0.006869213898502257,
+        -0.01667427039041486,
+        0.0007318672272477732,
+        -1.3085551045852796e-09
+      ],
+      [
+        -0.10649531869592214,
+        0.00405004196541045,
+        0.006255166079459591,
+        0.00543954054701214,
+        0.001317413210797162,
+        1.0180804836522571e-09
+      ],
+      [
+        -0.0035858174402293563,
+        -0.007161112519977434,
+        0.015133037126791073,
+        0.0386977014479012,
+        0.0003971919827349271,
+        -8.04091805600672e-10
+      ],
+      [
+        -0.021945306396488694,
+        0.06336862322167452,
+        0.011773015878083602,
+        -0.007842930796015606,
+        0.00014903880935011107,
+        -7.145003537250888e-10
+      ],
+      [
+        -0.04887791884687294,
+        0.015918018575738383,
+        -0.03830725474358354,
+        0.015015358639744996,
+        -0.001074251912249717,
+        -1.158400327803052e-10
+      ]
+    ]
+  },
+  "r_contrast": 6,
+  "remediation_spec": {
+    "bridge_mode": "inverse_variance",
+    "bridge_weight_cap": 0.15,
+    "cross_team_nu": null,
+    "cross_team_prior": "gaussian",
+    "dependence_temperature": 1.0,
+    "eb_family": "block_diagonal",
+    "k_game": 6,
+    "name": "final_upstream_candidate",
+    "r_contrast": 6,
+    "role_column": "role_bucket",
+    "role_scale_mode": "log_shrunk",
+    "role_tau_log": null,
+    "shrinkage": "empirical_bayes"
+  },
+  "role_column": "role_bucket",
+  "role_scale_identification": "multiplicative, one scale per role bucket, constrained to a player-share-weighted mean of exactly one, so the pooled same-team block is the same object the unroled fit produced",
+  "spec_hash": "d1ec90492fe2fba189455fc90ea3f08babc964a2cccc59a5c8edbea61e1f71fb",
+  "standardization_moments": {
+    "ast": {
+      "mean": -0.0010324282522954516,
+      "sd": 1.0018251209835307
+    },
+    "blk": {
+      "mean": 0.011743471000717397,
+      "sd": 1.0051165427505493
+    },
+    "fg3m": {
+      "mean": -0.014602351764211935,
+      "sd": 0.9991247889890215
+    },
+    "pts": {
+      "mean": -0.0053793696036107674,
+      "sd": 0.9991308805566164
+    },
+    "reb": {
+      "mean": 0.0002808430326635653,
+      "sd": 1.0013353417506248
+    },
+    "stl": {
+      "mean": -0.001024071154199583,
+      "sd": 0.9989914748108051
+    }
+  },
+  "stats": [
+    "pts",
+    "reb",
+    "ast",
+    "stl",
+    "blk",
+    "fg3m"
+  ],
+  "training_seasons": [
+    2020,
+    2021,
+    2022,
+    2023
+  ],
+  "upstream_choices": {
+    "cross_team_nu": null,
+    "cross_team_prior": "gaussian",
+    "dependence_temperature": 1.0,
+    "role_scale_mode": "log_shrunk",
+    "temporal_treatment": "A0_pooled_empirical_bayes",
+    "transmission_weight_cap": 0.15,
+    "uncertainty_model": "U0_raw"
+  },
+  "validation_seasons": [
+    2024,
+    2025
+  ],
+  "within_player_block_source": "incumbent nba_prop_quant.copula.GaussianCopula; pinned, not refitted"
+}
