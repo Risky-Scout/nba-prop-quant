@@ -54,10 +54,35 @@ MAX_SAME_PLAYER_BLOCK_DEVIATION = 1e-9
 MAX_BRIER_DEGRADATION = 0.0005
 MAX_ROLE_NEUTRALITY_DEVIATION = 1e-10
 
-#: The global inflation factor the V2 structural round rejected. Reviving it
-#: anywhere in the carried spec would reintroduce a dial that was fitted to a
-#: single pooled target, so the gate looks for the number itself.
+#: The global inflation factor the V2 structural round rejected: one dial
+#: fitted to one pooled target and applied to every block. Gate 13 looks for
+#: the number among the *parameters* of the carried spec rather than in the
+#: text of the repository, because the files that record why it was rejected
+#: name it too, and a text search would fail on its own evidence.
 FORBIDDEN_INFLATION_FACTOR = 1.7659
+FORBIDDEN_INFLATION_TOLERANCE = 1e-6
+
+#: The complete set of dials the frozen spec is allowed to carry. A revived
+#: global inflation factor would have to appear as one more key here, so
+#: pinning the set is what makes gate 13 structural rather than a search for
+#: one particular number.
+DECLARED_SPEC_KEYS = frozenset(
+    {
+        "name",
+        "k_game",
+        "r_contrast",
+        "eb_family",
+        "role_column",
+        "role_scale_mode",
+        "role_tau_log",
+        "cross_team_prior",
+        "cross_team_nu",
+        "bridge_mode",
+        "bridge_weight_cap",
+        "dependence_temperature",
+        "shrinkage",
+    }
+)
 
 ALLOWED_RESEARCH_PREFIXES = (
     "research/",
@@ -109,20 +134,38 @@ def changed_paths(production_ref: str) -> list[str]:
     return sorted(diff)
 
 
-def inflation_factor_present(paths: list[str]) -> list[str]:
-    """Any carried file that mentions the rejected global inflation factor."""
-    needle = f"{FORBIDDEN_INFLATION_FACTOR}"
-    offenders: list[str] = []
-    for relative in paths:
-        path = PROJECT_ROOT / relative
-        if not path.exists() or path.suffix in {".parquet", ".pkl", ".pickle"}:
-            continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError):
-            continue
-        if needle in text:
-            offenders.append(relative)
+def numeric_leaves(payload: object, trail: str = "") -> list[tuple[str, float]]:
+    """Every number in a JSON payload, with the path that reaches it."""
+    if isinstance(payload, bool) or payload is None:
+        return []
+    if isinstance(payload, (int, float)):
+        return [(trail or ".", float(payload))]
+    if isinstance(payload, dict):
+        return [
+            leaf
+            for key, value in payload.items()
+            for leaf in numeric_leaves(value, f"{trail}.{key}")
+        ]
+    if isinstance(payload, list):
+        return [
+            leaf
+            for index, value in enumerate(payload)
+            for leaf in numeric_leaves(value, f"{trail}[{index}]")
+        ]
+    return []
+
+
+def inflation_factor_in_parameters(
+    named: dict[str, object],
+) -> list[dict[str, object]]:
+    """Any parameter of the carried spec equal to the rejected factor."""
+    offenders: list[dict[str, object]] = []
+    for name, payload in named.items():
+        for trail, value in numeric_leaves(payload):
+            if abs(value - FORBIDDEN_INFLATION_FACTOR) <= (
+                FORBIDDEN_INFLATION_TOLERANCE
+            ):
+                offenders.append({"artifact": name, "path": trail, "value": value})
     return offenders
 
 
@@ -403,7 +446,14 @@ def main() -> None:
     # GATE 13: nothing was selected on the holdout, and the rejected global
     # inflation factor was not revived.
     carried = changed_paths(args.production_ref)
-    offenders = inflation_factor_present(carried)
+    offenders = inflation_factor_in_parameters(
+        {
+            "frozen_spec.json": frozen,
+            "factor_spec.json": spec,
+            "covariance_diagnostics.json": diagnostics,
+        }
+    )
+    undeclared = sorted(set(frozen["remediation_spec"]) - DECLARED_SPEC_KEYS)
     selection_clean = (
         inner["holdout_used_for_selection"] is False
         and temperature["holdout_used_for_selection"] is False
@@ -415,15 +465,23 @@ def main() -> None:
         13,
         "every selection used pre-2024 folds only and no global inflation "
         "factor was revived",
-        selection_clean and not offenders,
+        selection_clean and not offenders and not undeclared,
         {
+            "undeclared_spec_keys": undeclared,
+            "declared_spec_keys": sorted(DECLARED_SPEC_KEYS),
             "inner_selection_holdout_used": inner["holdout_used_for_selection"],
             "temperature_holdout_used": temperature["holdout_used_for_selection"],
             "frozen_holdout_used": frozen["holdout_used_for_selection"],
             "training_seasons": spec["training_seasons"],
             "holdout_seasons": frozen["holdout_seasons"],
             "forbidden_inflation_factor": FORBIDDEN_INFLATION_FACTOR,
-            "files_mentioning_it": offenders,
+            "match_tolerance": FORBIDDEN_INFLATION_TOLERANCE,
+            "artifacts_scanned": [
+                "frozen_spec.json",
+                "factor_spec.json",
+                "covariance_diagnostics.json",
+            ],
+            "parameters_equal_to_it": offenders,
         },
     )
 

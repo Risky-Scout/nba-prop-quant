@@ -627,6 +627,61 @@ def test_the_tie_band_keeps_the_simpler_candidate() -> None:
 # ----------------------------------------------------------------------
 
 
+def _load_driver(name: str, module_name: str):
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "research/final_upstream_remediation"
+        / name
+    )
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_rejected_inflation_factor_is_looked_for_in_the_parameters() -> None:
+    """A text search would have failed on the evidence of its own rejection.
+
+    The files that record why the global inflation factor was rejected name
+    the number, so gate 13 reads the carried spec's parameters instead.
+    """
+    gates = _load_driver("05_evaluate_gates.py", "gate_driver")
+
+    clean = {"spec": {"bridge_weight_cap": 0.15, "loadings": [[0.1, 1.7035]]}}
+    assert gates.inflation_factor_in_parameters(clean) == []
+
+    revived = {
+        "spec": {"global_inflation": gates.FORBIDDEN_INFLATION_FACTOR},
+        "prose": {"note": "rejected the 1.7659 factor"},
+    }
+    offenders = gates.inflation_factor_in_parameters(revived)
+    assert [entry["path"] for entry in offenders] == [".global_inflation"]
+
+
+def test_a_new_global_dial_cannot_enter_the_spec_unannounced() -> None:
+    gates = _load_driver("05_evaluate_gates.py", "gate_driver")
+    upstream = _load_driver("upstream_spec.py", "upstream_spec_under_test")
+
+    choices = upstream.UpstreamChoices(
+        temporal="A0_pooled_empirical_bayes",
+        role_scale_mode="log_shrunk",
+        cross_team_prior="gaussian",
+        cross_team_nu=None,
+        transmission_cap=0.15,
+        uncertainty="U0_raw",
+        dependence_temperature=1.0,
+    )
+    assert set(choices.spec().payload()) == set(gates.DECLARED_SPEC_KEYS)
+
+
+def test_a_gaussian_cross_team_prior_reports_no_degrees_of_freedom() -> None:
+    spec = RemediationSpec(name="g", cross_team_prior="gaussian", cross_team_nu=None)
+    assert spec.payload()["cross_team_nu"] is None
+    assert spec.parameter_count(len(STATS))["scalar_hyperparameters"] == 2
+
+
 def _temperature_driver():
     path = (
         Path(__file__).resolve().parents[1]
