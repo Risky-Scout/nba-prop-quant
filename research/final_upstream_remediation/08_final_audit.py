@@ -1083,8 +1083,16 @@ def provenance(inner: dict, temperature: dict, frozen: dict, gates: dict) -> dic
         ),
         "12_gate_evaluator_code_sha": gates["code_sha"],
         "13_gate_report_sha256": sha256(ARTIFACT_DIR / "gate_report.json"),
+        # Both rows are HEAD at the moment the audit ran, which is one commit
+        # behind the commit that carries this file. A row cannot name the
+        # commit that contains it, so the number is stated for what it is.
         "14_report_generator_sha": git_sha(PROJECT_ROOT),
         "15_final_branch_head_sha": git_sha(PROJECT_ROOT),
+        "15_note": (
+            "HEAD when the audit ran. The commit carrying final_audit.json is "
+            "its child, since a recorded hash cannot name the commit that "
+            "contains it."
+        ),
         "control_factor_spec_hash": frozen["control"]["factor_spec_hash"],
         "control_factor_spec_file_sha256": sha256(REPAIR_DIR / "factor_spec.json"),
     }

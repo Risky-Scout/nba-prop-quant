@@ -1,7 +1,7 @@
 {
   "audit_only": true,
   "candidate_factor_spec_hash": "3229bbc83a4388c270a21008a75afacc3479cfd6f6390c8737f041412d2f2eb4",
-  "code_sha": "29dcb64af8d0ab12510797cf7da7fd06f2b77ca6",
+  "code_sha": "17143c1bbbf7b2b5e7085d53f770ebfc241299e9",
   "count_rmse": {
     "are_values_directly_comparable": "NO",
     "by_run": {
@@ -916,12 +916,15 @@
         "research/final_upstream_remediation/05_evaluate_gates.py",
         "research/final_upstream_remediation/06_write_report.py",
         "research/final_upstream_remediation/07_audit_reconciliation.py",
+        "research/final_upstream_remediation/08_final_audit.py",
+        "research/final_upstream_remediation/README.md",
         "research/final_upstream_remediation/SHA256SUMS.factors.txt",
         "research/final_upstream_remediation/SHA256SUMS.validation.txt",
         "research/final_upstream_remediation/audit_reconciliation.json",
         "research/final_upstream_remediation/covariance_diagnostics.json",
         "research/final_upstream_remediation/dependence_temperature.json",
         "research/final_upstream_remediation/factor_spec.json",
+        "research/final_upstream_remediation/final_audit.json",
         "research/final_upstream_remediation/frozen_spec.json",
         "research/final_upstream_remediation/gate_report.json",
         "research/final_upstream_remediation/inner_selection.json",
@@ -930,9 +933,10 @@
         "research/final_upstream_remediation/paired_joint_calibration.json",
         "research/final_upstream_remediation/upstream_spec.py",
         "research/final_upstream_remediation/validation_report.json",
+        "tests/test_game_latent_state_shadow_final_audit.py",
         "tests/test_game_latent_state_shadow_final_upstream_remediation.py"
       ],
-      "head": "29dcb64af8d0ab12510797cf7da7fd06f2b77ca6",
+      "head": "17143c1bbbf7b2b5e7085d53f770ebfc241299e9",
       "per_file": [
         {
           "behaviour_unchanged_because": "the moved bodies are the same expressions over the same inputs; the estimator was not edited, only relocated",
@@ -1126,8 +1130,9 @@
     "11b_validation_sha256_in_manifest": "03d35ed1733ae105f00be0d00c56a0de1e5f61985cd2c29194878c5a15b89817",
     "12_gate_evaluator_code_sha": "9343de38107feca14090697dabbd85f6a895d223",
     "13_gate_report_sha256": "391271776d1f17b8e55a7fc62686e3f5c79be38ef5373ac9e7ca7f3b02908a75",
-    "14_report_generator_sha": "29dcb64af8d0ab12510797cf7da7fd06f2b77ca6",
-    "15_final_branch_head_sha": "29dcb64af8d0ab12510797cf7da7fd06f2b77ca6",
+    "14_report_generator_sha": "17143c1bbbf7b2b5e7085d53f770ebfc241299e9",
+    "15_final_branch_head_sha": "17143c1bbbf7b2b5e7085d53f770ebfc241299e9",
+    "15_note": "HEAD when the audit ran. The commit carrying final_audit.json is its child, since a recorded hash cannot name the commit that contains it.",
     "control_factor_spec_file_sha256": "d51b387fe4b102c14a245136e3587da1ebf00f15556819970b02b4cad2a032da",
     "control_factor_spec_hash": "c9b46e3a7497cfee52832f29397397b843aafb8e5f770a39157ce508f8157bc0"
   },
