@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -85,13 +86,12 @@ from nba_prop_quant.research.game_latent_state.remediation import (  # noqa: E40
 )
 from nba_prop_quant.research.game_latent_state.transmission import (  # noqa: E402
     DEFAULT_BRIDGE_ORDER,
-    SourcePair,
     accumulate_per_game,
+    bootstrap_source_pair,
     bridge_forward,
-    bridge_inverse,
     combine_sources,
-    hermite_coefficient_columns,
     homogeneity_test,
+    transmission_coefficient_columns,
 )
 from nba_prop_quant.research.game_latent_state.validation import (  # noqa: E402
     DEPENDENCE_BUCKETS,
@@ -561,33 +561,41 @@ class Fold:
             suffixes=("", "_count"),
         )
         assert_holdout_absent(merged, f"fold {target} transmission")
-        merged, self.coefficient_diagnostics = hermite_coefficient_columns(
+        merged, self.coefficient_diagnostics = transmission_coefficient_columns(
             merged, STATS, order=DEFAULT_BRIDGE_ORDER
         )
+        orders = range(1, DEFAULT_BRIDGE_ORDER + 1)
         usable = merged.dropna(
-            subset=[f"h{k}_{stat}" for k in (1, 2) for stat in STATS]
+            subset=[f"{name}{k}_{stat}" for name in "hg" for k in orders for stat in STATS]
             + [f"zs_{stat}" for stat in STATS]
             + [f"e_{stat}" for stat in STATS]
         )
+        if len(usable) != len(merged):
+            raise SystemExit(
+                f"fold {target}: {len(merged) - len(usable)} rows lack a "
+                "transmission coefficient, which would make the control and "
+                "the bridged arms read different rows"
+            )
         self.latent_per_game = accumulate_per_game(
             usable, [f"zs_{stat}" for stat in STATS], STATS
         )
         self.count_per_game = accumulate_per_game(
             usable, [f"e_{stat}" for stat in STATS], STATS
         )
-        self.gain_per_game = [
+        self.count_gain_per_game = [
             accumulate_per_game(usable, [f"h{k}_{stat}" for stat in STATS], STATS)
-            for k in range(1, DEFAULT_BRIDGE_ORDER + 1)
+            for k in orders
         ]
-
-        from nba_prop_quant.research.game_latent_state.transmission import (
-            bootstrap_source_pair,
-        )
+        self.latent_gain_per_game = [
+            accumulate_per_game(usable, [f"g{k}_{stat}" for stat in STATS], STATS)
+            for k in orders
+        ]
 
         self.same_pair = bootstrap_source_pair(
             self.latent_per_game,
             self.count_per_game,
-            self.gain_per_game,
+            self.latent_gain_per_game,
+            self.count_gain_per_game,
             draws=bridge_bootstrap,
             seed=seed + target,
             same_team=True,
@@ -595,13 +603,16 @@ class Fold:
         self.cross_pair = bootstrap_source_pair(
             self.latent_per_game,
             self.count_per_game,
-            self.gain_per_game,
+            self.latent_gain_per_game,
+            self.count_gain_per_game,
             draws=bridge_bootstrap,
             seed=seed + target,
             same_team=False,
         )
-        self.same_gains = [moment.pooled()[0] for moment in self.gain_per_game]
-        self.cross_gains = [moment.pooled()[1] for moment in self.gain_per_game]
+        # ``score_fit`` prices a fitted latent correlation in count space, so
+        # the gains it uses are the count ones.
+        self.same_gains = [moment.pooled()[0] for moment in self.count_gain_per_game]
+        self.cross_gains = [moment.pooled()[1] for moment in self.count_gain_per_game]
 
         # Observed count-space buckets on the scoring season, for item 4's
         # objective. Built the same way, from the scoring season alone.
@@ -621,14 +632,29 @@ class Fold:
         same_counts, cross_counts = score_counts.pooled()
         self.observed_count = read_buckets(STATS, same_counts, cross_counts)
 
-    def fit(self, spec: RemediationSpec, role_scale_override=None, target_override=None):
+    def fit(self, spec: RemediationSpec, role_scale_override=None, combined=None):
+        """Fit one candidate on the training seasons.
+
+        ``combined`` replaces the *raw* pooled blocks, not the shrunk ones, so
+        the transmission layer's output still passes through the same
+        empirical-Bayes shrinkage the control applies. Overriding the shrunk
+        targets instead would have compared a bridged-and-unshrunk arm against
+        a plain-and-shrunk control and credited the difference to the bridge.
+        """
+        moments = self.train_moments
+        if combined is not None:
+            same, cross = combined
+            moments = replace(
+                moments,
+                same_team=np.asarray(same, dtype=float),
+                cross_team=np.asarray(cross, dtype=float),
+            )
         return fit_remediated_factors(
             self.train,
             STATS,
             spec=spec,
-            moments=self.train_moments,
+            moments=moments,
             role_scale_override=role_scale_override,
-            target_override=target_override,
         )
 
     def score_fit(self, fit) -> dict[str, float]:
@@ -922,7 +948,7 @@ def decide_transmission(folds: list[Fold], cross_choice: dict[str, object]) -> d
         protected_scores: dict[str, dict[str, float]] = {}
         for fold in folds:
             if cap == 0.0:
-                override = None
+                combined = None
                 weights: dict[str, object] = {
                     "mean_bridge_weight_same_team": 0.0,
                     "mean_bridge_weight_cross_team": 0.0,
@@ -932,7 +958,7 @@ def decide_transmission(folds: list[Fold], cross_choice: dict[str, object]) -> d
                 cross, cross_info = combine_sources(
                     fold.cross_pair, bridge_weight_cap=cap
                 )
-                override = (same, cross)
+                combined = (same, cross)
                 weights = {
                     "mean_bridge_weight_same_team": same_info["mean_bridge_weight"],
                     "mean_bridge_weight_cross_team": cross_info["mean_bridge_weight"],
@@ -947,7 +973,7 @@ def decide_transmission(folds: list[Fold], cross_choice: dict[str, object]) -> d
                         np.sqrt(cross_info["bridge_model_error_variance"])
                     ),
                 }
-            fit = fold.fit(spec, target_override=override)
+            fit = fold.fit(spec, combined=combined)
             scored = fold.score_fit(fit)
             protected = {
                 name: scored["latent_z_errors"][name]
@@ -962,6 +988,18 @@ def decide_transmission(folds: list[Fold], cross_choice: dict[str, object]) -> d
                         "passer_ast_teammate_pts"
                     ],
                     "passer_ast_teammate_pts_latent_z": scored["latent_z_errors"][
+                        "passer_ast_teammate_pts"
+                    ],
+                    "passer_ast_teammate_pts_implied_latent": scored[
+                        "implied_latent"
+                    ]["passer_ast_teammate_pts"],
+                    "passer_ast_teammate_pts_implied_count": scored[
+                        "implied_count"
+                    ]["passer_ast_teammate_pts"],
+                    "passer_ast_teammate_pts_observed_latent": fold.observed[
+                        "passer_ast_teammate_pts"
+                    ],
+                    "passer_ast_teammate_pts_observed_count": fold.observed_count[
                         "passer_ast_teammate_pts"
                     ],
                     "protected_z": protected,

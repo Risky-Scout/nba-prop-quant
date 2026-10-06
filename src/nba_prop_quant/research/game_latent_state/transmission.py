@@ -205,46 +205,141 @@ def _hermite_value(z: np.ndarray, order: int) -> np.ndarray:
     return hermite_e.hermeval(z, coefficients)
 
 
-def hermite_coefficient_columns(
+def conditional_hermite_moments(
+    cdf_lower: np.ndarray,
+    cdf_upper: np.ndarray,
+    order: int = DEFAULT_BRIDGE_ORDER,
+) -> list[np.ndarray]:
+    """``M_k(y) = E[He_k(Z) | Y = y]`` for one observation's PIT interval.
+
+    Under the model ``Y = y`` is exactly the event ``Z in (t_l, t_u]`` with
+    ``t = Phi^{-1}(F)``, so the conditional moment is a closed-form ratio of
+    Hermite-weighted normal tails:
+
+        int He_k(z) phi(z) dz = -He_{k-1}(z) phi(z)
+
+    which gives ``M_k = (He_{k-1}(t_l) phi(t_l) - He_{k-1}(t_u) phi(t_u)) / (F_u - F_l)``.
+
+    This replaces the single-draw estimator ``He_k(z)``. Both are unbiased for
+    the same quantity -- ``z`` is the randomized PIT, so ``z | Y`` and
+    ``Z | Y`` are the same truncated normal -- but ``M_k`` is the conditional
+    expectation of the one the draw estimates, so it carries none of the
+    randomization's variance. Rao-Blackwell, not a different estimand.
+    """
+    lower = np.clip(np.asarray(cdf_lower, dtype=float), 1e-15, 1.0 - 1e-15)
+    upper = np.clip(np.asarray(cdf_upper, dtype=float), 1e-15, 1.0 - 1e-15)
+    t_lower = stats.norm.ppf(lower)
+    t_upper = stats.norm.ppf(upper)
+    mass = np.clip(upper - lower, 1e-15, None)
+    density_lower = stats.norm.pdf(t_lower)
+    density_upper = stats.norm.pdf(t_upper)
+
+    hermite_lower = [np.ones_like(t_lower), t_lower]
+    hermite_upper = [np.ones_like(t_upper), t_upper]
+    out: list[np.ndarray] = []
+    for k in range(1, order + 1):
+        out.append(
+            (
+                hermite_lower[k - 1] * density_lower
+                - hermite_upper[k - 1] * density_upper
+            )
+            / mass
+        )
+        hermite_lower.append(
+            t_lower * hermite_lower[k] - (k - 1) * hermite_lower[k - 1]
+        )
+        hermite_upper.append(
+            t_upper * hermite_upper[k] - (k - 1) * hermite_upper[k - 1]
+        )
+    return out
+
+
+def transmission_coefficient_columns(
     frame: pd.DataFrame,
     stats: Sequence[str],
     order: int = DEFAULT_BRIDGE_ORDER,
     bins: int = DEFAULT_COEFFICIENT_BINS,
-    latent_prefix: str = "z_",
     count_prefix: str = "e_",
     mean_prefix: str = "analytic_mean_",
+    lower_prefix: str = "cdf_lower_",
+    upper_prefix: str = "cdf_upper_",
 ) -> tuple[pd.DataFrame, dict[str, object]]:
-    """Add smoothed ``h{k}_{stat}`` columns and report the smoothing.
+    """Add the transmission coefficients of *both* observable moments.
 
-    The per-observation product ``e He_k(z)`` is unbiased for that
-    observation's coefficient but has variance of order one, so it is averaged
-    within quantile bins of the analytic mean. Binning on the analytic mean
-    rather than on the realized count keeps the smoother a function of the
-    *margin*, which is what the coefficient actually depends on; binning on the
-    outcome would make ``h`` depend on the very residual it multiplies.
+    Two different observables are read off the same latent vector and neither
+    of them is the latent vector:
+
+    ``h{k}_{stat}``
+        coefficients of the standardized count residual ``e``, estimated by
+        ``e_i M_k(y_i)``. This is the bridge of the brief.
+
+    ``g{k}_{stat}``
+        coefficients of ``m(y) = E[Z | Y = y]``, which is what the *recorded*
+        latent column measures. The residual build stores the randomized PIT,
+        and the randomization is independent of ``Z`` given ``Y``, so
+
+            Corr(z_a, z_b) = Corr(m(Y_a), m(Y_b)) = sum_k rho^k g_{a,k} g_{b,k} / k!
+
+        with ``g_1 = E[m(Y)^2] < 1``. The recorded latent correlation is
+        therefore an *attenuated* reading of ``rho``, not ``rho`` itself. This
+        is not a modelling choice to be argued about; it follows from the
+        residual build storing a randomized PIT, and it is measurable: ``g_1``
+        runs from 0.93 for points down to 0.37 for blocks, because a margin
+        with mean 0.3 discards far more of the latent ordering than one with
+        mean 20.
+
+    Carrying both means the two sources can be inverted onto a common ``rho``
+    before they are compared, which is the only way an agreement test between
+    them means anything: comparing a latent reading attenuated by ``g`` with a
+    count reading attenuated by ``h`` would report a conflict wherever the two
+    attenuations differ, whether or not the model was wrong.
+
+    Both are smoothed within quantile bins of the analytic mean, which is the
+    quantity they actually vary with.
     """
     out = frame.copy()
-    diagnostics: dict[str, object] = {"bins": int(bins), "order": int(order), "by_stat": {}}
+    diagnostics: dict[str, object] = {
+        "bins": int(bins),
+        "order": int(order),
+        "by_stat": {},
+    }
     for stat in stats:
-        latent = out[f"{latent_prefix}{stat}"].to_numpy(dtype=float)
         count = out[f"{count_prefix}{stat}"].to_numpy(dtype=float)
         mean = out[f"{mean_prefix}{stat}"].to_numpy(dtype=float)
-        valid = np.isfinite(latent) & np.isfinite(count) & np.isfinite(mean)
+        lower = out[f"{lower_prefix}{stat}"].to_numpy(dtype=float)
+        upper = out[f"{upper_prefix}{stat}"].to_numpy(dtype=float)
+        valid = (
+            np.isfinite(count)
+            & np.isfinite(mean)
+            & np.isfinite(lower)
+            & np.isfinite(upper)
+        )
+        conditional = conditional_hermite_moments(lower, upper, order=order)
         labels = np.full(len(out), -1, dtype=int)
         labels[valid] = pd.qcut(
             pd.Series(mean[valid]), bins, labels=False, duplicates="drop"
         ).to_numpy()
+
         per_stat: dict[str, object] = {}
         for k in range(1, order + 1):
-            raw = np.where(valid, count * _hermite_value(latent, k), np.nan)
-            table = pd.DataFrame({"bin": labels, "value": raw})
-            means = table.loc[labels >= 0].groupby("bin")["value"].mean()
-            smoothed = means.reindex(labels).to_numpy()
-            smoothed = np.where(labels >= 0, smoothed, np.nan)
-            out[f"h{k}_{stat}"] = smoothed
-            per_stat[f"h{k}_pooled"] = float(np.nanmean(raw))
-            per_stat[f"h{k}_min_bin"] = float(np.nanmin(means.to_numpy()))
-            per_stat[f"h{k}_max_bin"] = float(np.nanmax(means.to_numpy()))
+            products = {
+                "h": count * conditional[k - 1],
+                "g": conditional[0] * conditional[k - 1],
+            }
+            for name, product in products.items():
+                raw = np.where(valid, product, np.nan)
+                table = pd.DataFrame({"bin": labels, "value": raw})
+                means = table.loc[labels >= 0].groupby("bin")["value"].mean()
+                smoothed = np.where(
+                    labels >= 0, means.reindex(labels).to_numpy(), np.nan
+                )
+                out[f"{name}{k}_{stat}"] = smoothed
+                per_stat[f"{name}{k}_pooled"] = float(np.nanmean(raw))
+                per_stat[f"{name}{k}_min_bin"] = float(np.nanmin(means.to_numpy()))
+                per_stat[f"{name}{k}_max_bin"] = float(np.nanmax(means.to_numpy()))
+        # The latent column's own first-order attenuation, reported because it
+        # is the number that decides whether the two sources can be compared.
+        per_stat["latent_attenuation_g1"] = per_stat["g1_pooled"]
         diagnostics["by_stat"][stat] = per_stat  # type: ignore[index]
     return out, diagnostics
 
@@ -434,23 +529,40 @@ def combine_sources(
 def bootstrap_source_pair(
     latent_moments: PerGameMoments,
     count_moments: PerGameMoments,
-    gain_moments: Sequence[PerGameMoments],
+    latent_gain_moments: Sequence[PerGameMoments],
+    count_gain_moments: Sequence[PerGameMoments],
     draws: int = 400,
     seed: int = 73,
     same_team: bool = True,
 ) -> SourcePair:
-    """Joint game-clustered bootstrap of the latent and bridge estimates.
+    """Joint game-clustered bootstrap of two readings of one bucket.
 
-    One resampled set of games drives every quantity, which is the only way to
-    measure the covariance between the direct and bridge-implied targets: they
-    are functions of the same games, so resampling them independently would
-    report a covariance of zero and make the pooling overconfident.
+    Both sources are expressed in the units of the *recorded latent column*,
+    which is what the factor targets and the validation metric are both stated
+    in. The count moment reaches those units by a composition, not a single
+    step:
+
+        count moment --(invert h)--> rho --(apply g)--> recorded-latent units
+
+    The round trip through ``rho`` is what makes the two comparable. Leaving
+    the count reading in count units and calling it a latent target would
+    report a conflict wherever the two attenuations merely differ, and
+    de-attenuating the *target* instead would move the model off the scale its
+    own metric is read on -- which is a different claim than the brief's, and
+    one the latent gate would correctly reject.
+
+    One resampled set of games drives every quantity. That is the only way to
+    measure the covariance between the two, since they are functions of the
+    same games and resampling them independently would report a covariance of
+    zero and make the pooling overconfident.
     """
     block = 0 if same_team else 1
+    latent_gains = [moment.pooled()[block] for moment in latent_gain_moments]
+    count_gains = [moment.pooled()[block] for moment in count_gain_moments]
     direct = latent_moments.pooled()[block]
-    counts = count_moments.pooled()[block]
-    gains = [moment.pooled()[block] for moment in gain_moments]
-    bridge = bridge_inverse(counts, gains)
+    bridge = bridge_forward(
+        bridge_inverse(count_moments.pooled()[block], count_gains), latent_gains
+    )
 
     rng = np.random.default_rng(seed)
     n_games = latent_moments.n_games
@@ -460,9 +572,13 @@ def bootstrap_source_pair(
     for draw in range(draws):
         index = rng.integers(0, n_games, size=n_games)
         latent_draws[draw] = latent_moments.pooled(index)[block]
-        drawn_counts = count_moments.pooled(index)[block]
-        drawn_gains = [moment.pooled(index)[block] for moment in gain_moments]
-        bridge_draws[draw] = bridge_inverse(drawn_counts, drawn_gains)
+        bridge_draws[draw] = bridge_forward(
+            bridge_inverse(
+                count_moments.pooled(index)[block],
+                [moment.pooled(index)[block] for moment in count_gain_moments],
+            ),
+            [moment.pooled(index)[block] for moment in latent_gain_moments],
+        )
 
     variance_latent = np.nanvar(latent_draws, axis=0, ddof=1)
     variance_bridge = np.nanvar(bridge_draws, axis=0, ddof=1)

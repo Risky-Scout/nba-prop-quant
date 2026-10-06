@@ -1,0 +1,3037 @@
+{
+  "bootstrap": 400,
+  "bridge_bootstrap": 2000,
+  "code_sha": "766ef10a76367f77e3c73a4ef2ad4df311ef750f",
+  "control_spec": {
+    "bridge_mode": "off",
+    "bridge_weight_cap": 1.0,
+    "cross_team_nu": 5.0,
+    "cross_team_prior": "gaussian",
+    "dependence_temperature": 1.0,
+    "eb_family": "block_diagonal",
+    "k_game": 6,
+    "name": "accepted_bucket_repair_control",
+    "r_contrast": 6,
+    "role_column": "role_bucket",
+    "role_scale_mode": "ratio",
+    "role_tau_log": null,
+    "shrinkage": "empirical_bayes"
+  },
+  "forward_fold_target_seasons": [
+    2021,
+    2022,
+    2023
+  ],
+  "holdout_seasons_excluded": [
+    2024,
+    2025
+  ],
+  "holdout_used_for_selection": false,
+  "item_1_temporal": {
+    "candidates_scored": [
+      "A0_pooled_empirical_bayes",
+      "A1_gaussian_random_effects",
+      "A2_robust_student_t",
+      "A3_recency_weighted_robust"
+    ],
+    "fits_on_all_training_seasons": {
+      "opponent_ast_ast": {
+        "half_life": null,
+        "i_squared": 0.0,
+        "model": "A0_pooled_empirical_bayes",
+        "nu": null,
+        "posterior_mean": 0.009133730350254742,
+        "posterior_sd": 0.0014649533411346361,
+        "predictive_probability_rho_positive": 0.9999999997738609,
+        "predictive_sd": 0.0014649533411346361,
+        "probability_rho_positive": 0.9999999997738609,
+        "q_p_value": 0.5402252545756938,
+        "q_statistic": 2.1582164129743155,
+        "stability_classification": "STABLE",
+        "tau": 0.0,
+        "weights": [
+          0.25526298617044346,
+          0.22604139099658613,
+          0.21015843634871845,
+          0.308537186484252
+        ]
+      },
+      "opponent_fg3m_reb": {
+        "half_life": null,
+        "i_squared": 0.0,
+        "model": "A0_pooled_empirical_bayes",
+        "nu": null,
+        "posterior_mean": -0.004337276256582922,
+        "posterior_sd": 0.0010257055505451175,
+        "predictive_probability_rho_positive": 1.1758632392731641e-05,
+        "predictive_sd": 0.0010257055505451175,
+        "probability_rho_positive": 1.1758632392731641e-05,
+        "q_p_value": 0.8691704664299428,
+        "q_statistic": 0.7171178340644531,
+        "stability_classification": "STABLE",
+        "tau": 0.0,
+        "weights": [
+          0.22209116644293853,
+          0.25909147686054435,
+          0.21851289658312562,
+          0.30030446011339135
+        ]
+      },
+      "opponent_pts_pts": {
+        "half_life": null,
+        "i_squared": 0.0,
+        "model": "A0_pooled_empirical_bayes",
+        "nu": null,
+        "posterior_mean": 0.016097428441103068,
+        "posterior_sd": 0.00143329671516121,
+        "predictive_probability_rho_positive": 1.0,
+        "predictive_sd": 0.00143329671516121,
+        "probability_rho_positive": 1.0,
+        "q_p_value": 0.5420860283811981,
+        "q_statistic": 2.148887227068259,
+        "stability_classification": "STABLE",
+        "tau": 0.0,
+        "weights": [
+          0.2461838709233448,
+          0.2114930246862526,
+          0.23835993741340153,
+          0.30396316697700104
+        ]
+      },
+      "opponent_pts_reb": {
+        "half_life": null,
+        "i_squared": 0.0,
+        "model": "A0_pooled_empirical_bayes",
+        "nu": null,
+        "posterior_mean": -0.004653306540824793,
+        "posterior_sd": 0.0012156008917012422,
+        "predictive_probability_rho_positive": 6.459732942851271e-05,
+        "predictive_sd": 0.0012156008917012422,
+        "probability_rho_positive": 6.459732942851271e-05,
+        "q_p_value": 0.5881446972802571,
+        "q_statistic": 1.924874677058006,
+        "stability_classification": "STABLE",
+        "tau": 0.0,
+        "weights": [
+          0.24591862599181383,
+          0.2314972310028385,
+          0.21801647180838085,
+          0.3045676711969668
+        ]
+      },
+      "opponent_reb_reb": {
+        "half_life": null,
+        "i_squared": 0.0,
+        "model": "A0_pooled_empirical_bayes",
+        "nu": null,
+        "posterior_mean": 0.012213274040153382,
+        "posterior_sd": 0.0014997481779805753,
+        "predictive_probability_rho_positive": 0.9999999999999998,
+        "predictive_sd": 0.0014997481779805753,
+        "probability_rho_positive": 0.9999999999999998,
+        "q_p_value": 0.7666707919009865,
+        "q_statistic": 1.1431426353957792,
+        "stability_classification": "STABLE",
+        "tau": 0.0,
+        "weights": [
+          0.28545015227637915,
+          0.245507900680384,
+          0.2051827040019358,
+          0.26385924304130104
+        ]
+      },
+      "opponent_stl_pts": {
+        "half_life": null,
+        "i_squared": 0.0,
+        "model": "A0_pooled_empirical_bayes",
+        "nu": null,
+        "posterior_mean": -0.0006117441481978609,
+        "posterior_sd": 0.0009627503545120114,
+        "predictive_probability_rho_positive": 0.26257952647469157,
+        "predictive_sd": 0.0009627503545120114,
+        "probability_rho_positive": 0.26257952647469157,
+        "q_p_value": 0.8645923313131028,
+        "q_statistic": 0.7364775982255668,
+        "stability_classification": "STABLE",
+        "tau": 0.0,
+        "weights": [
+          0.2201796252397563,
+          0.2730465886785653,
+          0.24234939278437895,
+          0.26442439329729955
+        ]
+      },
+      "passer_ast_teammate_pts": {
+        "half_life": null,
+        "i_squared": 0.8042602866593443,
+        "model": "A0_pooled_empirical_bayes",
+        "nu": null,
+        "posterior_mean": 0.04318256021916279,
+        "posterior_sd": 0.0013536476723384659,
+        "predictive_probability_rho_positive": 0.9999999999999807,
+        "predictive_sd": 0.005707844462119607,
+        "probability_rho_positive": 1.0,
+        "q_p_value": 0.001557876364387155,
+        "q_statistic": 15.326475904145976,
+        "stability_classification": "TIME_VARYING",
+        "tau": 0.0055450091418249355,
+        "weights": [
+          0.24960380677320418,
+          0.1930439006643261,
+          0.20615003517499134,
+          0.35120225738747846
+        ]
+      },
+      "teammate_ast_ast": {
+        "half_life": null,
+        "i_squared": 0.643772564358893,
+        "model": "A0_pooled_empirical_bayes",
+        "nu": null,
+        "posterior_mean": 0.004909841927312604,
+        "posterior_sd": 0.0015867421813964865,
+        "predictive_probability_rho_positive": 0.8589896527338572,
+        "predictive_sd": 0.004563936193214764,
+        "probability_rho_positive": 0.999013580346587,
+        "q_p_value": 0.0380568219711524,
+        "q_statistic": 8.421586042638355,
+        "stability_classification": "TIME_VARYING",
+        "tau": 0.004279224558902324,
+        "weights": [
+          0.24766979158513266,
+          0.22009319658960014,
+          0.2264511821439934,
+          0.30578582968127377
+        ]
+      },
+      "teammate_fg3m_fg3m": {
+        "half_life": null,
+        "i_squared": 0.0,
+        "model": "A0_pooled_empirical_bayes",
+        "nu": null,
+        "posterior_mean": -0.00137850778374672,
+        "posterior_sd": 0.00133472157363868,
+        "predictive_probability_rho_positive": 0.1508474644096639,
+        "predictive_sd": 0.00133472157363868,
+        "probability_rho_positive": 0.1508474644096639,
+        "q_p_value": 0.7855252010086451,
+        "q_statistic": 1.0650166367080596,
+        "stability_classification": "STABLE",
+        "tau": 0.0,
+        "weights": [
+          0.22852582406814662,
+          0.28289337693534056,
+          0.235996111011331,
+          0.25258468798518163
+        ]
+      },
+      "teammate_pts_pts": {
+        "half_life": null,
+        "i_squared": 0.0,
+        "model": "A0_pooled_empirical_bayes",
+        "nu": null,
+        "posterior_mean": -0.0027025556828583737,
+        "posterior_sd": 0.0015287783349034398,
+        "predictive_probability_rho_positive": 0.03854819297052349,
+        "predictive_sd": 0.0015287783349034398,
+        "probability_rho_positive": 0.03854819297052349,
+        "q_p_value": 0.42781787189745646,
+        "q_statistic": 2.7738795863906094,
+        "stability_classification": "STABLE",
+        "tau": 0.0,
+        "weights": [
+          0.2513668437323982,
+          0.21596805377023948,
+          0.19957085482689876,
+          0.3330942476704635
+        ]
+      },
+      "teammate_pts_reb": {
+        "half_life": null,
+        "i_squared": 0.16186611356186645,
+        "model": "A0_pooled_empirical_bayes",
+        "nu": null,
+        "posterior_mean": 0.014579831547335121,
+        "posterior_sd": 0.0013155462936945085,
+        "predictive_probability_rho_positive": 1.0,
+        "predictive_sd": 0.001753541773636485,
+        "probability_rho_positive": 1.0,
+        "q_p_value": 0.3106117454634509,
+        "q_statistic": 3.5793803932081483,
+        "stability_classification": "STABLE",
+        "tau": 0.0011594165347427264,
+        "weights": [
+          0.25355739625561713,
+          0.23577889592403808,
+          0.21174317688656594,
+          0.2989205309337788
+        ]
+      },
+      "teammate_reb_reb": {
+        "half_life": null,
+        "i_squared": 0.0,
+        "model": "A0_pooled_empirical_bayes",
+        "nu": null,
+        "posterior_mean": 0.006351012643286406,
+        "posterior_sd": 0.0015588458372193046,
+        "predictive_probability_rho_positive": 0.9999769112464418,
+        "predictive_sd": 0.0015588458372193046,
+        "probability_rho_positive": 0.9999769112464418,
+        "q_p_value": 0.6139493493152037,
+        "q_statistic": 1.8045313991636283,
+        "stability_classification": "STABLE",
+        "tau": 0.0,
+        "weights": [
+          0.27273741181214173,
+          0.25771259552037334,
+          0.20856835970252874,
+          0.2609816329649563
+        ]
+      }
+    },
+    "forward_fold_target_seasons": [
+      2022,
+      2023
+    ],
+    "forward_records": {
+      "A0_pooled_empirical_bayes": [
+        {
+          "bucket": "teammate_pts_pts",
+          "error": 0.0007306455762238056,
+          "log_score": -4.564781672148001,
+          "observed": -0.000492362935604076,
+          "observed_se": 0.0034221257228211227,
+          "prediction": -0.0012230085118278815,
+          "predictive_sd": 0.0022363017993502687,
+          "squared_z": 0.03194370937562956,
+          "target_season": 2022.0,
+          "tau": 0.0,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "teammate_pts_pts",
+          "error": -0.005098233049469705,
+          "log_score": -3.5768879722240206,
+          "observed": -0.006102596630266274,
+          "observed_se": 0.002648871880900206,
+          "prediction": -0.0010043635807965693,
+          "predictive_sd": 0.0018720277740074363,
+          "squared_z": 2.470483315122761,
+          "target_season": 2023.0,
+          "tau": 0.0,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "teammate_reb_reb",
+          "error": 0.004470645404587475,
+          "log_score": -3.979667122109439,
+          "observed": 0.009609734370002333,
+          "observed_se": 0.00341333532043478,
+          "prediction": 0.005139088965414857,
+          "predictive_sd": 0.0021403309800072626,
+          "squared_z": 1.2313223633177781,
+          "target_season": 2022.0,
+          "tau": 0.0,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "teammate_reb_reb",
+          "error": -0.00019080872833951608,
+          "log_score": -4.720557312587885,
+          "observed": 0.006210001488452904,
+          "observed_se": 0.0030513933502874365,
+          "prediction": 0.00640081021679242,
+          "predictive_sd": 0.0018133245922213469,
+          "squared_z": 0.002889717017819962,
+          "target_season": 2023.0,
+          "tau": 0.0,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "teammate_ast_ast",
+          "error": -0.001362702642856992,
+          "log_score": -4.530842795146874,
+          "observed": 0.00700538868853548,
+          "observed_se": 0.003334410546570948,
+          "prediction": 0.008368091331392472,
+          "predictive_sd": 0.0023200291382618685,
+          "squared_z": 0.1125372855274856,
+          "target_season": 2022.0,
+          "tau": 0.0,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "teammate_ast_ast",
+          "error": -0.009855717351900904,
+          "log_score": -0.6572991590143564,
+          "observed": -0.0019321367170331552,
+          "observed_se": 0.0028694435739401087,
+          "prediction": 0.007923580634867748,
+          "predictive_sd": 0.00190440638942678,
+          "squared_z": 8.189824141609385,
+          "target_season": 2023.0,
+          "tau": 0.0,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "passer_ast_teammate_pts",
+          "error": -0.004849388303447846,
+          "log_score": -3.802728029606941,
+          "observed": 0.04349191870481931,
+          "observed_se": 0.002981356662452565,
+          "prediction": 0.04834130700826716,
+          "predictive_sd": 0.0020345882458563578,
+          "squared_z": 1.805073714187502,
+          "target_season": 2022.0,
+          "tau": 0.0,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "passer_ast_teammate_pts",
+          "error": -0.010301455348869275,
+          "log_score": 1.2591154795865922,
+          "observed": 0.03649899924319271,
+          "observed_se": 0.002284162469399155,
+          "prediction": 0.04680045459206199,
+          "predictive_sd": 0.0018382431237584907,
+          "squared_z": 12.34450512295429,
+          "target_season": 2023.0,
+          "tau": 0.0007449130784065942,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "teammate_pts_reb",
+          "error": 0.0011985093606988288,
+          "log_score": -4.6972560768346066,
+          "observed": 0.01694174223101411,
+          "observed_se": 0.002858916183128063,
+          "prediction": 0.01574323287031528,
+          "predictive_sd": 0.0018806259390515597,
+          "squared_z": 0.12266486704377015,
+          "target_season": 2022.0,
+          "tau": 0.0,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "teammate_pts_reb",
+          "error": -0.005102963352706555,
+          "log_score": -3.356594055995271,
+          "observed": 0.011002248709355228,
+          "observed_se": 0.002406180832493212,
+          "prediction": 0.016105212062061783,
+          "predictive_sd": 0.001571167586091404,
+          "squared_z": 3.1532297990726743,
+          "target_season": 2023.0,
+          "tau": 0.0,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "teammate_fg3m_fg3m",
+          "error": 0.002518097412983913,
+          "log_score": -4.501030317777944,
+          "observed": 0.00040765765708692406,
+          "observed_se": 0.002747503517247019,
+          "prediction": -0.002110439755896989,
+          "predictive_sd": 0.0018663889971171157,
+          "squared_z": 0.5747560853123331,
+          "target_season": 2022.0,
+          "tau": 0.0,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "teammate_fg3m_fg3m",
+          "error": -0.000250040349612856,
+          "log_score": -4.863209885412386,
+          "observed": -0.0015653917696689073,
+          "observed_se": 0.002655749879482266,
+          "prediction": -0.0013153514200560513,
+          "predictive_sd": 0.0015438662907201702,
+          "squared_z": 0.006625335034926874,
+          "target_season": 2023.0,
+          "tau": 0.0,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "opponent_pts_pts",
+          "error": -0.0037119928441063064,
+          "log_score": -4.176613056636468,
+          "observed": 0.014190556577690795,
+          "observed_se": 0.002935752735291295,
+          "prediction": 0.0179025494217971,
+          "predictive_sd": 0.002118637285415573,
+          "squared_z": 1.0512404874295795,
+          "target_season": 2022.0,
+          "tau": 0.0,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "opponent_pts_pts",
+          "error": -0.0017565868570732779,
+          "log_score": -4.69335115316329,
+          "observed": 0.01487477928817596,
+          "observed_se": 0.002599714312626865,
+          "prediction": 0.016631366145249238,
+          "predictive_sd": 0.001717987479433453,
+          "squared_z": 0.3177753677277885,
+          "target_season": 2023.0,
+          "tau": 0.0,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "opponent_reb_reb",
+          "error": -0.0003120618307246581,
+          "log_score": -4.625019420758236,
+          "observed": 0.012915142924169048,
+          "observed_se": 0.003310914520906871,
+          "prediction": 0.013227204754893706,
+          "predictive_sd": 0.002058203142536533,
+          "squared_z": 0.006407442469510872,
+          "target_season": 2022.0,
+          "tau": 0.0,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "opponent_reb_reb",
+          "error": -0.0035130491428714203,
+          "log_score": -4.231296045357453,
+          "observed": 0.009627175384886904,
+          "observed_se": 0.0029196593742689017,
+          "prediction": 0.013140224527758324,
+          "predictive_sd": 0.0017479858443516247,
+          "squared_z": 1.0657735545131897,
+          "target_season": 2023.0,
+          "tau": 0.0,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "opponent_pts_reb",
+          "error": -0.004106982357298307,
+          "log_score": -3.9897024629898112,
+          "observed": -0.007280942084210915,
+          "observed_se": 0.0026034327059515387,
+          "prediction": -0.003173959726912608,
+          "predictive_sd": 0.001759310886756599,
+          "squared_z": 1.7084210947399343,
+          "target_season": 2022.0,
+          "tau": 0.0,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "opponent_pts_reb",
+          "error": -0.0006298011745118296,
+          "log_score": -4.98910928701345,
+          "observed": -0.00509129063829844,
+          "observed_se": 0.0022026683357808607,
+          "prediction": -0.004461489463786611,
+          "predictive_sd": 0.001457684621348644,
+          "squared_z": 0.05685433590577251,
+          "target_season": 2023.0,
+          "tau": 0.0,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "opponent_fg3m_reb",
+          "error": 0.00015983294526126894,
+          "log_score": -5.013957251494334,
+          "observed": -0.004287976063242638,
+          "observed_se": 0.002194240206555529,
+          "prediction": -0.004447809008503907,
+          "predictive_sd": 0.0014786579714493348,
+          "squared_z": 0.003648926498354634,
+          "target_season": 2022.0,
+          "tau": 0.0,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "opponent_fg3m_reb",
+          "error": 0.00020185309484077596,
+          "log_score": -5.179333011595205,
+          "observed": -0.004196040546410523,
+          "observed_se": 0.00187172402331053,
+          "prediction": -0.0043978936412512985,
+          "predictive_sd": 0.001226219315532845,
+          "squared_z": 0.00813759930697121,
+          "target_season": 2023.0,
+          "tau": 0.0,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "opponent_ast_ast",
+          "error": -0.002056301637621159,
+          "log_score": -4.501781896153688,
+          "observed": 0.006624356416815941,
+          "observed_se": 0.0031955850326190883,
+          "prediction": 0.0086806580544371,
+          "predictive_sd": 0.0021116108601204075,
+          "squared_z": 0.2882198371372949,
+          "target_season": 2022.0,
+          "tau": 0.0,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "opponent_ast_ast",
+          "error": 0.003494069674609435,
+          "log_score": -4.22774115558068,
+          "observed": 0.011549749598080234,
+          "observed_se": 0.002637363765372742,
+          "prediction": 0.0080556799234708,
+          "predictive_sd": 0.0017617301145680506,
+          "squared_z": 1.213645585462577,
+          "target_season": 2023.0,
+          "tau": 0.0,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "opponent_stl_pts",
+          "error": -0.0018493075746374432,
+          "log_score": -4.818454624941801,
+          "observed": -0.001918506323689257,
+          "observed_se": 0.0019556571460714206,
+          "prediction": -6.919874905181379e-05,
+          "predictive_sd": 0.0013708521326965641,
+          "squared_z": 0.5995862850357067,
+          "target_season": 2022.0,
+          "tau": 0.0,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "opponent_stl_pts",
+          "error": 0.00025241317885718107,
+          "log_score": -5.201442042516183,
+          "observed": -0.00042607517102023263,
+          "observed_se": 0.00187224607556335,
+          "prediction": -0.0006784883498774137,
+          "predictive_sd": 0.0011225353539778134,
+          "squared_z": 0.013369818555492716,
+          "target_season": 2023.0,
+          "tau": 0.0,
+          "training_seasons": 3.0
+        }
+      ],
+      "A1_gaussian_random_effects": [
+        {
+          "bucket": "teammate_pts_pts",
+          "error": 0.0007306455762238056,
+          "log_score": -4.564781672148001,
+          "observed": -0.000492362935604076,
+          "observed_se": 0.0034221257228211227,
+          "prediction": -0.0012230085118278815,
+          "predictive_sd": 0.0022363017993502687,
+          "squared_z": 0.03194370937562956,
+          "target_season": 2022.0,
+          "tau": 0.0,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "teammate_pts_pts",
+          "error": -0.005098233049469705,
+          "log_score": -3.5768879722240206,
+          "observed": -0.006102596630266274,
+          "observed_se": 0.002648871880900206,
+          "prediction": -0.0010043635807965693,
+          "predictive_sd": 0.0018720277740074363,
+          "squared_z": 2.470483315122761,
+          "target_season": 2023.0,
+          "tau": 0.0,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "teammate_reb_reb",
+          "error": 0.004470645404587475,
+          "log_score": -3.979667122109439,
+          "observed": 0.009609734370002333,
+          "observed_se": 0.00341333532043478,
+          "prediction": 0.005139088965414857,
+          "predictive_sd": 0.0021403309800072626,
+          "squared_z": 1.2313223633177781,
+          "target_season": 2022.0,
+          "tau": 0.0,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "teammate_reb_reb",
+          "error": -0.00019080872833951608,
+          "log_score": -4.720557312587885,
+          "observed": 0.006210001488452904,
+          "observed_se": 0.0030513933502874365,
+          "prediction": 0.00640081021679242,
+          "predictive_sd": 0.0018133245922213469,
+          "squared_z": 0.002889717017819962,
+          "target_season": 2023.0,
+          "tau": 0.0,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "teammate_ast_ast",
+          "error": -0.001362702642856992,
+          "log_score": -4.530842795146874,
+          "observed": 0.00700538868853548,
+          "observed_se": 0.003334410546570948,
+          "prediction": 0.008368091331392472,
+          "predictive_sd": 0.0023200291382618685,
+          "squared_z": 0.1125372855274856,
+          "target_season": 2022.0,
+          "tau": 0.0,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "teammate_ast_ast",
+          "error": -0.009855717351900904,
+          "log_score": -0.6572991590143564,
+          "observed": -0.0019321367170331552,
+          "observed_se": 0.0028694435739401087,
+          "prediction": 0.007923580634867748,
+          "predictive_sd": 0.00190440638942678,
+          "squared_z": 8.189824141609385,
+          "target_season": 2023.0,
+          "tau": 0.0,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "passer_ast_teammate_pts",
+          "error": -0.004849388303447846,
+          "log_score": -3.802728029606941,
+          "observed": 0.04349191870481931,
+          "observed_se": 0.002981356662452565,
+          "prediction": 0.04834130700826716,
+          "predictive_sd": 0.0020345882458563578,
+          "squared_z": 1.805073714187502,
+          "target_season": 2022.0,
+          "tau": 0.0,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "passer_ast_teammate_pts",
+          "error": -0.010302198231207031,
+          "log_score": 1.139260016991818,
+          "observed": 0.03649899924319271,
+          "observed_se": 0.002284162469399155,
+          "prediction": 0.046801197474399744,
+          "predictive_sd": 0.0018884557777035915,
+          "squared_z": 12.083259959930682,
+          "target_season": 2023.0,
+          "tau": 0.0007449130784065942,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "teammate_pts_reb",
+          "error": 0.0011985093606988288,
+          "log_score": -4.6972560768346066,
+          "observed": 0.01694174223101411,
+          "observed_se": 0.002858916183128063,
+          "prediction": 0.01574323287031528,
+          "predictive_sd": 0.0018806259390515597,
+          "squared_z": 0.12266486704377015,
+          "target_season": 2022.0,
+          "tau": 0.0,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "teammate_pts_reb",
+          "error": -0.005102963352706555,
+          "log_score": -3.356594055995271,
+          "observed": 0.011002248709355228,
+          "observed_se": 0.002406180832493212,
+          "prediction": 0.016105212062061783,
+          "predictive_sd": 0.001571167586091404,
+          "squared_z": 3.1532297990726743,
+          "target_season": 2023.0,
+          "tau": 0.0,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "teammate_fg3m_fg3m",
+          "error": 0.002518097412983913,
+          "log_score": -4.501030317777944,
+          "observed": 0.00040765765708692406,
+          "observed_se": 0.002747503517247019,
+          "prediction": -0.002110439755896989,
+          "predictive_sd": 0.0018663889971171157,
+          "squared_z": 0.5747560853123331,
+          "target_season": 2022.0,
+          "tau": 0.0,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "teammate_fg3m_fg3m",
+          "error": -0.000250040349612856,
+          "log_score": -4.863209885412386,
+          "observed": -0.0015653917696689073,
+          "observed_se": 0.002655749879482266,
+          "prediction": -0.0013153514200560513,
+          "predictive_sd": 0.0015438662907201702,
+          "squared_z": 0.006625335034926874,
+          "target_season": 2023.0,
+          "tau": 0.0,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "opponent_pts_pts",
+          "error": -0.0037119928441063064,
+          "log_score": -4.176613056636468,
+          "observed": 0.014190556577690795,
+          "observed_se": 0.002935752735291295,
+          "prediction": 0.0179025494217971,
+          "predictive_sd": 0.002118637285415573,
+          "squared_z": 1.0512404874295795,
+          "target_season": 2022.0,
+          "tau": 0.0,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "opponent_pts_pts",
+          "error": -0.0017565868570732779,
+          "log_score": -4.69335115316329,
+          "observed": 0.01487477928817596,
+          "observed_se": 0.002599714312626865,
+          "prediction": 0.016631366145249238,
+          "predictive_sd": 0.001717987479433453,
+          "squared_z": 0.3177753677277885,
+          "target_season": 2023.0,
+          "tau": 0.0,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "opponent_reb_reb",
+          "error": -0.0003120618307246581,
+          "log_score": -4.625019420758236,
+          "observed": 0.012915142924169048,
+          "observed_se": 0.003310914520906871,
+          "prediction": 0.013227204754893706,
+          "predictive_sd": 0.002058203142536533,
+          "squared_z": 0.006407442469510872,
+          "target_season": 2022.0,
+          "tau": 0.0,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "opponent_reb_reb",
+          "error": -0.0035130491428714203,
+          "log_score": -4.231296045357453,
+          "observed": 0.009627175384886904,
+          "observed_se": 0.0029196593742689017,
+          "prediction": 0.013140224527758324,
+          "predictive_sd": 0.0017479858443516247,
+          "squared_z": 1.0657735545131897,
+          "target_season": 2023.0,
+          "tau": 0.0,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "opponent_pts_reb",
+          "error": -0.004106982357298307,
+          "log_score": -3.9897024629898112,
+          "observed": -0.007280942084210915,
+          "observed_se": 0.0026034327059515387,
+          "prediction": -0.003173959726912608,
+          "predictive_sd": 0.001759310886756599,
+          "squared_z": 1.7084210947399343,
+          "target_season": 2022.0,
+          "tau": 0.0,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "opponent_pts_reb",
+          "error": -0.0006298011745118296,
+          "log_score": -4.98910928701345,
+          "observed": -0.00509129063829844,
+          "observed_se": 0.0022026683357808607,
+          "prediction": -0.004461489463786611,
+          "predictive_sd": 0.001457684621348644,
+          "squared_z": 0.05685433590577251,
+          "target_season": 2023.0,
+          "tau": 0.0,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "opponent_fg3m_reb",
+          "error": 0.00015983294526126894,
+          "log_score": -5.013957251494334,
+          "observed": -0.004287976063242638,
+          "observed_se": 0.002194240206555529,
+          "prediction": -0.004447809008503907,
+          "predictive_sd": 0.0014786579714493348,
+          "squared_z": 0.003648926498354634,
+          "target_season": 2022.0,
+          "tau": 0.0,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "opponent_fg3m_reb",
+          "error": 0.00020185309484077596,
+          "log_score": -5.179333011595205,
+          "observed": -0.004196040546410523,
+          "observed_se": 0.00187172402331053,
+          "prediction": -0.0043978936412512985,
+          "predictive_sd": 0.001226219315532845,
+          "squared_z": 0.00813759930697121,
+          "target_season": 2023.0,
+          "tau": 0.0,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "opponent_ast_ast",
+          "error": -0.002056301637621159,
+          "log_score": -4.501781896153688,
+          "observed": 0.006624356416815941,
+          "observed_se": 0.0031955850326190883,
+          "prediction": 0.0086806580544371,
+          "predictive_sd": 0.0021116108601204075,
+          "squared_z": 0.2882198371372949,
+          "target_season": 2022.0,
+          "tau": 0.0,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "opponent_ast_ast",
+          "error": 0.003494069674609435,
+          "log_score": -4.22774115558068,
+          "observed": 0.011549749598080234,
+          "observed_se": 0.002637363765372742,
+          "prediction": 0.0080556799234708,
+          "predictive_sd": 0.0017617301145680506,
+          "squared_z": 1.213645585462577,
+          "target_season": 2023.0,
+          "tau": 0.0,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "opponent_stl_pts",
+          "error": -0.0018493075746374432,
+          "log_score": -4.818454624941801,
+          "observed": -0.001918506323689257,
+          "observed_se": 0.0019556571460714206,
+          "prediction": -6.919874905181379e-05,
+          "predictive_sd": 0.0013708521326965641,
+          "squared_z": 0.5995862850357067,
+          "target_season": 2022.0,
+          "tau": 0.0,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "opponent_stl_pts",
+          "error": 0.00025241317885718107,
+          "log_score": -5.201442042516183,
+          "observed": -0.00042607517102023263,
+          "observed_se": 0.00187224607556335,
+          "prediction": -0.0006784883498774137,
+          "predictive_sd": 0.0011225353539778134,
+          "squared_z": 0.013369818555492716,
+          "target_season": 2023.0,
+          "tau": 0.0,
+          "training_seasons": 3.0
+        }
+      ],
+      "A2_robust_student_t": [
+        {
+          "bucket": "teammate_pts_pts",
+          "error": 0.000730345975621088,
+          "log_score": -4.567860306559213,
+          "observed": -0.000492362935604076,
+          "observed_se": 0.0034221257228211227,
+          "prediction": -0.001222708911225164,
+          "predictive_sd": 0.002212584124439228,
+          "squared_z": 0.032120321097261456,
+          "target_season": 2022.0,
+          "tau": 9.365676125691251e-11,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "teammate_pts_pts",
+          "error": -0.005099905575824226,
+          "log_score": -3.5706532691059305,
+          "observed": -0.006102596630266274,
+          "observed_se": 0.002648871880900206,
+          "prediction": -0.001002691054442048,
+          "predictive_sd": 0.0018514084534049509,
+          "squared_z": 2.490276753663983,
+          "target_season": 2023.0,
+          "tau": 9.742834692316866e-11,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "teammate_reb_reb",
+          "error": 0.0044709739974403175,
+          "log_score": -3.9789979467322865,
+          "observed": 0.009609734370002333,
+          "observed_se": 0.00341333532043478,
+          "prediction": 0.005138760372562015,
+          "predictive_sd": 0.002121584306009699,
+          "squared_z": 1.2375950805506435,
+          "target_season": 2022.0,
+          "tau": 4.652886173224813e-11,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "teammate_reb_reb",
+          "error": -0.00019434717436246467,
+          "log_score": -4.721826103288209,
+          "observed": 0.006210001488452904,
+          "observed_se": 0.0030513933502874365,
+          "prediction": 0.006404348662815368,
+          "predictive_sd": 0.0018040941823174975,
+          "squared_z": 0.0030058534150366996,
+          "target_season": 2023.0,
+          "tau": 1.3591732420977607e-10,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "teammate_ast_ast",
+          "error": -0.0013626322786092198,
+          "log_score": -4.5341801749949635,
+          "observed": 0.00700538868853548,
+          "observed_se": 0.003334410546570948,
+          "prediction": 0.0083680209671447,
+          "predictive_sd": 0.0022932624181733973,
+          "squared_z": 0.11337409020408959,
+          "target_season": 2022.0,
+          "tau": 1.5524931540145348e-10,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "teammate_ast_ast",
+          "error": -0.009854808510464975,
+          "log_score": -0.6330601192346004,
+          "observed": -0.0019321367170331552,
+          "observed_se": 0.0028694435739401087,
+          "prediction": 0.007922671793431821,
+          "predictive_sd": 0.0018827886785081642,
+          "squared_z": 8.24522895867362,
+          "target_season": 2023.0,
+          "tau": 4.319612833341845e-12,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "passer_ast_teammate_pts",
+          "error": -0.004848788577155927,
+          "log_score": -3.8003039642499274,
+          "observed": 0.04349191870481931,
+          "observed_se": 0.002981356662452565,
+          "prediction": 0.04834070728197524,
+          "predictive_sd": 0.0020136347560581005,
+          "squared_z": 1.816454045168026,
+          "target_season": 2022.0,
+          "tau": 8.086162124187817e-11,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "passer_ast_teammate_pts",
+          "error": -0.010315387008271483,
+          "log_score": 1.6876260596081396,
+          "observed": 0.03649899924319271,
+          "observed_se": 0.002284162469399155,
+          "prediction": 0.046814386251464196,
+          "predictive_sd": 0.001673469552042829,
+          "squared_z": 13.271209252127846,
+          "target_season": 2023.0,
+          "tau": 6.009614861925375e-12,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "teammate_pts_reb",
+          "error": 0.001198366120537888,
+          "log_score": -4.7000199569259475,
+          "observed": 0.01694174223101411,
+          "observed_se": 0.002858916183128063,
+          "prediction": 0.015743376110476222,
+          "predictive_sd": 0.0018610652441648527,
+          "squared_z": 0.1234068579424772,
+          "target_season": 2022.0,
+          "tau": 1.8885942516505102e-11,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "teammate_pts_reb",
+          "error": -0.00510547893623803,
+          "log_score": -3.348239654427087,
+          "observed": 0.011002248709355228,
+          "observed_se": 0.002406180832493212,
+          "prediction": 0.016107727645593258,
+          "predictive_sd": 0.0015546340493502418,
+          "squared_z": 3.1762162995490004,
+          "target_season": 2023.0,
+          "tau": 1.4245760494023416e-10,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "teammate_fg3m_fg3m",
+          "error": 0.0025189317224899675,
+          "log_score": -4.502083462843696,
+          "observed": 0.00040765765708692406,
+          "observed_se": 0.002747503517247019,
+          "prediction": -0.0021112740654030434,
+          "predictive_sd": 0.0018489876814283828,
+          "squared_z": 0.5785273831505611,
+          "target_season": 2022.0,
+          "tau": 1.0102929289490514e-10,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "teammate_fg3m_fg3m",
+          "error": -0.00025580547652388395,
+          "log_score": -4.864983455084306,
+          "observed": -0.0015653917696689073,
+          "observed_se": 0.002655749879482266,
+          "prediction": -0.0013095862931450234,
+          "predictive_sd": 0.0015319760539013226,
+          "squared_z": 0.006961354663174526,
+          "target_season": 2023.0,
+          "tau": 1.1819925937027373e-10,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "opponent_pts_pts",
+          "error": -0.0037106010151656543,
+          "log_score": -4.1768708740874505,
+          "observed": 0.014190556577690795,
+          "observed_se": 0.002935752735291295,
+          "prediction": 0.01790115759285645,
+          "predictive_sd": 0.0021027559183426974,
+          "squared_z": 1.055852811657044,
+          "target_season": 2022.0,
+          "tau": 5.2154070374399464e-11,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "opponent_pts_pts",
+          "error": -0.001743238895043065,
+          "log_score": -4.69682977248952,
+          "observed": 0.01487477928817596,
+          "observed_se": 0.002599714312626865,
+          "prediction": 0.016618018183219025,
+          "predictive_sd": 0.0017091444262828683,
+          "squared_z": 0.313944155599342,
+          "target_season": 2023.0,
+          "tau": 7.835471070132085e-11,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "opponent_reb_reb",
+          "error": -0.00031209834414687616,
+          "log_score": -4.628287513701226,
+          "observed": 0.012915142924169048,
+          "observed_se": 0.003310914520906871,
+          "prediction": 0.013227241268315924,
+          "predictive_sd": 0.0020338444796167625,
+          "squared_z": 0.006451251843193172,
+          "target_season": 2022.0,
+          "tau": 5.347340151439499e-11,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "opponent_reb_reb",
+          "error": -0.003512913233783388,
+          "log_score": -4.231120652995051,
+          "observed": 0.009627175384886904,
+          "observed_se": 0.0029196593742689017,
+          "prediction": 0.013140088618670292,
+          "predictive_sd": 0.001727141239216106,
+          "squared_z": 1.0723994698262191,
+          "target_season": 2023.0,
+          "tau": 4.0913474543839516e-11,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "opponent_pts_reb",
+          "error": -0.004106939936781455,
+          "log_score": -3.987197610456374,
+          "observed": -0.007280942084210915,
+          "observed_se": 0.0026034327059515387,
+          "prediction": -0.0031740021474294597,
+          "predictive_sd": 0.0017394543502874849,
+          "squared_z": 1.720492349914548,
+          "target_season": 2022.0,
+          "tau": 4.4591634072707855e-11,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "opponent_pts_reb",
+          "error": -0.0006448527622471868,
+          "log_score": -4.989151293345887,
+          "observed": -0.00509129063829844,
+          "observed_se": 0.0022026683357808607,
+          "prediction": -0.004446437876051253,
+          "predictive_sd": 0.0014504651803571055,
+          "squared_z": 0.05978424034241551,
+          "target_season": 2023.0,
+          "tau": 4.358303257377964e-11,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "opponent_fg3m_reb",
+          "error": 0.00016067968904706284,
+          "log_score": -5.0164083676771245,
+          "observed": -0.004287976063242638,
+          "observed_se": 0.002194240206555529,
+          "prediction": -0.004448655752289701,
+          "predictive_sd": 0.0014668996169057275,
+          "squared_z": 0.003706024496617922,
+          "target_season": 2022.0,
+          "tau": 5.343957376445854e-11,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "opponent_fg3m_reb",
+          "error": 0.00020152381228224353,
+          "log_score": -5.18210326619523,
+          "observed": -0.004196040546410523,
+          "observed_se": 0.00187172402331053,
+          "prediction": -0.004397564358692766,
+          "predictive_sd": 0.001214848274197208,
+          "squared_z": 0.008156287879467226,
+          "target_season": 2023.0,
+          "tau": 5.358870152707191e-11,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "opponent_ast_ast",
+          "error": -0.0020554441100721094,
+          "log_score": -4.5036809945615115,
+          "observed": 0.006624356416815941,
+          "observed_se": 0.0031955850326190883,
+          "prediction": 0.00867980052688805,
+          "predictive_sd": 0.0020942068248225535,
+          "squared_z": 0.2894235555058629,
+          "target_season": 2022.0,
+          "tau": 1.4158636472126525e-10,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "opponent_ast_ast",
+          "error": 0.003503421090954707,
+          "log_score": -4.223905374298156,
+          "observed": 0.011549749598080234,
+          "observed_se": 0.002637363765372742,
+          "prediction": 0.008046328507125527,
+          "predictive_sd": 0.0017467938202211548,
+          "squared_z": 1.2265402650675654,
+          "target_season": 2023.0,
+          "tau": 6.904075726532549e-11,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "opponent_stl_pts",
+          "error": -0.0018492281799708092,
+          "log_score": -4.819988281763563,
+          "observed": -0.001918506323689257,
+          "observed_se": 0.0019556571460714206,
+          "prediction": -6.927814371844789e-05,
+          "predictive_sd": 0.0013550640902336686,
+          "squared_z": 0.604092840407151,
+          "target_season": 2022.0,
+          "tau": 8.943531532908251e-12,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "opponent_stl_pts",
+          "error": 0.0002509921699840366,
+          "log_score": -5.203978110083846,
+          "observed": -0.00042607517102023263,
+          "observed_se": 0.00187224607556335,
+          "prediction": -0.0006770673410042693,
+          "predictive_sd": 0.0011119237479263419,
+          "squared_z": 0.01328581266577536,
+          "target_season": 2023.0,
+          "tau": 5.757692898670936e-11,
+          "training_seasons": 3.0
+        }
+      ],
+      "A3_recency_weighted_robust": [
+        {
+          "bucket": "teammate_pts_pts",
+          "error": 0.0011302061832215858,
+          "log_score": -4.497766871909437,
+          "observed": -0.000492362935604076,
+          "observed_se": 0.0034221257228211227,
+          "prediction": -0.001622569118825662,
+          "predictive_sd": 0.002587570788267228,
+          "squared_z": 0.06939767492178242,
+          "target_season": 2022.0,
+          "tau": 4.2882079685027895e-11,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "teammate_pts_pts",
+          "error": -0.0050916982038251134,
+          "log_score": -3.7161541551463126,
+          "observed": -0.006102596630266274,
+          "observed_se": 0.002648871880900206,
+          "prediction": -0.0010108984264411611,
+          "predictive_sd": 0.002483734856670519,
+          "squared_z": 1.9662103920522658,
+          "target_season": 2023.0,
+          "tau": 9.742834692316866e-11,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "teammate_reb_reb",
+          "error": 0.003920159464545558,
+          "log_score": -4.117898456240438,
+          "observed": 0.009609734370002333,
+          "observed_se": 0.00341333532043478,
+          "prediction": 0.005689574905456775,
+          "predictive_sd": 0.0024606762930819495,
+          "squared_z": 0.8679451099109601,
+          "target_season": 2022.0,
+          "tau": 3.355476989347733e-13,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "teammate_reb_reb",
+          "error": -0.001517818857785536,
+          "log_score": -4.5515738479647965,
+          "observed": 0.006210001488452904,
+          "observed_se": 0.0030513933502874365,
+          "prediction": 0.00772782034623844,
+          "predictive_sd": 0.002432726238784221,
+          "squared_z": 0.15127389412930958,
+          "target_season": 2023.0,
+          "tau": 1.8041651951545741e-12,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "teammate_ast_ast",
+          "error": -0.0016352985870583172,
+          "log_score": -4.462993536225994,
+          "observed": 0.00700538868853548,
+          "observed_se": 0.003334410546570948,
+          "prediction": 0.008640687275593797,
+          "predictive_sd": 0.0026743269299950817,
+          "squared_z": 0.14636863115368304,
+          "target_season": 2022.0,
+          "tau": 8.231062348422383e-11,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "teammate_ast_ast",
+          "error": -0.00964143885087771,
+          "log_score": -1.4296675808395243,
+          "observed": -0.0019321367170331552,
+          "observed_se": 0.0028694435739401087,
+          "prediction": 0.0077093021338445564,
+          "predictive_sd": 0.002485489103334999,
+          "squared_z": 6.450281371466614,
+          "target_season": 2023.0,
+          "tau": 7.25425297736775e-11,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "passer_ast_teammate_pts",
+          "error": -0.005252569261428523,
+          "log_score": -3.701484071472291,
+          "observed": 0.04349191870481931,
+          "observed_se": 0.002981356662452565,
+          "prediction": 0.048744487966247835,
+          "predictive_sd": 0.002376359993381632,
+          "squared_z": 1.8980662992539998,
+          "target_season": 2022.0,
+          "tau": 2.0028125169290504e-11,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "passer_ast_teammate_pts",
+          "error": -0.00925427798154016,
+          "log_score": -0.6339455856256535,
+          "observed": 0.03649899924319271,
+          "observed_se": 0.002284162469399155,
+          "prediction": 0.04575327722473287,
+          "predictive_sd": 0.0022349212456884275,
+          "squared_z": 8.386152268100146,
+          "target_season": 2023.0,
+          "tau": 9.59607320632635e-11,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "teammate_pts_reb",
+          "error": 0.001550155280494174,
+          "log_score": -4.618747974891359,
+          "observed": 0.01694174223101411,
+          "observed_se": 0.002858916183128063,
+          "prediction": 0.015391586950519936,
+          "predictive_sd": 0.002161781610873006,
+          "squared_z": 0.1870504579149409,
+          "target_season": 2022.0,
+          "tau": 4.715029824756369e-11,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "teammate_pts_reb",
+          "error": -0.005228748438992703,
+          "log_score": -3.4791510072428036,
+          "observed": 0.011002248709355228,
+          "observed_se": 0.002406180832493212,
+          "prediction": 0.01623099714834793,
+          "predictive_sd": 0.002076289808503248,
+          "squared_z": 2.70672817755025,
+          "target_season": 2023.0,
+          "tau": 5.612554031063346e-13,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "teammate_fg3m_fg3m",
+          "error": 0.0029383158555571047,
+          "log_score": -4.38725693518432,
+          "observed": 0.00040765765708692406,
+          "observed_se": 0.002747503517247019,
+          "prediction": -0.0025306581984701807,
+          "predictive_sd": 0.0020969133409080554,
+          "squared_z": 0.7227380996516732,
+          "target_season": 2022.0,
+          "tau": 3.725279679831795e-11,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "teammate_fg3m_fg3m",
+          "error": -0.0006449046139836784,
+          "log_score": -4.766886660428763,
+          "observed": -0.0015653917696689073,
+          "observed_se": 0.002655749879482266,
+          "prediction": -0.0009204871556852289,
+          "predictive_sd": 0.0020101269547760825,
+          "squared_z": 0.03749020101103771,
+          "target_season": 2023.0,
+          "tau": 4.676473298172023e-11,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "opponent_pts_pts",
+          "error": -0.004360470860750899,
+          "log_score": -3.997810867742259,
+          "observed": 0.014190556577690795,
+          "observed_se": 0.002935752735291295,
+          "prediction": 0.018551027438441694,
+          "predictive_sd": 0.002458816587998089,
+          "squared_z": 1.2965873905084493,
+          "target_season": 2022.0,
+          "tau": 8.180379706104683e-11,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "opponent_pts_pts",
+          "error": -0.0010786986404077749,
+          "log_score": -4.706354212028048,
+          "observed": 0.01487477928817596,
+          "observed_se": 0.002599714312626865,
+          "prediction": 0.015953477928583735,
+          "predictive_sd": 0.0022401236314141637,
+          "squared_z": 0.09880474835119452,
+          "target_season": 2023.0,
+          "tau": 1.3045372400711053e-10,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "opponent_reb_reb",
+          "error": -0.00012485495551488486,
+          "log_score": -4.583069220724927,
+          "observed": 0.012915142924169048,
+          "observed_se": 0.003310914520906871,
+          "prediction": 0.013039997879683933,
+          "predictive_sd": 0.0023784487408777385,
+          "squared_z": 0.0009379985130613374,
+          "target_season": 2022.0,
+          "tau": 4.334388013979164e-11,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "opponent_reb_reb",
+          "error": -0.0033485850029145465,
+          "log_score": -4.268663711137821,
+          "observed": 0.009627175384886904,
+          "observed_se": 0.0029196593742689017,
+          "prediction": 0.01297576038780145,
+          "predictive_sd": 0.002344769432535848,
+          "squared_z": 0.7996532592977993,
+          "target_season": 2023.0,
+          "tau": 9.426215010883531e-11,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "opponent_pts_reb",
+          "error": -0.004344360323414226,
+          "log_score": -3.927073706508035,
+          "observed": -0.007280942084210915,
+          "observed_se": 0.0026034327059515387,
+          "prediction": -0.002936581760796688,
+          "predictive_sd": 0.002018568525807654,
+          "squared_z": 1.7390923843364334,
+          "target_season": 2022.0,
+          "tau": 7.085956109544553e-11,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "opponent_pts_reb",
+          "error": 0.00025667661856647317,
+          "log_score": -4.911010347220872,
+          "observed": -0.00509129063829844,
+          "observed_se": 0.0022026683357808607,
+          "prediction": -0.005347967256864913,
+          "predictive_sd": 0.0019275098656529783,
+          "squared_z": 0.007690272314091181,
+          "target_season": 2023.0,
+          "tau": 1.6245822507470947e-09,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "opponent_fg3m_reb",
+          "error": 0.0005688478037818119,
+          "log_score": -4.9529715401118874,
+          "observed": -0.004287976063242638,
+          "observed_se": 0.002194240206555529,
+          "prediction": -0.00485682386702445,
+          "predictive_sd": 0.0016712188111780624,
+          "squared_z": 0.04253446155998817,
+          "target_season": 2022.0,
+          "tau": 1.065761068930153e-11,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "opponent_fg3m_reb",
+          "error": 0.0003496634094604222,
+          "log_score": -5.078162901313229,
+          "observed": -0.004196040546410523,
+          "observed_se": 0.00187172402331053,
+          "prediction": -0.004545703955870945,
+          "predictive_sd": 0.0015978350425634926,
+          "squared_z": 0.02018756057677447,
+          "target_season": 2023.0,
+          "tau": 6.272259432735537e-11,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "opponent_ast_ast",
+          "error": -0.0026453878835330444,
+          "log_score": -4.380717667125828,
+          "observed": 0.006624356416815941,
+          "observed_se": 0.0031955850326190883,
+          "prediction": 0.009269744300348985,
+          "predictive_sd": 0.0024424617365488882,
+          "squared_z": 0.4325839994710216,
+          "target_season": 2022.0,
+          "tau": 1.1758253564365063e-10,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "opponent_ast_ast",
+          "error": 0.003732402291768862,
+          "log_score": -4.16827784338617,
+          "observed": 0.011549749598080234,
+          "observed_se": 0.002637363765372742,
+          "prediction": 0.007817347306311373,
+          "predictive_sd": 0.0023348684864024486,
+          "squared_z": 1.1227929182487426,
+          "target_season": 2023.0,
+          "tau": 1.0133413200335089e-10,
+          "training_seasons": 3.0
+        },
+        {
+          "bucket": "opponent_stl_pts",
+          "error": -0.001694693682184924,
+          "log_score": -4.845463622120709,
+          "observed": -0.001918506323689257,
+          "observed_se": 0.0019556571460714206,
+          "prediction": -0.0002238126415043331,
+          "predictive_sd": 0.0015372332022291454,
+          "squared_z": 0.464145901095518,
+          "target_season": 2022.0,
+          "tau": 2.7664360444820973e-11,
+          "training_seasons": 2.0
+        },
+        {
+          "bucket": "opponent_stl_pts",
+          "error": 0.0007465081470558318,
+          "log_score": -5.077685573822654,
+          "observed": -0.00042607517102023263,
+          "observed_se": 0.00187224607556335,
+          "prediction": -0.0011725833180760644,
+          "predictive_sd": 0.001447268303526567,
+          "squared_z": 0.09951522674129341,
+          "target_season": 2023.0,
+          "tau": 5.86495882854379e-11,
+          "training_seasons": 3.0
+        }
+      ]
+    },
+    "half_life_grid": [
+      1.0,
+      2.0,
+      4.0
+    ],
+    "half_life_selected": 1.0,
+    "nu_forward_log_scores": {
+      "15.0": -4.0460601470436295,
+      "3.0": -4.022296207637531,
+      "40.0": -4.049754352728875,
+      "5.0": -4.034150171363567,
+      "8.0": -4.040858271683474
+    },
+    "nu_grid": [
+      3.0,
+      5.0,
+      8.0,
+      15.0,
+      40.0
+    ],
+    "nu_selected": 40.0,
+    "paired_difference_against_control": {
+      "A0_pooled_empirical_bayes": {
+        "mean": 0.0,
+        "standard_error": 0.0
+      },
+      "A1_gaussian_random_effects": {
+        "mean": -0.004993977608115596,
+        "standard_error": 0.004993977608115597
+      },
+      "A2_robust_student_t": {
+        "mean": 0.018559827582448674,
+        "standard_error": 0.017929462718083003
+      },
+      "A3_recency_weighted_robust": {
+        "mean": -0.06755198203926627,
+        "standard_error": 0.0832089041890611
+      }
+    },
+    "per_bucket_forward_log_score": {
+      "A0_pooled_empirical_bayes": {
+        "opponent_ast_ast": -4.364761525867184,
+        "opponent_fg3m_reb": -5.09664513154477,
+        "opponent_pts_pts": -4.434982104899879,
+        "opponent_pts_reb": -4.489405875001631,
+        "opponent_reb_reb": -4.428157733057844,
+        "opponent_stl_pts": -5.0099483337289925,
+        "passer_ast_teammate_pts": -1.2718062750101744,
+        "teammate_ast_ast": -2.5940709770806154,
+        "teammate_fg3m_fg3m": -4.6821201015951655,
+        "teammate_pts_pts": -4.070834822186011,
+        "teammate_pts_reb": -4.026925066414939,
+        "teammate_reb_reb": -4.350112217348662
+      },
+      "A1_gaussian_random_effects": {
+        "opponent_ast_ast": -4.364761525867184,
+        "opponent_fg3m_reb": -5.09664513154477,
+        "opponent_pts_pts": -4.434982104899879,
+        "opponent_pts_reb": -4.489405875001631,
+        "opponent_reb_reb": -4.428157733057844,
+        "opponent_stl_pts": -5.0099483337289925,
+        "passer_ast_teammate_pts": -1.3317340063075616,
+        "teammate_ast_ast": -2.5940709770806154,
+        "teammate_fg3m_fg3m": -4.6821201015951655,
+        "teammate_pts_pts": -4.070834822186011,
+        "teammate_pts_reb": -4.026925066414939,
+        "teammate_reb_reb": -4.350112217348662
+      },
+      "A2_robust_student_t": {
+        "opponent_ast_ast": -4.363793184429834,
+        "opponent_fg3m_reb": -5.099255816936177,
+        "opponent_pts_pts": -4.4368503232884855,
+        "opponent_pts_reb": -4.488174451901131,
+        "opponent_reb_reb": -4.429704083348138,
+        "opponent_stl_pts": -5.011983195923705,
+        "passer_ast_teammate_pts": -1.056338952320894,
+        "teammate_ast_ast": -2.583620147114782,
+        "teammate_fg3m_fg3m": -4.683533458964001,
+        "teammate_pts_pts": -4.069256787832572,
+        "teammate_pts_reb": -4.024129805676518,
+        "teammate_reb_reb": -4.350412025010248
+      },
+      "A3_recency_weighted_robust": {
+        "opponent_ast_ast": -4.274497755255998,
+        "opponent_fg3m_reb": -5.015567220712558,
+        "opponent_pts_pts": -4.352082539885153,
+        "opponent_pts_reb": -4.419042026864453,
+        "opponent_reb_reb": -4.4258664659313744,
+        "opponent_stl_pts": -4.961574597971682,
+        "passer_ast_teammate_pts": -2.1677148285489722,
+        "teammate_ast_ast": -2.9463305585327593,
+        "teammate_fg3m_fg3m": -4.577071797806541,
+        "teammate_pts_pts": -4.106960513527874,
+        "teammate_pts_reb": -4.048949491067081,
+        "teammate_reb_reb": -4.334736152102617
+      }
+    },
+    "pooled_forward_log_score": {
+      "A0_pooled_empirical_bayes": -4.068314180311322,
+      "A1_gaussian_random_effects": -4.073308157919438,
+      "A2_robust_student_t": -4.049754352728874,
+      "A3_recency_weighted_robust": -4.135866162350587
+    },
+    "pooled_forward_log_score_se": {
+      "A0_pooled_empirical_bayes": 0.31291648802758615,
+      "A1_gaussian_random_effects": 0.30887287109609185,
+      "A2_robust_student_t": 0.3281671847515562,
+      "A3_recency_weighted_robust": 0.23382753478117424
+    },
+    "primary_bucket": "teammate_ast_ast",
+    "primary_bucket_series": {
+      "estimates": [
+        0.007612923999500611,
+        0.009217877415649813,
+        0.00700538868853548,
+        -0.0019321367170331552
+      ],
+      "seasons": [
+        2020,
+        2021,
+        2022,
+        2023
+      ],
+      "standard_errors": [
+        0.003188378322065304,
+        0.0033822293818446723,
+        0.003334410546570948,
+        0.0028694435739401087
+      ]
+    },
+    "selected": "A0_pooled_empirical_bayes",
+    "selection": {
+      "best": "A3_recency_weighted_robust",
+      "difference_from_best": 0.06755198203926627,
+      "difference_se": 0.0832089041890611,
+      "reason": "simplest candidate within 1.0 SE of A3_recency_weighted_robust: worse by 0.067552 +/- 0.0832089",
+      "selected": "A0_pooled_empirical_bayes"
+    }
+  },
+  "item_2_role_scale": {
+    "candidates": {
+      "log_shrunk": {
+        "folds": [
+          {
+            "by_cell": {
+              "bench+bench": 0.04632726278760787,
+              "rotation+bench": 0.006129826910554875,
+              "rotation+rotation": 0.010474065606098353,
+              "starter+bench": 0.023320937851919105,
+              "starter+rotation": 0.01130496962439846,
+              "starter+starter": 0.014144506123015307
+            },
+            "pooled_block_max_change": 0.0,
+            "role_scale": {
+              "bench": 1.224207054498685,
+              "rotation": 0.827735879079415,
+              "starter": 0.9516382883291385
+            },
+            "role_scale_fit": {
+              "log_standard_errors": {
+                "bench": 0.05139272733795769,
+                "rotation": 0.07241105390496297,
+                "starter": 0.045187258041609085
+              },
+              "mode": "log_shrunk",
+              "player_shares": {
+                "bench": 0.33352035908945177,
+                "rotation": 0.34337928823340813,
+                "starter": 0.3231003526771401
+              },
+              "raw_scales": {
+                "bench": 1.6222069560287031,
+                "rotation": 1.087191674133121,
+                "starter": 1.2503502933718253
+              },
+              "scales": {
+                "bench": 1.224207054498685,
+                "rotation": 0.827735879079415,
+                "starter": 0.9516382883291385
+              },
+              "tau_log": 0.3060668265079096,
+              "weighted_mean_scale_minus_one": 0.0
+            },
+            "supported_cell_rmse": 0.022968208606796606,
+            "supported_cells": 6,
+            "target_season": 2021
+          },
+          {
+            "by_cell": {
+              "bench+bench": 0.052078963992799356,
+              "rotation+bench": 0.0066673740571415105,
+              "rotation+rotation": 0.009837166455544952,
+              "starter+bench": 0.02357482158460097,
+              "starter+rotation": 0.008793050194700594,
+              "starter+starter": 0.011423757307581401
+            },
+            "pooled_block_max_change": 0.0,
+            "role_scale": {
+              "bench": 1.2635692092656516,
+              "rotation": 0.8015271007287107,
+              "starter": 0.9374057776520645
+            },
+            "role_scale_fit": {
+              "log_standard_errors": {
+                "bench": 0.0365886531200587,
+                "rotation": 0.053500091046402694,
+                "starter": 0.028360113560456392
+              },
+              "mode": "log_shrunk",
+              "player_shares": {
+                "bench": 0.33251413123617596,
+                "rotation": 0.3375049624742424,
+                "starter": 0.32998090628958165
+              },
+              "raw_scales": {
+                "bench": 1.686162365370534,
+                "rotation": 1.0644213364312853,
+                "starter": 1.2448767674987566
+              },
+              "scales": {
+                "bench": 1.2635692092656516,
+                "rotation": 0.8015271007287107,
+                "starter": 0.9374057776520645
+              },
+              "tau_log": 0.32651124581142776,
+              "weighted_mean_scale_minus_one": 0.0
+            },
+            "supported_cell_rmse": 0.024552781195993682,
+            "supported_cells": 6,
+            "target_season": 2022
+          },
+          {
+            "by_cell": {
+              "bench+bench": 0.03198388859512548,
+              "rotation+bench": 0.006838999199966296,
+              "rotation+rotation": 0.010048445136128618,
+              "starter+bench": 0.029500869461338636,
+              "starter+rotation": 0.009427948399453021,
+              "starter+starter": 0.013104912793923977
+            },
+            "pooled_block_max_change": 0.0,
+            "role_scale": {
+              "bench": 1.2972964455019416,
+              "rotation": 0.809921584248031,
+              "starter": 0.891744205915382
+            },
+            "role_scale_fit": {
+              "log_standard_errors": {
+                "bench": 0.03036629751421601,
+                "rotation": 0.03901126099947621,
+                "starter": 0.025414331943151867
+              },
+              "mode": "log_shrunk",
+              "player_shares": {
+                "bench": 0.3334823368721674,
+                "rotation": 0.32984416713230275,
+                "starter": 0.33667349599552987
+              },
+              "raw_scales": {
+                "bench": 1.737085935687067,
+                "rotation": 1.0807572545314381,
+                "starter": 1.189888746056173
+              },
+              "scales": {
+                "bench": 1.2972964455019416,
+                "rotation": 0.809921584248031,
+                "starter": 0.891744205915382
+              },
+              "tau_log": 0.3357099294365641,
+              "weighted_mean_scale_minus_one": 0.0
+            },
+            "supported_cell_rmse": 0.019585873049685443,
+            "supported_cells": 6,
+            "target_season": 2023
+          }
+        ]
+      },
+      "ratio": {
+        "folds": [
+          {
+            "by_cell": {
+              "bench+bench": 0.04721034323534468,
+              "rotation+bench": 0.00613277575249287,
+              "rotation+rotation": 0.009957314755823038,
+              "starter+bench": 0.0229521709470665,
+              "starter+rotation": 0.011314737135078936,
+              "starter+starter": 0.01398492804926551
+            },
+            "pooled_block_max_change": 0.0,
+            "role_scale": {
+              "bench": 1.1829831249946758,
+              "rotation": 0.8607763022712619,
+              "starter": 0.9590775336063181
+            },
+            "role_scale_fit": {
+              "mode": "ratio"
+            },
+            "supported_cell_rmse": 0.023151598951758466,
+            "supported_cells": 6,
+            "target_season": 2021
+          },
+          {
+            "by_cell": {
+              "bench+bench": 0.05253469281770932,
+              "rotation+bench": 0.0066981670130083605,
+              "rotation+rotation": 0.009435241875575854,
+              "starter+bench": 0.02335922490226064,
+              "starter+rotation": 0.008802231472064015,
+              "starter+starter": 0.011383040406192303
+            },
+            "pooled_block_max_change": 0.0,
+            "role_scale": {
+              "bench": 1.2383673214682216,
+              "rotation": 0.8214299711854869,
+              "starter": 0.9424444518545376
+            },
+            "role_scale_fit": {
+              "mode": "ratio"
+            },
+            "supported_cell_rmse": 0.024652550428732004,
+            "supported_cells": 6,
+            "target_season": 2022
+          },
+          {
+            "by_cell": {
+              "bench+bench": 0.0321817146596163,
+              "rotation+bench": 0.006844125179937026,
+              "rotation+rotation": 0.009785869845974914,
+              "starter+bench": 0.029392937647524823,
+              "starter+rotation": 0.009419317856342634,
+              "starter+starter": 0.012965879627950495
+            },
+            "pooled_block_max_change": 0.0,
+            "role_scale": {
+              "bench": 1.2780190977328885,
+              "rotation": 0.8226539780852955,
+              "starter": 0.8983647126329579
+            },
+            "role_scale_fit": {
+              "mode": "ratio"
+            },
+            "supported_cell_rmse": 0.019574858124264786,
+            "supported_cells": 6,
+            "target_season": 2023
+          }
+        ]
+      }
+    },
+    "paired_difference_log_shrunk_minus_ratio": {
+      "mean": -9.071488409317467e-05,
+      "standard_error": 5.630227411086741e-05
+    },
+    "pooled_supported_cell_rmse": {
+      "log_shrunk": 0.02236895428415858,
+      "ratio": 0.02245966916825175
+    },
+    "reason": "the log-scale form lowers supported-cell RMSE on the forward folds",
+    "selected": "log_shrunk",
+    "supported_cell_rmse_by_fold": {
+      "log_shrunk": {
+        "2021": 0.022968208606796606,
+        "2022": 0.024552781195993682,
+        "2023": 0.019585873049685443
+      },
+      "ratio": {
+        "2021": 0.023151598951758466,
+        "2022": 0.024652550428732004,
+        "2023": 0.019574858124264786
+      }
+    }
+  },
+  "item_3_cross_team": {
+    "candidates": {
+      "gaussian": {
+        "folds": [
+          {
+            "cross_team_latent_rmse": 0.003068354939660738,
+            "protected_opponent_z": {
+              "opponent_ast_ast": -1.206267906470482,
+              "opponent_fg3m_reb": 1.4983560362950359,
+              "opponent_pts_reb": -0.24178125469266454
+            },
+            "same_team_latent_rmse": 0.003503954053493443,
+            "shrink_diagnostics": {
+              "max_shrink_factor_cross_team_diagonal": 0.9152735322470753,
+              "max_shrink_factor_cross_team_offdiagonal": 0.8404388414520237,
+              "min_shrink_factor_cross_team_diagonal": 0.8946477166395014,
+              "min_shrink_factor_cross_team_offdiagonal": 0.7845380485403359,
+              "tau2_cross_team_diagonal": 8.170409486896409e-05,
+              "tau2_cross_team_offdiagonal": 2.1587404623996453e-05
+            },
+            "target_season": 2021
+          },
+          {
+            "cross_team_latent_rmse": 0.0024488203034482466,
+            "protected_opponent_z": {
+              "opponent_ast_ast": 0.5616034491191215,
+              "opponent_fg3m_reb": 0.06888153846055389,
+              "opponent_pts_reb": 1.690729873903783
+            },
+            "same_team_latent_rmse": 0.00289552097261818,
+            "shrink_diagnostics": {
+              "max_shrink_factor_cross_team_diagonal": 0.9659461110928116,
+              "max_shrink_factor_cross_team_offdiagonal": 0.9439169369573236,
+              "min_shrink_factor_cross_team_diagonal": 0.953889601479603,
+              "min_shrink_factor_cross_team_offdiagonal": 0.889813148147742,
+              "tau2_cross_team_diagonal": 9.52171628820906e-05,
+              "tau2_cross_team_offdiagonal": 2.948570822868136e-05
+            },
+            "target_season": 2022
+          },
+          {
+            "cross_team_latent_rmse": 0.0020349846580966125,
+            "protected_opponent_z": {
+              "opponent_ast_ast": -1.6143173573133158,
+              "opponent_fg3m_reb": 0.04849168740904698,
+              "opponent_pts_reb": 0.437168703234935
+            },
+            "same_team_latent_rmse": 0.006199863083453475,
+            "shrink_diagnostics": {
+              "max_shrink_factor_cross_team_diagonal": 0.9752047757222176,
+              "max_shrink_factor_cross_team_offdiagonal": 0.9603379984551934,
+              "min_shrink_factor_cross_team_diagonal": 0.9628550853081063,
+              "min_shrink_factor_cross_team_offdiagonal": 0.9211816601333962,
+              "tau2_cross_team_diagonal": 8.782878872639808e-05,
+              "tau2_cross_team_offdiagonal": 3.044338413615804e-05
+            },
+            "target_season": 2023
+          }
+        ]
+      },
+      "student_t_nu15": {
+        "folds": [
+          {
+            "cross_team_latent_rmse": 0.0030768787277435294,
+            "protected_opponent_z": {
+              "opponent_ast_ast": -1.2260230594297092,
+              "opponent_fg3m_reb": 1.5224175604441383,
+              "opponent_pts_reb": -0.21559732231216414
+            },
+            "same_team_latent_rmse": 0.0035039540534934225,
+            "shrink_diagnostics": {
+              "max_shrink_factor_cross_team_diagonal": 0.9048828519441906,
+              "max_shrink_factor_cross_team_offdiagonal": 0.8364593192430184,
+              "min_shrink_factor_cross_team_diagonal": 0.881722065076128,
+              "min_shrink_factor_cross_team_offdiagonal": 0.7683737447625621,
+              "nu": 15.0,
+              "tau_cross_team_diagonal": 0.008611305936920118,
+              "tau_cross_team_offdiagonal": 0.004418545504604685
+            },
+            "target_season": 2021
+          },
+          {
+            "cross_team_latent_rmse": 0.002465571465669744,
+            "protected_opponent_z": {
+              "opponent_ast_ast": 0.5473662727488786,
+              "opponent_fg3m_reb": 0.08707880736101485,
+              "opponent_pts_reb": 1.7066485442002421
+            },
+            "same_team_latent_rmse": 0.00289552097261817,
+            "shrink_diagnostics": {
+              "max_shrink_factor_cross_team_diagonal": 0.9606318726006229,
+              "max_shrink_factor_cross_team_offdiagonal": 0.9334455266000798,
+              "min_shrink_factor_cross_team_diagonal": 0.9489951517625796,
+              "min_shrink_factor_cross_team_offdiagonal": 0.8936023068311988,
+              "nu": 15.0,
+              "tau_cross_team_diagonal": 0.009272580370154097,
+              "tau_cross_team_offdiagonal": 0.005081516933080918
+            },
+            "target_season": 2022
+          },
+          {
+            "cross_team_latent_rmse": 0.0020472173052198833,
+            "protected_opponent_z": {
+              "opponent_ast_ast": -1.6279107194042048,
+              "opponent_fg3m_reb": 0.06347508049938888,
+              "opponent_pts_reb": 0.4559624254747783
+            },
+            "same_team_latent_rmse": 0.006199863083453471,
+            "shrink_diagnostics": {
+              "max_shrink_factor_cross_team_diagonal": 0.9715382980145623,
+              "max_shrink_factor_cross_team_offdiagonal": 0.9585301794875928,
+              "min_shrink_factor_cross_team_diagonal": 0.9588705373599807,
+              "min_shrink_factor_cross_team_offdiagonal": 0.9193050330541892,
+              "nu": 15.0,
+              "tau_cross_team_diagonal": 0.008926609080106888,
+              "tau_cross_team_offdiagonal": 0.005220098139241697
+            },
+            "target_season": 2023
+          }
+        ]
+      },
+      "student_t_nu3": {
+        "folds": [
+          {
+            "cross_team_latent_rmse": 0.003096869517739891,
+            "protected_opponent_z": {
+              "opponent_ast_ast": -1.2937714346257658,
+              "opponent_fg3m_reb": 1.6054240122649917,
+              "opponent_pts_reb": -0.13045031139558247
+            },
+            "same_team_latent_rmse": 0.0035039540534934307,
+            "shrink_diagnostics": {
+              "max_shrink_factor_cross_team_diagonal": 0.9092808990867269,
+              "max_shrink_factor_cross_team_offdiagonal": 0.8570132827786759,
+              "min_shrink_factor_cross_team_diagonal": 0.8325117310138863,
+              "min_shrink_factor_cross_team_offdiagonal": 0.7158093655767187,
+              "nu": 3.0,
+              "tau_cross_team_diagonal": 0.007316254860027148,
+              "tau_cross_team_offdiagonal": 0.003731392202578425
+            },
+            "target_season": 2021
+          },
+          {
+            "cross_team_latent_rmse": 0.002525554988744923,
+            "protected_opponent_z": {
+              "opponent_ast_ast": 0.4996356333987134,
+              "opponent_fg3m_reb": 0.14193782415791698,
+              "opponent_pts_reb": 1.760530209926197
+            },
+            "same_team_latent_rmse": 0.0028955209726181977,
+            "shrink_diagnostics": {
+              "max_shrink_factor_cross_team_diagonal": 0.9640838561366939,
+              "max_shrink_factor_cross_team_offdiagonal": 0.9490788123977196,
+              "min_shrink_factor_cross_team_diagonal": 0.921522427545827,
+              "min_shrink_factor_cross_team_offdiagonal": 0.850403365013301,
+              "nu": 3.0,
+              "tau_cross_team_diagonal": 0.007748653283040814,
+              "tau_cross_team_offdiagonal": 0.004187919600532447
+            },
+            "target_season": 2022
+          },
+          {
+            "cross_team_latent_rmse": 0.0020977934523504905,
+            "protected_opponent_z": {
+              "opponent_ast_ast": -1.6721252637801387,
+              "opponent_fg3m_reb": 0.10990047359615972,
+              "opponent_pts_reb": 0.5125061212556137
+            },
+            "same_team_latent_rmse": 0.006199863083453478,
+            "shrink_diagnostics": {
+              "max_shrink_factor_cross_team_diagonal": 0.9706117163670441,
+              "max_shrink_factor_cross_team_offdiagonal": 0.970000846887401,
+              "min_shrink_factor_cross_team_diagonal": 0.9459101695795447,
+              "min_shrink_factor_cross_team_offdiagonal": 0.8939523477772167,
+              "nu": 3.0,
+              "tau_cross_team_diagonal": 0.007583763399714248,
+              "tau_cross_team_offdiagonal": 0.004429602258869482
+            },
+            "target_season": 2023
+          }
+        ]
+      },
+      "student_t_nu40": {
+        "folds": [
+          {
+            "cross_team_latent_rmse": 0.003075039331525523,
+            "protected_opponent_z": {
+              "opponent_ast_ast": -1.2147204890154502,
+              "opponent_fg3m_reb": 1.5085548492869758,
+              "opponent_pts_reb": -0.23038200793974406
+            },
+            "same_team_latent_rmse": 0.0035039540534934415,
+            "shrink_diagnostics": {
+              "max_shrink_factor_cross_team_diagonal": 0.9109530560289988,
+              "max_shrink_factor_cross_team_offdiagonal": 0.8339928320752235,
+              "min_shrink_factor_cross_team_diagonal": 0.8892886574535749,
+              "min_shrink_factor_cross_team_offdiagonal": 0.7775008745714193,
+              "nu": 40.0,
+              "tau_cross_team_diagonal": 0.008849584110374646,
+              "tau_cross_team_offdiagonal": 0.004546511292110727
+            },
+            "target_season": 2021
+          },
+          {
+            "cross_team_latent_rmse": 0.0024554066391578957,
+            "protected_opponent_z": {
+              "opponent_ast_ast": 0.5556798553894944,
+              "opponent_fg3m_reb": 0.07739549190608304,
+              "opponent_pts_reb": 1.697961635376684
+            },
+            "same_team_latent_rmse": 0.0028955209726181583,
+            "shrink_diagnostics": {
+              "max_shrink_factor_cross_team_diagonal": 0.9638576600219038,
+              "max_shrink_factor_cross_team_offdiagonal": 0.939291429149245,
+              "min_shrink_factor_cross_team_diagonal": 0.9518531912462973,
+              "min_shrink_factor_cross_team_offdiagonal": 0.8899217890595204,
+              "nu": 40.0,
+              "tau_cross_team_diagonal": 0.009551573217305457,
+              "tau_cross_team_offdiagonal": 0.0052592091772198325
+            },
+            "target_season": 2022
+          },
+          {
+            "cross_team_latent_rmse": 0.0020392581239027153,
+            "protected_opponent_z": {
+              "opponent_ast_ast": -1.6201797905212734,
+              "opponent_fg3m_reb": 0.05500161452817667,
+              "opponent_pts_reb": 0.445418858630398
+            },
+            "same_team_latent_rmse": 0.006199863083453484,
+            "shrink_diagnostics": {
+              "max_shrink_factor_cross_team_diagonal": 0.973708767408975,
+              "max_shrink_factor_cross_team_offdiagonal": 0.9575935259194047,
+              "min_shrink_factor_cross_team_diagonal": 0.9611366622973997,
+              "min_shrink_factor_cross_team_offdiagonal": 0.9214000521800279,
+              "nu": 40.0,
+              "tau_cross_team_diagonal": 0.009173764759753728,
+              "tau_cross_team_offdiagonal": 0.005382150948092373
+            },
+            "target_season": 2023
+          }
+        ]
+      },
+      "student_t_nu5": {
+        "folds": [
+          {
+            "cross_team_latent_rmse": 0.0030853120129366923,
+            "protected_opponent_z": {
+              "opponent_ast_ast": -1.260972555018677,
+              "opponent_fg3m_reb": 1.5651684687911356,
+              "opponent_pts_reb": -0.1710947603222925
+            },
+            "same_team_latent_rmse": 0.003503954053493438,
+            "shrink_diagnostics": {
+              "max_shrink_factor_cross_team_diagonal": 0.9037753981718971,
+              "max_shrink_factor_cross_team_offdiagonal": 0.8476998813258997,
+              "min_shrink_factor_cross_team_diagonal": 0.8571791455685573,
+              "min_shrink_factor_cross_team_offdiagonal": 0.7409006776754644,
+              "nu": 5.0,
+              "tau_cross_team_diagonal": 0.007918982060610535,
+              "tau_cross_team_offdiagonal": 0.004049836985728065
+            },
+            "target_season": 2021
+          },
+          {
+            "cross_team_latent_rmse": 0.002496796345186513,
+            "protected_opponent_z": {
+              "opponent_ast_ast": 0.5221198983310116,
+              "opponent_fg3m_reb": 0.1162559075371189,
+              "opponent_pts_reb": 1.7341791025433329
+            },
+            "same_team_latent_rmse": 0.0028955209726181804,
+            "shrink_diagnostics": {
+              "max_shrink_factor_cross_team_diagonal": 0.9607523532874407,
+              "max_shrink_factor_cross_team_offdiagonal": 0.9417458704260006,
+              "min_shrink_factor_cross_team_diagonal": 0.9378987135186609,
+              "min_shrink_factor_cross_team_offdiagonal": 0.8732227830656984,
+              "nu": 5.0,
+              "tau_cross_team_diagonal": 0.00845789393651831,
+              "tau_cross_team_offdiagonal": 0.004588424512276459
+            },
+            "target_season": 2022
+          },
+          {
+            "cross_team_latent_rmse": 0.0020730150612841055,
+            "protected_opponent_z": {
+              "opponent_ast_ast": -1.6513631790501333,
+              "opponent_fg3m_reb": 0.08846926226497646,
+              "opponent_pts_reb": 0.48661000704526375
+            },
+            "same_team_latent_rmse": 0.006199863083453472,
+            "shrink_diagnostics": {
+              "max_shrink_factor_cross_team_diagonal": 0.967994294957982,
+              "max_shrink_factor_cross_team_offdiagonal": 0.9653624457936728,
+              "min_shrink_factor_cross_team_diagonal": 0.9519960460210496,
+              "min_shrink_factor_cross_team_offdiagonal": 0.9055634747897907,
+              "nu": 5.0,
+              "tau_cross_team_diagonal": 0.008206215746159026,
+              "tau_cross_team_offdiagonal": 0.004779456571667696
+            },
+            "target_season": 2023
+          }
+        ]
+      },
+      "student_t_nu8": {
+        "folds": [
+          {
+            "cross_team_latent_rmse": 0.0030801240566257844,
+            "protected_opponent_z": {
+              "opponent_ast_ast": -1.2415567950338187,
+              "opponent_fg3m_reb": 1.541430222265943,
+              "opponent_pts_reb": -0.19561409674744581
+            },
+            "same_team_latent_rmse": 0.0035039540534934346,
+            "shrink_diagnostics": {
+              "max_shrink_factor_cross_team_diagonal": 0.9027078834260566,
+              "max_shrink_factor_cross_team_offdiagonal": 0.8416423185290671,
+              "min_shrink_factor_cross_team_diagonal": 0.8710300677487097,
+              "min_shrink_factor_cross_team_offdiagonal": 0.756037365192304,
+              "nu": 8.0,
+              "tau_cross_team_diagonal": 0.008296059904108293,
+              "tau_cross_team_offdiagonal": 0.004250112007495652
+            },
+            "target_season": 2021
+          },
+          {
+            "cross_team_latent_rmse": 0.002479507165349532,
+            "protected_opponent_z": {
+              "opponent_ast_ast": 0.5360329832124117,
+              "opponent_fg3m_reb": 0.10022857092437587,
+              "opponent_pts_reb": 1.7187841670991961
+            },
+            "same_team_latent_rmse": 0.00289552097261817,
+            "shrink_diagnostics": {
+              "max_shrink_factor_cross_team_diagonal": 0.9585732972596834,
+              "max_shrink_factor_cross_team_offdiagonal": 0.9364496992443364,
+              "min_shrink_factor_cross_team_diagonal": 0.9450989988792966,
+              "min_shrink_factor_cross_team_offdiagonal": 0.8865544227074492,
+              "nu": 8.0,
+              "tau_cross_team_diagonal": 0.008902109677517474,
+              "tau_cross_team_offdiagonal": 0.004852572281786737
+            },
+            "target_season": 2022
+          },
+          {
+            "cross_team_latent_rmse": 0.0020585132973162026,
+            "protected_opponent_z": {
+              "opponent_ast_ast": -1.638447130612668,
+              "opponent_fg3m_reb": 0.0748348359768166,
+              "opponent_pts_reb": 0.46996739820631445
+            },
+            "same_team_latent_rmse": 0.006199863083453481,
+            "shrink_diagnostics": {
+              "max_shrink_factor_cross_team_diagonal": 0.9683835842518647,
+              "max_shrink_factor_cross_team_offdiagonal": 0.9618554288648801,
+              "min_shrink_factor_cross_team_diagonal": 0.9557820567191596,
+              "min_shrink_factor_cross_team_offdiagonal": 0.9130255767669431,
+              "nu": 8.0,
+              "tau_cross_team_diagonal": 0.008598624432473922,
+              "tau_cross_team_offdiagonal": 0.005013950170495606
+            },
+            "target_season": 2023
+          }
+        ]
+      }
+    },
+    "cross_team_latent_rmse_by_fold": {
+      "gaussian": {
+        "2021": 0.003068354939660738,
+        "2022": 0.0024488203034482466,
+        "2023": 0.0020349846580966125
+      },
+      "student_t_nu15": {
+        "2021": 0.0030768787277435294,
+        "2022": 0.002465571465669744,
+        "2023": 0.0020472173052198833
+      },
+      "student_t_nu3": {
+        "2021": 0.003096869517739891,
+        "2022": 0.002525554988744923,
+        "2023": 0.0020977934523504905
+      },
+      "student_t_nu40": {
+        "2021": 0.003075039331525523,
+        "2022": 0.0024554066391578957,
+        "2023": 0.0020392581239027153
+      },
+      "student_t_nu5": {
+        "2021": 0.0030853120129366923,
+        "2022": 0.002496796345186513,
+        "2023": 0.0020730150612841055
+      },
+      "student_t_nu8": {
+        "2021": 0.0030801240566257844,
+        "2022": 0.002479507165349532,
+        "2023": 0.0020585132973162026
+      }
+    },
+    "pooled_cross_team_latent_rmse": {
+      "gaussian": 0.0025173866337351992,
+      "student_t_nu15": 0.0025298891662110523,
+      "student_t_nu3": 0.0025734059862784348,
+      "student_t_nu40": 0.002523234698195378,
+      "student_t_nu5": 0.0025517078064691036,
+      "student_t_nu8": 0.0025393815064305063
+    },
+    "same_team_latent_rmse_by_fold": {
+      "gaussian": {
+        "2021": 0.003503954053493443,
+        "2022": 0.00289552097261818,
+        "2023": 0.006199863083453475
+      },
+      "student_t_nu15": {
+        "2021": 0.0035039540534934225,
+        "2022": 0.00289552097261817,
+        "2023": 0.006199863083453471
+      },
+      "student_t_nu3": {
+        "2021": 0.0035039540534934307,
+        "2022": 0.0028955209726181977,
+        "2023": 0.006199863083453478
+      },
+      "student_t_nu40": {
+        "2021": 0.0035039540534934415,
+        "2022": 0.0028955209726181583,
+        "2023": 0.006199863083453484
+      },
+      "student_t_nu5": {
+        "2021": 0.003503954053493438,
+        "2022": 0.0028955209726181804,
+        "2023": 0.006199863083453472
+      },
+      "student_t_nu8": {
+        "2021": 0.0035039540534934346,
+        "2022": 0.00289552097261817,
+        "2023": 0.006199863083453481
+      }
+    },
+    "selected": "gaussian",
+    "selected_spec": {
+      "cross_team_prior": "gaussian"
+    },
+    "selection": {
+      "best": "gaussian",
+      "difference_from_best": 0.0,
+      "difference_se": 0.0,
+      "reason": "this candidate has the best score",
+      "selected": "gaussian"
+    },
+    "simplicity_order": [
+      "gaussian",
+      "student_t_nu40",
+      "student_t_nu15",
+      "student_t_nu8",
+      "student_t_nu5",
+      "student_t_nu3"
+    ]
+  },
+  "item_4_transmission": {
+    "admissibility": {
+      "cap_0.00": {
+        "admissible": true,
+        "forward_count_rmse_ratio": 1.0,
+        "forward_latent_rmse_ratio": 1.0,
+        "forward_target_bucket_improvement": 0.0,
+        "worst_protected_z_increase": 0.0
+      },
+      "cap_0.15": {
+        "admissible": true,
+        "forward_count_rmse_ratio": 0.9287096799960727,
+        "forward_latent_rmse_ratio": 0.9534894434096282,
+        "forward_target_bucket_improvement": 0.06710838542166042,
+        "worst_protected_z_increase": 0.3876075330313607
+      },
+      "cap_0.30": {
+        "admissible": true,
+        "forward_count_rmse_ratio": 0.9287096799960727,
+        "forward_latent_rmse_ratio": 0.9534894434096282,
+        "forward_target_bucket_improvement": 0.06710838542166042,
+        "worst_protected_z_increase": 0.3876075330313607
+      },
+      "cap_0.50": {
+        "admissible": true,
+        "forward_count_rmse_ratio": 0.9287096799960727,
+        "forward_latent_rmse_ratio": 0.9534894434096282,
+        "forward_target_bucket_improvement": 0.06710838542166042,
+        "worst_protected_z_increase": 0.3876075330313607
+      },
+      "cap_1.00": {
+        "admissible": true,
+        "forward_count_rmse_ratio": 0.9287096799960727,
+        "forward_latent_rmse_ratio": 0.9534894434096282,
+        "forward_target_bucket_improvement": 0.06710838542166042,
+        "worst_protected_z_increase": 0.3876075330313607
+      }
+    },
+    "candidates": {
+      "cap_0.00": {
+        "folds": [
+          {
+            "count_rmse": 0.008672340699405213,
+            "latent_rmse": 0.003293364240767606,
+            "mean_bridge_weight_cross_team": 0.0,
+            "mean_bridge_weight_same_team": 0.0,
+            "passer_ast_teammate_pts_count_error": -0.01995600613386058,
+            "passer_ast_teammate_pts_latent_z": -1.1534712673930103,
+            "protected_z": {
+              "opponent_ast_ast": -1.206267906470482,
+              "opponent_fg3m_reb": 1.4983560362950359,
+              "opponent_pts_reb": -0.24178125469266454,
+              "teammate_ast_ast": -1.43823257499054,
+              "teammate_reb_reb": -1.4806264584424929
+            },
+            "target_season": 2021
+          },
+          {
+            "count_rmse": 0.006199753682485797,
+            "latent_rmse": 0.002681488633338961,
+            "mean_bridge_weight_cross_team": 0.0,
+            "mean_bridge_weight_same_team": 0.0,
+            "passer_ast_teammate_pts_count_error": -0.010607890470886304,
+            "passer_ast_teammate_pts_latent_z": 1.356452350530977,
+            "protected_z": {
+              "opponent_ast_ast": 0.5616034491191215,
+              "opponent_fg3m_reb": 0.06888153846055389,
+              "opponent_pts_reb": 1.690729873903783,
+              "teammate_ast_ast": -0.048488997783561236,
+              "teammate_reb_reb": -1.4635795036362869
+            },
+            "target_season": 2022
+          },
+          {
+            "count_rmse": 0.002043472547914119,
+            "latent_rmse": 0.0046140798005809254,
+            "mean_bridge_weight_cross_team": 0.0,
+            "mean_bridge_weight_same_team": 0.0,
+            "passer_ast_teammate_pts_count_error": -0.002183487271367003,
+            "passer_ast_teammate_pts_latent_z": 4.245206298719599,
+            "protected_z": {
+              "opponent_ast_ast": -1.6143173573133158,
+              "opponent_fg3m_reb": 0.04849168740904698,
+              "opponent_pts_reb": 0.437168703234935,
+              "teammate_ast_ast": 3.063808786345172,
+              "teammate_reb_reb": -0.2592858992517143
+            },
+            "target_season": 2023
+          }
+        ]
+      },
+      "cap_0.15": {
+        "folds": [
+          {
+            "bridge_model_error_sd_cross_team": 0.004476217496561412,
+            "bridge_model_error_sd_same_team": 0.007381876432430302,
+            "count_rmse": 0.007771254606395254,
+            "entries_clipped_cross_team": 28,
+            "entries_clipped_same_team": 34,
+            "latent_rmse": 0.00243682959833635,
+            "max_bridge_weight_cross_team": 0.010061738143003299,
+            "max_bridge_weight_same_team": 0.010944800079405013,
+            "mean_bridge_weight_cross_team": 0.0008321110767888556,
+            "mean_bridge_weight_same_team": 0.00033697382641518933,
+            "passer_ast_teammate_pts_count_error": -0.018874177422589435,
+            "passer_ast_teammate_pts_latent_z": -0.7672997330021658,
+            "protected_z": {
+              "opponent_ast_ast": -1.0123675010682105,
+              "opponent_fg3m_reb": 1.248040533548634,
+              "opponent_pts_reb": -0.590799761468533,
+              "teammate_ast_ast": -0.4772746855340702,
+              "teammate_reb_reb": -1.0367562708933682
+            },
+            "target_season": 2021
+          },
+          {
+            "bridge_model_error_sd_cross_team": 0.004339779821041802,
+            "bridge_model_error_sd_same_team": 0.007906400998486147,
+            "count_rmse": 0.00583854293445749,
+            "entries_clipped_cross_team": 31,
+            "entries_clipped_same_team": 33,
+            "latent_rmse": 0.002760933832148742,
+            "max_bridge_weight_cross_team": 0.0031349430918545034,
+            "max_bridge_weight_same_team": 0.001784837070161629,
+            "mean_bridge_weight_cross_team": 0.00014528866645966158,
+            "mean_bridge_weight_same_team": 6.873071118240787e-05,
+            "passer_ast_teammate_pts_count_error": -0.009948259492406623,
+            "passer_ast_teammate_pts_latent_z": 1.6007356761822398,
+            "protected_z": {
+              "opponent_ast_ast": 0.6957312702617887,
+              "opponent_fg3m_reb": -0.05970901905816999,
+              "opponent_pts_reb": 1.5877809757608903,
+              "teammate_ast_ast": 0.43609653081492195,
+              "teammate_reb_reb": -1.2171402417874837
+            },
+            "target_season": 2022
+          },
+          {
+            "bridge_model_error_sd_cross_team": 0.004470861864885995,
+            "bridge_model_error_sd_same_team": 0.007990118142698312,
+            "count_rmse": 0.0020998532094787235,
+            "entries_clipped_cross_team": 36,
+            "entries_clipped_same_team": 35,
+            "latent_rmse": 0.004898672091804712,
+            "max_bridge_weight_cross_team": 0.0,
+            "max_bridge_weight_same_team": 0.0001000526340592279,
+            "mean_bridge_weight_cross_team": 0.0,
+            "mean_bridge_weight_same_team": 2.779239834978553e-06,
+            "passer_ast_teammate_pts_count_error": -0.0017273229024085124,
+            "passer_ast_teammate_pts_latent_z": 4.4517180393030396,
+            "protected_z": {
+              "opponent_ast_ast": -1.4875967652121844,
+              "opponent_fg3m_reb": -0.0703134468540664,
+              "opponent_pts_reb": 0.2759897081006427,
+              "teammate_ast_ast": 3.4492544561508325,
+              "teammate_reb_reb": 0.022767191189372194
+            },
+            "target_season": 2023
+          }
+        ]
+      },
+      "cap_0.30": {
+        "folds": [
+          {
+            "bridge_model_error_sd_cross_team": 0.004476217496561412,
+            "bridge_model_error_sd_same_team": 0.007381876432430302,
+            "count_rmse": 0.007771254606395254,
+            "entries_clipped_cross_team": 28,
+            "entries_clipped_same_team": 34,
+            "latent_rmse": 0.00243682959833635,
+            "max_bridge_weight_cross_team": 0.010061738143003299,
+            "max_bridge_weight_same_team": 0.010944800079405013,
+            "mean_bridge_weight_cross_team": 0.0008321110767888556,
+            "mean_bridge_weight_same_team": 0.00033697382641518933,
+            "passer_ast_teammate_pts_count_error": -0.018874177422589435,
+            "passer_ast_teammate_pts_latent_z": -0.7672997330021658,
+            "protected_z": {
+              "opponent_ast_ast": -1.0123675010682105,
+              "opponent_fg3m_reb": 1.248040533548634,
+              "opponent_pts_reb": -0.590799761468533,
+              "teammate_ast_ast": -0.4772746855340702,
+              "teammate_reb_reb": -1.0367562708933682
+            },
+            "target_season": 2021
+          },
+          {
+            "bridge_model_error_sd_cross_team": 0.004339779821041802,
+            "bridge_model_error_sd_same_team": 0.007906400998486147,
+            "count_rmse": 0.00583854293445749,
+            "entries_clipped_cross_team": 31,
+            "entries_clipped_same_team": 33,
+            "latent_rmse": 0.002760933832148742,
+            "max_bridge_weight_cross_team": 0.0031349430918545034,
+            "max_bridge_weight_same_team": 0.001784837070161629,
+            "mean_bridge_weight_cross_team": 0.00014528866645966158,
+            "mean_bridge_weight_same_team": 6.873071118240787e-05,
+            "passer_ast_teammate_pts_count_error": -0.009948259492406623,
+            "passer_ast_teammate_pts_latent_z": 1.6007356761822398,
+            "protected_z": {
+              "opponent_ast_ast": 0.6957312702617887,
+              "opponent_fg3m_reb": -0.05970901905816999,
+              "opponent_pts_reb": 1.5877809757608903,
+              "teammate_ast_ast": 0.43609653081492195,
+              "teammate_reb_reb": -1.2171402417874837
+            },
+            "target_season": 2022
+          },
+          {
+            "bridge_model_error_sd_cross_team": 0.004470861864885995,
+            "bridge_model_error_sd_same_team": 0.007990118142698312,
+            "count_rmse": 0.0020998532094787235,
+            "entries_clipped_cross_team": 36,
+            "entries_clipped_same_team": 35,
+            "latent_rmse": 0.004898672091804712,
+            "max_bridge_weight_cross_team": 0.0,
+            "max_bridge_weight_same_team": 0.0001000526340592279,
+            "mean_bridge_weight_cross_team": 0.0,
+            "mean_bridge_weight_same_team": 2.779239834978553e-06,
+            "passer_ast_teammate_pts_count_error": -0.0017273229024085124,
+            "passer_ast_teammate_pts_latent_z": 4.4517180393030396,
+            "protected_z": {
+              "opponent_ast_ast": -1.4875967652121844,
+              "opponent_fg3m_reb": -0.0703134468540664,
+              "opponent_pts_reb": 0.2759897081006427,
+              "teammate_ast_ast": 3.4492544561508325,
+              "teammate_reb_reb": 0.022767191189372194
+            },
+            "target_season": 2023
+          }
+        ]
+      },
+      "cap_0.50": {
+        "folds": [
+          {
+            "bridge_model_error_sd_cross_team": 0.004476217496561412,
+            "bridge_model_error_sd_same_team": 0.007381876432430302,
+            "count_rmse": 0.007771254606395254,
+            "entries_clipped_cross_team": 28,
+            "entries_clipped_same_team": 34,
+            "latent_rmse": 0.00243682959833635,
+            "max_bridge_weight_cross_team": 0.010061738143003299,
+            "max_bridge_weight_same_team": 0.010944800079405013,
+            "mean_bridge_weight_cross_team": 0.0008321110767888556,
+            "mean_bridge_weight_same_team": 0.00033697382641518933,
+            "passer_ast_teammate_pts_count_error": -0.018874177422589435,
+            "passer_ast_teammate_pts_latent_z": -0.7672997330021658,
+            "protected_z": {
+              "opponent_ast_ast": -1.0123675010682105,
+              "opponent_fg3m_reb": 1.248040533548634,
+              "opponent_pts_reb": -0.590799761468533,
+              "teammate_ast_ast": -0.4772746855340702,
+              "teammate_reb_reb": -1.0367562708933682
+            },
+            "target_season": 2021
+          },
+          {
+            "bridge_model_error_sd_cross_team": 0.004339779821041802,
+            "bridge_model_error_sd_same_team": 0.007906400998486147,
+            "count_rmse": 0.00583854293445749,
+            "entries_clipped_cross_team": 31,
+            "entries_clipped_same_team": 33,
+            "latent_rmse": 0.002760933832148742,
+            "max_bridge_weight_cross_team": 0.0031349430918545034,
+            "max_bridge_weight_same_team": 0.001784837070161629,
+            "mean_bridge_weight_cross_team": 0.00014528866645966158,
+            "mean_bridge_weight_same_team": 6.873071118240787e-05,
+            "passer_ast_teammate_pts_count_error": -0.009948259492406623,
+            "passer_ast_teammate_pts_latent_z": 1.6007356761822398,
+            "protected_z": {
+              "opponent_ast_ast": 0.6957312702617887,
+              "opponent_fg3m_reb": -0.05970901905816999,
+              "opponent_pts_reb": 1.5877809757608903,
+              "teammate_ast_ast": 0.43609653081492195,
+              "teammate_reb_reb": -1.2171402417874837
+            },
+            "target_season": 2022
+          },
+          {
+            "bridge_model_error_sd_cross_team": 0.004470861864885995,
+            "bridge_model_error_sd_same_team": 0.007990118142698312,
+            "count_rmse": 0.0020998532094787235,
+            "entries_clipped_cross_team": 36,
+            "entries_clipped_same_team": 35,
+            "latent_rmse": 0.004898672091804712,
+            "max_bridge_weight_cross_team": 0.0,
+            "max_bridge_weight_same_team": 0.0001000526340592279,
+            "mean_bridge_weight_cross_team": 0.0,
+            "mean_bridge_weight_same_team": 2.779239834978553e-06,
+            "passer_ast_teammate_pts_count_error": -0.0017273229024085124,
+            "passer_ast_teammate_pts_latent_z": 4.4517180393030396,
+            "protected_z": {
+              "opponent_ast_ast": -1.4875967652121844,
+              "opponent_fg3m_reb": -0.0703134468540664,
+              "opponent_pts_reb": 0.2759897081006427,
+              "teammate_ast_ast": 3.4492544561508325,
+              "teammate_reb_reb": 0.022767191189372194
+            },
+            "target_season": 2023
+          }
+        ]
+      },
+      "cap_1.00": {
+        "folds": [
+          {
+            "bridge_model_error_sd_cross_team": 0.004476217496561412,
+            "bridge_model_error_sd_same_team": 0.007381876432430302,
+            "count_rmse": 0.007771254606395254,
+            "entries_clipped_cross_team": 28,
+            "entries_clipped_same_team": 34,
+            "latent_rmse": 0.00243682959833635,
+            "max_bridge_weight_cross_team": 0.010061738143003299,
+            "max_bridge_weight_same_team": 0.010944800079405013,
+            "mean_bridge_weight_cross_team": 0.0008321110767888556,
+            "mean_bridge_weight_same_team": 0.00033697382641518933,
+            "passer_ast_teammate_pts_count_error": -0.018874177422589435,
+            "passer_ast_teammate_pts_latent_z": -0.7672997330021658,
+            "protected_z": {
+              "opponent_ast_ast": -1.0123675010682105,
+              "opponent_fg3m_reb": 1.248040533548634,
+              "opponent_pts_reb": -0.590799761468533,
+              "teammate_ast_ast": -0.4772746855340702,
+              "teammate_reb_reb": -1.0367562708933682
+            },
+            "target_season": 2021
+          },
+          {
+            "bridge_model_error_sd_cross_team": 0.004339779821041802,
+            "bridge_model_error_sd_same_team": 0.007906400998486147,
+            "count_rmse": 0.00583854293445749,
+            "entries_clipped_cross_team": 31,
+            "entries_clipped_same_team": 33,
+            "latent_rmse": 0.002760933832148742,
+            "max_bridge_weight_cross_team": 0.0031349430918545034,
+            "max_bridge_weight_same_team": 0.001784837070161629,
+            "mean_bridge_weight_cross_team": 0.00014528866645966158,
+            "mean_bridge_weight_same_team": 6.873071118240787e-05,
+            "passer_ast_teammate_pts_count_error": -0.009948259492406623,
+            "passer_ast_teammate_pts_latent_z": 1.6007356761822398,
+            "protected_z": {
+              "opponent_ast_ast": 0.6957312702617887,
+              "opponent_fg3m_reb": -0.05970901905816999,
+              "opponent_pts_reb": 1.5877809757608903,
+              "teammate_ast_ast": 0.43609653081492195,
+              "teammate_reb_reb": -1.2171402417874837
+            },
+            "target_season": 2022
+          },
+          {
+            "bridge_model_error_sd_cross_team": 0.004470861864885995,
+            "bridge_model_error_sd_same_team": 0.007990118142698312,
+            "count_rmse": 0.0020998532094787235,
+            "entries_clipped_cross_team": 36,
+            "entries_clipped_same_team": 35,
+            "latent_rmse": 0.004898672091804712,
+            "max_bridge_weight_cross_team": 0.0,
+            "max_bridge_weight_same_team": 0.0001000526340592279,
+            "mean_bridge_weight_cross_team": 0.0,
+            "mean_bridge_weight_same_team": 2.779239834978553e-06,
+            "passer_ast_teammate_pts_count_error": -0.0017273229024085124,
+            "passer_ast_teammate_pts_latent_z": 4.4517180393030396,
+            "protected_z": {
+              "opponent_ast_ast": -1.4875967652121844,
+              "opponent_fg3m_reb": -0.0703134468540664,
+              "opponent_pts_reb": 0.2759897081006427,
+              "teammate_ast_ast": 3.4492544561508325,
+              "teammate_reb_reb": 0.022767191189372194
+            },
+            "target_season": 2023
+          }
+        ]
+      }
+    },
+    "cap_grid": [
+      0.0,
+      0.15,
+      0.3,
+      0.5,
+      1.0
+    ],
+    "count_rmse_by_fold": {
+      "cap_0.00": {
+        "2021": 0.008672340699405213,
+        "2022": 0.006199753682485797,
+        "2023": 0.002043472547914119
+      },
+      "cap_0.15": {
+        "2021": 0.007771254606395254,
+        "2022": 0.00583854293445749,
+        "2023": 0.0020998532094787235
+      },
+      "cap_0.30": {
+        "2021": 0.007771254606395254,
+        "2022": 0.00583854293445749,
+        "2023": 0.0020998532094787235
+      },
+      "cap_0.50": {
+        "2021": 0.007771254606395254,
+        "2022": 0.00583854293445749,
+        "2023": 0.0020998532094787235
+      },
+      "cap_1.00": {
+        "2021": 0.007771254606395254,
+        "2022": 0.00583854293445749,
+        "2023": 0.0020998532094787235
+      }
+    },
+    "homogeneity": [
+      {
+        "block": "same_team",
+        "degrees_of_freedom": 36,
+        "homogeneous": false,
+        "max_disagreement_in_sigma": 10.069193221886326,
+        "p_value": 5.225451628883195e-108,
+        "pooled_chi_square": 622.3237797398057,
+        "target_season": 2021
+      },
+      {
+        "block": "cross_team",
+        "degrees_of_freedom": 36,
+        "homogeneous": false,
+        "max_disagreement_in_sigma": 5.420332778274586,
+        "p_value": 3.803962587983947e-24,
+        "pooled_chi_square": 197.3347504153185,
+        "target_season": 2021
+      },
+      {
+        "block": "same_team",
+        "degrees_of_freedom": 36,
+        "homogeneous": false,
+        "max_disagreement_in_sigma": 13.858235149107626,
+        "p_value": 7.722768193371974e-230,
+        "pooled_chi_square": 1205.8075131036496,
+        "target_season": 2022
+      },
+      {
+        "block": "cross_team",
+        "degrees_of_freedom": 36,
+        "homogeneous": false,
+        "max_disagreement_in_sigma": 8.274564146583371,
+        "p_value": 1.1259014555750438e-60,
+        "pooled_chi_square": 388.38604169084056,
+        "target_season": 2022
+      },
+      {
+        "block": "same_team",
+        "degrees_of_freedom": 36,
+        "homogeneous": false,
+        "max_disagreement_in_sigma": 16.77376726868825,
+        "p_value": 0.0,
+        "pooled_chi_square": 1856.2626276878793,
+        "target_season": 2023
+      },
+      {
+        "block": "cross_team",
+        "degrees_of_freedom": 36,
+        "homogeneous": false,
+        "max_disagreement_in_sigma": 10.766312714573433,
+        "p_value": 2.773571344587309e-102,
+        "pooled_chi_square": 594.4043422264856,
+        "target_season": 2023
+      }
+    ],
+    "homogeneity_verdict": "REJECTED",
+    "latent_rmse_by_fold": {
+      "cap_0.00": {
+        "2021": 0.003293364240767606,
+        "2022": 0.002681488633338961,
+        "2023": 0.0046140798005809254
+      },
+      "cap_0.15": {
+        "2021": 0.00243682959833635,
+        "2022": 0.002760933832148742,
+        "2023": 0.004898672091804712
+      },
+      "cap_0.30": {
+        "2021": 0.00243682959833635,
+        "2022": 0.002760933832148742,
+        "2023": 0.004898672091804712
+      },
+      "cap_0.50": {
+        "2021": 0.00243682959833635,
+        "2022": 0.002760933832148742,
+        "2023": 0.004898672091804712
+      },
+      "cap_1.00": {
+        "2021": 0.00243682959833635,
+        "2022": 0.002760933832148742,
+        "2023": 0.004898672091804712
+      }
+    },
+    "pooled_forward_count_rmse": {
+      "cap_0.00": 0.005638522309935043,
+      "cap_0.15": 0.00523655025011049,
+      "cap_0.30": 0.00523655025011049,
+      "cap_0.50": 0.00523655025011049,
+      "cap_1.00": 0.00523655025011049
+    },
+    "pooled_forward_latent_rmse": {
+      "cap_0.00": 0.003529644224895831,
+      "cap_0.15": 0.0033654785074299343,
+      "cap_0.30": 0.0033654785074299343,
+      "cap_0.50": 0.0033654785074299343,
+      "cap_1.00": 0.0033654785074299343
+    },
+    "pooled_forward_target_bucket_abs_count_error": {
+      "cap_0.00": 0.010915794625371296,
+      "cap_0.15": 0.01018325327246819,
+      "cap_0.30": 0.01018325327246819,
+      "cap_0.50": 0.01018325327246819,
+      "cap_1.00": 0.01018325327246819
+    },
+    "selected": "cap_0.15",
+    "selected_cap": 0.15,
+    "selection_rule": "among caps whose pooled forward global latent RMSE and forward global count RMSE stay within 1.03x the cap-0 control and whose protected buckets do not worsen by more than 0.5 z, take the cap with the largest forward improvement in the absolute count-space error of passer_ast_teammate_pts; otherwise keep the control",
+    "target_bucket_abs_count_error_by_fold": {
+      "cap_0.00": {
+        "2021": 0.01995600613386058,
+        "2022": 0.010607890470886304,
+        "2023": 0.002183487271367003
+      },
+      "cap_0.15": {
+        "2021": 0.018874177422589435,
+        "2022": 0.009948259492406623,
+        "2023": 0.0017273229024085124
+      },
+      "cap_0.30": {
+        "2021": 0.018874177422589435,
+        "2022": 0.009948259492406623,
+        "2023": 0.0017273229024085124
+      },
+      "cap_0.50": {
+        "2021": 0.018874177422589435,
+        "2022": 0.009948259492406623,
+        "2023": 0.0017273229024085124
+      },
+      "cap_1.00": {
+        "2021": 0.018874177422589435,
+        "2022": 0.009948259492406623,
+        "2023": 0.0017273229024085124
+      }
+    }
+  },
+  "item_6_uncertainty": {
+    "candidates": {
+      "U0_raw": {
+        "coverage": {
+          "coverage_68": 0.5,
+          "coverage_80": 0.6666666666666666,
+          "coverage_90": 0.75,
+          "coverage_95": 0.8333333333333334,
+          "mean_squared_z": 2.403592807690304,
+          "median_squared_z": 0.691774461120489,
+          "observations": 12.0
+        },
+        "coverage_loss": 0.14500000000000002,
+        "cross_fitted_observations": 12,
+        "scales_by_fold": {
+          "2022": 1.0,
+          "2023": 1.0
+        }
+      },
+      "U1_huber_m_scale": {
+        "coverage": {
+          "coverage_68": 0.5,
+          "coverage_80": 0.6666666666666666,
+          "coverage_90": 0.6666666666666666,
+          "coverage_95": 0.75,
+          "mean_squared_z": 2.930402476171382,
+          "median_squared_z": 0.8433947660908462,
+          "observations": 12.0
+        },
+        "coverage_loss": 0.1866666666666667,
+        "cross_fitted_observations": 12,
+        "scales_by_fold": {
+          "2022": 1.0,
+          "2023": 0.9056633882214283
+        }
+      },
+      "U2_median_of_forward_fold_scales": {
+        "coverage": {
+          "coverage_68": 0.5,
+          "coverage_80": 0.6666666666666666,
+          "coverage_90": 0.6666666666666666,
+          "coverage_95": 0.75,
+          "mean_squared_z": 2.930402476171382,
+          "median_squared_z": 0.8433947660908462,
+          "observations": 12.0
+        },
+        "coverage_loss": 0.1866666666666667,
+        "cross_fitted_observations": 12,
+        "scales_by_fold": {
+          "2022": 1.0,
+          "2023": 0.9056633882214283
+        }
+      },
+      "U3_student_t_predictive": {
+        "coverage": {
+          "coverage_68": 0.5,
+          "coverage_80": 0.5,
+          "coverage_90": 0.6666666666666666,
+          "coverage_95": 0.6666666666666666,
+          "mean_squared_z": 3.8274671794164523,
+          "median_squared_z": 1.101577620396312,
+          "observations": 12.0
+        },
+        "coverage_loss": 0.2491666666666667,
+        "cross_fitted_observations": 12,
+        "scales_by_fold": {
+          "2022": 1.0,
+          "2023": 0.7924551830363981
+        }
+      }
+    },
+    "coverage_levels": [
+      0.68,
+      0.8,
+      0.9,
+      0.95
+    ],
+    "coverage_loss": {
+      "U0_raw": 0.14500000000000002,
+      "U1_huber_m_scale": 0.1866666666666667,
+      "U2_median_of_forward_fold_scales": 0.1866666666666667,
+      "U3_student_t_predictive": 0.2491666666666667
+    },
+    "note": "The objective is mean absolute coverage error across the declared levels, not a mean squared z of one. A rejected earlier attempt optimised the second moment and produced an interval that was worse calibrated than the raw one.",
+    "selected": "U0_raw",
+    "selection": {
+      "best": "U0_raw",
+      "difference_from_best": 0.0,
+      "difference_se": 0.0,
+      "reason": "this candidate has the best score",
+      "selected": "U0_raw"
+    },
+    "temporal_model_used": "A0_pooled_empirical_bayes"
+  },
+  "parsimony_tie_band_se": 1.0,
+  "promotion_eligibility": "SHADOW_RESEARCH_ONLY__NOT_ELIGIBLE_FOR_PROMOTION",
+  "scope": "strictly pre-2024 chronological folds",
+  "seasons_used": [
+    2020,
+    2021,
+    2022,
+    2023
+  ],
+  "seed": 73,
+  "stats": [
+    "pts",
+    "reb",
+    "ast",
+    "stl",
+    "blk",
+    "fg3m"
+  ],
+  "title": "Final upstream remediation: inner selection"
+}
