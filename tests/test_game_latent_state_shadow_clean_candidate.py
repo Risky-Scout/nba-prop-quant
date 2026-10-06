@@ -167,6 +167,47 @@ def test_the_recorded_equivalence_evidence_still_matches_its_source(resolution):
     assert reused["source_sha256"] == sha256_file(REPAIR_DIR / "validation_report.json")
 
 
+@pytest.mark.parametrize(
+    "checksum_file",
+    sorted(
+        path.relative_to(PROJECT).as_posix()
+        for directory in (V1_DIR, REPAIR_DIR, V2_DIR, RESOLUTION_DIR)
+        for path in directory.glob("SHA256SUMS.*.txt")
+    ),
+)
+def test_every_carried_checksum_file_still_describes_what_it_covers(checksum_file):
+    """A checksum file nobody verifies is a comment that looks like a guarantee.
+
+    Entries for the generated parquet exports are expected to name files this
+    branch does not carry -- being identified by hash instead of committed is
+    the whole point of them -- so those are checked for *being* generated
+    artifacts rather than for matching. Everything else must match its bytes.
+    """
+    from nba_prop_quant.research.game_latent_state.artifacts import sha256_file
+    from nba_prop_quant.research.game_latent_state.safety import is_generated_artifact
+
+    path = PROJECT / checksum_file
+    entries = [
+        line.split(None, 1)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert entries, f"{checksum_file} covers nothing"
+
+    for digest, name in entries:
+        covered = path.parent / name.strip()
+        if not covered.exists():
+            assert is_generated_artifact(covered.name), (
+                f"{checksum_file} covers {name.strip()}, which is absent and is "
+                "not a generated artifact this branch deliberately excludes"
+            )
+            continue
+        assert sha256_file(covered) == digest, (
+            f"{checksum_file} is stale for {name.strip()}: regenerate it "
+            "alongside the artifact it covers"
+        )
+
+
 # ---------------------------------------------------------------------
 # The predictive-SD rejection
 # ---------------------------------------------------------------------

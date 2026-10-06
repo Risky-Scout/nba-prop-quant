@@ -1,7 +1,7 @@
 {
   "all_v2_structural_additions_screened_and_not_carried": true,
   "clean_branch": "research/nba-game-latent-state-shadow-clean",
-  "code_sha": "9f228ae7d891f7a9646b00402114a914fc567999",
+  "code_sha": "e45fcfece1e6598df7513bf6b1a13f4f8a8ce181",
   "code_sha_note": "code_sha is HEAD at generation time, which is the commit *before* the one that carries this file. A head SHA cannot name the commit that contains it, so the clean branch head is reported in the pull request rather than claimed here.",
   "equivalence_proof": {
     "bitwise_identical_everywhere": true,
@@ -42,7 +42,7 @@
         "path": "research/game_latent_state_v2/inner_screening.json",
         "sha": "d009be4183c6da3613bf7c71382cd4323e3c1bbe"
       },
-      "new_blob_count": 70,
+      "new_blob_count": 73,
       "notable": [],
       "notable_bytes": 5242880,
       "over_ceiling": [],

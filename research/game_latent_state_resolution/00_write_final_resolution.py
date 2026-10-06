@@ -50,6 +50,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from nba_prop_quant.research.game_latent_state.artifacts import (  # noqa: E402
     sha256_file,
+    write_checksums,
     write_json,
 )
 from nba_prop_quant.research.game_latent_state.covariance import (  # noqa: E402
@@ -65,6 +66,7 @@ console = Console()
 V1_DIR = PROJECT_ROOT / "research" / "game_latent_state"
 REPAIR_DIR = PROJECT_ROOT / "research" / "game_latent_state_bucket_repair"
 V2_DIR = PROJECT_ROOT / "research" / "game_latent_state_v2"
+RESOLUTION_DIR = PROJECT_ROOT / "research" / "game_latent_state_resolution"
 
 #: The components the research screened and did not carry, each with the
 #: artifact that decided it. A rejection with no evidence attached is an
@@ -533,6 +535,17 @@ def main() -> None:
     artifact_dir = Path(args.artifact_root)
     artifact_dir.mkdir(parents=True, exist_ok=True)
     path = write_json(resolution, artifact_dir / "final_resolution.json")
+    # Written here rather than by hand, because a checksum file that is not
+    # regenerated alongside what it covers goes stale without saying so.
+    checksums = write_checksums(
+        [
+            path,
+            RESOLUTION_DIR / "00_write_final_resolution.py",
+            RESOLUTION_DIR / "audit_merge_path_blobs.py",
+            RESOLUTION_DIR / "README.md",
+        ],
+        RESOLUTION_DIR / "SHA256SUMS.resolution.txt",
+    )
     console.rule("Resolution")
     console.print("WINNING_DEPENDENCE_MODEL=ACCEPTED_BUCKET_REPAIR")
     console.print("ALL_V2_STRUCTURAL_ADDITIONS_NOT_CARRIED=YES")
@@ -541,6 +554,7 @@ def main() -> None:
     console.print("MERGE_PATH_AUDIT_VERDICT=SEE_audit_merge_path_blobs.py_AGAINST_THE_PUSHED_HEAD")
     console.print(f"PRODUCTION_PATHS_MODIFIED={len(touched)}")
     console.print(f"\nwrote {path}")
+    console.print(f"wrote {checksums}")
 
 
 if __name__ == "__main__":
