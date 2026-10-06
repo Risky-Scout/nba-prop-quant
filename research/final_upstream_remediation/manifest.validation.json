@@ -1,11 +1,11 @@
 {
   "artifact_name": "game_latent_state_validation",
   "branch": "research/nba-final-upstream-remediation",
-  "code_sha": "0c98d6e1104b45c88136a768ece68d9ab2a573ab",
-  "created_at": "2026-10-06T10:38:12Z",
+  "code_sha": "9343de38107feca14090697dabbd85f6a895d223",
+  "created_at": "2026-10-06T14:22:56Z",
   "dependence_model_version": "game-latent-state-shadow-v1",
   "input_fingerprints": {
-    "factor_spec.json": "6f3cc755b0f4fcd7da3a7249df76bb3ee8bb5cf01d43b83afd5709934820f3c0",
+    "factor_spec.json": "e643c6d52d5fd547b925e2bfedc3b128fbc5a4815d0a1200b13571f67b33509a",
     "oof_gaussian_residuals.parquet": "d0005f0e4996670266bfb5f9cf5cd25d8cbf9189c305fdc009f0f805ac921174"
   },
   "notes": [
@@ -13,8 +13,8 @@
     "Joint-event lines come from the predictive marginal only; realized values are used solely for grading."
   ],
   "outputs": {
-    "joint_event_grades.parquet": "6dae3bc26e8bcacdcda196193cb7bd94d08e8f26ee191f73afa320dfc86454ba",
-    "validation_report.json": "dc8acb28fe0c60a46926b78d5caa72287003e50569d53cdfb802c0e4fe5fd6dd"
+    "joint_event_grades.parquet": "58aa122344b11bf0d732524fc2af69d543317aa261a05d3e6a11e6dd07e54776",
+    "validation_report.json": "03d35ed1733ae105f00be0d00c56a0de1e5f61985cd2c29194878c5a15b89817"
   },
   "parameters": {
     "bootstrap_draws": 400,
