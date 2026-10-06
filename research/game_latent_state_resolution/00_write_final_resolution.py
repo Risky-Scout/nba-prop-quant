@@ -486,7 +486,22 @@ def main() -> None:
         "equivalence_proof": proof,
         "predictive_sd_verdict": sd_verdict,
         "further_holdout_simulation_required": False,
-        "merge_path_audit": audit,
+        "merge_path_audit": {
+            "snapshot_at_generation_time": audit,
+            "snapshot_is_not_the_verdict": (
+                "This file is written before the commit that carries it, so at "
+                "generation time the merge path is empty and the snapshot above "
+                "reports zero new objects. That is an artefact of ordering, not "
+                "a clean result. The verdict is whatever "
+                "research/game_latent_state_resolution/audit_merge_path_blobs.py "
+                "reports against the pushed branch head, which is also what "
+                "test_no_new_object_in_the_merge_path_breaches_the_blob_contract "
+                "enforces on every run."
+            ),
+            "ceiling_bytes": audit["ceiling_bytes"],
+            "notable_bytes": audit["notable_bytes"],
+            "base": audit["base"],
+        },
         "protected_production_paths_modified": touched,
         "production_base": git_sha("origin/production/wizardofodds-integration")
         or args.production_base,
@@ -523,7 +538,7 @@ def main() -> None:
     console.print("ALL_V2_STRUCTURAL_ADDITIONS_NOT_CARRIED=YES")
     console.print("PREDICTIVE_SD_INFLATION=REJECTED")
     console.print("FURTHER_HOLDOUT_SIMULATION_REQUIRED=NO")
-    console.print(f"MERGE_PATH_AUDIT_PASSED={'YES' if audit['passed'] else 'NO'}")
+    console.print("MERGE_PATH_AUDIT_VERDICT=SEE_audit_merge_path_blobs.py_AGAINST_THE_PUSHED_HEAD")
     console.print(f"PRODUCTION_PATHS_MODIFIED={len(touched)}")
     console.print(f"\nwrote {path}")
 

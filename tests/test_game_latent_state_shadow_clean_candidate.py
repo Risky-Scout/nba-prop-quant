@@ -22,6 +22,10 @@ from pathlib import Path
 import pytest
 
 from nba_prop_quant.research.game_latent_state.covariance import SharedFactorLoadings
+from nba_prop_quant.research.game_latent_state.safety import (
+    MAX_MERGE_PATH_BLOB_BYTES,
+    audit_merge_path,
+)
 
 PROJECT = Path(__file__).resolve().parents[1]
 V1_DIR = PROJECT / "research" / "game_latent_state"
@@ -277,9 +281,29 @@ def test_the_reused_metrics_carry_the_full_acceptance_evidence(resolution):
 # ---------------------------------------------------------------------
 
 
-def test_the_resolution_records_a_clean_merge_path(resolution):
+def test_the_resolution_records_the_blob_contract_without_claiming_to_have_met_it(
+    resolution,
+):
+    """The artifact cannot audit the commit that carries it.
+
+    It is written first, so at that moment the merge path is empty and any
+    ``passed`` it recorded would be vacuously true. What it should carry is the
+    contract and a pointer to the check that runs against the real head.
+    """
     audit = resolution["merge_path_audit"]
+    assert audit["ceiling_bytes"] == MAX_MERGE_PATH_BLOB_BYTES
+    assert audit["snapshot_is_not_the_verdict"]
+    assert "passed" not in audit
+
+
+def test_the_live_merge_path_audit_is_what_passes(resolution):
+    """And the check that is not vacuous runs here, against the real head."""
+    audit = audit_merge_path(PROJECT, base=resolution["production_base"])
     assert audit["base_resolved"] is True
+    assert audit["new_blob_count"] > 0, (
+        "an empty merge path against the recorded production base means the "
+        "base is wrong, not that the branch is clean"
+    )
     assert audit["over_ceiling"] == []
     assert audit["generated_artifacts"] == []
     assert audit["passed"] is True
