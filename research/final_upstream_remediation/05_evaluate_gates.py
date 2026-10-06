@@ -182,6 +182,29 @@ def main() -> None:
     inner = load(artifact_dir / "inner_selection.json")
     temperature = load(artifact_dir / "dependence_temperature.json")
 
+    # A gate report is only worth reading if it scored the spec that is
+    # actually frozen. Both runs record the hash of the spec they loaded, so
+    # a stale report from an earlier revision is caught here rather than
+    # quietly reported as a result.
+    if report["factor_spec_hash"] != spec["spec_hash"]:
+        raise SystemExit(
+            "the candidate validation report scored factor spec "
+            f"{report['factor_spec_hash']}, not the frozen {spec['spec_hash']}; "
+            "re-run 04_validate_shadow_v1.py against this artifact root"
+        )
+    if report["factor_spec_hash"] != frozen["factor_spec_hash"]:
+        raise SystemExit("the frozen record and the factor spec disagree")
+    if control["factor_spec_hash"] != frozen["control"]["factor_spec_hash"]:
+        raise SystemExit(
+            "the control validation report scored factor spec "
+            f"{control['factor_spec_hash']}, not the accepted repair's "
+            f"{frozen['control']['factor_spec_hash']}"
+        )
+    if paired["events"] != sum(
+        entry["events"] for entry in paired["by_legs"].values()
+    ):
+        raise SystemExit("the paired comparison does not account for its events")
+
     latent = report["latent_dependence"]
     control_latent = control["latent_dependence"]
     observed = latent["observed_buckets"]
