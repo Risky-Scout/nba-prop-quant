@@ -7,7 +7,7 @@ Monte Carlo draws. That is the right instrument for the confirmatory run --
 it exercises the production inverse CDFs and the Cholesky path end to end --
 but it is the wrong one for choosing a scalar, because the quantity being
 compared across candidate temperatures is smaller than the Monte Carlo noise
-    10|at any affordable draw count. The accepted repair and the production
+at any affordable draw count. The accepted repair and the production
 incumbent differ by about 3e-5 in Brier; resolving a difference that size by
 simulation needs far more draws than a search over a grid can afford.
 
@@ -17,7 +17,7 @@ A leg is a threshold on a count, the count is a monotone transform of one
 latent normal, and therefore the leg is a threshold on that normal:
 
     Y = min{k : F(k) >= Phi(Z)}      (``simulator.grid_ppf``)
-    20|    Y <= m   <=>   Phi(Z) <= F(m)   <=>   Z <= Phi^{-1}(F(m))
+    Y <= m   <=>   Phi(Z) <= F(m)   <=>   Z <= Phi^{-1}(F(m))
 
 A conjunction of such legs is an orthant of a multivariate normal, so its
 probability is a Gaussian orthant integral over the sub-correlation matrix of
@@ -27,7 +27,7 @@ reproducible to the last bit -- so two temperatures priced here differ only
 because their correlations differ, never because their draws differed.
 
 The correlation matrix still comes from ``build_game_covariance``, so the
-    30|same-player pinning, the shared-factor shrink and the PSD projection all
+same-player pinning, the shared-factor shrink and the PSD projection all
 apply exactly as they do in simulation. Only the pricing is analytic.
 """
 
@@ -37,7 +37,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 import numpy as np
-    40|from scipy.stats import multivariate_normal, norm
+from scipy.stats import multivariate_normal, norm
 
 from .covariance import GameCovariance
 
@@ -47,7 +47,7 @@ from .covariance import GameCovariance
 #: four orders of magnitude of headroom for the comparison this drives.
 ORTHANT_ABSOLUTE_TOLERANCE = 1e-7
 
-    50|#: Quasi-random point budget for the orthant integral. The tolerance above
+#: Quasi-random point budget for the orthant integral. The tolerance above
 #: is a request, not a guarantee; this is the ceiling on the work spent
 #: trying to meet it.
 ORTHANT_MAX_POINTS = 200_000
@@ -57,7 +57,7 @@ ORTHANT_MAX_POINTS = 200_000
 #: *comparison* even where it survives in the level.
 ORTHANT_SEED = 20_260_206
 
-    60|
+
 @dataclass(frozen=True)
 class LatentOrthant:
     """One conjunction expressed as ``W <= limit`` on correlated normals.
@@ -66,7 +66,7 @@ class LatentOrthant:
     ``W = diag(signs) Z``, so the orthant is upper-tailed in the original
     normals wherever the leg was. Degenerate legs -- ones a marginal already
     settles at probability 0 or 1 -- are recorded in ``certainty`` and removed
-    70|    from the integral rather than pushed through it as an infinite limit.
+    from the integral rather than pushed through it as an infinite limit.
     """
 
     columns: tuple[int, ...]
@@ -77,7 +77,7 @@ class LatentOrthant:
     @property
     def size(self) -> int:
         return len(self.columns)
-    80|
+
 
 def dimension_columns(covariance: GameCovariance) -> dict[tuple[int, str], int]:
     """Column of the game correlation matrix for each ``(player, stat)``."""
@@ -86,7 +86,7 @@ def dimension_columns(covariance: GameCovariance) -> dict[tuple[int, str], int]:
         for position, dimension in enumerate(covariance.dimensions)
     }
 
-    90|
+
 def latent_orthant(
     legs: Sequence[object],
     columns: Mapping[tuple[int, str], int],
@@ -96,7 +96,7 @@ def latent_orthant(
 
     The threshold uses the *same* tabulated CDF the simulator pushes uniforms
     through, so the translation is exact rather than approximate: there is no
-   100|    continuity correction and no normal approximation to a discrete count
+    continuity correction and no normal approximation to a discrete count
     anywhere in it.
     """
     chosen: list[int] = []
@@ -106,7 +106,7 @@ def latent_orthant(
     for leg in legs:
         key = (int(leg.player_id), str(leg.stat))  # type: ignore[attr-defined]
         if key not in columns or key not in reference:
-   110|            raise KeyError(f"leg {key} is not a simulated dimension")
+            raise KeyError(f"leg {key} is not a simulated dimension")
         cdf = np.asarray(reference[key].cdf, dtype=float)  # type: ignore[attr-defined]
         floor_line = int(np.floor(float(leg.line)))  # type: ignore[attr-defined]
 
@@ -117,7 +117,7 @@ def latent_orthant(
         elif floor_line >= len(cdf):
             below = 1.0
         else:
-   120|            below = float(cdf[floor_line])
+            below = float(cdf[floor_line])
 
         if str(leg.side) == "over":  # type: ignore[attr-defined]
             probability = 1.0 - below
@@ -127,7 +127,7 @@ def latent_orthant(
             sign = 1.0
 
         if probability <= 0.0:
-   130|            return LatentOrthant((), np.empty(0), np.empty(0), 0.0)
+            return LatentOrthant((), np.empty(0), np.empty(0), 0.0)
         if probability >= 1.0:
             continue
 
@@ -137,7 +137,7 @@ def latent_orthant(
 
     if not chosen:
         return LatentOrthant((), np.empty(0), np.empty(0), 1.0)
-   140|
+
     return LatentOrthant(
         columns=tuple(chosen),
         limits=np.asarray(limits, dtype=float),
@@ -147,7 +147,7 @@ def latent_orthant(
 
 
 def orthant_probability(
-   150|    orthant: LatentOrthant,
+    orthant: LatentOrthant,
     correlation: np.ndarray,
     absolute_tolerance: float = ORTHANT_ABSOLUTE_TOLERANCE,
     max_points: int = ORTHANT_MAX_POINTS,
@@ -157,7 +157,7 @@ def orthant_probability(
 
     One dimension is a univariate normal CDF and needs no integration; two or
     more go to Genz's algorithm with a fixed generator.
-   160|    """
+    """
     if orthant.certainty is not None:
         return float(orthant.certainty)
 
@@ -167,7 +167,7 @@ def orthant_probability(
     block = flip @ block @ flip
     upper = orthant.signs * orthant.limits
 
-   170|    if orthant.size == 1:
+    if orthant.size == 1:
         return float(norm.cdf(upper[0]))
 
     value = multivariate_normal.cdf(
@@ -177,7 +177,7 @@ def orthant_probability(
         abseps=absolute_tolerance,
         maxpts=max_points,
         rng=np.random.default_rng(seed),
-   180|    )
+    )
     return float(np.clip(value, 0.0, 1.0))
 
 
@@ -187,7 +187,7 @@ def independent_product(
     """The conjunction's probability if every leg were independent.
 
     Reported alongside the coupled price so the share of the joint effect a
-   190|    temperature actually carries is visible, rather than inferred.
+    temperature actually carries is visible, rather than inferred.
     """
     if orthant.certainty is not None:
         return float(orthant.certainty)

@@ -1,7 +1,7 @@
 {
   "bootstrap": 400,
   "bridge_bootstrap": 2000,
-  "code_sha": "766ef10a76367f77e3c73a4ef2ad4df311ef750f",
+  "code_sha": "fc474dd10bf5ae4ca4ec4ba0ad04c23d0412090a",
   "control_spec": {
     "bridge_mode": "off",
     "bridge_weight_cap": 1.0,
@@ -2390,43 +2390,47 @@
       },
       "cap_0.15": {
         "admissible": true,
-        "forward_count_rmse_ratio": 0.9287096799960727,
-        "forward_latent_rmse_ratio": 0.9534894434096282,
-        "forward_target_bucket_improvement": 0.06710838542166042,
-        "worst_protected_z_increase": 0.3876075330313607
+        "forward_count_rmse_ratio": 0.9927124933020889,
+        "forward_latent_rmse_ratio": 0.9913479327268219,
+        "forward_target_bucket_improvement": 0.00028196794506618605,
+        "worst_protected_z_increase": 0.09629085520124792
       },
       "cap_0.30": {
         "admissible": true,
-        "forward_count_rmse_ratio": 0.9287096799960727,
-        "forward_latent_rmse_ratio": 0.9534894434096282,
-        "forward_target_bucket_improvement": 0.06710838542166042,
-        "worst_protected_z_increase": 0.3876075330313607
+        "forward_count_rmse_ratio": 0.992896244564005,
+        "forward_latent_rmse_ratio": 0.991665097722291,
+        "forward_target_bucket_improvement": 0.00025732042994996984,
+        "worst_protected_z_increase": 0.09671692875098115
       },
       "cap_0.50": {
         "admissible": true,
-        "forward_count_rmse_ratio": 0.9287096799960727,
-        "forward_latent_rmse_ratio": 0.9534894434096282,
-        "forward_target_bucket_improvement": 0.06710838542166042,
-        "worst_protected_z_increase": 0.3876075330313607
+        "forward_count_rmse_ratio": 0.9948582133859359,
+        "forward_latent_rmse_ratio": 0.9968870200901053,
+        "forward_target_bucket_improvement": 0.0002570082426374132,
+        "worst_protected_z_increase": 0.09720171779872167
       },
       "cap_1.00": {
         "admissible": true,
-        "forward_count_rmse_ratio": 0.9287096799960727,
-        "forward_latent_rmse_ratio": 0.9534894434096282,
-        "forward_target_bucket_improvement": 0.06710838542166042,
-        "worst_protected_z_increase": 0.3876075330313607
+        "forward_count_rmse_ratio": 0.9954683566793763,
+        "forward_latent_rmse_ratio": 0.9980756369563434,
+        "forward_target_bucket_improvement": 0.00025700824263685806,
+        "worst_protected_z_increase": 0.09729190308649982
       }
     },
     "candidates": {
       "cap_0.00": {
         "folds": [
           {
-            "count_rmse": 0.008672340699405213,
+            "count_rmse": 0.008666457511702254,
             "latent_rmse": 0.003293364240767606,
             "mean_bridge_weight_cross_team": 0.0,
             "mean_bridge_weight_same_team": 0.0,
-            "passer_ast_teammate_pts_count_error": -0.01995600613386058,
+            "passer_ast_teammate_pts_count_error": -0.019921901068024245,
+            "passer_ast_teammate_pts_implied_count": 0.04220242287372591,
+            "passer_ast_teammate_pts_implied_latent": 0.046143781232118,
             "passer_ast_teammate_pts_latent_z": -1.1534712673930103,
+            "passer_ast_teammate_pts_observed_count": 0.06212432394175015,
+            "passer_ast_teammate_pts_observed_latent": 0.04966040548347338,
             "protected_z": {
               "opponent_ast_ast": -1.206267906470482,
               "opponent_fg3m_reb": 1.4983560362950359,
@@ -2437,12 +2441,16 @@
             "target_season": 2021
           },
           {
-            "count_rmse": 0.006199753682485797,
+            "count_rmse": 0.006206351932133884,
             "latent_rmse": 0.002681488633338961,
             "mean_bridge_weight_cross_team": 0.0,
             "mean_bridge_weight_same_team": 0.0,
-            "passer_ast_teammate_pts_count_error": -0.010607890470886304,
+            "passer_ast_teammate_pts_count_error": -0.010648352325121645,
+            "passer_ast_teammate_pts_implied_count": 0.044624528197576625,
+            "passer_ast_teammate_pts_implied_latent": 0.04735238521071933,
             "passer_ast_teammate_pts_latent_z": 1.356452350530977,
+            "passer_ast_teammate_pts_observed_count": 0.05527288052269827,
+            "passer_ast_teammate_pts_observed_latent": 0.04349191870481931,
             "protected_z": {
               "opponent_ast_ast": 0.5616034491191215,
               "opponent_fg3m_reb": 0.06888153846055389,
@@ -2453,12 +2461,16 @@
             "target_season": 2022
           },
           {
-            "count_rmse": 0.002043472547914119,
+            "count_rmse": 0.002046620774346253,
             "latent_rmse": 0.0046140798005809254,
             "mean_bridge_weight_cross_team": 0.0,
             "mean_bridge_weight_same_team": 0.0,
-            "passer_ast_teammate_pts_count_error": -0.002183487271367003,
+            "passer_ast_teammate_pts_count_error": -0.00219800845141354,
+            "passer_ast_teammate_pts_implied_count": 0.04348730231601226,
+            "passer_ast_teammate_pts_implied_latent": 0.04645455889882827,
             "passer_ast_teammate_pts_latent_z": 4.245206298719599,
+            "passer_ast_teammate_pts_observed_count": 0.045685310767425796,
+            "passer_ast_teammate_pts_observed_latent": 0.03649899924319271,
             "protected_z": {
               "opponent_ast_ast": -1.6143173573133158,
               "opponent_fg3m_reb": 0.04849168740904698,
@@ -2473,68 +2485,80 @@
       "cap_0.15": {
         "folds": [
           {
-            "bridge_model_error_sd_cross_team": 0.004476217496561412,
-            "bridge_model_error_sd_same_team": 0.007381876432430302,
-            "count_rmse": 0.007771254606395254,
-            "entries_clipped_cross_team": 28,
-            "entries_clipped_same_team": 34,
-            "latent_rmse": 0.00243682959833635,
-            "max_bridge_weight_cross_team": 0.010061738143003299,
-            "max_bridge_weight_same_team": 0.010944800079405013,
-            "mean_bridge_weight_cross_team": 0.0008321110767888556,
-            "mean_bridge_weight_same_team": 0.00033697382641518933,
-            "passer_ast_teammate_pts_count_error": -0.018874177422589435,
-            "passer_ast_teammate_pts_latent_z": -0.7672997330021658,
+            "bridge_model_error_sd_cross_team": 0.0015078437414047987,
+            "bridge_model_error_sd_same_team": 0.0020717512410101365,
+            "count_rmse": 0.008594786798775742,
+            "entries_clipped_cross_team": 31,
+            "entries_clipped_same_team": 28,
+            "latent_rmse": 0.003209290022089622,
+            "max_bridge_weight_cross_team": 0.15,
+            "max_bridge_weight_same_team": 0.15,
+            "mean_bridge_weight_cross_team": 0.13007644929677004,
+            "mean_bridge_weight_same_team": 0.11617810782074299,
+            "passer_ast_teammate_pts_count_error": -0.019915314087060862,
+            "passer_ast_teammate_pts_implied_count": 0.04220900985468929,
+            "passer_ast_teammate_pts_implied_latent": 0.04615094476990867,
+            "passer_ast_teammate_pts_latent_z": -1.1511215892858773,
+            "passer_ast_teammate_pts_observed_count": 0.06212432394175015,
+            "passer_ast_teammate_pts_observed_latent": 0.04966040548347338,
             "protected_z": {
-              "opponent_ast_ast": -1.0123675010682105,
-              "opponent_fg3m_reb": 1.248040533548634,
-              "opponent_pts_reb": -0.590799761468533,
-              "teammate_ast_ast": -0.4772746855340702,
-              "teammate_reb_reb": -1.0367562708933682
+              "opponent_ast_ast": -1.067580381032869,
+              "opponent_fg3m_reb": 1.4624996038949392,
+              "opponent_pts_reb": -0.24899368917067205,
+              "teammate_ast_ast": -1.344249615540822,
+              "teammate_reb_reb": -1.465768109312112
             },
             "target_season": 2021
           },
           {
-            "bridge_model_error_sd_cross_team": 0.004339779821041802,
-            "bridge_model_error_sd_same_team": 0.007906400998486147,
-            "count_rmse": 0.00583854293445749,
-            "entries_clipped_cross_team": 31,
-            "entries_clipped_same_team": 33,
-            "latent_rmse": 0.002760933832148742,
-            "max_bridge_weight_cross_team": 0.0031349430918545034,
-            "max_bridge_weight_same_team": 0.001784837070161629,
-            "mean_bridge_weight_cross_team": 0.00014528866645966158,
-            "mean_bridge_weight_same_team": 6.873071118240787e-05,
-            "passer_ast_teammate_pts_count_error": -0.009948259492406623,
-            "passer_ast_teammate_pts_latent_z": 1.6007356761822398,
+            "bridge_model_error_sd_cross_team": 0.0013869629318951971,
+            "bridge_model_error_sd_same_team": 0.002975851374362786,
+            "count_rmse": 0.006179309788924717,
+            "entries_clipped_cross_team": 30,
+            "entries_clipped_same_team": 10,
+            "latent_rmse": 0.002676371456607586,
+            "max_bridge_weight_cross_team": 0.15,
+            "max_bridge_weight_same_team": 0.15,
+            "mean_bridge_weight_cross_team": 0.11575837954448158,
+            "mean_bridge_weight_same_team": 0.059036456030178965,
+            "passer_ast_teammate_pts_count_error": -0.01064646109526643,
+            "passer_ast_teammate_pts_implied_count": 0.04462641942743184,
+            "passer_ast_teammate_pts_implied_latent": 0.04735438041673677,
+            "passer_ast_teammate_pts_latent_z": 1.3571534061904467,
+            "passer_ast_teammate_pts_observed_count": 0.05527288052269827,
+            "passer_ast_teammate_pts_observed_latent": 0.04349191870481931,
             "protected_z": {
-              "opponent_ast_ast": 0.6957312702617887,
-              "opponent_fg3m_reb": -0.05970901905816999,
-              "opponent_pts_reb": 1.5877809757608903,
-              "teammate_ast_ast": 0.43609653081492195,
-              "teammate_reb_reb": -1.2171402417874837
+              "opponent_ast_ast": 0.6578943043203694,
+              "opponent_fg3m_reb": 0.1212855677585136,
+              "opponent_pts_reb": 1.6890500572456402,
+              "teammate_ast_ast": -0.05120879370742695,
+              "teammate_reb_reb": -1.4758322979579237
             },
             "target_season": 2022
           },
           {
-            "bridge_model_error_sd_cross_team": 0.004470861864885995,
-            "bridge_model_error_sd_same_team": 0.007990118142698312,
-            "count_rmse": 0.0020998532094787235,
-            "entries_clipped_cross_team": 36,
-            "entries_clipped_same_team": 35,
-            "latent_rmse": 0.004898672091804712,
-            "max_bridge_weight_cross_team": 0.0,
-            "max_bridge_weight_same_team": 0.0001000526340592279,
-            "mean_bridge_weight_cross_team": 0.0,
-            "mean_bridge_weight_same_team": 2.779239834978553e-06,
-            "passer_ast_teammate_pts_count_error": -0.0017273229024085124,
-            "passer_ast_teammate_pts_latent_z": 4.4517180393030396,
+            "bridge_model_error_sd_cross_team": 0.0014793772211377494,
+            "bridge_model_error_sd_same_team": 0.003077191155912015,
+            "count_rmse": 0.0020220331694420918,
+            "entries_clipped_cross_team": 23,
+            "entries_clipped_same_team": 9,
+            "latent_rmse": 0.004611655038137736,
+            "max_bridge_weight_cross_team": 0.15,
+            "max_bridge_weight_same_team": 0.15,
+            "mean_bridge_weight_cross_team": 0.10034423496236172,
+            "mean_bridge_weight_same_team": 0.03787632323333273,
+            "passer_ast_teammate_pts_count_error": -0.0021972470627764362,
+            "passer_ast_teammate_pts_implied_count": 0.04348806370464936,
+            "passer_ast_teammate_pts_implied_latent": 0.04645536757217773,
+            "passer_ast_teammate_pts_latent_z": 4.245551129679936,
+            "passer_ast_teammate_pts_observed_count": 0.045685310767425796,
+            "passer_ast_teammate_pts_observed_latent": 0.03649899924319271,
             "protected_z": {
-              "opponent_ast_ast": -1.4875967652121844,
-              "opponent_fg3m_reb": -0.0703134468540664,
-              "opponent_pts_reb": 0.2759897081006427,
-              "teammate_ast_ast": 3.4492544561508325,
-              "teammate_reb_reb": 0.022767191189372194
+              "opponent_ast_ast": -1.5509632025544315,
+              "opponent_fg3m_reb": 0.1119867590924394,
+              "opponent_pts_reb": 0.43417764691025706,
+              "teammate_ast_ast": 3.0741354244658656,
+              "teammate_reb_reb": -0.2649218285194795
             },
             "target_season": 2023
           }
@@ -2543,68 +2567,80 @@
       "cap_0.30": {
         "folds": [
           {
-            "bridge_model_error_sd_cross_team": 0.004476217496561412,
-            "bridge_model_error_sd_same_team": 0.007381876432430302,
-            "count_rmse": 0.007771254606395254,
-            "entries_clipped_cross_team": 28,
-            "entries_clipped_same_team": 34,
-            "latent_rmse": 0.00243682959833635,
-            "max_bridge_weight_cross_team": 0.010061738143003299,
-            "max_bridge_weight_same_team": 0.010944800079405013,
-            "mean_bridge_weight_cross_team": 0.0008321110767888556,
-            "mean_bridge_weight_same_team": 0.00033697382641518933,
-            "passer_ast_teammate_pts_count_error": -0.018874177422589435,
-            "passer_ast_teammate_pts_latent_z": -0.7672997330021658,
+            "bridge_model_error_sd_cross_team": 0.0015078437414047987,
+            "bridge_model_error_sd_same_team": 0.0020717512410101365,
+            "count_rmse": 0.008593032170742605,
+            "entries_clipped_cross_team": 24,
+            "entries_clipped_same_team": 12,
+            "latent_rmse": 0.0032091874041564085,
+            "max_bridge_weight_cross_team": 0.3,
+            "max_bridge_weight_same_team": 0.3,
+            "mean_bridge_weight_cross_team": 0.24015914025170326,
+            "mean_bridge_weight_same_team": 0.1823828193996696,
+            "passer_ast_teammate_pts_count_error": -0.019916121743289994,
+            "passer_ast_teammate_pts_implied_count": 0.04220820219846016,
+            "passer_ast_teammate_pts_implied_latent": 0.04615006642036932,
+            "passer_ast_teammate_pts_latent_z": -1.151409692558776,
+            "passer_ast_teammate_pts_observed_count": 0.06212432394175015,
+            "passer_ast_teammate_pts_observed_latent": 0.04966040548347338,
             "protected_z": {
-              "opponent_ast_ast": -1.0123675010682105,
-              "opponent_fg3m_reb": 1.248040533548634,
-              "opponent_pts_reb": -0.590799761468533,
-              "teammate_ast_ast": -0.4772746855340702,
-              "teammate_reb_reb": -1.0367562708933682
+              "opponent_ast_ast": -0.9311649633699919,
+              "opponent_fg3m_reb": 1.4272934783716984,
+              "opponent_pts_reb": -0.2550899663471325,
+              "teammate_ast_ast": -1.4008155941987908,
+              "teammate_reb_reb": -1.4923194266379467
             },
             "target_season": 2021
           },
           {
-            "bridge_model_error_sd_cross_team": 0.004339779821041802,
-            "bridge_model_error_sd_same_team": 0.007906400998486147,
-            "count_rmse": 0.00583854293445749,
-            "entries_clipped_cross_team": 31,
-            "entries_clipped_same_team": 33,
-            "latent_rmse": 0.002760933832148742,
-            "max_bridge_weight_cross_team": 0.0031349430918545034,
-            "max_bridge_weight_same_team": 0.001784837070161629,
-            "mean_bridge_weight_cross_team": 0.00014528866645966158,
-            "mean_bridge_weight_same_team": 6.873071118240787e-05,
-            "passer_ast_teammate_pts_count_error": -0.009948259492406623,
-            "passer_ast_teammate_pts_latent_z": 1.6007356761822398,
+            "bridge_model_error_sd_cross_team": 0.0013869629318951971,
+            "bridge_model_error_sd_same_team": 0.002975851374362786,
+            "count_rmse": 0.006184292924196051,
+            "entries_clipped_cross_team": 14,
+            "entries_clipped_same_team": 8,
+            "latent_rmse": 0.002679787175244107,
+            "max_bridge_weight_cross_team": 0.3,
+            "max_bridge_weight_same_team": 0.23293204615453683,
+            "mean_bridge_weight_cross_team": 0.1877182614429401,
+            "mean_bridge_weight_same_team": 0.06191314134047518,
+            "passer_ast_teammate_pts_count_error": -0.010646461095266437,
+            "passer_ast_teammate_pts_implied_count": 0.044626419427431833,
+            "passer_ast_teammate_pts_implied_latent": 0.04735438041673676,
+            "passer_ast_teammate_pts_latent_z": 1.3571534061904418,
+            "passer_ast_teammate_pts_observed_count": 0.05527288052269827,
+            "passer_ast_teammate_pts_observed_latent": 0.04349191870481931,
             "protected_z": {
-              "opponent_ast_ast": 0.6957312702617887,
-              "opponent_fg3m_reb": -0.05970901905816999,
-              "opponent_pts_reb": 1.5877809757608903,
-              "teammate_ast_ast": 0.43609653081492195,
-              "teammate_reb_reb": -1.2171402417874837
+              "opponent_ast_ast": 0.6583203778701027,
+              "opponent_fg3m_reb": 0.13979460551407336,
+              "opponent_pts_reb": 1.687803060110112,
+              "teammate_ast_ast": -0.06329384825782901,
+              "teammate_reb_reb": -1.4820649031565407
             },
             "target_season": 2022
           },
           {
-            "bridge_model_error_sd_cross_team": 0.004470861864885995,
-            "bridge_model_error_sd_same_team": 0.007990118142698312,
-            "count_rmse": 0.0020998532094787235,
-            "entries_clipped_cross_team": 36,
-            "entries_clipped_same_team": 35,
-            "latent_rmse": 0.004898672091804712,
-            "max_bridge_weight_cross_team": 0.0,
-            "max_bridge_weight_same_team": 0.0001000526340592279,
-            "mean_bridge_weight_cross_team": 0.0,
-            "mean_bridge_weight_same_team": 2.779239834978553e-06,
-            "passer_ast_teammate_pts_count_error": -0.0017273229024085124,
-            "passer_ast_teammate_pts_latent_z": 4.4517180393030396,
+            "bridge_model_error_sd_cross_team": 0.0014793772211377494,
+            "bridge_model_error_sd_same_team": 0.003077191155912015,
+            "count_rmse": 0.002021913628857386,
+            "entries_clipped_cross_team": 10,
+            "entries_clipped_same_team": 8,
+            "latent_rmse": 0.004611700376218217,
+            "max_bridge_weight_cross_team": 0.3,
+            "max_bridge_weight_same_team": 0.15021703816270285,
+            "mean_bridge_weight_cross_team": 0.12827219407794915,
+            "mean_bridge_weight_same_team": 0.03788235207118559,
+            "passer_ast_teammate_pts_count_error": -0.002197247062776443,
+            "passer_ast_teammate_pts_implied_count": 0.04348806370464935,
+            "passer_ast_teammate_pts_implied_latent": 0.046455367572177726,
+            "passer_ast_teammate_pts_latent_z": 4.245551129679933,
+            "passer_ast_teammate_pts_observed_count": 0.045685310767425796,
+            "passer_ast_teammate_pts_observed_latent": 0.03649899924319271,
             "protected_z": {
-              "opponent_ast_ast": -1.4875967652121844,
-              "opponent_fg3m_reb": -0.0703134468540664,
-              "opponent_pts_reb": 0.2759897081006427,
-              "teammate_ast_ast": 3.4492544561508325,
-              "teammate_reb_reb": 0.022767191189372194
+              "opponent_ast_ast": -1.5504722270232858,
+              "opponent_fg3m_reb": 0.11169723836269897,
+              "opponent_pts_reb": 0.4337822749873063,
+              "teammate_ast_ast": 3.074122153226922,
+              "teammate_reb_reb": -0.26493148356713575
             },
             "target_season": 2023
           }
@@ -2613,68 +2649,80 @@
       "cap_0.50": {
         "folds": [
           {
-            "bridge_model_error_sd_cross_team": 0.004476217496561412,
-            "bridge_model_error_sd_same_team": 0.007381876432430302,
-            "count_rmse": 0.007771254606395254,
-            "entries_clipped_cross_team": 28,
-            "entries_clipped_same_team": 34,
-            "latent_rmse": 0.00243682959833635,
-            "max_bridge_weight_cross_team": 0.010061738143003299,
-            "max_bridge_weight_same_team": 0.010944800079405013,
-            "mean_bridge_weight_cross_team": 0.0008321110767888556,
-            "mean_bridge_weight_same_team": 0.00033697382641518933,
-            "passer_ast_teammate_pts_count_error": -0.018874177422589435,
-            "passer_ast_teammate_pts_latent_z": -0.7672997330021658,
+            "bridge_model_error_sd_cross_team": 0.0015078437414047987,
+            "bridge_model_error_sd_same_team": 0.0020717512410101365,
+            "count_rmse": 0.008626400155578567,
+            "entries_clipped_cross_team": 6,
+            "entries_clipped_same_team": 6,
+            "latent_rmse": 0.003264111994089838,
+            "max_bridge_weight_cross_team": 0.5,
+            "max_bridge_weight_same_team": 0.5,
+            "mean_bridge_weight_cross_team": 0.30861710949612564,
+            "mean_bridge_weight_same_team": 0.19874367159344583,
+            "passer_ast_teammate_pts_count_error": -0.019916131973125584,
+            "passer_ast_teammate_pts_implied_count": 0.04220819196862457,
+            "passer_ast_teammate_pts_implied_latent": 0.0461500552951257,
+            "passer_ast_teammate_pts_latent_z": -1.1514133416972518,
+            "passer_ast_teammate_pts_observed_count": 0.06212432394175015,
+            "passer_ast_teammate_pts_observed_latent": 0.04966040548347338,
             "protected_z": {
-              "opponent_ast_ast": -1.0123675010682105,
-              "opponent_fg3m_reb": 1.248040533548634,
-              "opponent_pts_reb": -0.590799761468533,
-              "teammate_ast_ast": -0.4772746855340702,
-              "teammate_reb_reb": -1.0367562708933682
+              "opponent_ast_ast": -0.9299360387551819,
+              "opponent_fg3m_reb": 1.4167179550832363,
+              "opponent_pts_reb": -0.25814433599865383,
+              "teammate_ast_ast": -1.473077815991868,
+              "teammate_reb_reb": -1.5265089718794522
             },
             "target_season": 2021
           },
           {
-            "bridge_model_error_sd_cross_team": 0.004339779821041802,
-            "bridge_model_error_sd_same_team": 0.007906400998486147,
-            "count_rmse": 0.00583854293445749,
-            "entries_clipped_cross_team": 31,
-            "entries_clipped_same_team": 33,
-            "latent_rmse": 0.002760933832148742,
-            "max_bridge_weight_cross_team": 0.0031349430918545034,
-            "max_bridge_weight_same_team": 0.001784837070161629,
-            "mean_bridge_weight_cross_team": 0.00014528866645966158,
-            "mean_bridge_weight_same_team": 6.873071118240787e-05,
-            "passer_ast_teammate_pts_count_error": -0.009948259492406623,
-            "passer_ast_teammate_pts_latent_z": 1.6007356761822398,
+            "bridge_model_error_sd_cross_team": 0.0013869629318951971,
+            "bridge_model_error_sd_same_team": 0.002975851374362786,
+            "count_rmse": 0.0061841615838674055,
+            "entries_clipped_cross_team": 6,
+            "entries_clipped_same_team": 8,
+            "latent_rmse": 0.002680129192344996,
+            "max_bridge_weight_cross_team": 0.5,
+            "max_bridge_weight_same_team": 0.23293204615453683,
+            "mean_bridge_weight_cross_team": 0.2055001205633854,
+            "mean_bridge_weight_same_team": 0.06191314134047518,
+            "passer_ast_teammate_pts_count_error": -0.010646461095266457,
+            "passer_ast_teammate_pts_implied_count": 0.04462641942743181,
+            "passer_ast_teammate_pts_implied_latent": 0.04735438041673674,
+            "passer_ast_teammate_pts_latent_z": 1.3571534061904345,
+            "passer_ast_teammate_pts_observed_count": 0.05527288052269827,
+            "passer_ast_teammate_pts_observed_latent": 0.04349191870481931,
             "protected_z": {
-              "opponent_ast_ast": 0.6957312702617887,
-              "opponent_fg3m_reb": -0.05970901905816999,
-              "opponent_pts_reb": 1.5877809757608903,
-              "teammate_ast_ast": 0.43609653081492195,
-              "teammate_reb_reb": -1.2171402417874837
+              "opponent_ast_ast": 0.6588051669178432,
+              "opponent_fg3m_reb": 0.13980403662537713,
+              "opponent_pts_reb": 1.6878107111285614,
+              "teammate_ast_ast": -0.06329384825783119,
+              "teammate_reb_reb": -1.4820649031565223
             },
             "target_season": 2022
           },
           {
-            "bridge_model_error_sd_cross_team": 0.004470861864885995,
-            "bridge_model_error_sd_same_team": 0.007990118142698312,
-            "count_rmse": 0.0020998532094787235,
-            "entries_clipped_cross_team": 36,
-            "entries_clipped_same_team": 35,
-            "latent_rmse": 0.004898672091804712,
-            "max_bridge_weight_cross_team": 0.0,
-            "max_bridge_weight_same_team": 0.0001000526340592279,
-            "mean_bridge_weight_cross_team": 0.0,
-            "mean_bridge_weight_same_team": 2.779239834978553e-06,
-            "passer_ast_teammate_pts_count_error": -0.0017273229024085124,
-            "passer_ast_teammate_pts_latent_z": 4.4517180393030396,
+            "bridge_model_error_sd_cross_team": 0.0014793772211377494,
+            "bridge_model_error_sd_same_team": 0.003077191155912015,
+            "count_rmse": 0.0020218723789229777,
+            "entries_clipped_cross_team": 8,
+            "entries_clipped_same_team": 8,
+            "latent_rmse": 0.00461172835356913,
+            "max_bridge_weight_cross_team": 0.37971099910796197,
+            "max_bridge_weight_same_team": 0.15021703816270285,
+            "mean_bridge_weight_cross_team": 0.1310517015636975,
+            "mean_bridge_weight_same_team": 0.03788235207118559,
+            "passer_ast_teammate_pts_count_error": -0.0021972470627764362,
+            "passer_ast_teammate_pts_implied_count": 0.04348806370464936,
+            "passer_ast_teammate_pts_implied_latent": 0.04645536757217773,
+            "passer_ast_teammate_pts_latent_z": 4.245551129679936,
+            "passer_ast_teammate_pts_observed_count": 0.045685310767425796,
+            "passer_ast_teammate_pts_observed_latent": 0.03649899924319271,
             "protected_z": {
-              "opponent_ast_ast": -1.4875967652121844,
-              "opponent_fg3m_reb": -0.0703134468540664,
-              "opponent_pts_reb": 0.2759897081006427,
-              "teammate_ast_ast": 3.4492544561508325,
-              "teammate_reb_reb": 0.022767191189372194
+              "opponent_ast_ast": -1.550261970350931,
+              "opponent_fg3m_reb": 0.11169723836270853,
+              "opponent_pts_reb": 0.43378227498731015,
+              "teammate_ast_ast": 3.0741221532269143,
+              "teammate_reb_reb": -0.2649314835671221
             },
             "target_season": 2023
           }
@@ -2683,68 +2731,80 @@
       "cap_1.00": {
         "folds": [
           {
-            "bridge_model_error_sd_cross_team": 0.004476217496561412,
-            "bridge_model_error_sd_same_team": 0.007381876432430302,
-            "count_rmse": 0.007771254606395254,
-            "entries_clipped_cross_team": 28,
-            "entries_clipped_same_team": 34,
-            "latent_rmse": 0.00243682959833635,
-            "max_bridge_weight_cross_team": 0.010061738143003299,
-            "max_bridge_weight_same_team": 0.010944800079405013,
-            "mean_bridge_weight_cross_team": 0.0008321110767888556,
-            "mean_bridge_weight_same_team": 0.00033697382641518933,
-            "passer_ast_teammate_pts_count_error": -0.018874177422589435,
-            "passer_ast_teammate_pts_latent_z": -0.7672997330021658,
+            "bridge_model_error_sd_cross_team": 0.0015078437414047987,
+            "bridge_model_error_sd_same_team": 0.0020717512410101365,
+            "count_rmse": 0.00863674798718442,
+            "entries_clipped_cross_team": 3,
+            "entries_clipped_same_team": 5,
+            "latent_rmse": 0.0032766350737702607,
+            "max_bridge_weight_cross_team": 0.675998804825969,
+            "max_bridge_weight_same_team": 0.5734722678093276,
+            "mean_bridge_weight_cross_team": 0.3168477448576226,
+            "mean_bridge_weight_same_team": 0.2007845679214827,
+            "passer_ast_teammate_pts_count_error": -0.01991613197312562,
+            "passer_ast_teammate_pts_implied_count": 0.042208191968624534,
+            "passer_ast_teammate_pts_implied_latent": 0.04615005529512567,
+            "passer_ast_teammate_pts_latent_z": -1.151413341697261,
+            "passer_ast_teammate_pts_observed_count": 0.06212432394175015,
+            "passer_ast_teammate_pts_observed_latent": 0.04966040548347338,
             "protected_z": {
-              "opponent_ast_ast": -1.0123675010682105,
-              "opponent_fg3m_reb": 1.248040533548634,
-              "opponent_pts_reb": -0.590799761468533,
-              "teammate_ast_ast": -0.4772746855340702,
-              "teammate_reb_reb": -1.0367562708933682
+              "opponent_ast_ast": -0.9287283530943368,
+              "opponent_fg3m_reb": 1.4167179550832267,
+              "opponent_pts_reb": -0.25814433599865566,
+              "teammate_ast_ast": -1.496454567792689,
+              "teammate_reb_reb": -1.5376348584761217
             },
             "target_season": 2021
           },
           {
-            "bridge_model_error_sd_cross_team": 0.004339779821041802,
-            "bridge_model_error_sd_same_team": 0.007906400998486147,
-            "count_rmse": 0.00583854293445749,
-            "entries_clipped_cross_team": 31,
-            "entries_clipped_same_team": 33,
-            "latent_rmse": 0.002760933832148742,
-            "max_bridge_weight_cross_team": 0.0031349430918545034,
-            "max_bridge_weight_same_team": 0.001784837070161629,
-            "mean_bridge_weight_cross_team": 0.00014528866645966158,
-            "mean_bridge_weight_same_team": 6.873071118240787e-05,
-            "passer_ast_teammate_pts_count_error": -0.009948259492406623,
-            "passer_ast_teammate_pts_latent_z": 1.6007356761822398,
+            "bridge_model_error_sd_cross_team": 0.0013869629318951971,
+            "bridge_model_error_sd_same_team": 0.002975851374362786,
+            "count_rmse": 0.006184137029138007,
+            "entries_clipped_cross_team": 5,
+            "entries_clipped_same_team": 8,
+            "latent_rmse": 0.0026801922966371637,
+            "max_bridge_weight_cross_team": 0.5317757609459252,
+            "max_bridge_weight_same_team": 0.23293204615453683,
+            "mean_bridge_weight_cross_team": 0.20638278058966109,
+            "mean_bridge_weight_same_team": 0.06191314134047518,
+            "passer_ast_teammate_pts_count_error": -0.010646461095266437,
+            "passer_ast_teammate_pts_implied_count": 0.044626419427431833,
+            "passer_ast_teammate_pts_implied_latent": 0.04735438041673676,
+            "passer_ast_teammate_pts_latent_z": 1.3571534061904418,
+            "passer_ast_teammate_pts_observed_count": 0.05527288052269827,
+            "passer_ast_teammate_pts_observed_latent": 0.04349191870481931,
             "protected_z": {
-              "opponent_ast_ast": 0.6957312702617887,
-              "opponent_fg3m_reb": -0.05970901905816999,
-              "opponent_pts_reb": 1.5877809757608903,
-              "teammate_ast_ast": 0.43609653081492195,
-              "teammate_reb_reb": -1.2171402417874837
+              "opponent_ast_ast": 0.6588953522056213,
+              "opponent_fg3m_reb": 0.13980403662537794,
+              "opponent_pts_reb": 1.68781071112856,
+              "teammate_ast_ast": -0.06329384825784756,
+              "teammate_reb_reb": -1.4820649031565387
             },
             "target_season": 2022
           },
           {
-            "bridge_model_error_sd_cross_team": 0.004470861864885995,
-            "bridge_model_error_sd_same_team": 0.007990118142698312,
-            "count_rmse": 0.0020998532094787235,
-            "entries_clipped_cross_team": 36,
-            "entries_clipped_same_team": 35,
-            "latent_rmse": 0.004898672091804712,
-            "max_bridge_weight_cross_team": 0.0,
-            "max_bridge_weight_same_team": 0.0001000526340592279,
-            "mean_bridge_weight_cross_team": 0.0,
-            "mean_bridge_weight_same_team": 2.779239834978553e-06,
-            "passer_ast_teammate_pts_count_error": -0.0017273229024085124,
-            "passer_ast_teammate_pts_latent_z": 4.4517180393030396,
+            "bridge_model_error_sd_cross_team": 0.0014793772211377494,
+            "bridge_model_error_sd_same_team": 0.003077191155912015,
+            "count_rmse": 0.0020218723789229777,
+            "entries_clipped_cross_team": 8,
+            "entries_clipped_same_team": 8,
+            "latent_rmse": 0.00461172835356913,
+            "max_bridge_weight_cross_team": 0.37971099910796197,
+            "max_bridge_weight_same_team": 0.15021703816270285,
+            "mean_bridge_weight_cross_team": 0.1310517015636975,
+            "mean_bridge_weight_same_team": 0.03788235207118559,
+            "passer_ast_teammate_pts_count_error": -0.0021972470627764362,
+            "passer_ast_teammate_pts_implied_count": 0.04348806370464936,
+            "passer_ast_teammate_pts_implied_latent": 0.04645536757217773,
+            "passer_ast_teammate_pts_latent_z": 4.245551129679936,
+            "passer_ast_teammate_pts_observed_count": 0.045685310767425796,
+            "passer_ast_teammate_pts_observed_latent": 0.03649899924319271,
             "protected_z": {
-              "opponent_ast_ast": -1.4875967652121844,
-              "opponent_fg3m_reb": -0.0703134468540664,
-              "opponent_pts_reb": 0.2759897081006427,
-              "teammate_ast_ast": 3.4492544561508325,
-              "teammate_reb_reb": 0.022767191189372194
+              "opponent_ast_ast": -1.550261970350931,
+              "opponent_fg3m_reb": 0.11169723836270853,
+              "opponent_pts_reb": 0.43378227498731015,
+              "teammate_ast_ast": 3.0741221532269143,
+              "teammate_reb_reb": -0.2649314835671221
             },
             "target_season": 2023
           }
@@ -2760,29 +2820,29 @@
     ],
     "count_rmse_by_fold": {
       "cap_0.00": {
-        "2021": 0.008672340699405213,
-        "2022": 0.006199753682485797,
-        "2023": 0.002043472547914119
+        "2021": 0.008666457511702254,
+        "2022": 0.006206351932133884,
+        "2023": 0.002046620774346253
       },
       "cap_0.15": {
-        "2021": 0.007771254606395254,
-        "2022": 0.00583854293445749,
-        "2023": 0.0020998532094787235
+        "2021": 0.008594786798775742,
+        "2022": 0.006179309788924717,
+        "2023": 0.0020220331694420918
       },
       "cap_0.30": {
-        "2021": 0.007771254606395254,
-        "2022": 0.00583854293445749,
-        "2023": 0.0020998532094787235
+        "2021": 0.008593032170742605,
+        "2022": 0.006184292924196051,
+        "2023": 0.002021913628857386
       },
       "cap_0.50": {
-        "2021": 0.007771254606395254,
-        "2022": 0.00583854293445749,
-        "2023": 0.0020998532094787235
+        "2021": 0.008626400155578567,
+        "2022": 0.0061841615838674055,
+        "2023": 0.0020218723789229777
       },
       "cap_1.00": {
-        "2021": 0.007771254606395254,
-        "2022": 0.00583854293445749,
-        "2023": 0.0020998532094787235
+        "2021": 0.00863674798718442,
+        "2022": 0.006184137029138007,
+        "2023": 0.0020218723789229777
       }
     },
     "homogeneity": [
@@ -2790,54 +2850,54 @@
         "block": "same_team",
         "degrees_of_freedom": 36,
         "homogeneous": false,
-        "max_disagreement_in_sigma": 10.069193221886326,
-        "p_value": 5.225451628883195e-108,
-        "pooled_chi_square": 622.3237797398057,
+        "max_disagreement_in_sigma": 3.8318744509613047,
+        "p_value": 1.0504191608976384e-14,
+        "pooled_chi_square": 143.08566057309537,
         "target_season": 2021
       },
       {
         "block": "cross_team",
         "degrees_of_freedom": 36,
         "homogeneous": false,
-        "max_disagreement_in_sigma": 5.420332778274586,
-        "p_value": 3.803962587983947e-24,
-        "pooled_chi_square": 197.3347504153185,
+        "max_disagreement_in_sigma": 2.997348804311111,
+        "p_value": 0.0004712778705391585,
+        "pooled_chi_square": 70.80667168088692,
         "target_season": 2021
       },
       {
         "block": "same_team",
         "degrees_of_freedom": 36,
         "homogeneous": false,
-        "max_disagreement_in_sigma": 13.858235149107626,
-        "p_value": 7.722768193371974e-230,
-        "pooled_chi_square": 1205.8075131036496,
+        "max_disagreement_in_sigma": 6.827148675208171,
+        "p_value": 2.313626835786009e-59,
+        "pooled_chi_square": 381.758506475526,
         "target_season": 2022
       },
       {
         "block": "cross_team",
         "degrees_of_freedom": 36,
         "homogeneous": false,
-        "max_disagreement_in_sigma": 8.274564146583371,
-        "p_value": 1.1259014555750438e-60,
-        "pooled_chi_square": 388.38604169084056,
+        "max_disagreement_in_sigma": 3.9634673332246035,
+        "p_value": 3.132022371067158e-12,
+        "pooled_chi_square": 127.96418313112768,
         "target_season": 2022
       },
       {
         "block": "same_team",
         "degrees_of_freedom": 36,
         "homogeneous": false,
-        "max_disagreement_in_sigma": 16.77376726868825,
-        "p_value": 0.0,
-        "pooled_chi_square": 1856.2626276878793,
+        "max_disagreement_in_sigma": 8.468627333631899,
+        "p_value": 4.823556518440689e-107,
+        "pooled_chi_square": 617.6216727764131,
         "target_season": 2023
       },
       {
         "block": "cross_team",
         "degrees_of_freedom": 36,
         "homogeneous": false,
-        "max_disagreement_in_sigma": 10.766312714573433,
-        "p_value": 2.773571344587309e-102,
-        "pooled_chi_square": 594.4043422264856,
+        "max_disagreement_in_sigma": 4.818477808413977,
+        "p_value": 1.6545297646871916e-23,
+        "pooled_chi_square": 193.78485465135603,
         "target_season": 2023
       }
     ],
@@ -2849,75 +2909,75 @@
         "2023": 0.0046140798005809254
       },
       "cap_0.15": {
-        "2021": 0.00243682959833635,
-        "2022": 0.002760933832148742,
-        "2023": 0.004898672091804712
+        "2021": 0.003209290022089622,
+        "2022": 0.002676371456607586,
+        "2023": 0.004611655038137736
       },
       "cap_0.30": {
-        "2021": 0.00243682959833635,
-        "2022": 0.002760933832148742,
-        "2023": 0.004898672091804712
+        "2021": 0.0032091874041564085,
+        "2022": 0.002679787175244107,
+        "2023": 0.004611700376218217
       },
       "cap_0.50": {
-        "2021": 0.00243682959833635,
-        "2022": 0.002760933832148742,
-        "2023": 0.004898672091804712
+        "2021": 0.003264111994089838,
+        "2022": 0.002680129192344996,
+        "2023": 0.00461172835356913
       },
       "cap_1.00": {
-        "2021": 0.00243682959833635,
-        "2022": 0.002760933832148742,
-        "2023": 0.004898672091804712
+        "2021": 0.0032766350737702607,
+        "2022": 0.0026801922966371637,
+        "2023": 0.00461172835356913
       }
     },
     "pooled_forward_count_rmse": {
-      "cap_0.00": 0.005638522309935043,
-      "cap_0.15": 0.00523655025011049,
-      "cap_0.30": 0.00523655025011049,
-      "cap_0.50": 0.00523655025011049,
-      "cap_1.00": 0.00523655025011049
+      "cap_0.00": 0.005639810072727464,
+      "cap_0.15": 0.005598709919047516,
+      "cap_0.30": 0.005599746241265347,
+      "cap_0.50": 0.00561081137278965,
+      "cap_1.00": 0.005614252465081802
     },
     "pooled_forward_latent_rmse": {
       "cap_0.00": 0.003529644224895831,
-      "cap_0.15": 0.0033654785074299343,
-      "cap_0.30": 0.0033654785074299343,
-      "cap_0.50": 0.0033654785074299343,
-      "cap_1.00": 0.0033654785074299343
+      "cap_0.15": 0.0034991055056116474,
+      "cap_0.30": 0.003500224985206244,
+      "cap_0.50": 0.0035186565133346545,
+      "cap_1.00": 0.0035228519079921854
     },
     "pooled_forward_target_bucket_abs_count_error": {
-      "cap_0.00": 0.010915794625371296,
-      "cap_0.15": 0.01018325327246819,
-      "cap_0.30": 0.01018325327246819,
-      "cap_0.50": 0.01018325327246819,
-      "cap_1.00": 0.01018325327246819
+      "cap_0.00": 0.010922753948186476,
+      "cap_0.15": 0.010919674081701242,
+      "cap_0.30": 0.01091994330044429,
+      "cap_0.50": 0.010919946710389492,
+      "cap_1.00": 0.010919946710389497
     },
     "selected": "cap_0.15",
     "selected_cap": 0.15,
     "selection_rule": "among caps whose pooled forward global latent RMSE and forward global count RMSE stay within 1.03x the cap-0 control and whose protected buckets do not worsen by more than 0.5 z, take the cap with the largest forward improvement in the absolute count-space error of passer_ast_teammate_pts; otherwise keep the control",
     "target_bucket_abs_count_error_by_fold": {
       "cap_0.00": {
-        "2021": 0.01995600613386058,
-        "2022": 0.010607890470886304,
-        "2023": 0.002183487271367003
+        "2021": 0.019921901068024245,
+        "2022": 0.010648352325121645,
+        "2023": 0.00219800845141354
       },
       "cap_0.15": {
-        "2021": 0.018874177422589435,
-        "2022": 0.009948259492406623,
-        "2023": 0.0017273229024085124
+        "2021": 0.019915314087060862,
+        "2022": 0.01064646109526643,
+        "2023": 0.0021972470627764362
       },
       "cap_0.30": {
-        "2021": 0.018874177422589435,
-        "2022": 0.009948259492406623,
-        "2023": 0.0017273229024085124
+        "2021": 0.019916121743289994,
+        "2022": 0.010646461095266437,
+        "2023": 0.002197247062776443
       },
       "cap_0.50": {
-        "2021": 0.018874177422589435,
-        "2022": 0.009948259492406623,
-        "2023": 0.0017273229024085124
+        "2021": 0.019916131973125584,
+        "2022": 0.010646461095266457,
+        "2023": 0.0021972470627764362
       },
       "cap_1.00": {
-        "2021": 0.018874177422589435,
-        "2022": 0.009948259492406623,
-        "2023": 0.0017273229024085124
+        "2021": 0.01991613197312562,
+        "2022": 0.010646461095266437,
+        "2023": 0.0021972470627764362
       }
     }
   },

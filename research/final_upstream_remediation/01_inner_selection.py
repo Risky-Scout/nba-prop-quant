@@ -31,7 +31,6 @@ difference -- is applied mechanically by
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -45,15 +44,15 @@ from scipy import stats
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from nba_prop_quant.research.game_latent_state.artifacts import (  # noqa: E402
+from nba_prop_quant.research.game_latent_state.artifacts import (
     git_sha,
     write_json,
 )
-from nba_prop_quant.research.game_latent_state.factors import (  # noqa: E402
+from nba_prop_quant.research.game_latent_state.factors import (
     pair_moments,
     standardize_residuals,
 )
-from nba_prop_quant.research.game_latent_state.remediation import (  # noqa: E402
+from nba_prop_quant.research.game_latent_state.remediation import (
     COVERAGE_LEVELS,
     CROSS_PRIOR_GAUSSIAN,
     CROSS_PRIOR_STUDENT_T,
@@ -84,7 +83,7 @@ from nba_prop_quant.research.game_latent_state.remediation import (  # noqa: E40
     role_scale_components,
     select_within_tie_band,
 )
-from nba_prop_quant.research.game_latent_state.transmission import (  # noqa: E402
+from nba_prop_quant.research.game_latent_state.transmission import (
     DEFAULT_BRIDGE_ORDER,
     accumulate_per_game,
     bootstrap_source_pair,
@@ -93,7 +92,7 @@ from nba_prop_quant.research.game_latent_state.transmission import (  # noqa: E4
     homogeneity_test,
     transmission_coefficient_columns,
 )
-from nba_prop_quant.research.game_latent_state.validation import (  # noqa: E402
+from nba_prop_quant.research.game_latent_state.validation import (
     DEPENDENCE_BUCKETS,
 )
 
