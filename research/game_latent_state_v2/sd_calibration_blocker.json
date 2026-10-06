@@ -1,0 +1,225 @@
+{
+  "buckets_that_departed_and_reverted": [
+    "passer_ast_teammate_pts",
+    "teammate_ast_ast",
+    "teammate_pts_reb"
+  ],
+  "cause": "The inflation factor double-counts one season of heterogeneity. It is sqrt of a mean over two folds that disagree by a factor of 8.9, so it is effectively fold 2023's number. Fold 2023 is large because the pooled control was fitted on seasons before it and could not have known that season would depart from the level. For a holdout window that season is inside the training set, the random-effects tau^2 absorbs its departure, and the reported predictive SD widens on its own -- by up to x3.41 across the departing buckets. Multiplying that already-widened SD by a factor fitted on the unwidened one applies the same correction twice, which is why the calibrated mean z^2 lands further from 1 than the raw one. The correspondence is exact across the four buckets: the three that departed are the three whose predictive SD widens and the three with a large fold-2023 z^2, and the one that did not depart is the one whose SD does not widen and whose fold z^2 is near zero.",
+  "code_sha": "9b6e3e719426b2a1526e27782ac8f95916ef42ca",
+  "departing_buckets_whose_predictive_sd_widened": [
+    "passer_ast_teammate_pts",
+    "teammate_ast_ast",
+    "teammate_pts_reb"
+  ],
+  "departure_and_reversion": {
+    "passer_ast_teammate_pts": {
+      "departed_to": 0.036807056459376056,
+      "departure": -0.010281104127915011,
+      "departure_in_standard_errors": 4.4844826535814715,
+      "departure_is_material": true,
+      "inner_fold_squared_z": 11.797709200969976,
+      "level_after": 0.04700021821641031,
+      "level_before": 0.04708816058729107,
+      "recovery": 0.010193161757034254,
+      "reverted": true
+    },
+    "teammate_ast_ast": {
+      "departed_to": -0.0019339780497959422,
+      "departure": -0.010053605375196726,
+      "departure_in_standard_errors": 3.6431714647186086,
+      "departure_is_material": true,
+      "inner_fold_squared_z": 7.082260413350344,
+      "level_after": 0.008969933541060831,
+      "level_before": 0.008119627325400783,
+      "recovery": 0.010903911590856774,
+      "reverted": true
+    },
+    "teammate_pts_reb": {
+      "departed_to": 0.010604263374405598,
+      "departure": -0.005353221327491579,
+      "departure_in_standard_errors": 2.3706087262513456,
+      "departure_is_material": true,
+      "inner_fold_squared_z": 3.501974527262539,
+      "level_after": 0.016313149561488452,
+      "level_before": 0.015957484701897177,
+      "recovery": 0.005708886187082854,
+      "reverted": true
+    },
+    "teammate_reb_reb": {
+      "departed_to": 0.0059100704105731795,
+      "departure": -0.00015652991162139196,
+      "departure_in_standard_errors": 0.052719189918872505,
+      "departure_is_material": false,
+      "inner_fold_squared_z": 0.03285255225828629,
+      "level_after": 0.009421551547516838,
+      "level_before": 0.0060666003221945715,
+      "recovery": 0.003511481136943658,
+      "reverted": false
+    }
+  },
+  "departure_materiality_floor_in_standard_errors": 1.0,
+  "diagnoses": {
+    "artifact": "equivalence_and_calibration.json",
+    "artifact_sha256": "3b06c8f519efbb08545e414f991f99ce5dbc818588d9651e9dc6a0f5e3454e57",
+    "temporal_diagnostic_sha256": "64ec5c9ae545c623970494ca1f49e3f95463d13dca94a67ff1918cf0d76ef61f"
+  },
+  "double_counting_established": true,
+  "folds_disagree": {
+    "disagree": true,
+    "driving_fold": 2023,
+    "quiet_fold": 2022,
+    "quiet_fold_agrees_with_the_holdout": true,
+    "ratio": 8.854002657596636,
+    "threshold": 3.0
+  },
+  "holdout_calibrated_mean_squared_z": 0.390769082372168,
+  "holdout_raw_mean_squared_z": 0.6652266156010309,
+  "holdout_seasons": [
+    2024,
+    2025
+  ],
+  "holdout_used_for_selection": false,
+  "inflation_factor": 1.7658707871961534,
+  "inner_fold_mean_squared_z_by_fold": {
+    "2022": {
+      "by_bucket": {
+        "passer_ast_teammate_pts": 1.1344842974659586,
+        "teammate_ast_ast": 0.0023933551732214656,
+        "teammate_pts_reb": 0.17447047560238588,
+        "teammate_reb_reb": 1.2202522744993916
+      },
+      "mean_squared_z": 0.6329001006852393,
+      "training_seasons": 2
+    },
+    "2023": {
+      "by_bucket": {
+        "passer_ast_teammate_pts": 11.797709200969976,
+        "teammate_ast_ast": 7.082260413350344,
+        "teammate_pts_reb": 3.501974527262539,
+        "teammate_reb_reb": 0.03285255225828629
+      },
+      "mean_squared_z": 5.603699173460287,
+      "training_seasons": 3
+    }
+  },
+  "inner_pooled_mean_squared_z": 3.118299637072763,
+  "non_departing_buckets_whose_predictive_sd_did_not_widen": [
+    "teammate_reb_reb"
+  ],
+  "predictive_sd_widening_once_the_departure_is_in_training": {
+    "passer_ast_teammate_pts": {
+      "fold_prediction_sd": 0.0016923330774877272,
+      "holdout_prediction_sd": 0.005772948251472409,
+      "inner_fold_squared_z": 11.797709200969976,
+      "ratio": 3.411236433458102
+    },
+    "teammate_ast_ast": {
+      "fold_prediction_sd": 0.001877239591764378,
+      "holdout_prediction_sd": 0.0049687449036962365,
+      "inner_fold_squared_z": 7.082260413350344,
+      "ratio": 2.6468357717867104
+    },
+    "teammate_pts_reb": {
+      "fold_prediction_sd": 0.001596349778474873,
+      "holdout_prediction_sd": 0.00211063335808322,
+      "inner_fold_squared_z": 3.501974527262539,
+      "ratio": 1.3221622144112333
+    },
+    "teammate_reb_reb": {
+      "fold_prediction_sd": 0.0018195965602014169,
+      "holdout_prediction_sd": 0.0015514346009915397,
+      "inner_fold_squared_z": 0.03285255225828629,
+      "ratio": 0.8526255956539105
+    }
+  },
+  "promotion_eligibility": "SHADOW_RESEARCH_ONLY__NOT_ELIGIBLE_FOR_PROMOTION",
+  "season_estimate_path": {
+    "passer_ast_teammate_pts": {
+      "2020": 0.04748572220533583,
+      "2021": 0.049683416654590945,
+      "2022": 0.04409534290194642,
+      "2023": 0.036807056459376056,
+      "2024": 0.04635356782969501,
+      "2025": 0.04764686860312561
+    },
+    "teammate_ast_ast": {
+      "2020": 0.008133229356437071,
+      "2021": 0.009308277425028199,
+      "2022": 0.00691737519473708,
+      "2023": -0.0019339780497959422,
+      "2024": 0.008885056494145012,
+      "2025": 0.00905481058797665
+    },
+    "teammate_pts_reb": {
+      "2020": 0.01650977955515559,
+      "2021": 0.014589081808247738,
+      "2022": 0.016773592742288207,
+      "2023": 0.010604263374405598,
+      "2024": 0.018775102931372512,
+      "2025": 0.013851196191604392
+    },
+    "teammate_reb_reb": {
+      "2020": 0.0031459870997116914,
+      "2021": 0.006544151815018613,
+      "2022": 0.00850966205185341,
+      "2023": 0.0059100704105731795,
+      "2024": 0.009674283108257603,
+      "2025": 0.009168819986776074
+    }
+  },
+  "season_standard_errors": {
+    "passer_ast_teammate_pts": {
+      "2020": 0.0027890126872496404,
+      "2021": 0.003050891781763034,
+      "2022": 0.0029725860092327597,
+      "2023": 0.002292595360961904,
+      "2024": 0.0027465293551961287,
+      "2025": 0.002652867528426264
+    },
+    "teammate_ast_ast": {
+      "2020": 0.0032277656555571785,
+      "2021": 0.003256552895574004,
+      "2022": 0.003270544706776916,
+      "2023": 0.0027595751318757232,
+      "2024": 0.002904335057222353,
+      "2025": 0.003139625524164005
+    },
+    "teammate_pts_reb": {
+      "2020": 0.0025771176974077477,
+      "2021": 0.002816349094144648,
+      "2022": 0.0029389980689086934,
+      "2023": 0.0022581631748047485,
+      "2024": 0.002820930154547884,
+      "2025": 0.0024134868591818015
+    },
+    "teammate_reb_reb": {
+      "2020": 0.002962406793921434,
+      "2021": 0.0031755473246885654,
+      "2022": 0.003353613899748584,
+      "2023": 0.002969125888737473,
+      "2024": 0.003338060864226072,
+      "2025": 0.0030957341093550378
+    }
+  },
+  "verdict_being_explained": {
+    "criteria_were_not_revisited_after_seeing_the_holdout": true,
+    "pre_registered_criteria": {
+      "calibrated_must_beat_raw": true,
+      "declared": "in this driver, before any 2024 or 2025 bucket value was read, and judging a reported uncertainty rather than a fitted parameter of the probability model",
+      "max_calibrated_mean_squared_z": 2.0,
+      "min_calibrated_mean_squared_z": 0.25
+    },
+    "predictive_sd_calibration_passed": false,
+    "verdicts": {
+      "calibrated_inside_ceiling": true,
+      "calibrated_inside_floor": true,
+      "calibration_beats_raw": false
+    }
+  },
+  "what_this_does_not_do": [
+    "refit anything",
+    "read residual data",
+    "change a pre-registered threshold",
+    "re-decide the calibration verdict"
+  ]
+}

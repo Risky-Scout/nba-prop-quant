@@ -1,0 +1,2 @@
+3b06c8f519efbb08545e414f991f99ce5dbc818588d9651e9dc6a0f5e3454e57  equivalence_and_calibration.json
+90705358394799b64967b4f3108c0af149d0895c3ca7291fc5d440b45a7cb4dd  manifest.equivalence.json
