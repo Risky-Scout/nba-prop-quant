@@ -1,8 +1,8 @@
 {
   "artifact_name": "game_latent_state_shadow_v2_equivalence_and_calibration",
   "branch": "research/nba-game-latent-state-shadow-v2-structural",
-  "code_sha": "9b6e3e719426b2a1526e27782ac8f95916ef42ca",
-  "created_at": "2026-10-06T00:42:38Z",
+  "code_sha": "470318f4f7305a0e5849ef9dba2eefb78a7a6f8e",
+  "created_at": "2026-10-06T01:03:28Z",
   "dependence_model_version": "game-latent-state-shadow-v1",
   "input_fingerprints": {
     "oof_gaussian_residuals.parquet": "d0005f0e4996670266bfb5f9cf5cd25d8cbf9189c305fdc009f0f805ac921174",
@@ -18,7 +18,7 @@
     "Season 2024 enters the 2025 refit window's training set, which is what a walk-forward predictive-SD test means; it reaches no hyperparameter of the frozen candidate."
   ],
   "outputs": {
-    "equivalence_and_calibration.json": "3b06c8f519efbb08545e414f991f99ce5dbc818588d9651e9dc6a0f5e3454e57"
+    "equivalence_and_calibration.json": "888254e34ee7ca5dd2266812609ce9bd6100dec408ee4d1761d886520049d37c"
   },
   "parameters": {
     "bootstrap_draws": 800,

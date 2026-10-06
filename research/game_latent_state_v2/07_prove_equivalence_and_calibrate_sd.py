@@ -788,20 +788,28 @@ def main() -> None:
     graded_game_ids = {int(value) for value in repair_grades["game_id"].unique()}
 
     rosters: dict[int, GameRoster] = {}
+    rosters_by_window: dict[int, dict[int, GameRoster]] = {}
     for season in HOLDOUT_SEASONS:
-        rosters.update(
-            graded_roster_geometries(
-                residuals,
-                history,
-                season=int(season),
-                games_per_season=args.games_per_season,
-                min_expected_minutes=args.min_expected_minutes,
-            )
+        window = graded_roster_geometries(
+            residuals,
+            history,
+            season=int(season),
+            games_per_season=args.games_per_season,
+            min_expected_minutes=args.min_expected_minutes,
         )
+        rosters_by_window[int(season)] = window
+        rosters.update(window)
     reconstruction_matches = set(rosters) == graded_game_ids
     console.print(
         f"rebuilt {len(rosters)} roster geometries; they are exactly the "
         f"{len(graded_game_ids)} graded games: {reconstruction_matches}"
+    )
+    console.print(
+        "  per refit window: "
+        + ", ".join(
+            f"{season}: {len(window)} games"
+            for season, window in sorted(rosters_by_window.items())
+        )
     )
     if not reconstruction_matches:
         console.print(
@@ -827,6 +835,30 @@ def main() -> None:
         f"{covariance_report['max_abs_cholesky_difference']:.3e}"
     )
 
+    # The identity has to hold in each refit window separately, not just on the
+    # pooled set, because the question asked is whether the two models agree
+    # across both windows. Splitting it also means a window-specific failure
+    # could not hide inside a pooled maximum.
+    by_window = {
+        season: prove_covariance_identity(
+            {
+                game_id: roster
+                for game_id, roster in sorted(window.items())
+                if game_id in checked
+            },
+            candidate_loadings,
+            repair_loadings,
+            seed=args.seed,
+        )
+        for season, window in sorted(rosters_by_window.items())
+    }
+    for season, entry in by_window.items():
+        console.print(
+            f"  refit window {season}: {entry['games_checked']} games, "
+            f"bitwise identical everywhere: "
+            f"{entry['bitwise_identical_everywhere']}"
+        )
+
     equivalence_passed = bool(
         payload_identical
         and all(entry["identical"] for entry in array_report.values())
@@ -834,6 +866,7 @@ def main() -> None:
         and moments_identical
         and stats_identical
         and signature_checks["all_signature_checks_pass"]
+        and all(entry["bitwise_identical_everywhere"] for entry in by_window.values())
         and grades_fingerprint_ok
         and report_fingerprint_ok
         and reconstruction_matches
@@ -1058,6 +1091,26 @@ def main() -> None:
                 reconstruction_matches
             ),
             "game_covariance_identity": covariance_report,
+            "refit_windows": list(HOLDOUT_SEASONS),
+            "game_covariance_identity_by_refit_window": {
+                str(season): entry for season, entry in by_window.items()
+            },
+            "graded_games_by_refit_window": {
+                str(season): len(window)
+                for season, window in sorted(rosters_by_window.items())
+            },
+            "why_this_holds_in_every_refit_window": (
+                "A refit window changes the marginals and the within-player "
+                "block, not the dependence model: fit_season takes "
+                "(history, season, stats) and no factor-model argument, so "
+                "whatever a window refits is the same object under both "
+                "models. The loadings are the only model-bearing input the "
+                "simulator reads, and they are fixed by the frozen factor "
+                "spec rather than refitted per window. So the two models "
+                "agree in every window for the same reason they agree in "
+                "one, and the per-window split above checks it rather than "
+                "assuming it."
+            ),
             "reused_artifact_fingerprints": {
                 "joint_event_grades.parquet": sha256_file(repair_grades_path),
                 "validation_report.json": sha256_file(repair_report_path),

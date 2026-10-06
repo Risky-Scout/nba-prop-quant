@@ -1,7 +1,7 @@
 {
   "bootstrap_draws": 800,
   "branch": "research/nba-game-latent-state-shadow-v2-structural",
-  "code_sha": "9b6e3e719426b2a1526e27782ac8f95916ef42ca",
+  "code_sha": "470318f4f7305a0e5849ef9dba2eefb78a7a6f8e",
   "equivalence": {
     "conclusion": "The frozen candidate and the accepted repair differ in no input the simulator reads, so on the graded games at the graded seed their draws are bitwise equal and every probability graded from them is bitwise equal. The repair's committed grades are the candidate's grades.",
     "derived_correlation_blocks": {
@@ -46,6 +46,34 @@
       "note": "the correlation matrix and its Cholesky factor are the only two objects the simulator reads out of the covariance, and the Cholesky is what multiplies the seeded normal draw, so equality here is equality of the draws",
       "offenders": [],
       "within_player_variants_per_game": 3
+    },
+    "game_covariance_identity_by_refit_window": {
+      "2024": {
+        "bitwise_identical_everywhere": true,
+        "covariance_assemblies_compared": 900,
+        "games_checked": 300,
+        "max_abs_cholesky_difference": 0.0,
+        "max_abs_correlation_difference": 0.0,
+        "max_dimensions": 168,
+        "note": "the correlation matrix and its Cholesky factor are the only two objects the simulator reads out of the covariance, and the Cholesky is what multiplies the seeded normal draw, so equality here is equality of the draws",
+        "offenders": [],
+        "within_player_variants_per_game": 3
+      },
+      "2025": {
+        "bitwise_identical_everywhere": true,
+        "covariance_assemblies_compared": 900,
+        "games_checked": 300,
+        "max_abs_cholesky_difference": 0.0,
+        "max_abs_correlation_difference": 0.0,
+        "max_dimensions": 162,
+        "note": "the correlation matrix and its Cholesky factor are the only two objects the simulator reads out of the covariance, and the Cholesky is what multiplies the seeded normal draw, so equality here is equality of the draws",
+        "offenders": [],
+        "within_player_variants_per_game": 3
+      }
+    },
+    "graded_games_by_refit_window": {
+      "2024": 300,
+      "2025": 300
     },
     "graded_roster_reconstruction_matches_grade_file": true,
     "loading_arrays": {
@@ -118,13 +146,18 @@
       ]
     },
     "passed": true,
+    "refit_windows": [
+      2024,
+      2025
+    ],
     "reused_artifact_fingerprints": {
       "joint_event_grades.parquet": "f1123076af245eed9582250d9aad89701ec6a724429060e4ef4f1f5026291ac0",
       "matches_repair_manifest": true,
       "validation_report.json": "421751bdf70ee29cd36ed3f2cab19ae32ed81642c701e99d7b67220fd154a4a8"
     },
     "standardization_moments_identical": true,
-    "stat_order_identical": true
+    "stat_order_identical": true,
+    "why_this_holds_in_every_refit_window": "A refit window changes the marginals and the within-player block, not the dependence model: fit_season takes (history, season, stats) and no factor-model argument, so whatever a window refits is the same object under both models. The loadings are the only model-bearing input the simulator reads, and they are fixed by the frozen factor spec rather than refitted per window. So the two models agree in every window for the same reason they agree in one, and the per-window split above checks it rather than assuming it."
   },
   "factor_model_refitted": false,
   "factor_spec_hash": "700fc17723d11ba96a0842e39ec2b5d69bddffd2c27920297de09f78e292aa22",

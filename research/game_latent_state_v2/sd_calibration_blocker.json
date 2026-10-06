@@ -5,7 +5,7 @@
     "teammate_pts_reb"
   ],
   "cause": "The inflation factor double-counts one season of heterogeneity. It is sqrt of a mean over two folds that disagree by a factor of 8.9, so it is effectively fold 2023's number. Fold 2023 is large because the pooled control was fitted on seasons before it and could not have known that season would depart from the level. For a holdout window that season is inside the training set, the random-effects tau^2 absorbs its departure, and the reported predictive SD widens on its own -- by up to x3.41 across the departing buckets. Multiplying that already-widened SD by a factor fitted on the unwidened one applies the same correction twice, which is why the calibrated mean z^2 lands further from 1 than the raw one. The correspondence is exact across the four buckets: the three that departed are the three whose predictive SD widens and the three with a large fold-2023 z^2, and the one that did not depart is the one whose SD does not widen and whose fold z^2 is near zero.",
-  "code_sha": "9b6e3e719426b2a1526e27782ac8f95916ef42ca",
+  "code_sha": "470318f4f7305a0e5849ef9dba2eefb78a7a6f8e",
   "departing_buckets_whose_predictive_sd_widened": [
     "passer_ast_teammate_pts",
     "teammate_ast_ast",
@@ -60,7 +60,7 @@
   "departure_materiality_floor_in_standard_errors": 1.0,
   "diagnoses": {
     "artifact": "equivalence_and_calibration.json",
-    "artifact_sha256": "3b06c8f519efbb08545e414f991f99ce5dbc818588d9651e9dc6a0f5e3454e57",
+    "artifact_sha256": "888254e34ee7ca5dd2266812609ce9bd6100dec408ee4d1761d886520049d37c",
     "temporal_diagnostic_sha256": "64ec5c9ae545c623970494ca1f49e3f95463d13dca94a67ff1918cf0d76ef61f"
   },
   "double_counting_established": true,
