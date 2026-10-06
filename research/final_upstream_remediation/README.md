@@ -14,18 +14,24 @@ before the 2024-2025 holdout was opened.
 
 | item | layer | candidates | selected |
 | --- | --- | --- | --- |
-| 1 | temporal AST-AST season effects | pooled EB, Gaussian RE, robust Student-t, recency-weighted robust | `A0_pooled_empirical_bayes` |
+| 1 | temporal AST-AST season effects | pooled EB, Gaussian RE, robust Student-t, recency-weighted robust | `A2_robust_student_t` |
 | 2 | multiplicative `role_scale` | ratio (control), hierarchically shrunk log-scale | `log_shrunk` |
 | 3 | cross-team shrinkage prior | Gaussian, Student-t at nu in {40, 15, 8, 5, 3} | `gaussian` |
 | 4 | latent-to-count transmission bridge | weight cap in {0.00, 0.15, 0.30, 0.50, 1.00} | cap `0.15` |
 | 5 | cross-player dependence temperature | lambda in {0.00, 0.25, 0.50, 0.75, 1.00} | `1.00` |
 | 6 | predictive uncertainty calibration | raw, Huber M-scale, median of folds, Student-t predictive | `U0_raw` |
 
-Four of the six land on the control's own behaviour. That is the folds
-declining to buy a layer, not the layer being unavailable: every alternative
-was fitted and scored on the same folds, and `remediation.select_within_tie_band`
-kept the simpler candidate whenever the margin sat inside one standard error of
-the paired per-unit difference.
+Three of the six -- items 3, 5 and 6 -- land on the control's own behaviour.
+That is the folds declining to buy a layer, not the layer being unavailable:
+every alternative was fitted and scored on the same folds, and
+`remediation.select_within_tie_band` kept the simpler candidate whenever the
+margin sat inside one standard error of the paired per-unit difference.
+
+Item 1's `half_life` dial is carried in the frozen choices at 4.0 but has no
+numerical effect, because the recency weighting lives on the `A3` branch and
+item 1 selected `A2`. `08_final_audit.py` proves the A2 fit is bitwise
+identical across six half-life probes; the dial is
+`INACTIVE_NOT_APPLICABLE`.
 
 ## Why the recorded latent column reads lower than the counts
 
