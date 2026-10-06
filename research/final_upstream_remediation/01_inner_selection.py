@@ -43,6 +43,7 @@ from scipy import stats
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from nba_prop_quant.research.game_latent_state.artifacts import (
     git_sha,
@@ -92,8 +93,10 @@ from nba_prop_quant.research.game_latent_state.transmission import (
     homogeneity_test,
     transmission_coefficient_columns,
 )
-from nba_prop_quant.research.game_latent_state.validation import (
-    DEPENDENCE_BUCKETS,
+from upstream_spec import (
+    CROSS_PLAYER_BUCKETS,
+    read_buckets,
+    season_series,
 )
 
 console = Console()
@@ -101,13 +104,6 @@ console = Console()
 STATS = ("pts", "reb", "ast", "stl", "blk", "fg3m")
 HOLDOUT_SEASONS = (2024, 2025)
 ROLE_COLUMN = "role_bucket"
-
-#: The buckets the dependence model is judged on, cross-player only.
-CROSS_PLAYER_BUCKETS = tuple(
-    (name, kind, pair)
-    for name, kind, pair in DEPENDENCE_BUCKETS
-    if kind in {"same_team", "cross_team"}
-)
 
 #: Item 1's primary bucket, and item 3's protected cross-team buckets. Both
 #: lists come from the brief, not from anything measured here.
@@ -182,67 +178,6 @@ def assert_holdout_absent(frame: pd.DataFrame, where: str) -> pd.DataFrame:
 
 def bucket_index(stats):
     return {stat: position for position, stat in enumerate(stats)}
-
-
-def read_buckets(
-    stats,
-    same: np.ndarray,
-    cross: np.ndarray,
-) -> dict[str, float]:
-    index = bucket_index(stats)
-    out: dict[str, float] = {}
-    for name, kind, (first, second) in CROSS_PLAYER_BUCKETS:
-        matrix = same if kind == "same_team" else cross
-        out[name] = float(matrix[index[first], index[second]])
-    return out
-
-
-# ----------------------------------------------------------------------
-# season-level series, shared by items 1 and 6
-# ----------------------------------------------------------------------
-
-
-def season_series(
-    frame: pd.DataFrame,
-    moments_by_season: dict[int, dict[str, tuple[float, float]]],
-    bootstrap: int,
-    seed: int,
-) -> dict[str, SeasonSeries]:
-    """Per-season bucket estimates with game-clustered standard errors.
-
-    Each season is standardized with the constants of the seasons *before* it,
-    which is the same no-lookahead rule the fits use. Season 2020 has no
-    earlier season, so it is standardized on itself and that is recorded.
-    """
-    seasons = sorted(int(value) for value in frame["season"].unique())
-    estimates: dict[str, list[float]] = {name: [] for name, _, _ in CROSS_PLAYER_BUCKETS}
-    errors: dict[str, list[float]] = {name: [] for name, _, _ in CROSS_PLAYER_BUCKETS}
-
-    for season in seasons:
-        block = frame.loc[frame["season"] == season]
-        standardized, _ = standardize_residuals(
-            block, STATS, moments=moments_by_season.get(season)
-        )
-        pooled = pair_moments(
-            standardized, STATS, bootstrap=bootstrap, seed=seed + season
-        )
-        values = read_buckets(STATS, pooled.same_team, pooled.cross_team)
-        standard_errors = read_buckets(
-            STATS, pooled.same_team_se, pooled.cross_team_se
-        )
-        for name in estimates:
-            estimates[name].append(values[name])
-            errors[name].append(standard_errors[name])
-
-    return {
-        name: SeasonSeries(
-            name=name,
-            seasons=tuple(seasons),
-            estimates=np.array(estimates[name]),
-            standard_errors=np.array(errors[name]),
-        )
-        for name in estimates
-    }
 
 
 def select_temporal(
@@ -1148,17 +1083,10 @@ def main() -> None:
     seasons = sorted(int(value) for value in frame["season"].unique())
     console.print(f"seasons available for selection: {seasons}")
 
-    # Per-season standardization constants from the seasons before each one.
-    moments_by_season: dict[int, dict[str, tuple[float, float]]] = {}
-    for season in seasons:
-        earlier = frame.loc[frame["season"] < season]
-        if earlier.empty:
-            continue
-        _, moments = standardize_residuals(earlier, STATS)
-        moments_by_season[season] = moments
-
     console.rule("1. temporal treatment")
-    series = season_series(frame, moments_by_season, args.bootstrap, args.seed)
+    series = season_series(
+        frame, STATS, bootstrap=args.bootstrap, seed=args.seed
+    )
     temporal = decide_temporal(series)
     table = Table(title="forward predictive log score, pooled over buckets")
     table.add_column("candidate")

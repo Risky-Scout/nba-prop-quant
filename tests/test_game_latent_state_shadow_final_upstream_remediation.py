@@ -104,6 +104,41 @@ def _synthetic_residuals(games: int = 160, seed: int = 11) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _season_frame(seasons: int = 4, games: int = 90, seed: int = 29) -> pd.DataFrame:
+    """Four seasons whose shared loading genuinely drifts between them.
+
+    Item 1's treatments all reduce to the same answer on a homogeneous
+    series, so the series has to carry real between-season spread for the
+    robust treatment to be distinguishable from the fixed effect.
+    """
+    rng = np.random.default_rng(seed)
+    loadings = (0.20, 0.34, 0.26, 0.45)
+    roles = ("starter", "rotation", "bench")
+    rows = []
+    for offset in range(seasons):
+        loading = loadings[offset % len(loadings)]
+        for game in range(games):
+            for team in range(2):
+                shared = rng.normal(size=len(STATS))
+                for slot in range(5):
+                    own = rng.normal(size=len(STATS))
+                    values = loading * shared + np.sqrt(1.0 - loading**2) * own
+                    rows.append(
+                        {
+                            "game_id": offset * 10_000 + game,
+                            "team_id": team,
+                            "player_id": team * 100 + slot,
+                            "season": 2020 + offset,
+                            "role_bucket": roles[slot % 3],
+                            **{
+                                f"z_{stat}": values[index]
+                                for index, stat in enumerate(STATS)
+                            },
+                        }
+                    )
+    return pd.DataFrame(rows)
+
+
 @pytest.fixture(scope="module")
 def standardized() -> pd.DataFrame:
     frame, _ = standardize_residuals(_synthetic_residuals(), STATS)
@@ -639,6 +674,75 @@ def _load_driver(name: str, module_name: str):
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def test_the_pooled_temporal_treatment_moves_nothing() -> None:
+    """A0 is the control's fixed effect, so selecting it must be a no-op.
+
+    The layer enters as the difference between the chosen pooling and the
+    fixed-effect pooling of the same per-season series, which is identically
+    zero when the two are the same estimator.
+    """
+    upstream = _load_driver("upstream_spec.py", "upstream_spec_a0")
+    frame = _season_frame()
+
+    shifts, detail = upstream.temporal_shifts(
+        frame,
+        STATS,
+        treatment=upstream.TEMPORAL_POOLED,
+        nu=3.0,
+        half_life=4.0,
+        bootstrap=20,
+        seed=5,
+    )
+    assert detail["max_abs_shift"] == 0.0
+    assert all(value == 0.0 for value in shifts.values())
+
+
+def test_a_robust_temporal_treatment_moves_the_named_buckets_only() -> None:
+    upstream = _load_driver("upstream_spec.py", "upstream_spec_a2")
+    frame = _season_frame()
+
+    shifts, detail = upstream.temporal_shifts(
+        frame,
+        STATS,
+        treatment=upstream.TEMPORAL_STUDENT_T,
+        nu=3.0,
+        half_life=4.0,
+        bootstrap=20,
+        seed=5,
+    )
+    assert set(shifts) == {name for name, _, _ in upstream.CROSS_PLAYER_BUCKETS}
+    assert detail["max_abs_shift"] > 0.0
+
+    same = np.zeros((len(STATS), len(STATS)))
+    cross = np.zeros((len(STATS), len(STATS)))
+    shifted_same, shifted_cross = upstream.apply_bucket_shifts(
+        same, cross, shifts, STATS
+    )
+    # Both blocks stay symmetric, which the PSD construction downstream relies
+    # on, and only the named entries move.
+    assert shifted_same == pytest.approx(shifted_same.T)
+    assert shifted_cross == pytest.approx(shifted_cross.T)
+    touched = {
+        (name, kind)
+        for name, kind, _ in upstream.CROSS_PLAYER_BUCKETS
+        if shifts[name]
+    }
+    moved = int(np.count_nonzero(shifted_same)) + int(
+        np.count_nonzero(shifted_cross)
+    )
+    index = {stat: position for position, stat in enumerate(STATS)}
+    expected = sum(
+        1 if index[pair[0]] == index[pair[1]] else 2
+        for name, kind, pair in upstream.CROSS_PLAYER_BUCKETS
+        if (name, kind) in touched
+    )
+    assert moved == expected
+
+    recovered = upstream.read_buckets(STATS, shifted_same, shifted_cross)
+    for name, shift in shifts.items():
+        assert recovered[name] == pytest.approx(shift)
 
 
 def test_the_temporal_tie_band_reads_a_log_score_as_a_score() -> None:

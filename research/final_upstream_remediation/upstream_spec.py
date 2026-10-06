@@ -36,8 +36,12 @@ from nba_prop_quant.research.game_latent_state.remediation import (
     ROLE_SCALE_LOG_SHRUNK,
     ROLE_SCALE_RATIO,
     RemediationSpec,
+    SeasonSeries,
+    fit_gaussian_random_effects,
     fit_log_shrunk_role_scales,
+    fit_pooled,
     fit_remediated_factors,
+    fit_student_t_random_effects,
     role_scale_components,
     temper_loadings,
 )
@@ -49,9 +53,25 @@ from nba_prop_quant.research.game_latent_state.transmission import (
     homogeneity_test,
     transmission_coefficient_columns,
 )
+from nba_prop_quant.research.game_latent_state.validation import DEPENDENCE_BUCKETS
 
 ROLE_COLUMN = "role_bucket"
 HOLDOUT_SEASONS = (2024, 2025)
+
+#: The buckets the dependence model is judged on, cross-player only. Item 1's
+#: season pooling moves exactly these entries of the two blocks.
+CROSS_PLAYER_BUCKETS = tuple(
+    (name, kind, pair)
+    for name, kind, pair in DEPENDENCE_BUCKETS
+    if kind in {"same_team", "cross_team"}
+)
+
+#: Item 1's four treatments. ``A0`` is the accepted repair's fixed effect, so
+#: selecting it leaves the pooled targets exactly where the control put them.
+TEMPORAL_POOLED = "A0_pooled_empirical_bayes"
+TEMPORAL_GAUSSIAN = "A1_gaussian_random_effects"
+TEMPORAL_STUDENT_T = "A2_robust_student_t"
+TEMPORAL_RECENCY = "A3_recency_weighted_robust"
 
 
 @dataclass(frozen=True)
@@ -65,6 +85,10 @@ class UpstreamChoices:
     transmission_cap: float
     uncertainty: str
     dependence_temperature: float
+    #: Item 1's own hyperparameters, chosen on the same pre-2024 folds. Only
+    #: the Student-t treatments read them.
+    temporal_nu: float = 5.0
+    temporal_half_life: float = 2.0
 
     @classmethod
     def from_artifacts(
@@ -77,14 +101,17 @@ class UpstreamChoices:
             prior, nu = CROSS_PRIOR_GAUSSIAN, None
         else:
             prior, nu = CROSS_PRIOR_STUDENT_T, float(cross.split("nu")[1])
+        temporal = inner["item_1_temporal"]
         return cls(
-            temporal=str(inner["item_1_temporal"]["selected"]),
+            temporal=str(temporal["selected"]),
             role_scale_mode=str(inner["item_2_role_scale"]["selected"]),
             cross_team_prior=prior,
             cross_team_nu=nu,
             transmission_cap=float(inner["item_4_transmission"]["selected_cap"]),
             uncertainty=str(inner["item_6_uncertainty"]["selected"]),
             dependence_temperature=1.0 if temperature is None else float(temperature),
+            temporal_nu=float(temporal["nu_selected"]),
+            temporal_half_life=float(temporal["half_life_selected"]),
         )
 
     def spec(self, name: str = "final_upstream_candidate") -> RemediationSpec:
@@ -101,6 +128,8 @@ class UpstreamChoices:
     def payload(self) -> dict[str, object]:
         return {
             "temporal_treatment": self.temporal,
+            "temporal_nu": self.temporal_nu,
+            "temporal_half_life": self.temporal_half_life,
             "role_scale_mode": self.role_scale_mode,
             "cross_team_prior": self.cross_team_prior,
             "cross_team_nu": self.cross_team_nu,
@@ -136,6 +165,181 @@ def read_choices(
             json.loads(path.read_text(encoding="utf-8"))["selected_temperature"]
         )
     return UpstreamChoices.from_artifacts(inner, temperature)
+
+
+def read_buckets(
+    stats: Sequence[str],
+    same: np.ndarray,
+    cross: np.ndarray,
+) -> dict[str, float]:
+    """The named cross-player buckets read out of the two blocks."""
+    index = {stat: position for position, stat in enumerate(stats)}
+    out: dict[str, float] = {}
+    for name, kind, (first, second) in CROSS_PLAYER_BUCKETS:
+        matrix = same if kind == "same_team" else cross
+        out[name] = float(matrix[index[first], index[second]])
+    return out
+
+
+def expanding_season_moments(
+    frame: pd.DataFrame,
+    stats: Sequence[str],
+) -> dict[int, dict[str, tuple[float, float]]]:
+    """Standardization constants for each season, from the seasons before it.
+
+    The earliest season has nothing before it, so it is standardized on
+    itself. Every later season uses only its own past, which is the same
+    no-lookahead rule the fits follow.
+    """
+    seasons = sorted(int(value) for value in frame["season"].unique())
+    out: dict[int, dict[str, tuple[float, float]]] = {}
+    for season in seasons:
+        earlier = frame.loc[frame["season"] < season]
+        if earlier.empty:
+            earlier = frame.loc[frame["season"] == season]
+        _, moments = standardize_residuals(earlier, stats)
+        out[season] = moments
+    return out
+
+
+def season_series(
+    frame: pd.DataFrame,
+    stats: Sequence[str],
+    moments_by_season: dict[int, dict[str, tuple[float, float]]] | None = None,
+    bootstrap: int = 400,
+    seed: int = 73,
+) -> dict[str, SeasonSeries]:
+    """Per-season bucket estimates with game-clustered standard errors."""
+    stats = tuple(stats)
+    if moments_by_season is None:
+        moments_by_season = expanding_season_moments(frame, stats)
+    seasons = sorted(int(value) for value in frame["season"].unique())
+    estimates: dict[str, list[float]] = {
+        name: [] for name, _, _ in CROSS_PLAYER_BUCKETS
+    }
+    errors: dict[str, list[float]] = {name: [] for name, _, _ in CROSS_PLAYER_BUCKETS}
+
+    for season in seasons:
+        block = frame.loc[frame["season"] == season]
+        standardized, _ = standardize_residuals(
+            block, stats, moments=moments_by_season.get(season)
+        )
+        pooled = pair_moments(
+            standardized, stats, bootstrap=bootstrap, seed=seed + season
+        )
+        values = read_buckets(stats, pooled.same_team, pooled.cross_team)
+        standard_errors = read_buckets(
+            stats, pooled.same_team_se, pooled.cross_team_se
+        )
+        for name in estimates:
+            estimates[name].append(values[name])
+            errors[name].append(standard_errors[name])
+
+    return {
+        name: SeasonSeries(
+            name=name,
+            seasons=tuple(seasons),
+            estimates=np.array(estimates[name]),
+            standard_errors=np.array(errors[name]),
+        )
+        for name in estimates
+    }
+
+
+def temporal_fitter(treatment: str, nu: float, half_life: float):
+    if treatment == TEMPORAL_POOLED:
+        return fit_pooled
+    if treatment == TEMPORAL_GAUSSIAN:
+        return fit_gaussian_random_effects
+    if treatment == TEMPORAL_STUDENT_T:
+        return lambda series: fit_student_t_random_effects(series, nu=nu)
+    if treatment == TEMPORAL_RECENCY:
+        return lambda series: fit_student_t_random_effects(
+            series, nu=nu, half_life=half_life
+        )
+    raise ValueError(f"unknown temporal treatment {treatment!r}")
+
+
+def temporal_shifts(
+    frame: pd.DataFrame,
+    stats: Sequence[str],
+    treatment: str,
+    nu: float,
+    half_life: float,
+    bootstrap: int,
+    seed: int,
+) -> tuple[dict[str, float], dict[str, object]]:
+    """How far the chosen season pooling moves each bucket off the control's.
+
+    The layer enters as a *shift*, not as a replacement. The control pools
+    rows; the four treatments pool seasons; and the question item 1 asks is
+    whether modelling season heterogeneity moves the estimate, not whether
+    pooling seasons reproduces pooling rows. Taking the difference between the
+    chosen treatment and the fixed effect on the same per-season series answers
+    exactly that question and makes ``A0`` an exact no-op, so selecting the
+    incumbent treatment leaves the control's targets untouched.
+
+    A shift also composes with the transmission bridge, which is the other
+    layer that moves these entries. A replacement would overwrite whatever the
+    bridge contributed to the same bucket.
+    """
+    series = season_series(frame, stats, bootstrap=bootstrap, seed=seed)
+    chosen = temporal_fitter(treatment, nu, half_life)
+    shifts: dict[str, float] = {}
+    detail: dict[str, object] = {}
+    for name, bucket in series.items():
+        baseline = fit_pooled(bucket)
+        fit = chosen(bucket)
+        shifts[name] = float(fit.posterior_mean - baseline.posterior_mean)
+        detail[name] = {
+            "seasons": list(bucket.seasons),
+            "per_season_estimates": bucket.estimates.tolist(),
+            "per_season_standard_errors": bucket.standard_errors.tolist(),
+            "fixed_effect_posterior_mean": float(baseline.posterior_mean),
+            "selected_posterior_mean": float(fit.posterior_mean),
+            "shift": shifts[name],
+            "tau": float(fit.tau),
+            "weights": list(fit.weights),
+            "q_statistic": float(fit.q_statistic),
+            "q_p_value": float(fit.q_p_value),
+            "i_squared": float(fit.i_squared),
+        }
+    return shifts, {
+        "treatment": treatment,
+        "nu": float(nu),
+        "half_life": float(half_life),
+        "shift_is_zero_by_construction_under_a0": treatment == TEMPORAL_POOLED,
+        "max_abs_shift": max((abs(value) for value in shifts.values()), default=0.0),
+        "shifts": shifts,
+        "by_bucket": detail,
+    }
+
+
+def apply_bucket_shifts(
+    same: np.ndarray,
+    cross: np.ndarray,
+    shifts: dict[str, float],
+    stats: Sequence[str],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Add a per-bucket shift to the two pooled blocks, symmetrically.
+
+    ``pair_moments`` symmetrises both blocks, so a shift has to land on both
+    entries of an off-diagonal bucket or the block stops being symmetric and
+    the PSD construction downstream silently reads the average instead.
+    """
+    index = {stat: position for position, stat in enumerate(stats)}
+    same = np.array(same, dtype=float, copy=True)
+    cross = np.array(cross, dtype=float, copy=True)
+    for name, kind, (first, second) in CROSS_PLAYER_BUCKETS:
+        shift = shifts.get(name)
+        if not shift:
+            continue
+        matrix = same if kind == "same_team" else cross
+        row, column = index[first], index[second]
+        matrix[row, column] += shift
+        if row != column:
+            matrix[column, row] += shift
+    return same, cross
 
 
 def transmission_targets(
@@ -261,6 +465,33 @@ def upstream_fit(
             same_team=np.asarray(combined[0], dtype=float),
             cross_team=np.asarray(combined[1], dtype=float),
         )
+
+    # Item 1 lands last among the target layers and only on the named buckets,
+    # so it moves the bridged estimate rather than discarding it. Under A0 the
+    # shift is identically zero and this is a no-op.
+    if choices.temporal != TEMPORAL_POOLED:
+        shifts, diagnostics["temporal"] = temporal_shifts(
+            frame,
+            stats,
+            treatment=choices.temporal,
+            nu=choices.temporal_nu,
+            half_life=choices.temporal_half_life,
+            bootstrap=bootstrap,
+            seed=seed,
+        )
+        shifted_same, shifted_cross = apply_bucket_shifts(
+            moments.same_team, moments.cross_team, shifts, stats
+        )
+        moments = replace(
+            moments, same_team=shifted_same, cross_team=shifted_cross
+        )
+    else:
+        diagnostics["temporal"] = {
+            "treatment": choices.temporal,
+            "shift_is_zero_by_construction_under_a0": True,
+            "max_abs_shift": 0.0,
+            "shifts": {name: 0.0 for name, _, _ in CROSS_PLAYER_BUCKETS},
+        }
 
     role_override = None
     if choices.role_scale_mode == ROLE_SCALE_LOG_SHRUNK:
