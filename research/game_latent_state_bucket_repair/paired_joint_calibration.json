@@ -1,0 +1,107 @@
+{
+  "all_leg_counts_within_tolerance": true,
+  "bootstrap_draws": 4000,
+  "by_legs": {
+    "2": {
+      "base_rate": 0.2313888888888889,
+      "brier_independence": 0.1654365174493056,
+      "brier_production": 0.1654106637222222,
+      "brier_repair": 0.16544182069166666,
+      "brier_v1": 0.1654372268013889,
+      "events": 3600,
+      "games": 600,
+      "repair_minus_independence": {
+        "ci95": [
+          -3.8120752187489894e-05,
+          4.681076421875347e-05
+        ],
+        "delta": 5.3032423610599455e-06
+      },
+      "repair_minus_v1": {
+        "ci95": [
+          -9.647012604140082e-06,
+          1.8498904687488245e-05
+        ],
+        "delta": 4.593890277765356e-06
+      },
+      "v1_minus_independence": {
+        "ci95": [
+          -3.9659779861101614e-05,
+          4.0218654218746736e-05
+        ],
+        "delta": 7.093520832945899e-07
+      },
+      "within_tolerance": true
+    },
+    "3": {
+      "base_rate": 0.11666666666666667,
+      "brier_independence": 0.09739232988333334,
+      "brier_production": 0.09736770679513888,
+      "brier_repair": 0.09740873114166668,
+      "brier_v1": 0.09740255686319445,
+      "events": 3600,
+      "games": 600,
+      "repair_minus_independence": {
+        "ci95": [
+          -1.9383376197915078e-05,
+          5.181215083333268e-05
+        ],
+        "delta": 1.6401258333340052e-05
+      },
+      "repair_minus_v1": {
+        "ci95": [
+          -3.807833177079875e-06,
+          1.599814902775096e-05
+        ],
+        "delta": 6.174278472229067e-06
+      },
+      "v1_minus_independence": {
+        "ci95": [
+          -2.479813625001423e-05,
+          4.478433623262661e-05
+        ],
+        "delta": 1.0226979861110985e-05
+      },
+      "within_tolerance": true
+    },
+    "4": {
+      "base_rate": 0.060833333333333336,
+      "brier_independence": 0.055435561340624995,
+      "brier_production": 0.0554234989625,
+      "brier_repair": 0.05545531043958333,
+      "brier_v1": 0.05546628825104167,
+      "events": 2400,
+      "games": 600,
+      "repair_minus_independence": {
+        "ci95": [
+          -1.7163034895784765e-06,
+          4.1473085729164254e-05
+        ],
+        "delta": 1.9749098958334044e-05
+      },
+      "repair_minus_v1": {
+        "ci95": [
+          -1.8896327291673815e-05,
+          -3.2832715885449863e-06
+        ],
+        "delta": -1.0977811458340314e-05
+      },
+      "v1_minus_independence": {
+        "ci95": [
+          9.042222083331838e-06,
+          5.2803584036459876e-05
+        ],
+        "delta": 3.072691041667436e-05
+      },
+      "within_tolerance": true
+    }
+  },
+  "control_artifact": "research/game_latent_state/joint_event_grades.parquet",
+  "events": 9600,
+  "games": 600,
+  "max_multi_leg_brier_degradation": 0.0005,
+  "paired": true,
+  "repair_artifact": "research/game_latent_state_bucket_repair/joint_event_grades.parquet",
+  "scope": "paired repair-vs-V1 joint calibration, untouched 2024-2025",
+  "seed": 73
+}

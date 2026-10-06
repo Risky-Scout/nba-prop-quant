@@ -1,0 +1,17 @@
+# Generated data. Excluded by rule, identified by hash.
+#
+# The residual dataset is the accepted V1 lineage's OOF residuals. The repair
+# candidate is fitted and validated on exactly the same residuals as the
+# control, which is what makes the comparison paired rather than a
+# re-derivation. See ../game_latent_state/.gitignore and the residual_manifest
+# there for the hash and the rebuild recipe.
+oof_gaussian_residuals.parquet
+__pycache__/
+
+# Regenerated exports, not inputs. factor_spec.json carries the full loadings
+# payload and validation_report.json carries every summary computed from the
+# grades, so nothing on this branch reads either file. Their SHA256s are in
+# SHA256SUMS.factors.txt and SHA256SUMS.validation.txt, and the grades remain
+# available on the research branch that produced them.
+factor_loadings.parquet
+joint_event_grades.parquet
