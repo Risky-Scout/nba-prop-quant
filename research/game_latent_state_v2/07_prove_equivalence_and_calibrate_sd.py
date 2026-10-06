@@ -572,6 +572,77 @@ def calibrate_predictive_sd(
     }
 
 
+def explain_published_prediction(
+    standardized: pd.DataFrame,
+    temporal: dict,
+    bootstrap: int,
+    seed: int,
+) -> dict[str, object]:
+    """Account for the gap between the published and the refitted ``T0`` mean.
+
+    ``01_temporal_diagnostic.py`` reports a ``T0`` prediction for the first
+    holdout season, but it reuses the *last inner fold's* pooled control --
+    fitted on seasons ``< 2023`` -- rather than refitting on seasons
+    ``< 2024``. That is the right choice there, where the point of the number
+    is to extend the inner walk-forward by one step with the fold machinery
+    intact. It is the wrong choice here: a 2024 holdout prediction may use
+    every completed season before 2024, and the accepted repair's own
+    validation manifest refits per validation season on seasons strictly
+    before it.
+
+    So the two numbers are expected to differ, and the difference has to be
+    attributable to the refit window and nothing else. Two bitwise checks
+    pin that down: the published value is the recorded ``< 2023`` fold
+    control, and this driver's pooled-block code reproduces that same
+    ``< 2023`` control when it is handed the same window.
+    """
+    index = {stat: position for position, stat in enumerate(STATS)}
+    last_inner_fold = max(
+        int(fold)
+        for bucket in temporal["buckets"].values()
+        for fold in bucket["pooled_control_by_fold"]
+    )
+    recomputed_block = pooled_same_team_block(
+        standardized, target_season=last_inner_fold, bootstrap=bootstrap, seed=seed
+    )
+    published = temporal["uncertainty_calibration"]["by_bucket"]
+
+    by_bucket: dict[str, object] = {}
+    provenance_exact = True
+    implementation_exact = True
+    for name, (_block, first_stat, second_stat) in BUCKETS.items():
+        recorded = float(
+            temporal["buckets"][name]["pooled_control_by_fold"][str(last_inner_fold)]
+        )
+        recomputed = float(recomputed_block[index[first_stat], index[second_stat]])
+        published_prediction = float(published[name]["prediction"])
+        provenance = published_prediction == recorded
+        implementation = recomputed == recorded
+        provenance_exact &= provenance
+        implementation_exact &= implementation
+        by_bucket[name] = {
+            "published_prediction": published_prediction,
+            "recorded_inner_fold_control": recorded,
+            "published_is_the_inner_fold_control": bool(provenance),
+            "this_driver_reproduces_that_control": bool(implementation),
+            "recomputed_inner_fold_control": recomputed,
+        }
+
+    return {
+        "last_inner_fold": last_inner_fold,
+        "published_prediction_trained_on": f"seasons < {last_inner_fold}",
+        "holdout_prediction_trained_on": "seasons < the refit window",
+        "published_prediction_is_the_last_inner_fold_control": bool(provenance_exact),
+        "this_driver_reproduces_the_inner_fold_control_bitwise": bool(
+            implementation_exact
+        ),
+        "difference_is_attributable_to_the_refit_window_alone": bool(
+            provenance_exact and implementation_exact
+        ),
+        "by_bucket": by_bucket,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-root", type=Path, default=DEFAULT_RESEARCH_DATA_ROOT)
@@ -905,8 +976,12 @@ def main() -> None:
         f"(inner folds scored {temporal['uncertainty_calibration']['pooled']['mean_squared_z']:.4f} raw)"
     )
 
-    # Self-check: the 2024 window's prediction is the one the frozen temporal
-    # diagnostic already published, so recomputing it here has to reproduce it.
+    # Self-check: the predictive SD is the quantity under test, and the frozen
+    # temporal diagnostic already published its 2024-window value, so this
+    # driver's arithmetic has to reproduce it bitwise. The accompanying point
+    # prediction is expected to differ, because the published one reuses the
+    # last inner fold's pooled control; `explain_published_prediction` is what
+    # holds that difference to the refit window and nothing else.
     published = temporal["uncertainty_calibration"]["by_bucket"]
     reproduction: dict[str, object] = {}
     for name in BUCKETS:
@@ -924,14 +999,37 @@ def main() -> None:
                 - float(window["raw_prediction_sd"])
             ),
         }
-    worst_reproduction = max(
-        max(float(entry["prediction_difference"]), float(entry["raw_sd_difference"]))
+    worst_sd_reproduction = max(
+        float(entry["raw_sd_difference"])
         for entry in reproduction.values()  # type: ignore[union-attr]
     )
     console.print(
-        "  2024-window predictions reproduce the frozen diagnostic to "
-        f"{worst_reproduction:.3e}"
+        "  2024-window predictive SD reproduces the frozen diagnostic to "
+        f"{worst_sd_reproduction:.3e}"
     )
+
+    provenance = explain_published_prediction(
+        standardized, temporal, bootstrap=args.bootstrap, seed=args.seed
+    )
+    console.print(
+        "  the published 2024 point prediction is the "
+        f"< {provenance['last_inner_fold']} fold control "
+        f"(bitwise: {provenance['published_prediction_is_the_last_inner_fold_control']}), "
+        "which this driver reproduces bitwise: "
+        f"{provenance['this_driver_reproduces_the_inner_fold_control_bitwise']}; "
+        "the holdout refits on seasons < the window"
+    )
+    if not provenance["difference_is_attributable_to_the_refit_window_alone"]:
+        raise SystemExit(
+            "the published T0 prediction is not the recorded inner-fold control, "
+            "so the gap against the refitted one is unexplained"
+        )
+    if worst_sd_reproduction != 0.0:
+        raise SystemExit(
+            "the 2024-window predictive SD does not reproduce the frozen "
+            f"diagnostic bitwise (worst {worst_sd_reproduction:.3e}); the "
+            "holdout mean z^2 is not comparable with the inner-fold one"
+        )
 
     console.print(
         "\n[bold]PREDICTIVE_SD_CALIBRATION_PASSED="
@@ -1021,8 +1119,9 @@ def main() -> None:
         "predictive_sd_calibration": calibration,
         "predictive_sd_2024_window_reproduces_frozen_diagnostic": {
             "by_bucket": reproduction,
-            "worst_absolute_difference": worst_reproduction,
-            "exact": bool(worst_reproduction == 0.0),
+            "worst_raw_sd_difference": worst_sd_reproduction,
+            "predictive_sd_exact": bool(worst_sd_reproduction == 0.0),
+            "point_prediction_gap_explained": provenance,
         },
         "holdout_seasons": list(HOLDOUT_SEASONS),
         "holdout_used_for_selection": False,
