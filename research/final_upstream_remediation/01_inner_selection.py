@@ -245,6 +245,28 @@ def season_series(
     }
 
 
+def select_temporal(
+    pooled_scores: dict[str, float],
+    per_bucket_scores: dict[str, dict[str, float]],
+) -> dict[str, object]:
+    """Apply the parsimony tie band to forward predictive log scores.
+
+    Separated out and tested because of the sign: the tie band ranks a loss,
+    and a log score is a log density, so both tables are negated on the way
+    in. The returned ``difference_from_best`` is therefore a loss difference,
+    positive when the selected candidate predicts worse than the best one.
+    """
+    return select_within_tie_band(
+        {name: -value for name, value in pooled_scores.items()},
+        TEMPORAL_ORDER,
+        {
+            name: {bucket: -value for bucket, value in table.items()}
+            for name, table in per_bucket_scores.items()
+        },
+        PARSIMONY_TIE_BAND_SE,
+    )
+
+
 def decide_temporal(series: dict[str, SeasonSeries]) -> dict[str, object]:
     """Item 1: which temporal treatment predicts an unseen season best.
 
@@ -268,7 +290,11 @@ def decide_temporal(series: dict[str, SeasonSeries]) -> dict[str, object]:
         for nu, values in nu_choices.items()
         if values
     }
-    best_nu = min(nu_scores, key=lambda key: nu_scores[key]) if nu_scores else 5.0
+    # A forward predictive *log score* is a log density: larger is better. The
+    # grid searches here and the tie band below all rank a loss, so the score
+    # is negated wherever it is ranked. Ranking the log score directly would
+    # order the candidates backwards and prefer the worst-predicting one.
+    best_nu = max(nu_scores, key=lambda key: nu_scores[key]) if nu_scores else 5.0
 
     half_life_scores: dict[float, dict[str, float]] = {}
     for half_life in DEFAULT_HALF_LIFE_GRID:
@@ -289,7 +315,7 @@ def decide_temporal(series: dict[str, SeasonSeries]) -> dict[str, object]:
         if scores
     }
     best_half_life = (
-        min(half_life_means, key=lambda key: half_life_means[key])
+        max(half_life_means, key=lambda key: half_life_means[key])
         if half_life_means
         else 2.0
     )
@@ -327,9 +353,7 @@ def decide_temporal(series: dict[str, SeasonSeries]) -> dict[str, object]:
         pooled_scores[label] = mean
         pooled_se[label] = se
 
-    decision = select_within_tie_band(
-        pooled_scores, TEMPORAL_ORDER, per_bucket_scores, PARSIMONY_TIE_BAND_SE
-    )
+    decision = select_temporal(pooled_scores, per_bucket_scores)
 
     selected = decision["selected"] or "A0_pooled_empirical_bayes"
     final_fits = {
@@ -775,7 +799,13 @@ def decide_role_scale(folds: list[Fold], seed: int) -> dict[str, object]:
     difference, se = paired_difference_se(
         per_fold_scores[ROLE_SCALE_LOG_SHRUNK], per_fold_scores[ROLE_SCALE_RATIO]
     )
-    improves = difference < 0.0
+    # The ratio form is the accepted repair's and carries one parameter fewer,
+    # so it holds the ground unless the log-scale form beats it by more than
+    # one standard error of the paired per-fold difference. The same tie band
+    # the other items use, applied here rather than taking any improvement.
+    improves = bool(
+        np.isfinite(se) and se > 0.0 and difference < -PARSIMONY_TIE_BAND_SE * se
+    )
     selected = ROLE_SCALE_LOG_SHRUNK if improves else ROLE_SCALE_RATIO
     return {
         "candidates": results,
@@ -785,12 +815,16 @@ def decide_role_scale(folds: list[Fold], seed: int) -> dict[str, object]:
             "mean": difference,
             "standard_error": se,
         },
+        "parsimony_tie_band_se": PARSIMONY_TIE_BAND_SE,
         "selected": selected,
         "reason": (
-            "the log-scale form lowers supported-cell RMSE on the forward folds"
+            f"the log-scale form lowers supported-cell RMSE by "
+            f"{-difference:.3e} +/- {se:.3e}, more than one standard error of "
+            f"the paired per-fold difference"
             if improves
-            else "the accepted ratio form is retained: the log-scale form does "
-            "not lower supported-cell RMSE on the forward folds"
+            else f"the accepted ratio form is retained: the log-scale form "
+            f"moves supported-cell RMSE by {difference:+.3e} +/- {se:.3e}, "
+            f"which is not a decisive improvement"
         ),
     }
 

@@ -641,6 +641,39 @@ def _load_driver(name: str, module_name: str):
     return module
 
 
+def test_the_temporal_tie_band_reads_a_log_score_as_a_score() -> None:
+    """A log score is a log density, and the tie band ranks a loss.
+
+    Feeding one to the other orders the candidates backwards and prefers the
+    worst-predicting treatment, so the direction is pinned here.
+    """
+    inner = _load_driver("01_inner_selection.py", "inner_selection_under_test")
+    simplest, _, robust, recency = inner.TEMPORAL_ORDER
+
+    # The robust treatment predicts decisively better; the recency-weighted one
+    # predicts worst. Only the robust one may be selected.
+    pooled = {simplest: -4.00, robust: -3.00, recency: -5.00}
+    per_bucket = {
+        simplest: {"a": -4.1, "b": -3.9, "c": -4.0},
+        robust: {"a": -3.1, "b": -2.9, "c": -3.0},
+        recency: {"a": -5.1, "b": -4.9, "c": -5.0},
+    }
+    decision = inner.select_temporal(pooled, per_bucket)
+    assert decision["best"] == robust
+    assert decision["selected"] == robust
+
+    # Inside the tie band the simplest treatment is kept instead.
+    narrow = {simplest: -4.000, robust: -3.999, recency: -5.000}
+    narrow_per_bucket = {
+        simplest: {"a": -4.1, "b": -3.9, "c": -4.0},
+        robust: {"a": -4.2, "b": -3.8, "c": -3.997},
+        recency: {"a": -5.1, "b": -4.9, "c": -5.0},
+    }
+    kept = inner.select_temporal(narrow, narrow_per_bucket)
+    assert kept["best"] == robust
+    assert kept["selected"] == simplest
+
+
 def test_the_rejected_inflation_factor_is_looked_for_in_the_parameters() -> None:
     """A text search would have failed on the evidence of its own rejection.
 
