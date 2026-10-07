@@ -23,10 +23,7 @@ FORENSIC_DIR = PROJECT_ROOT / "research/count_space_forensic"
 sys.path.insert(0, str(FORENSIC_DIR))
 
 from nba_prop_quant.research.game_latent_state import censored  # noqa: E402
-from nba_prop_quant.research.game_latent_state.bridge import (  # noqa: E402
-    discrete_marginal,
-    mehler_scores,
-)
+from marginal import discrete_marginal, mehler_scores  # noqa: E402
 from nba_prop_quant.research.game_latent_state.covariance import (  # noqa: E402
     SharedFactorLoadings,
 )
@@ -581,15 +578,43 @@ def test_censored_estimate_exceeds_the_reading_by_more_than_its_uncertainty(
 
 
 @requires_report
-def test_transmission_ranks_the_censored_estimator_best(report):
+def test_correcting_the_estimator_moves_count_space_the_right_way(report):
+    """The correction helps, which is the part the attenuation predicts."""
     rows = report["section_2_transmission"]["pooled_2020_2023"]
-    censored_error = rows["D_interval_censored_mle"]["abs_count_space_error"]
-    for name in (
-        "A_randomized_pit",
-        "B_multi_seed_randomized_pit",
-        "C_mid_pit",
-    ):
-        assert censored_error <= rows[name]["abs_count_space_error"]
+    assert (
+        rows["D_interval_censored_mle"]["abs_count_space_error"]
+        < rows["A_randomized_pit"]["abs_count_space_error"]
+    )
+    assert (
+        rows["B_multi_seed_randomized_pit"]["abs_count_space_error"]
+        > rows["D_interval_censored_mle"]["abs_count_space_error"]
+    )
+
+
+@requires_report
+def test_no_latent_estimator_reproduces_the_count_moment(report):
+    """And the part it does not predict, which is the real blocker.
+
+    Every estimator of the latent correlation lands below the value the
+    count-space moment implies, so over this range the count-space ranking of
+    the estimators is just their ordering in rho -- and the correct estimate
+    of the copula parameter is not the closest one. The residual is a
+    statement about the Gaussian copula and the production margins, not about
+    any estimator, which is why no estimator can be asked to close it.
+    """
+    residual = report["section_2_transmission"]["pooled_2020_2023"][
+        "residual_after_correcting_the_estimator"
+    ]
+    assert residual["every_estimator_undershoots_the_count_moment"] is True
+    assert residual["count_space_error_is_monotone_in_the_latent_rho"] is True
+    assert residual["shortfall"] > 0.0
+    assert residual["shortfall_in_sandwich_se"] > 2.0
+    assert residual["count_space_error_reduction_from_a_to_d"] > 0.0
+    rows = report["section_2_transmission"]["pooled_2020_2023"]
+    assert (
+        rows["C_mid_pit"]["abs_count_space_error"]
+        < rows["D_interval_censored_mle"]["abs_count_space_error"]
+    ), "the diagnostic-only estimator sits closer purely by overshooting"
 
 
 @requires_report
@@ -600,34 +625,98 @@ def test_the_lever_never_breaks_psd_or_the_same_player_pinning(report):
 
 
 @requires_report
-def test_the_envelope_is_bounded_by_the_latent_gate_not_by_the_architecture(
-    report
-):
-    """The latent RMSE is the one constraint that stops the lever.
+def test_the_envelope_is_bounded_by_give_back_not_by_representability(report):
+    """What stops the lever is the price of representability, not the rank.
 
-    It has to fail at every infeasible point, it has to be the first to fail
-    along the sweep, and it has to be the only one failing at the point where
-    feasibility is first lost -- otherwise the boundary is not attributable to
-    it. Far past the boundary other constraints go too, which says nothing
-    about where the boundary is.
+    The architecture represents every value on the sweep -- PSD never fails,
+    the same-player blocks stay pinned at machine precision, and no
+    cross-team or opponent parameter moves at all. What binds is that the
+    frozen contrast Gram sits on the PSD boundary, so every step has to be
+    bought with competition inflation, the inflation is re-pinned out of
+    per-player shrink, and the shrink gives back ``teammate_reb_reb`` -- a
+    bucket the accepted repair fixed -- before the latent RMSE tolerance is
+    anywhere near.
     """
     envelope = report["section_3_feasibility_envelope"]
-    sweep = envelope["sweep"]
-    infeasible = [row for row in sweep if not row["all_constraints_pass"]]
-    assert infeasible, "the sweep has to reach past the boundary to locate it"
-    for row in infeasible:
-        failed = [name for name, ok in row["checks"].items() if not ok]
-        assert "latent_rmse_within_tolerance" in failed, (
-            row["target_latent_entry"],
-            failed,
-        )
-    first = infeasible[0]
-    assert [
-        name for name, ok in first["checks"].items() if not ok
-    ] == ["latent_rmse_within_tolerance"], first["target_latent_entry"]
-    assert envelope["binding_constraint"]["binds_at_the_boundary"] == [
-        "latent_rmse_within_tolerance"
+    readings = envelope["by_reading_of_the_constraints"]
+
+    assert envelope["binding_constraint"]["constant_across_the_whole_sweep"] == [
+        "protected_opponent_buckets_ok",
+        "same_player_deviation_ok",
+        "psd_failures_zero",
+        "pairwise_parameters_zero",
+        "player_indexed_parameters_zero",
     ]
+    assert readings["commissioned"][
+        "binding_constraints_just_past_the_boundary"
+    ] == ["teammate_reb_reb_no_worse"]
+    assert readings["give_back_in_latent_space"][
+        "binding_constraints_just_past_the_boundary"
+    ] == ["latent_rmse_within_tolerance"]
+    assert (
+        readings["commissioned"]["max_feasible_entry"]
+        < readings["give_back_in_latent_space"]["max_feasible_entry"]
+    )
+
+    # And the currency the price is paid in. The extremes of the shrink barely
+    # move, so the range hides the cost; the mean of w^2 is what scales every
+    # realised same-team correlation, and it falls monotonically.
+    sweep = envelope["sweep"]
+    scales = [row["mean_squared_shared_scale"] for row in sweep]
+    assert scales == sorted(scales, reverse=True)
+    assert scales[-1] < scales[0]
+    at_base = envelope["at_the_candidate_entry"]["mean_squared_shared_scale"]
+    at_boundary = readings["commissioned"]["at_the_boundary"][
+        "mean_squared_shared_scale"
+    ]
+    assert at_boundary < at_base
+
+
+@requires_report
+def test_the_latent_rmse_boundary_matches_its_closed_form(report):
+    """The latent gate scores one parameter, so its boundary is a quadratic.
+
+    That is what lets the boundary be compared against an estimate and its
+    standard error rather than being an artefact of where the bisection
+    happened to stop.
+    """
+    envelope = report["section_3_feasibility_envelope"]
+    analytic = envelope["analytic_latent_rmse_boundary"]
+    bisected = envelope["by_reading_of_the_constraints"][
+        "give_back_in_latent_space"
+    ]["max_feasible_entry"]
+    assert analytic["feasible"] is True
+    assert abs(analytic["max_entry"] - bisected) < 1e-6
+    for row in envelope["sweep"]:
+        entry = row["target_latent_entry"]
+        predicted = np.sqrt(
+            (
+                analytic["other_eleven_squared_error_sum"]
+                + (entry - analytic["observed_focal_latent"]) ** 2
+            )
+            / 12.0
+        )
+        assert abs(predicted - row["global_latent_rmse"]) < 1e-12
+
+
+@requires_report
+def test_the_lever_moves_no_parameter_but_the_focal_one(report):
+    """Across the whole sweep, every other latent bucket is fixed.
+
+    Fixed to machine precision rather than bitwise: the lever rebuilds the
+    three Grams by eigen-refactorisation, so the untouched entries come back
+    through a decomposition and round at the last bit.
+    """
+    sweep = report["section_3_feasibility_envelope"]["sweep"]
+    reference = sweep[0]["latent_buckets"]
+    for row in sweep:
+        for bucket, value in row["latent_buckets"].items():
+            if bucket == "passer_ast_teammate_pts":
+                continue
+            assert value == pytest.approx(reference[bucket], abs=1e-15), bucket
+        assert row["latent_buckets"]["passer_ast_teammate_pts"] == pytest.approx(
+            row["target_latent_entry"], abs=1e-12
+        )
 
 
 @requires_report
@@ -643,10 +732,22 @@ def test_the_count_reduction_peaks_and_then_falls(report):
 
 
 @requires_report
-def test_censored_estimator_improves_every_pre_2024_forward_fold(report):
+def test_the_forward_folds_cannot_rank_the_estimators(report):
+    """Section 5's precondition is scored, and it fails.
+
+    The bucket's observed count correlation moves further between 2022 and
+    2023 than the four estimators' implied values differ inside either
+    season, so whichever estimator happens to sit on the side the season
+    moved towards wins that fold. The two folds therefore pick different
+    winners, the precondition is not met, and no refit was run.
+    """
     forward = report["section_5_inner_forward_test"]
-    assert forward["censored_improves_every_forward_fold"] is True
-    assert forward["mean_error_reduction"] > 0.0
+    why = forward["why_the_folds_disagree"]
+    assert why["target_moves_more_than_the_estimators_differ"] is True
+    assert why["the_folds_agree_on_a_winner"] is False
+    assert forward["censored_improves_every_forward_fold"] is False
+    assert forward["section_5_precondition_met"] is False
+    assert forward["inner_fit_was_run"] is False
 
 
 @requires_report
@@ -733,6 +834,91 @@ def test_the_latent_gate_scores_a_parameter_against_a_sample_moment(report):
     ]
     assert focal["transmitted_randomized_pit_reading"] < focal["parameter"]
     assert 0.5 < focal["ratio"] < 1.0
+
+
+@requires_report
+def test_the_trade_curve_is_monotone_in_both_quantities(report):
+    """The give-back is the price of the gain, and the price only rises.
+
+    Over the sampled range the focal bucket's count-space error reduction
+    rises with the entry and ``teammate_reb_reb``'s count-space degradation
+    rises with it, so there is a single trade and not a region where both
+    improve. Every point is an evaluated covariance assembly, not a fit.
+    """
+    curve = report["section_3_feasibility_envelope"]["trade_curve"]["curve"]
+    assert len(curve) > 30
+    entries = [row["entry"] for row in curve]
+    assert entries == sorted(entries)
+    reductions = [row["focal_count_error_reduction"] for row in curve]
+    give_back = [row["teammate_reb_reb_degradation_fraction"] for row in curve]
+    assert reductions == sorted(reductions)
+    assert give_back == sorted(give_back)
+    assert reductions[0] < 0.10 < reductions[-1]
+    assert give_back[0] < 0.0 < give_back[-1]
+    for row in curve:
+        assert row["psd_numerical_failures"] == 0
+
+
+@requires_report
+def test_the_answers_are_reported_under_both_gate_sets(report):
+    """A to E, evaluated, under the implemented gates and the original brief."""
+    answers = report["answers"]
+    for gate_set in ("pipeline_own_gates", "commissioned"):
+        entry = answers[gate_set]
+        assert entry["A_max_feasible_ast_to_teammate_pts_count_correlation"][
+            "count_space_correlation"
+        ] > 0.0
+        assert 0.0 < entry["B_absolute_error_reduction_percent"] < 100.0
+        degradation = entry["C_teammate_reb_reb_degradation_at_that_point"]
+        assert degradation["abs_count_error"] > 0.0
+        assert degradation["degradation_percent"] == pytest.approx(
+            100.0
+            * (
+                degradation["abs_count_error"]
+                / degradation["control_abs_count_error"]
+                - 1.0
+            )
+        )
+        assert entry["D_first_binding_constraint"] in entry[
+            "D_all_constraints_failing_just_past_it"
+        ]
+        assert isinstance(entry["E_twenty_percent_gate_achievable"], bool)
+
+    # The original brief is strictly tighter in both of the ways it differs,
+    # so it cannot admit more than the implemented gates do.
+    assert (
+        answers["commissioned"]["B_absolute_error_reduction_percent"]
+        < answers["pipeline_own_gates"]["B_absolute_error_reduction_percent"]
+    )
+    assert (
+        answers["commissioned"]["D_first_binding_constraint"]
+        == "teammate_reb_reb_no_worse"
+    )
+    assert (
+        answers["pipeline_own_gates"]["D_first_binding_constraint"]
+        == "latent_rmse_within_tolerance"
+    )
+    assert answers["commissioned"]["E_twenty_percent_gate_achievable"] is False
+
+
+@requires_report
+def test_the_boundary_is_where_the_give_back_crosses_zero(report):
+    """Under the original brief the boundary is exactly the crossing point."""
+    answers = report["answers"]["commissioned"]
+    degradation = answers["C_teammate_reb_reb_degradation_at_that_point"]
+    assert degradation["degradation_absolute"] == pytest.approx(0.0, abs=1e-9)
+    crossings = report["section_3_feasibility_envelope"]["trade_curve"][
+        "give_back_budget_crossings"
+    ]
+    boundary = answers[
+        "A_max_feasible_ast_to_teammate_pts_count_correlation"
+    ]["latent_parameter_that_produces_it"]
+    first = crossings[
+        "first_entry_where_reb_reb_degrades_more_than_0_percent"
+    ]
+    assert first is not None
+    assert first >= boundary
+    assert first - boundary < 3e-4
 
 
 @requires_report

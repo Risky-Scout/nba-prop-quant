@@ -57,9 +57,7 @@ import forensic_lib as FL  # noqa: E402
 import holdout_lib as HL  # noqa: E402
 from nba_prop_quant.copula import GaussianCopula  # noqa: E402
 from nba_prop_quant.research.game_latent_state import censored  # noqa: E402
-from nba_prop_quant.research.game_latent_state.bridge import (  # noqa: E402
-    discrete_marginal,
-)
+from marginal import discrete_marginal  # noqa: E402
 from nba_prop_quant.research.game_latent_state.covariance import (  # noqa: E402
     SharedFactorLoadings,
 )
@@ -474,6 +472,61 @@ def transmission_test(
         statistic: float(series[statistic].coefficients[0])
         for statistic in ("count", "randomized_pit", "mid_pit")
     }
+
+    # The count moment's own latent rho against the best latent estimator.
+    # Correcting the attenuation moves the implied count correlation the right
+    # way, but it does not arrive: the count moment wants a parameter no
+    # estimator of the latent correlation supports, which is a statement about
+    # the Gaussian copula and the production margins rather than about any
+    # estimator.
+    named = [
+        (name, rows[name])
+        for name in (
+            "A_randomized_pit",
+            "B_multi_seed_randomized_pit",
+            "C_mid_pit",
+            "D_interval_censored_mle",
+        )
+    ]
+    mle = float(entry["D_interval_censored_mle"]["rho"])  # type: ignore[index]
+    mle_se = float(entry["D_interval_censored_mle"]["clustered_sandwich_se"])  # type: ignore[index]
+    count_rho = float(rows["E_observed_count"]["latent_rho"])  # type: ignore[index]
+    ordered = sorted(named, key=lambda item: item[1]["latent_rho"])
+    rows["residual_after_correcting_the_estimator"] = {  # type: ignore[assignment]
+        "latent_rho_the_count_moment_implies": count_rho,
+        "interval_censored_mle": mle,
+        "shortfall": float(count_rho - mle),
+        "shortfall_in_sandwich_se": (
+            float((count_rho - mle) / mle_se) if mle_se > 0 else None
+        ),
+        "every_estimator_undershoots_the_count_moment": bool(
+            all(
+                row["implied_count_correlation"] < observed
+                for _, row in named
+            )
+        ),
+        "count_space_error_is_monotone_in_the_latent_rho": bool(
+            all(
+                ordered[index][1]["abs_count_space_error"]
+                >= ordered[index + 1][1]["abs_count_space_error"]
+                for index in range(len(ordered) - 1)
+            )
+        ),
+        "count_space_error_reduction_from_a_to_d": float(
+            1.0
+            - rows["D_interval_censored_mle"]["abs_count_space_error"]  # type: ignore[index]
+            / rows["A_randomized_pit"]["abs_count_space_error"]  # type: ignore[index]
+        ),
+        "note": (
+            "because the count-space error is monotone in the latent rho over "
+            "this range and every estimator sits below the value the count "
+            "moment implies, the count-space ranking of the estimators is "
+            "just their ordering in rho. The censored MLE is the correct "
+            "estimate of the copula parameter and is still not the closest in "
+            "count space, which is the sharpest form of the finding: the "
+            "remaining gap is not an estimator's to close"
+        ),
+    }
     return rows
 
 
@@ -875,6 +928,20 @@ def evaluate_target(
             float(diagnostics.min_shared_scale),
             float(diagnostics.max_shared_scale),
         ],
+        # The price of representability, in the currency it is paid in. The
+        # *extremes* of the shrink barely move -- the binding player is the
+        # same one -- so the range alone hides the cost. The mean of w^2 is
+        # what every realised same-team correlation is scaled by, and it is
+        # what carries the give-back to the buckets the lever never touches.
+        "mean_squared_shared_scale": float(
+            np.mean(
+                np.square(
+                    np.concatenate(
+                        [game.scale for game in games if game.scale.size]
+                    )
+                )
+            )
+        ),
         "min_covariance_eigenvalue": float(diagnostics.min_covariance_eigenvalue),
         "max_same_player_block_deviation": float(
             diagnostics.max_same_player_block_deviation
@@ -1008,7 +1075,9 @@ def feasibility_envelope(
         }
 
     primary = readings["commissioned"]
+    curve = trade_curve(evaluate, base, constraints, readings, needed)
     return {
+        "trade_curve": curve,
         "lever": (
             "one same-team off-diagonal entry retargeted through the "
             "competition Gram, which leaves every cross-team block and every "
@@ -1049,6 +1118,51 @@ def feasibility_envelope(
             "cross-player correlation, so the price of moving one entry is "
             "charged to all twelve buckets"
         ),
+    }
+
+
+def tradeoff_row(row: Mapping[str, object]) -> dict[str, object]:
+    """One point of the trade curve, in the two quantities that trade.
+
+    The focal bucket's count-space error reduction is what the research target
+    is stated in; ``teammate_reb_reb``'s count-space degradation is what pays
+    for it. Nothing else on the sweep moves except through per-player shrink,
+    so these two columns are the whole trade.
+    """
+    reb = row["guarded_same_team_buckets"]["teammate_reb_reb"]  # type: ignore[index]
+    ast = row["guarded_same_team_buckets"]["teammate_ast_ast"]  # type: ignore[index]
+    control = float(reb["control_count_abs_error"])
+    error = float(reb["count_abs_error"])
+    return {
+        "entry": float(row["target_latent_entry"]),  # type: ignore[arg-type]
+        "focal_count_correlation": float(row["focal_predicted_count"]),  # type: ignore[arg-type]
+        "focal_abs_count_error": float(row["focal_abs_count_error"]),  # type: ignore[arg-type]
+        "focal_count_error_reduction": float(
+            row["focal_count_error_reduction"]  # type: ignore[arg-type]
+        ),
+        "teammate_reb_reb_abs_count_error": error,
+        "teammate_reb_reb_control_abs_count_error": control,
+        "teammate_reb_reb_degradation_absolute": float(error - control),
+        "teammate_reb_reb_degradation_fraction": float(error / control - 1.0),
+        "teammate_ast_ast_abs_count_error": float(ast["count_abs_error"]),
+        "teammate_ast_ast_degradation_fraction": float(
+            float(ast["count_abs_error"])
+            / float(ast["control_count_abs_error"])
+            - 1.0
+        ),
+        "latent_rmse_ratio_to_control": float(
+            row["global_latent_rmse_ratio_to_control"]  # type: ignore[arg-type]
+        ),
+        "count_rmse_ratio_to_control": float(
+            row["global_count_rmse_ratio_to_control"]  # type: ignore[arg-type]
+        ),
+        "mean_squared_shared_scale": float(row["mean_squared_shared_scale"]),  # type: ignore[arg-type]
+        "competition_inflation": float(row["competition_inflation"]),  # type: ignore[arg-type]
+        "psd_numerical_failures": int(row["psd_numerical_failures"]),  # type: ignore[arg-type]
+        "feasible_under": dict(row["feasible_under"]),  # type: ignore[arg-type]
+        "failing_constraints_under": {
+            policy: binding_constraints(row, policy) for policy in POLICIES
+        },
     }
 
 
@@ -1228,16 +1342,74 @@ def inner_forward_test(
             "bridge_pairs": int(series["_pairs"]),  # type: ignore[arg-type]
             "estimators": rows,
         }
+    folds = list(out)
     improvements = [
         out[key]["estimators"]["D_interval_censored_mle"][  # type: ignore[index]
             "error_reduction_vs_current_estimator"
         ]
-        for key in out
+        for key in folds
     ]
     out["censored_improves_every_forward_fold"] = bool(
         all(value > 0.0 for value in improvements)
     )
     out["mean_error_reduction"] = float(np.mean(improvements))
+
+    # Why the folds answer the way they do. Within one fold every estimator's
+    # implied count correlation sits inside a band narrower than the
+    # fold-to-fold movement of the target, so whichever estimator happens to
+    # sit on the side the season moved towards wins that fold. That is a
+    # statement about the target's year-to-year stability, not about the
+    # estimators, and it is the reason section 5's precondition is scored
+    # rather than assumed.
+    observed_spread = float(
+        max(out[key]["observed_count_correlation"] for key in folds)  # type: ignore[index]
+        - min(out[key]["observed_count_correlation"] for key in folds)  # type: ignore[index]
+    )
+    implied_spreads = {
+        key: float(
+            max(
+                row["implied_count_correlation"]
+                for row in out[key]["estimators"].values()  # type: ignore[index]
+            )
+            - min(
+                row["implied_count_correlation"]
+                for row in out[key]["estimators"].values()  # type: ignore[index]
+            )
+        )
+        for key in folds
+    }
+    best_by_fold = {
+        key: min(
+            out[key]["estimators"].items(),  # type: ignore[index]
+            key=lambda item: item[1]["abs_error"],
+        )[0]
+        for key in folds
+    }
+    out["why_the_folds_disagree"] = {
+        "observed_count_correlation_by_fold": {
+            key: float(out[key]["observed_count_correlation"]) for key in folds  # type: ignore[index]
+        },
+        "fold_to_fold_spread_of_the_target": observed_spread,
+        "within_fold_spread_of_the_estimators": implied_spreads,
+        "target_moves_more_than_the_estimators_differ": bool(
+            observed_spread > max(implied_spreads.values())
+        ),
+        "best_estimator_by_fold": best_by_fold,
+        "the_folds_agree_on_a_winner": bool(len(set(best_by_fold.values())) == 1),
+    }
+    out["section_5_precondition_met"] = bool(
+        out["censored_improves_every_forward_fold"]
+    )
+    out["inner_fit_was_run"] = False
+    out["why_no_inner_fit"] = (
+        "section 5 permits refitting the existing PSD factor model to an "
+        "improved latent target only if the generic estimator improves this "
+        "bucket on the pre-2024 forward folds. It does not: it wins one fold "
+        "and loses the other, because the target moves further between "
+        "seasons than the estimators differ within a season. The precondition "
+        "is not met, so no refit was performed and no new factor family was "
+        "introduced"
+    )
     return out
 
 
@@ -1343,6 +1515,165 @@ def generic_application(
 
 
 # ----------------------------------------------------------------------
+# the trade curve, and the five answers it is read off
+# ----------------------------------------------------------------------
+
+#: The two gate sets the envelope is reported under.
+#:
+#: ``pipeline_own_gates`` is what ``05_evaluate_gates.py`` implements and what
+#: the frozen candidate actually had to satisfy: 1.05 RMSE tolerances, gate 5's
+#: one-z latent rule on the protected set, gate 1's quarter-z latent rule on
+#: the two repaired buckets.
+#:
+#: ``commissioned`` is the original remediation requirement as briefed: 1.03
+#: RMSE tolerances, and "no worse than control" on the two repaired buckets
+#: enforced in count space as well as latent space. It is the stricter of the
+#: two in both respects.
+REPORTED_GATE_SETS = ("pipeline_own_gates", "commissioned")
+
+
+def trade_curve(
+    evaluate,
+    base: float,
+    constraints: Mapping[str, object],
+    readings: Mapping[str, object],
+    needed: float | None,
+) -> dict[str, object]:
+    """The exact trade between the focal gain and the ``reb_reb`` give-back.
+
+    Sampled finely from the frozen entry up past both boundaries, with every
+    boundary and the twenty-percent crossing included exactly rather than
+    interpolated, so the five answers below are read off evaluated points and
+    not off a fit.
+    """
+    probes = {
+        float(value) for value in np.round(np.arange(base, 0.0565, 0.00025), 10)
+    }
+    probes.add(round(base, 12))
+    for entry in readings.values():
+        probes.add(round(float(entry["max_feasible_entry"]), 12))  # type: ignore[index]
+    if needed is not None:
+        probes.add(round(float(needed), 12))
+    curve = [tradeoff_row(evaluate(entry)) for entry in sorted(probes)]
+
+    def crossing(fraction: float) -> dict[str, object] | None:
+        """The first curve point whose ``reb_reb`` give-back exceeds a budget."""
+        for row in curve:
+            if row["teammate_reb_reb_degradation_fraction"] > fraction + 1e-9:  # type: ignore[operator]
+                return row
+        return None
+
+    return {
+        "what_trades": (
+            "the focal bucket's count-space error reduction against "
+            "teammate_reb_reb's count-space degradation. The lever moves one "
+            "latent parameter and no other, so the only channel between them "
+            "is the per-player shrink that representability costs"
+        ),
+        "curve": curve,
+        "give_back_budget_crossings": {
+            f"first_entry_where_reb_reb_degrades_more_than_{int(100 * fraction)}_percent": (
+                None if row is None else row["entry"]
+            )
+            for fraction, row in (
+                (value, crossing(value))
+                for value in (0.0, 0.05, 0.10, 0.15, 0.20)
+            )
+        },
+        # The budget comparison is tolerant at the ninth decimal so the
+        # bisected boundaries, which land on a give-back of zero to within
+        # 1e-12, are counted rather than excluded by their own rounding.
+        "reduction_available_within_each_give_back_budget": {
+            f"reb_reb_degradation_at_most_{int(100 * fraction)}_percent": (
+                max(
+                    (
+                        row["focal_count_error_reduction"]
+                        for row in curve
+                        if row["teammate_reb_reb_degradation_fraction"]  # type: ignore[operator]
+                        <= fraction + 1e-9
+                    ),
+                    default=None,
+                )
+            )
+            for fraction in (0.0, 0.05, 0.10, 0.15, 0.20)
+        },
+    }
+
+
+def five_answers(
+    readings: Mapping[str, object],
+    curve: Sequence[Mapping[str, object]],
+    needed: float | None,
+    forward: Mapping[str, object],
+    transmission: Mapping[str, object],
+) -> dict[str, object]:
+    """A to E, one evaluated number each, under both gate sets."""
+    out: dict[str, object] = {}
+    for gate_set in REPORTED_GATE_SETS:
+        reading = readings[gate_set]
+        boundary = float(reading["max_feasible_entry"])  # type: ignore[index]
+        at_boundary = tradeoff_row(reading["at_the_boundary"])  # type: ignore[index]
+        binding = reading["binding_constraints_just_past_the_boundary"]  # type: ignore[index]
+        out[gate_set] = {
+            "A_max_feasible_ast_to_teammate_pts_count_correlation": {
+                "count_space_correlation": at_boundary["focal_count_correlation"],
+                "latent_parameter_that_produces_it": boundary,
+            },
+            "B_absolute_error_reduction_percent": float(
+                100.0 * at_boundary["focal_count_error_reduction"]  # type: ignore[arg-type]
+            ),
+            "C_teammate_reb_reb_degradation_at_that_point": {
+                "abs_count_error": at_boundary[
+                    "teammate_reb_reb_abs_count_error"
+                ],
+                "control_abs_count_error": at_boundary[
+                    "teammate_reb_reb_control_abs_count_error"
+                ],
+                "degradation_absolute": at_boundary[
+                    "teammate_reb_reb_degradation_absolute"
+                ],
+                "degradation_percent": float(
+                    100.0
+                    * at_boundary["teammate_reb_reb_degradation_fraction"]  # type: ignore[arg-type]
+                ),
+            },
+            "D_first_binding_constraint": (
+                binding[0] if binding else None  # type: ignore[index]
+            ),
+            "D_all_constraints_failing_just_past_it": binding,
+            "E_twenty_percent_gate_achievable": bool(
+                reading["reaches_target_reduction"]  # type: ignore[index]
+            ),
+        }
+    out["entry_needed_for_twenty_percent"] = needed
+    out["E_qualification"] = {
+        "achievable_under_the_implemented_pipeline_gates": bool(
+            readings["pipeline_own_gates"]["reaches_target_reduction"]  # type: ignore[index]
+        ),
+        "achievable_under_the_original_remediation_requirements": bool(
+            readings["commissioned"]["reaches_target_reduction"]  # type: ignore[index]
+        ),
+        "but_the_pre_2024_folds_do_not_support_the_corrected_estimator": bool(
+            not forward["censored_improves_every_forward_fold"]
+        ),
+        "and_the_count_moment_wants_a_rho_no_estimator_supports": bool(
+            transmission["residual_after_correcting_the_estimator"][  # type: ignore[index]
+                "every_estimator_undershoots_the_count_moment"
+            ]
+        ),
+        "note": (
+            "where the gate is reachable it is reachable only by setting the "
+            "parameter above the generic estimator's own pre-2024 value, and "
+            "the forward folds decline to prefer that estimator at all, so "
+            "reaching it would require choosing this bucket's value against "
+            "the holdout -- which is the bucket-specific free parameter the "
+            "brief forbids"
+        ),
+    }
+    return out
+
+
+# ----------------------------------------------------------------------
 # section 4: identifiability, and section 6: the stop rule
 # ----------------------------------------------------------------------
 
@@ -1362,6 +1693,7 @@ def identifiability(
     at_generic_value: Mapping[str, object],
     generic_all_buckets: Mapping[str, object] | None,
     transmission: Mapping[str, object],
+    forward: Mapping[str, object],
 ) -> dict[str, object]:
     """One classification, derived from predicates rather than asserted.
 
@@ -1406,6 +1738,14 @@ def identifiability(
         ),
         "applying_the_generic_estimator_to_all_twelve_buckets_is_feasible": (
             all_buckets_feasible
+        ),
+        "the_pre_2024_forward_folds_agree_the_estimator_is_better": bool(
+            forward["censored_improves_every_forward_fold"]
+        ),
+        "the_count_moment_wants_a_rho_no_estimator_supports": bool(
+            transmission["residual_after_correcting_the_estimator"][  # type: ignore[index]
+                "every_estimator_undershoots_the_count_moment"
+            ]
         ),
     }
 
@@ -1553,6 +1893,8 @@ def stop_rule(
             forward["censored_improves_every_forward_fold"]
         ),
         "mean_forward_fold_error_reduction": float(forward["mean_error_reduction"]),  # type: ignore[arg-type]
+        "section_5_precondition_met": bool(forward["section_5_precondition_met"]),
+        "inner_fit_was_run": bool(forward["inner_fit_was_run"]),
         "at_its_own_value_reaches_twenty_percent": reaches,
         "at_its_own_value_every_constraint_passes": feasible,
         "constraints_it_fails": failed,
@@ -1966,6 +2308,10 @@ def main() -> None:
     ]
     envelope = feasibility_envelope(games, loadings, constraints, grid)
     report["section_3_feasibility_envelope"] = envelope
+    log(
+        "  commissioned max entry "
+        f"{envelope['by_reading_of_the_constraints']['commissioned']['max_feasible_entry']:.8f}"
+    )
 
     log("section 5: inner forward test")
     forward_history = history[
@@ -2012,6 +2358,7 @@ def main() -> None:
         at_generic,
         generic_all,
         transmission,
+        forward,
     )
 
     log("section 6: stop rule")
@@ -2023,6 +2370,13 @@ def main() -> None:
     )
     report["final_conclusion"] = CONCLUSION_BY_CLASSIFICATION[classification]
     report["classification"] = classification
+    report["answers"] = five_answers(
+        envelope["by_reading_of_the_constraints"],  # type: ignore[index]
+        envelope["trade_curve"]["curve"],  # type: ignore[index]
+        envelope["entry_needed_for_target_reduction"],  # type: ignore[index]
+        forward,
+        transmission,
+    )
 
     arguments.out.parent.mkdir(parents=True, exist_ok=True)
     arguments.out.write_text(json.dumps(report, indent=1, sort_keys=False))

@@ -47,10 +47,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from nba_prop_quant.research.game_latent_state.bridge import (
-    discrete_marginal,
-    mehler_scores,
-)
+from marginal import discrete_marginal, mehler_scores
 from nba_prop_quant.research.game_latent_state.covariance import (
     SharedFactorLoadings,
     build_game_covariance,

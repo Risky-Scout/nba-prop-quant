@@ -44,10 +44,7 @@ import pandas as pd
 from scipy.stats import norm
 
 from nba_prop_quant.adaptive_training import load_script_module
-from nba_prop_quant.research.game_latent_state.bridge import (
-    DiscreteMarginal,
-    discrete_marginal,
-)
+from marginal import DiscreteMarginal, discrete_marginal
 from nba_prop_quant.research.game_latent_state.covariance import (
     SharedFactorLoadings,
 )
@@ -454,7 +451,7 @@ def build_transmission_pairs(
     ``(b of i, a of j)`` by relabelling, so a bridge that pools one and not
     the other is measuring a different thing.
     """
-    from nba_prop_quant.research.game_latent_state.bridge import mehler_scores
+    from marginal import mehler_scores
 
     cache: dict[tuple[int, str], DiscreteMarginal] = {}
 
@@ -715,7 +712,7 @@ def pooled_statistic_series(
     """Pool per-pair Hermite series into one coefficient vector.
 
     Entry ``j`` multiplies ``rho ** (j + 1)``, matching
-    :class:`bridge.BridgeCurve`'s convention. The expansion starts at order
+    the Mehler convention in :mod:`marginal`. The expansion starts at order
     one because the order-zero term is ``E[t_a] E[t_b]``, which the covariance
     subtracts; that is also what pins the reading to zero at ``rho = 0``,
     where it has to be for any margins.
