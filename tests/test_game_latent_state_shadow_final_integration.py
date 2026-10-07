@@ -204,13 +204,37 @@ def test_every_merge_in_this_lineage_only_joins_production(manifest):
     content: every merge after the declared base must have a parent that is
     production history, so the only joins possible are production-into-lineage
     and lineage-into-production.
+
+    "Production history" is resolved against the production ref rather than
+    against the declared base. Those agree only while the integration is
+    pending; afterwards production has advanced past the declared base, and a
+    parent that is the current production tip -- which is what GitHub's
+    synthetic pull-request merge has, and what a second deployment branch
+    merges into -- is production history even though it is a descendant of the
+    base rather than an ancestor of it.
     """
+    from nba_prop_quant.research.game_latent_state.safety import PRODUCTION_REF
+
     base = manifest["production_base"]
+    production = next(
+        (
+            ref
+            for ref in (f"origin/{PRODUCTION_REF}", PRODUCTION_REF)
+            if resolves(ref)
+        ),
+        None,
+    )
+
+    def is_production_history(commit: str) -> bool:
+        if commit == base or is_ancestor(commit, base):
+            return True
+        return production is not None and is_ancestor(commit, production)
+
     merges = [line for line in git("rev-list", "--merges", f"{base}..HEAD").splitlines()]
     for merge in merges:
         parents = git("rev-list", "--parents", "-n", "1", merge).split()[1:]
         joins_production = [
-            parent for parent in parents if is_ancestor(parent, base) or parent == base
+            parent for parent in parents if is_production_history(parent)
         ]
         assert joins_production, (
             f"merge {merge} has no production parent, so it joins a lineage "
