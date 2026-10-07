@@ -5,7 +5,14 @@
   "production_base_ref": "production/wizardofodds-integration",
   "integration_method": "explicit path allowlist applied onto a fresh branch cut from the production base; no merge commit from any research branch",
   "why_not_a_merge": "a merge transfers every object the merged history reaches, including blobs that were committed once and deleted later. The research line committed a 65 MB residual parquet that is absent from every current tree and still reachable from those heads. An allowlist carries the files; it does not carry the history that reaches them.",
-  "superseded_research_pull_requests": [16, 17, 18, 20, 21, 22],
+  "superseded_research_pull_requests": [
+    16,
+    17,
+    18,
+    20,
+    21,
+    22
+  ],
   "superseded_research_branches": [
     "research/nba-game-latent-state-shadow-v1",
     "research/nba-game-latent-state-shadow-v1-bucket-repair",
@@ -103,15 +110,21 @@
       "written_by_the_verifier": "research/final_integration/integration_verification.json"
     },
     "production_documentation": {
-      "reason": "the production-facing record of what the shadow is, what it may not be said to be, and which original requirement was retired rather than met. The only protected production path this integration changes; it is declared in safety.DECLARED_INTEGRATION_PATHS and carries no model, config, script or release change.",
+      "reason": "the production-facing record of what the shadow is, what it may not be said to be, and which original requirement was retired rather than met. Declared in safety.DECLARED_INTEGRATION_PATHS and carrying no model, config, script or release change.",
       "paths": [
         "docs/wizardofodds/SAME_GAME_DEPENDENCE_SHADOW_V1.md"
+      ]
+    },
+    "production_deployment": {
+      "reason": "the shadow's production entry point and the one non-blocking lifecycle step that invokes it. Both are declared in safety.DECLARED_INTEGRATION_PATHS. The entry point reads the marginals and copula the daily fit just wrote -- the objects the live pricing path prices with -- records what the candidate would have said, and publishes nothing. The workflow change is additive: every pre-existing step is unchanged and the added step is continue-on-error, so a shadow failure cannot fail the production lifecycle.",
+      "paths": [
+        "ops/run_production_shadow.py",
+        ".github/workflows/nba_production_lifecycle.yml"
       ]
     },
     "tests": {
       "reason": "every test whose subject is carried",
       "paths": [
-        "tests/test_game_latent_state_shadow_production_doc.py",
         "tests/test_game_latent_state_shadow.py",
         "tests/test_game_latent_state_shadow_artifact_budget.py",
         "tests/test_game_latent_state_shadow_bucket_repair.py",
@@ -121,6 +134,8 @@
         "tests/test_game_latent_state_shadow_final_upstream_remediation.py",
         "tests/test_game_latent_state_shadow_hermite.py",
         "tests/test_game_latent_state_shadow_marginal_convention_audit.py",
+        "tests/test_game_latent_state_shadow_production_deployment.py",
+        "tests/test_game_latent_state_shadow_production_doc.py",
         "tests/test_game_latent_state_shadow_residual_convention.py",
         "tests/test_game_latent_state_shadow_runtime.py",
         "tests/test_game_latent_state_shadow_safety.py"

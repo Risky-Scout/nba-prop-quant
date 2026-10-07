@@ -190,6 +190,32 @@ jobs:
             --work-root "$NBA_PROP_WORK_DIR" \
             | tee "$RUNNER_TEMP/run/adaptive.json"
 
+      # SHADOW ONLY, and deliberately non-blocking. The incumbent is the
+      # served and published authority on every row; this step records what
+      # the same-game dependence candidate would have said, beside it.
+      #
+      # continue-on-error, and no --strict: a shadow that can fail the
+      # production lifecycle is worse than no shadow, so the entry point
+      # catches its own failures, records them and exits 0, and this setting
+      # is the belt to that braces. It runs after the adaptive fit because it
+      # reads that fit's own marginals.joblib and copula.joblib — the objects
+      # the live pricing path prices with — rather than a parallel fit of its
+      # own. It writes only into the run's temporary directory.
+      - name: Shadow the slate beside production
+        if: env.MODE == 'production' && env.RUN_ADAPTIVE == 'true'
+        continue-on-error: true
+        env:
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+        run: |
+          set -euo pipefail
+          python ops/run_production_shadow.py \
+            --slate-date "$slate" \
+            --adaptive-status "$RUNNER_TEMP/run/adaptive.json" \
+            --log-path "$RUNNER_TEMP/run/shadow_log.jsonl" \
+            --grading-path "$RUNNER_TEMP/run/shadow_grading.json" \
+            --status-path "$RUNNER_TEMP/run/shadow.json" \
+            --summary-path "$GITHUB_STEP_SUMMARY"
+
       - name: Report the run
         if: always()
         run: |

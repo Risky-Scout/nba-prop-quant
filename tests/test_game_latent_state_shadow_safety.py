@@ -29,6 +29,7 @@ from nba_prop_quant.research.game_latent_state.gates import (
     shadow_verdict,
 )
 from nba_prop_quant.research.game_latent_state.safety import (
+    ADDITIVE_ONLY_WORKFLOWS,
     DECLARED_INTEGRATION_PATHS,
     PRODUCTION_REF,
     PROTECTED_PRODUCTION_PREFIXES,
@@ -44,6 +45,9 @@ PROJECT = Path(__file__).resolve().parents[1]
 SHADOW_PACKAGE = PROJECT / "src" / "nba_prop_quant" / "research" / "game_latent_state"
 
 SHADOW_SCRIPTS = PROJECT / "research" / "game_latent_state"
+
+#: The one production-side file the shadow deployment adds.
+SHADOW_ENTRY_POINT = "ops/run_production_shadow.py"
 
 #: The protected-path definition is imported rather than restated, so the
 #: containment the validation report claims and the containment these tests
@@ -79,8 +83,19 @@ def changed_paths() -> list[str]:
 
 
 def python_sources() -> list[Path]:
+    """Every file the containment scans below apply to.
+
+    The production entry point is in this list rather than exempt from it.
+    It is shadow code that lives in production's own ``ops/`` namespace, so
+    it is the one file where a promotion path, a publishing import or a write
+    to a production artifact would be easiest to miss on review.
+    """
     return sorted(
-        [*SHADOW_PACKAGE.rglob("*.py"), *SHADOW_SCRIPTS.rglob("*.py")]
+        [
+            *SHADOW_PACKAGE.rglob("*.py"),
+            *SHADOW_SCRIPTS.rglob("*.py"),
+            *([PROJECT / SHADOW_ENTRY_POINT] if (PROJECT / SHADOW_ENTRY_POINT).exists() else []),
+        ]
     )
 
 
@@ -154,15 +169,62 @@ def test_gate_h_evidence_comes_from_the_shared_protected_path_declaration():
     assert ".github/workflows/" in PROTECTED_PRODUCTION_PREFIXES
 
 
-def test_production_automation_workflows_are_unchanged():
+def test_undeclared_production_automation_workflows_are_unchanged():
     base = production_base()
     if base is None:
         pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
     for workflow in ("nba_production_lifecycle.yml", "ci.yml"):
         relative = f".github/workflows/{workflow}"
+        if relative in DECLARED_INTEGRATION_PATHS:
+            continue
         assert git("rev-parse", f"{base}:{relative}") == git(
             "rev-parse", f"HEAD:{relative}"
         ), f"{relative} differs from the production ref"
+
+
+def test_a_declared_workflow_change_only_ever_adds_steps():
+    """Declaring the lifecycle buys an added step, not a rewritten lifecycle.
+
+    The refresh, the adaptive fit and the registration are the production
+    path. Comparing line sets rather than file hashes is what distinguishes
+    "a step was appended" from "a step was edited": every line the production
+    ref has must still be there, so no existing command can be changed, have a
+    flag added or be reordered out of existence by a declaration.
+    """
+    base = production_base()
+    if base is None:
+        pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
+    for relative in ADDITIVE_ONLY_WORKFLOWS:
+        before = git("show", f"{base}:{relative}").splitlines()
+        after = git("show", f"HEAD:{relative}").splitlines()
+        removed = [line for line in before if line not in after]
+        assert removed == [], f"{relative} removed or edited existing lines: {removed}"
+
+
+def test_the_added_lifecycle_step_cannot_fail_the_production_job():
+    """A shadow that can fail the production job is worse than no shadow."""
+    import yaml
+
+    relative = ".github/workflows/nba_production_lifecycle.yml"
+    if relative not in DECLARED_INTEGRATION_PATHS:
+        pytest.skip("the lifecycle workflow is not declared on this branch")
+    workflow = yaml.safe_load((PROJECT / relative).read_text(encoding="utf-8"))
+    steps = [
+        step
+        for job in workflow["jobs"].values()
+        for step in job["steps"]
+        if SHADOW_ENTRY_POINT in str(step.get("run", ""))
+    ]
+    assert steps, f"no lifecycle step invokes {SHADOW_ENTRY_POINT}"
+    for step in steps:
+        assert step.get("continue-on-error") is True, (
+            f"the step running {SHADOW_ENTRY_POINT} must be continue-on-error, "
+            "so a shadow failure cannot fail the production lifecycle"
+        )
+        assert "--strict" not in str(step["run"]), (
+            "--strict makes the shadow exit nonzero on failure and is for "
+            "humans debugging it, never for the lifecycle"
+        )
 
 
 def test_promotion_state_files_are_not_introduced_or_changed():
@@ -494,12 +556,20 @@ def test_shadow_package_references_no_production_write_target():
     assert offenders == []
 
 
-def test_the_only_production_artifact_the_shadow_reads_is_dynamic_params():
-    """Every other frozen production artifact must stay out of reach."""
+def test_the_only_frozen_production_artifact_the_shadow_reads_is_dynamic_params():
+    """Every other frozen production artifact must stay out of reach.
+
+    The committed contents of ``models/`` are read from git rather than from
+    the working tree, so a local fit that left an untracked ``marginals.joblib``
+    behind cannot change what this test checks. The subject is the *frozen*
+    artifacts the repository ships. The marginals and copula the shadow reads
+    are not among them: they are rebuilt by every daily fit, and reading the
+    ones production just priced with is the point of the shadow.
+    """
     production_artifacts = {
-        path.name
-        for path in (PROJECT / "models").rglob("*")
-        if path.is_file() and path.suffix in {".json", ".joblib", ".md", ".txt"}
+        Path(path).name
+        for path in git("ls-tree", "-r", "--name-only", "HEAD", "models/").splitlines()
+        if Path(path).suffix in {".json", ".joblib", ".md", ".txt"}
     }
     referenced = {
         literal
