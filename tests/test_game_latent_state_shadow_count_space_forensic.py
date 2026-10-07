@@ -300,11 +300,13 @@ def test_forensic_hermite_moments_match_direct_quadrature(order):
 def test_committed_recurrence_is_exact_at_the_orders_the_pipeline_uses():
     """``DEFAULT_BRIDGE_ORDER`` is 2, and orders 1 and 2 are correct.
 
-    This is the boundary of the defect the study reports: the committed
-    recurrence carries ``z He_k - (k - 1) He_{k-1}``, which is right for
+    This was the boundary of the defect the study reported: the committed
+    recurrence carried ``z He_k - (k - 1) He_{k-1}``, which is right for
     ``He_0`` and ``He_1`` and therefore right for ``M_1`` and ``M_2``. Every
     caller in the pipeline passes ``DEFAULT_BRIDGE_ORDER``, so the frozen
-    candidate never reaches the wrong orders.
+    candidate never reached the wrong orders. The coefficient has since been
+    corrected; these two orders are unchanged by that, which is what makes the
+    correction safe.
     """
     from nba_prop_quant.research.game_latent_state import transmission
 
@@ -317,14 +319,22 @@ def test_committed_recurrence_is_exact_at_the_orders_the_pipeline_uses():
         assert np.allclose(committed[order], correct[order], atol=1e-12)
 
 
-def test_committed_recurrence_diverges_from_order_three():
-    """The defect is real, and the study's own tool does not inherit it."""
+def test_committed_recurrence_now_agrees_from_order_three():
+    """The two independent implementations have converged.
+
+    They used to disagree from ``He_2`` up, because the pipeline's generic
+    recurrence carried the wrong coefficient while this study's own tool
+    carried the right one. Fixing the pipeline is what closed the gap, so the
+    assertion is now agreement rather than divergence -- and this remains a
+    genuinely independent check, because the two implementations were written
+    separately and only one of them was changed.
+    """
     lower = np.array([1e-12, 0.35, 0.62, 0.90])
     upper = np.array([0.35, 0.62, 0.81, 0.97])
-    committed = committed_moments(lower, upper, order=4)
-    correct = FL.conditional_hermite_moments(lower, upper, 4)
-    assert not np.allclose(committed[2], correct[2], atol=1e-6)
-    assert not np.allclose(committed[3], correct[3], atol=1e-6)
+    committed = committed_moments(lower, upper, order=5)
+    correct = FL.conditional_hermite_moments(lower, upper, 5)
+    for order in range(5):
+        assert np.allclose(committed[order], correct[order], atol=1e-12), order
 
 
 @pytest.mark.parametrize("mean", [1.5, 3.0, 11.0, 24.0])
