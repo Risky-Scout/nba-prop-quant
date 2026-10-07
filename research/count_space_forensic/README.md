@@ -87,9 +87,9 @@ control on that bucket.
 Both quantities are monotone in the entry over this range, so there is a single
 trade and no region where both improve. Read as a budget:
 
-| `teammate_reb_reb` give-back allowed | focal reduction available | first entry that exceeds the budget |
+| `teammate_reb_reb` give-back allowed | focal reduction available | first evaluated entry that exceeds the budget |
 | --- | --- | --- |
-| 0% (the original requirement) | 12.15% | 0.0480072 |
+| 0% (the original requirement) | 12.15% | 0.0480228 |
 | 5% | 16.53% | 0.0497728 |
 | 10% | 21.19% | 0.0515228 |
 | 15% | 24.96% | 0.0529950 |

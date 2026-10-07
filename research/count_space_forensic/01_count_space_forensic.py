@@ -1546,14 +1546,18 @@ def trade_curve(
     interpolated, so the five answers below are read off evaluated points and
     not off a fit.
     """
+    # Rounded to one precision throughout, so the frozen entry and the
+    # boundaries do not each appear twice under float representations that
+    # differ in their last bits.
     probes = {
-        float(value) for value in np.round(np.arange(base, 0.0565, 0.00025), 10)
+        round(float(value), 10)
+        for value in np.round(np.arange(base, 0.0565, 0.00025), 10)
     }
-    probes.add(round(base, 12))
+    probes.add(round(base, 10))
     for entry in readings.values():
-        probes.add(round(float(entry["max_feasible_entry"]), 12))  # type: ignore[index]
+        probes.add(round(float(entry["max_feasible_entry"]), 10))  # type: ignore[index]
     if needed is not None:
-        probes.add(round(float(needed), 12))
+        probes.add(round(float(needed), 10))
     curve = [tradeoff_row(evaluate(entry)) for entry in sorted(probes)]
 
     def crossing(fraction: float) -> dict[str, object] | None:

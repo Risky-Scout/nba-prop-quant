@@ -2148,14 +2148,14 @@
     }
    ],
    "give_back_budget_crossings": {
-    "first_entry_where_reb_reb_degrades_more_than_0_percent": 0.048007189154,
+    "first_entry_where_reb_reb_degrades_more_than_0_percent": 0.0480227805,
     "first_entry_where_reb_reb_degrades_more_than_5_percent": 0.0497727805,
     "first_entry_where_reb_reb_degrades_more_than_10_percent": 0.0515227805,
     "first_entry_where_reb_reb_degrades_more_than_15_percent": 0.052994956027,
     "first_entry_where_reb_reb_degrades_more_than_20_percent": 0.0547727805
    },
    "reduction_available_within_each_give_back_budget": {
-    "reb_reb_degradation_at_most_0_percent": 0.11446412937806749,
+    "reb_reb_degradation_at_most_0_percent": 0.12148041208690952,
     "reb_reb_degradation_at_most_5_percent": 0.16531808191454977,
     "reb_reb_degradation_at_most_10_percent": 0.2119103628130572,
     "reb_reb_degradation_at_most_15_percent": 0.24957746573239237,

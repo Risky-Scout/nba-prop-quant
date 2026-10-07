@@ -659,17 +659,15 @@ def test_the_envelope_is_bounded_by_give_back_not_by_representability(report):
     )
 
     # And the currency the price is paid in. The extremes of the shrink barely
-    # move, so the range hides the cost; the mean of w^2 is what scales every
-    # realised same-team correlation, and it falls monotonically.
-    sweep = envelope["sweep"]
-    scales = [row["mean_squared_shared_scale"] for row in sweep]
-    assert scales == sorted(scales, reverse=True)
-    assert scales[-1] < scales[0]
+    # move, so the shrink *range* hides the cost; what carries it is the mean
+    # of w^2, the factor every realised same-team correlation is scaled by.
     at_base = envelope["at_the_candidate_entry"]["mean_squared_shared_scale"]
-    at_boundary = readings["commissioned"]["at_the_boundary"][
-        "mean_squared_shared_scale"
-    ]
-    assert at_boundary < at_base
+    for reading in readings.values():
+        assert reading["at_the_boundary"]["mean_squared_shared_scale"] < at_base
+    assert (
+        envelope["at_the_candidate_entry"]["shared_scale_range"]
+        == readings["commissioned"]["at_the_boundary"]["shared_scale_range"]
+    ), "the shrink range is unmoved at the boundary, which is why it misleads"
 
 
 @requires_report
@@ -857,6 +855,13 @@ def test_the_trade_curve_is_monotone_in_both_quantities(report):
     assert give_back[0] < 0.0 < give_back[-1]
     for row in curve:
         assert row["psd_numerical_failures"] == 0
+
+    # The curve starts at the frozen entry and only moves away from it, so the
+    # price of representability rises monotonically along it -- unlike the
+    # coarse sweep, which straddles the frozen entry and therefore does not.
+    scales = [row["mean_squared_shared_scale"] for row in curve]
+    assert scales == sorted(scales, reverse=True)
+    assert scales[0] > scales[-1]
 
 
 @requires_report
