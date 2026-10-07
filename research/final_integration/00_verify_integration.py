@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 
 from rich.console import Console
@@ -120,33 +121,80 @@ def main() -> None:
 # ----------------------------------------------------------------------
 
 
+def tracked_paths() -> frozenset[str]:
+    completed = subprocess.run(
+        ["git", "ls-files"],
+        cwd=str(PROJECT_ROOT),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return frozenset(completed.stdout.splitlines())
+
+
+def is_ignored(path: str) -> bool:
+    return (
+        subprocess.run(
+            ["git", "check-ignore", "-q", path],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            check=False,
+        ).returncode
+        == 0
+    )
+
+
 def check_manifest_contents(manifest: dict) -> dict:
-    """Everything carried is present; everything excluded is absent."""
+    """Everything carried is tracked; everything excluded is not.
+
+    The question is about the branch, not about the filesystem. A machine that
+    has run the pipeline has a 68 MB residual parquet sitting in the working
+    tree, and that is correct: the file is a gitignored local build product.
+    Reporting it as an exclusion breach would conflate "this branch carries
+    it" with "this disk has it", and would make the check impossible to pass
+    on exactly the machine that produced the evidence.
+
+    So exclusions are checked against ``git ls-files``, and anything excluded
+    that is nonetheless on disk must be ignored -- untracked *and* unignored
+    is the state one ``git add -A`` away from the merge path, and that is a
+    breach.
+    """
+    tracked = tracked_paths()
     missing: list[str] = []
     for section in manifest["carry"].values():
         for declared in section["paths"]:
-            path = PROJECT_ROOT / declared
             if declared.endswith("/"):
-                if not path.is_dir() or not any(path.iterdir()):
+                if not any(entry.startswith(declared) for entry in tracked):
                     missing.append(declared)
-            elif not path.exists():
+            elif declared not in tracked:
                 missing.append(declared)
 
-    present: list[str] = []
+    committed: list[str] = []
+    unignored: list[str] = []
+    ignored_build_products: list[str] = []
     for section in manifest["exclude"].values():
         for declared in section["paths"]:
             if "*" in declared or "@" in declared:
                 continue
-            if (PROJECT_ROOT / declared).exists():
-                present.append(declared)
+            if declared in tracked:
+                committed.append(declared)
+            elif (PROJECT_ROOT / declared).exists():
+                if is_ignored(declared):
+                    ignored_build_products.append(declared)
+                else:
+                    unignored.append(declared)
 
     return {
         "carried_paths_declared": sum(
             len(section["paths"]) for section in manifest["carry"].values()
         ),
-        "carried_paths_missing": sorted(missing),
-        "excluded_paths_still_present": sorted(present),
-        "passed": not missing and not present,
+        "carried_paths_not_tracked": sorted(missing),
+        "excluded_paths_tracked": sorted(committed),
+        "excluded_paths_on_disk_but_not_ignored": sorted(unignored),
+        "excluded_paths_on_disk_and_correctly_ignored": sorted(
+            ignored_build_products
+        ),
+        "passed": not missing and not committed and not unignored,
     }
 
 
@@ -310,8 +358,9 @@ def _print(report: dict) -> None:
         "tree matches the carry manifest",
         "PASS" if contents["passed"] else "FAIL",
         f"{contents['carried_paths_declared']} declared, "
-        f"{len(contents['carried_paths_missing'])} missing, "
-        f"{len(contents['excluded_paths_still_present'])} excluded present",
+        f"{len(contents['carried_paths_not_tracked'])} untracked, "
+        f"{len(contents['excluded_paths_tracked'])} excluded but committed, "
+        f"{len(contents['excluded_paths_on_disk_but_not_ignored'])} unignored",
     )
     largest = blobs["largest_new_blob"]
     table.add_row(

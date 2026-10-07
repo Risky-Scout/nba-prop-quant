@@ -1,0 +1,253 @@
+{
+  "carry_manifest_contents": {
+    "carried_paths_declared": 50,
+    "carried_paths_not_tracked": [],
+    "excluded_paths_on_disk_and_correctly_ignored": [
+      "research/game_latent_state/oof_gaussian_residuals.parquet"
+    ],
+    "excluded_paths_on_disk_but_not_ignored": [],
+    "excluded_paths_tracked": [],
+    "passed": true
+  },
+  "checksum_files": {
+    "files": [
+      {
+        "absent": [],
+        "checked": 2,
+        "entries": 2,
+        "mismatched": [],
+        "path": "research/final_model/SHA256SUMS.final_model.txt",
+        "recorded_only_generated_artifacts": [],
+        "verified": true
+      },
+      {
+        "absent": [],
+        "checked": 2,
+        "entries": 2,
+        "mismatched": [],
+        "path": "research/final_role_scale_ablation/SHA256SUMS.ablation.txt",
+        "recorded_only_generated_artifacts": [],
+        "verified": true
+      },
+      {
+        "absent": [],
+        "checked": 2,
+        "entries": 2,
+        "mismatched": [],
+        "path": "research/final_role_scale_ablation/SHA256SUMS.confirmation.txt",
+        "recorded_only_generated_artifacts": [],
+        "verified": true
+      },
+      {
+        "absent": [],
+        "checked": 5,
+        "entries": 5,
+        "mismatched": [],
+        "path": "research/final_upstream_remediation/SHA256SUMS.factors.txt",
+        "recorded_only_generated_artifacts": [],
+        "verified": true
+      },
+      {
+        "absent": [],
+        "checked": 3,
+        "entries": 3,
+        "mismatched": [],
+        "path": "research/final_upstream_remediation/SHA256SUMS.validation.txt",
+        "recorded_only_generated_artifacts": [],
+        "verified": true
+      },
+      {
+        "absent": [],
+        "checked": 3,
+        "entries": 4,
+        "mismatched": [],
+        "path": "research/game_latent_state/SHA256SUMS.factors.txt",
+        "recorded_only_generated_artifacts": [
+          "factor_loadings.parquet"
+        ],
+        "verified": true
+      },
+      {
+        "absent": [],
+        "checked": 3,
+        "entries": 3,
+        "mismatched": [],
+        "path": "research/game_latent_state/SHA256SUMS.residuals.txt",
+        "recorded_only_generated_artifacts": [],
+        "verified": true
+      },
+      {
+        "absent": [],
+        "checked": 2,
+        "entries": 3,
+        "mismatched": [],
+        "path": "research/game_latent_state/SHA256SUMS.validation.txt",
+        "recorded_only_generated_artifacts": [
+          "joint_event_grades.parquet"
+        ],
+        "verified": true
+      },
+      {
+        "absent": [],
+        "checked": 2,
+        "entries": 2,
+        "mismatched": [],
+        "path": "research/game_latent_state/shadow/SHA256SUMS.shadow.txt",
+        "recorded_only_generated_artifacts": [],
+        "verified": true
+      },
+      {
+        "absent": [],
+        "checked": 4,
+        "entries": 5,
+        "mismatched": [],
+        "path": "research/game_latent_state_bucket_repair/SHA256SUMS.factors.txt",
+        "recorded_only_generated_artifacts": [
+          "factor_loadings.parquet"
+        ],
+        "verified": true
+      },
+      {
+        "absent": [],
+        "checked": 2,
+        "entries": 3,
+        "mismatched": [],
+        "path": "research/game_latent_state_bucket_repair/SHA256SUMS.validation.txt",
+        "recorded_only_generated_artifacts": [
+          "joint_event_grades.parquet"
+        ],
+        "verified": true
+      },
+      {
+        "absent": [],
+        "checked": 4,
+        "entries": 4,
+        "mismatched": [],
+        "path": "research/game_latent_state_resolution/SHA256SUMS.resolution.txt",
+        "recorded_only_generated_artifacts": [],
+        "verified": true
+      },
+      {
+        "absent": [],
+        "checked": 2,
+        "entries": 2,
+        "mismatched": [],
+        "path": "research/game_latent_state_v2/SHA256SUMS.equivalence.txt",
+        "recorded_only_generated_artifacts": [],
+        "verified": true
+      },
+      {
+        "absent": [],
+        "checked": 15,
+        "entries": 15,
+        "mismatched": [],
+        "path": "research/probability_quality_certification_v1_outputs/SHA256SUMS.txt",
+        "recorded_only_generated_artifacts": [],
+        "verified": true
+      },
+      {
+        "absent": [],
+        "checked": 2,
+        "entries": 2,
+        "mismatched": [],
+        "path": "research/v2_gate1_lock/SHA256SUMS.txt",
+        "recorded_only_generated_artifacts": [],
+        "verified": true
+      },
+      {
+        "absent": [],
+        "checked": 11,
+        "entries": 11,
+        "mismatched": [],
+        "path": "research/v2_gate2_certification_outputs/SHA256SUMS.txt",
+        "recorded_only_generated_artifacts": [],
+        "verified": true
+      },
+      {
+        "absent": [],
+        "checked": 2,
+        "entries": 2,
+        "mismatched": [],
+        "path": "research/v2_gate3_capture_lock/SHA256SUMS.txt",
+        "recorded_only_generated_artifacts": [],
+        "verified": true
+      },
+      {
+        "absent": [],
+        "checked": 4,
+        "entries": 4,
+        "mismatched": [],
+        "path": "research/v2_gate3_deployment_artifacts/SHA256SUMS.txt",
+        "recorded_only_generated_artifacts": [],
+        "verified": true
+      },
+      {
+        "absent": [],
+        "checked": 2,
+        "entries": 2,
+        "mismatched": [],
+        "path": "research/v2_gate3_lock/SHA256SUMS.txt",
+        "recorded_only_generated_artifacts": [],
+        "verified": true
+      }
+    ],
+    "files_checked": 19,
+    "files_verified": 19,
+    "generated_artifact_suffixes_treated_as_recorded_only": [
+      ".parquet",
+      ".pkl",
+      ".pickle",
+      ".npy",
+      ".npz",
+      ".joblib",
+      ".h5",
+      ".onnx",
+      ".pt",
+      ".pth"
+    ],
+    "lines_recording_a_regenerated_artifact": 4,
+    "lines_verified": 72,
+    "passed": true
+  },
+  "head_sha": "1176da28e3fbf8ef27750637d8b7ae571277890f",
+  "manifest_sha256": "726a7384dffdcf1459f00cb2d00a4f79def5a5a8e69d397952e6ab8a971f98bb",
+  "merge_path_blob_audit": {
+    "base": "a30ed672001f8774b6cfec9ad7a3ccb382506c4b",
+    "base_resolved": true,
+    "ceiling_bytes": 10485760,
+    "generated_artifacts_by_name": [],
+    "generated_artifacts_by_suffix": [],
+    "largest_new_blob": {
+      "bytes": 489996,
+      "path": "research/game_latent_state_v2/inner_screening.json",
+      "sha": "d009be4183c6da3613bf7c71382cd4323e3c1bbe"
+    },
+    "new_blob_count": 130,
+    "notable": [],
+    "over_ceiling": [],
+    "passed": true,
+    "suffixes_swept": [
+      ".parquet",
+      ".pkl",
+      ".pickle",
+      ".npy",
+      ".npz",
+      ".joblib",
+      ".h5",
+      ".onnx",
+      ".pt",
+      ".pth"
+    ]
+  },
+  "passed": true,
+  "production_base": "a30ed672001f8774b6cfec9ad7a3ccb382506c4b",
+  "provenance_hashes": {
+    "artifacts_resolved": 14,
+    "artifacts_unresolved": [],
+    "factor_spec_hash": "3229bbc83a4388c270a21008a75afacc3479cfd6f6390c8737f041412d2f2eb4",
+    "factor_spec_hash_is_the_authoritative_one": true,
+    "passed": true
+  },
+  "study": "final_clean_integration_verification_v1",
+  "verdict": "CLEAN INTEGRATION TREE VERIFIED"
+}

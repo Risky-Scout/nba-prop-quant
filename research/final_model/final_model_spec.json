@@ -248,7 +248,7 @@
     "14_report_generator_sha": "17143c1bbbf7b2b5e7085d53f770ebfc241299e9",
     "15_final_branch_head_sha": "17143c1bbbf7b2b5e7085d53f770ebfc241299e9",
     "15_note": "HEAD when the audit ran. The commit carrying final_audit.json is its child, since a recorded hash cannot name the commit that contains it.",
-    "16_final_model_spec_code_sha": "17e72ace24d181cbff49929d44859685c552b337",
+    "16_final_model_spec_code_sha": "1176da28e3fbf8ef27750637d8b7ae571277890f",
     "16_note": "HEAD when this spec was written. The commit carrying it is its child, since a recorded hash cannot name the commit that contains it.",
     "control_factor_spec_file_sha256": "d51b387fe4b102c14a245136e3587da1ebf00f15556819970b02b4cad2a032da",
     "control_factor_spec_hash": "c9b46e3a7497cfee52832f29397397b843aafb8e5f770a39157ce508f8157bc0"
