@@ -1,0 +1,317 @@
+{
+  "COUNT_SPACE_20_PERCENT_REQUIREMENT_DISPOSITION": "INCOMPATIBLE_WITH_OTHER_ORIGINAL_CONSTRAINTS_UNDER_CURRENT_ARCHITECTURE",
+  "COUNT_SPACE_FORENSIC_CHANGE_ADOPTED": "NO",
+  "MARGINAL_CONVENTION_AUDIT": "NON_MATERIAL",
+  "UNCERTAINTY_CALIBRATION": "RAW_MONITOR_ONLY_NOT_USED_FOR_MODEL_SELECTION_OR_PROMOTION",
+  "authoritative_spec_hash": "3229bbc83a4388c270a21008a75afacc3479cfd6f6390c8737f041412d2f2eb4",
+  "control_factor_spec_hash": "c9b46e3a7497cfee52832f29397397b843aafb8e5f770a39157ce508f8157bc0",
+  "count_space_forensic_detail": {},
+  "count_transmission": {
+    "enters_as": "an inverse-variance combination of the direct latent reading and the count-space reading, both inverted onto a common rho first, with the bridge's weight capped",
+    "order": 2,
+    "treatment": "inverse_variance",
+    "weight_cap": 0.15
+  },
+  "dependence_model_version": "game-latent-state-shadow-v1",
+  "dependence_temperature": 1.0,
+  "dependence_temperature_note": "lambda multiplies every shared cross-player loading by its square root, so every cross-player block is multiplied by exactly lambda while each player's own block stays pinned at the incumbent's.",
+  "factor_families": [
+    "game_pace_volume",
+    "game_rebound_environment",
+    "team_contrast_own_minus_opponent",
+    "within_team_zero_sum_competition",
+    "player_within_block_incumbent",
+    "idiosyncratic_residual"
+  ],
+  "factor_spec_hash": "3229bbc83a4388c270a21008a75afacc3479cfd6f6390c8737f041412d2f2eb4",
+  "factor_spec_hash_matches_authoritative": true,
+  "factor_spec_hash_recomputed": "3229bbc83a4388c270a21008a75afacc3479cfd6f6390c8737f041412d2f2eb4",
+  "grading": {
+    "all_gates_passed": true,
+    "games_graded": 400,
+    "gate_verdict": "ALL FOURTEEN GATES PASS",
+    "gates_passed": 14,
+    "gates_total": 14,
+    "holdout_seasons": [
+      2024,
+      2025
+    ],
+    "min_covariance_eigenvalue": 0.1030132441933305,
+    "numerical_failures": 0,
+    "regraded_for_the_final_freeze": false,
+    "regrading_not_required_because": "the selected role treatment is the frozen candidate's, the frozen factor spec file is unchanged and hashes to the authoritative value, and every module on the path from that file to a joint probability is byte-identical to the commit that graded it; re-running the simulation would reproduce the stored grades draw for draw, because the seed, the game universe and the inverse-CDF tabulation are all the same",
+    "same_player_max_block_deviation": 2.220446049250313e-16,
+    "simulations_per_game": 20000,
+    "verdict": "SHADOW V1 ACCEPTED FOR PRODUCTION-INTEGRATION DESIGN."
+  },
+  "k_game": 6,
+  "pairwise_parameter_count": 0,
+  "player_indexed": 0,
+  "player_indexed_note": "no loading, scale or offset is indexed by player identity; a player enters only through its role bucket, its team side and its pinned incumbent within-player block",
+  "promotion_eligibility": "SHADOW_RUNTIME_ONLY__PROMOTION_REQUIRES_A_SEPARATE_DECISION",
+  "r_competition": 6,
+  "r_contrast": 6,
+  "r_symmetric": 0,
+  "research_conclusions_carried_forward": {
+    "count_space_forensic": {
+      "finding": "randomized-PIT attenuation of the recorded latent column is real and measurable, so the recorded latent correlation reads lower than the latent correlation it stands for",
+      "parameter_change_adopted": false,
+      "status": "CLOSED",
+      "why_no_change_was_adopted": "forcing the focal passer_ast_teammate_pts count-space correction far enough to clear the original 20 per cent target breaks the teammate_reb_reb protection that was part of the same original brief, and no pre-2024 forward evidence supports the trade"
+    },
+    "hermite_recurrence": {
+      "finding": "the generic order >= 3 recurrence used the wrong coefficient; the bridge has only ever run at order 2, where M_k reads He_0 and He_1, so no produced output moved",
+      "frozen_candidate_probabilities_affected": false,
+      "status": "FIXED"
+    },
+    "marginal_convention_audit": {
+      "bucket_threshold_z": 0.25,
+      "classification": "NON_MATERIAL",
+      "finding": "the OOF builder trained every stat's marginal on the six-way intersection while the validator and production train per stat; one season missing two selected means is the whole of the gap",
+      "future_path": "02_build_oof_residuals.py now defaults to v2_per_stat_marginal_training; the frozen candidate is not regenerated for it and v1 stays reachable so the historical dataset remains reproducible",
+      "global_latent_movement": 0.009508657357762074,
+      "global_threshold": 0.03,
+      "largest_robust_bucket_shift_z": 0.026981581357138806,
+      "status": "CLOSED"
+    },
+    "structural_v2": {
+      "finding": "the symmetric cross-player subspace, the additive role deviation layer and the predictive-SD inflation were all rejected; they are absent from the payload rather than set to zero",
+      "status": "CLOSED"
+    },
+    "uncertainty": {
+      "finding": "no cross-fitted rescaling beat doing nothing on the declared coverage levels; the rejected global inflation factor was worse calibrated than the raw interval",
+      "role": "monitor only; never an input to selection or promotion",
+      "selected": "U0_raw",
+      "status": "CLOSED"
+    }
+  },
+  "role_deviation": false,
+  "role_deviation_note": "absent from the payload, not zeroed: loadings.role_deviation is None and the role offset map is empty",
+  "role_indexed": 3,
+  "role_scale": {
+    "identification": "multiplicative, one scale per role bucket, constrained to a player-share-weighted mean of exactly one, so the pooled same-team block is the same object the unroled fit produced",
+    "log_standard_errors": {
+      "bench": 0.02464192550600618,
+      "rotation": 0.03902010236968852,
+      "starter": 0.020767663566233895
+    },
+    "mode": "log_shrunk",
+    "player_share_weights": {
+      "bench": 0.33756198081009725,
+      "rotation": 0.3234041378802793,
+      "starter": 0.3390338813096235
+    },
+    "raw_scales": {
+      "bench": 1.687298416787376,
+      "rotation": 1.1061283548089613,
+      "starter": 1.2208279586467432
+    },
+    "role_column": "role_bucket",
+    "selected_by": "research/final_role_scale_ablation",
+    "tau_log": 0.32715358352547913,
+    "values": {
+      "bench": 1.2567044927931688,
+      "rotation": 0.8251141919545149,
+      "starter": 0.9112334054183127
+    },
+    "weighted_mean_scale_minus_one": 0.0
+  },
+  "role_scale_selection": {
+    "2024_2025_NOT_USED_FOR_ROLE_SELECTION": "YES",
+    "ROLE_SCALE_SELECTION_FROZEN": "YES",
+    "arms": {
+      "R0_ratio": "accepted bucket-repair multiplicative role scale (ratio)",
+      "R1_log_shrunk": "log-shrunk multiplicative role scale"
+    },
+    "criterion_A": true,
+    "criterion_B": true,
+    "criterion_C": true,
+    "forward_folds": [
+      2021,
+      2022,
+      2023
+    ],
+    "holdout_used_for_role_selection": false,
+    "rule": {
+      "criterion_A": "the support-weighted role-cell RMSE improves by more than one standard error of the paired per-fold difference, i.e. mean(R1 - R0) < -1.0 * se(R1 - R0) with a finite positive se",
+      "criterion_B": "no supported role cell worsens by more than 0.5 in rms z, where a cell's deterioration is the mean over folds of (rms z of R1 - rms z of R0)",
+      "criterion_C": "pooled neutrality, same-player preservation and PSD all hold for both arms in every fold",
+      "holdout_role": "none; 2024 and 2025 are excluded from every frame this file touches",
+      "improvement_standard_errors": 1.0,
+      "max_cell_deterioration_rms_z": 0.5,
+      "pairing_unit": "forward fold",
+      "primary_objective": "support-weighted RMSE over supported cells: sqrt(sum_c pairs_c * rmse_c^2 / sum_c pairs_c)",
+      "primary_universe": "frozen_architecture",
+      "secondary_objective_reported_not_decisive": "equal-weighted RMSE over supported cells: sqrt(mean_c rmse_c^2), the convention the stored inner selection used",
+      "statement": "select R1 only if all three criteria hold on the pre-2024 forward folds of the primary universe; otherwise select R0",
+      "tie_default": "R0, the accepted repair's treatment"
+    },
+    "selected": "R1_log_shrunk"
+  },
+  "scope": "SHADOW ONLY. The incumbent remains the published authority. This spec carries no promotion authority of its own.",
+  "shrinkage": {
+    "cross_team": "empirical_bayes",
+    "cross_team_nu": null,
+    "cross_team_prior": "gaussian",
+    "eb_family": "block_diagonal",
+    "same_team": "empirical_bayes"
+  },
+  "source_artifacts": {
+    "control_factor_spec": {
+      "exists": true,
+      "path": "research/game_latent_state_bucket_repair/factor_spec.json",
+      "sha256": "d51b387fe4b102c14a245136e3587da1ebf00f15556819970b02b4cad2a032da"
+    },
+    "count_space_forensic": {
+      "exists": true,
+      "path": "research/count_space_forensic/count_space_forensic.json",
+      "sha256": "b6851a01e0aef9f38a2015f65c012167ab8bb916939ed2e0295b944af2def71f"
+    },
+    "covariance_diagnostics": {
+      "exists": true,
+      "path": "research/final_upstream_remediation/covariance_diagnostics.json",
+      "sha256": "0c929ad3bd1932ca292a53f62860f042746566a5bd7436ec0c23325fc2198c87"
+    },
+    "dependence_temperature": {
+      "exists": true,
+      "path": "research/final_upstream_remediation/dependence_temperature.json",
+      "sha256": "41664caebf11cd054b42bf34bc2db4da27601e86438d09520fa0d6df47544177"
+    },
+    "factor_spec": {
+      "exists": true,
+      "path": "research/final_upstream_remediation/factor_spec.json",
+      "sha256": "e643c6d52d5fd547b925e2bfedc3b128fbc5a4815d0a1200b13571f67b33509a"
+    },
+    "final_audit": {
+      "exists": true,
+      "path": "research/final_upstream_remediation/final_audit.json",
+      "sha256": "0a031b00bf0d735e491e7f11254d8339ff5acb3f17c597df97c782aaaf805168"
+    },
+    "gate_report": {
+      "exists": true,
+      "path": "research/final_upstream_remediation/gate_report.json",
+      "sha256": "391271776d1f17b8e55a7fc62686e3f5c79be38ef5373ac9e7ca7f3b02908a75"
+    },
+    "holdout_confirmation": {
+      "exists": true,
+      "path": "research/final_role_scale_ablation/holdout_confirmation.json",
+      "sha256": "1ee0bcbd96e6edd4b82b1de8d85dd4ff3181d1c12a18bf704d4f3dd74e0904c4"
+    },
+    "inner_selection": {
+      "exists": true,
+      "path": "research/final_upstream_remediation/inner_selection.json",
+      "sha256": "658062d62a13bf3e9df82a60ae41c0206d3c3f2aa1f887084172d23eb342e284"
+    },
+    "marginal_convention_audit": {
+      "exists": true,
+      "path": "research/marginal_convention_audit/marginal_convention_audit.json",
+      "sha256": "3301506b1752620ea6a82c7e0230dc3246e8331653dd23da31ad845e2708164e"
+    },
+    "paired_joint_calibration": {
+      "exists": true,
+      "path": "research/final_upstream_remediation/paired_joint_calibration.json",
+      "sha256": "eee2831e228d9e38c27a4bbc358eea93f77c0f3ed8c8e0fa0530b699e5fbd119"
+    },
+    "role_scale_ablation": {
+      "exists": true,
+      "path": "research/final_role_scale_ablation/role_scale_ablation.json",
+      "sha256": "ae23e25093b83c09c94f0f2ec04e43ba36aa9d4c86a02d9013ab7ae53f7a66cd"
+    },
+    "structural_resolution": {
+      "exists": true,
+      "path": "research/game_latent_state_resolution/final_resolution.json",
+      "sha256": "f230231e9460c9a3265f5e9adb0a8d74c71252012a9a75a8fbf884e3fb97c2ad"
+    },
+    "validation_report": {
+      "exists": true,
+      "path": "research/final_upstream_remediation/validation_report.json",
+      "sha256": "03d35ed1733ae105f00be0d00c56a0de1e5f61985cd2c29194878c5a15b89817"
+    }
+  },
+  "source_shas": {
+    "01_clean_control_base_sha": "a30ed672001f8774b6cfec9ad7a3ccb382506c4b",
+    "02_remediation_branch_fork_sha": "ec2d513c869437756139ca7245736289012f8fba",
+    "03_inner_selection_code_sha": "23992e53769c69ba796a7ae83e3300327eb7212b",
+    "04_inner_selection_artifact_sha256": "658062d62a13bf3e9df82a60ae41c0206d3c3f2aa1f887084172d23eb342e284",
+    "05_dependence_temperature_code_sha": "a1af6fccbaa70ec9b30d8c930f5ae4766c6304b4",
+    "06_dependence_temperature_artifact_sha256": "41664caebf11cd054b42bf34bc2db4da27601e86438d09520fa0d6df47544177",
+    "07_frozen_spec_code_sha": "a1af6fccbaa70ec9b30d8c930f5ae4766c6304b4",
+    "08_frozen_spec_file_sha256": "aa2ceed3844bea20807e1ff77053ad8c03dc2ab8aa6f46a015fa042a7b4009a9",
+    "09_candidate_factor_spec_hash": "3229bbc83a4388c270a21008a75afacc3479cfd6f6390c8737f041412d2f2eb4",
+    "09b_factor_spec_file_sha256": "e643c6d52d5fd547b925e2bfedc3b128fbc5a4815d0a1200b13571f67b33509a",
+    "09c_factor_spec_sha256_in_manifest": "e643c6d52d5fd547b925e2bfedc3b128fbc5a4815d0a1200b13571f67b33509a",
+    "10_confirmatory_validation_code_sha": "9343de38107feca14090697dabbd85f6a895d223",
+    "11_validation_artifact_sha256": "03d35ed1733ae105f00be0d00c56a0de1e5f61985cd2c29194878c5a15b89817",
+    "11b_validation_sha256_in_manifest": "03d35ed1733ae105f00be0d00c56a0de1e5f61985cd2c29194878c5a15b89817",
+    "12_gate_evaluator_code_sha": "9343de38107feca14090697dabbd85f6a895d223",
+    "13_gate_report_sha256": "391271776d1f17b8e55a7fc62686e3f5c79be38ef5373ac9e7ca7f3b02908a75",
+    "14_report_generator_sha": "17143c1bbbf7b2b5e7085d53f770ebfc241299e9",
+    "15_final_branch_head_sha": "17143c1bbbf7b2b5e7085d53f770ebfc241299e9",
+    "15_note": "HEAD when the audit ran. The commit carrying final_audit.json is its child, since a recorded hash cannot name the commit that contains it.",
+    "16_final_model_spec_code_sha": "1176da28e3fbf8ef27750637d8b7ae571277890f",
+    "16_note": "HEAD when this spec was written. The commit carrying it is its child, since a recorded hash cannot name the commit that contains it.",
+    "control_factor_spec_file_sha256": "d51b387fe4b102c14a245136e3587da1ebf00f15556819970b02b4cad2a032da",
+    "control_factor_spec_hash": "c9b46e3a7497cfee52832f29397397b843aafb8e5f770a39157ce508f8157bc0"
+  },
+  "standardization_moments": {
+    "ast": {
+      "mean": -0.0010324282522954516,
+      "sd": 1.0018251209835307
+    },
+    "blk": {
+      "mean": 0.011743471000717397,
+      "sd": 1.0051165427505493
+    },
+    "fg3m": {
+      "mean": -0.014602351764211935,
+      "sd": 0.9991247889890215
+    },
+    "pts": {
+      "mean": -0.0053793696036107674,
+      "sd": 0.9991308805566164
+    },
+    "reb": {
+      "mean": 0.0002808430326635653,
+      "sd": 1.0013353417506248
+    },
+    "stl": {
+      "mean": -0.001024071154199583,
+      "sd": 0.9989914748108051
+    }
+  },
+  "stats": [
+    "pts",
+    "reb",
+    "ast",
+    "stl",
+    "blk",
+    "fg3m"
+  ],
+  "status": "FROZEN",
+  "supersedes": [
+    "research/game_latent_state_resolution/final_resolution.json",
+    "research/game_latent_state_bucket_repair/factor_spec.json"
+  ],
+  "temporal_treatment": {
+    "enters_as": "a shift on the twelve named cross-player buckets, so A0 is an exact no-op and the treatment composes with the bridge",
+    "half_life": 4.0,
+    "half_life_is_read_by_this_treatment": false,
+    "half_life_note": "A2 is the robust Student-t without recency weighting, so the half life is carried in the choice record but never read. The final audit probed it and found the fit bitwise identical across every value.",
+    "nu": 3.0,
+    "treatment": "A2_robust_student_t"
+  },
+  "title": "final NBA same-game dependence model specification",
+  "training_seasons": [
+    2020,
+    2021,
+    2022,
+    2023
+  ],
+  "uncertainty_model": "U0_raw",
+  "uncertainty_treatment": "RAW_MONITOR_ONLY",
+  "validation_seasons": [
+    2024,
+    2025
+  ],
+  "within_player_block_source": "incumbent nba_prop_quant.copula.GaussianCopula; pinned, not refitted"
+}

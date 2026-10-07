@@ -1,0 +1,59 @@
+{
+  "artifact_name": "game_latent_state_shadow_v2_equivalence_and_calibration",
+  "branch": "research/nba-game-latent-state-shadow-v2-structural",
+  "code_sha": "470318f4f7305a0e5849ef9dba2eefb78a7a6f8e",
+  "created_at": "2026-10-06T01:03:28Z",
+  "dependence_model_version": "game-latent-state-shadow-v1",
+  "input_fingerprints": {
+    "oof_gaussian_residuals.parquet": "d0005f0e4996670266bfb5f9cf5cd25d8cbf9189c305fdc009f0f805ac921174",
+    "repair_factor_spec.json": "d51b387fe4b102c14a245136e3587da1ebf00f15556819970b02b4cad2a032da",
+    "repair_joint_event_grades.parquet": "f1123076af245eed9582250d9aad89701ec6a724429060e4ef4f1f5026291ac0",
+    "repair_validation_report.json": "421751bdf70ee29cd36ed3f2cab19ae32ed81642c701e99d7b67220fd154a4a8",
+    "temporal_diagnostic.json": "64ec5c9ae545c623970494ca1f49e3f95463d13dca94a67ff1918cf0d76ef61f",
+    "v1_joint_event_grades.parquet": "96b7711fa356f02c1defbb2592852c3fb62ea1592ea78334cfd7a558fb3f6d9f",
+    "v2_factor_spec.json": "e803397546bc120c19d4992e6a592cfadd6ac0608742719871c71b9b24d1bcbd"
+  },
+  "notes": [
+    "No game was simulated. The point probabilities are the accepted repair's committed grades, reused because the frozen candidate's loadings are bitwise the repair's.",
+    "Season 2024 enters the 2025 refit window's training set, which is what a walk-forward predictive-SD test means; it reaches no hyperparameter of the frozen candidate."
+  ],
+  "outputs": {
+    "equivalence_and_calibration.json": "888254e34ee7ca5dd2266812609ce9bd6100dec408ee4d1761d886520049d37c"
+  },
+  "parameters": {
+    "bootstrap_draws": 800,
+    "games_per_season": 300,
+    "inflation_factor": 1.7658707871961534,
+    "monte_carlo_run": false,
+    "pre_registered_sd_criteria": {
+      "calibrated_must_beat_raw": true,
+      "declared": "in this driver, before any 2024 or 2025 bucket value was read, and judging a reported uncertainty rather than a fitted parameter of the probability model",
+      "max_calibrated_mean_squared_z": 2.0,
+      "min_calibrated_mean_squared_z": 0.25
+    }
+  },
+  "promotion_eligibility": "SHADOW_RESEARCH_ONLY__NOT_ELIGIBLE_FOR_PROMOTION",
+  "schema_version": 1,
+  "seasons_used": [
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "seed": 73,
+  "source_production_ref": "origin/production/wizardofodds-integration",
+  "source_production_sha": "a30ed672001f8774b6cfec9ad7a3ccb382506c4b",
+  "training_cutoff": "season<2024 for the candidate",
+  "training_seasons": [
+    2020,
+    2021,
+    2022,
+    2023
+  ],
+  "validation_seasons": [
+    2024,
+    2025
+  ]
+}

@@ -1,0 +1,161 @@
+{
+  "code_sha": "a1af6fccbaa70ec9b30d8c930f5ae4766c6304b4",
+  "events_by_fold": {
+    "2022": 3520,
+    "2023": 3520
+  },
+  "events_by_legs": {
+    "2": 2640,
+    "3": 2640,
+    "4": 1760
+  },
+  "fold_target_seasons": [
+    2022,
+    2023
+  ],
+  "holdout_seasons_excluded": [
+    2024,
+    2025
+  ],
+  "holdout_used_for_selection": false,
+  "pricing": "exact Gaussian orthant probabilities, not Monte Carlo: every leg is a threshold on one latent normal, so every conjunction is an orthant whose probability is an integral. The compared quantity is smaller than the Monte Carlo noise of any affordable draw count, so a simulated search would read its own noise.",
+  "promotion_eligibility": "SHADOW_RESEARCH_ONLY__NOT_ELIGIBLE_FOR_PROMOTION",
+  "scope": "strictly pre-2024 chronological folds",
+  "scores": {
+    "by_temperature": {
+      "0.00": {
+        "brier": 0.10558922637881527,
+        "brier_2leg": 0.15547171827862774,
+        "brier_3leg": 0.09413594980179915,
+        "brier_4leg": 0.04794540339462067,
+        "events_2leg": 2640,
+        "events_3leg": 2640,
+        "events_4leg": 1760,
+        "log_loss": 0.3471666824026414,
+        "log_loss_2leg": 0.47905621962836636,
+        "log_loss_3leg": 0.3217858310705521,
+        "log_loss_4leg": 0.18740365356218816,
+        "mean_probability": 0.1404710040016678
+      },
+      "0.25": {
+        "brier": 0.10558531467707781,
+        "brier_2leg": 0.15546728146466235,
+        "brier_3leg": 0.09413126601386032,
+        "brier_4leg": 0.04794343749052734,
+        "events_2leg": 2640,
+        "events_3leg": 2640,
+        "events_4leg": 1760,
+        "log_loss": 0.34715078476312017,
+        "log_loss_2leg": 0.47903801720857386,
+        "log_loss_3leg": 0.32177126490745406,
+        "log_loss_4leg": 0.18738921587843888,
+        "mean_probability": 0.1404838918601459
+      },
+      "0.50": {
+        "brier": 0.10558165432132385,
+        "brier_2leg": 0.15546312214778524,
+        "brier_3leg": 0.09412690868424733,
+        "brier_4leg": 0.0479415710372465,
+        "events_2leg": 2640,
+        "events_3leg": 2640,
+        "events_4leg": 1760,
+        "log_loss": 0.3471360704961906,
+        "log_loss_2leg": 0.47902064586374404,
+        "log_loss_3leg": 0.3217583202452623,
+        "log_loss_4leg": 0.18737583282125295,
+        "mean_probability": 0.14049679315155034
+      },
+      "0.75": {
+        "brier": 0.10557840564801362,
+        "brier_2leg": 0.15545984005258112,
+        "brier_3leg": 0.09412262684659656,
+        "brier_4leg": 0.04793992224328798,
+        "events_2leg": 2640,
+        "events_3leg": 2640,
+        "events_4leg": 1760,
+        "log_loss": 0.3471227975308936,
+        "log_loss_2leg": 0.4790055307345706,
+        "log_loss_3leg": 0.32174575591732124,
+        "log_loss_4leg": 0.18736426014573673,
+        "mean_probability": 0.14050985349517994
+      },
+      "1.00": {
+        "brier": 0.10557624582537437,
+        "brier_2leg": 0.1554582688515669,
+        "brier_3leg": 0.09411868748020608,
+        "brier_4leg": 0.047939548803837974,
+        "events_2leg": 2640,
+        "events_3leg": 2640,
+        "events_4leg": 1760,
+        "log_loss": 0.347113589154477,
+        "log_loss_2leg": 0.47899483608072135,
+        "log_loss_3leg": 0.3217310924047039,
+        "log_loss_4leg": 0.18736546388977002,
+        "mean_probability": 0.14052037540564907
+      }
+    },
+    "events": 7040
+  },
+  "seed": 73,
+  "selected_temperature": 1.0,
+  "selection": {
+    "best_improvement_over_full_model": 0.0,
+    "best_improvement_standard_error": 0.0,
+    "best_unconditional": "1.00",
+    "games": 440,
+    "paired_difference_against_full_model": {
+      "0.00": {
+        "mean": 5.3093248164463366e-05,
+        "standard_error": 4.942859002581131e-05
+      },
+      "0.25": {
+        "mean": 3.719560864320446e-05,
+        "standard_error": 3.6480264502021715e-05
+      },
+      "0.50": {
+        "mean": 2.2481341713627613e-05,
+        "standard_error": 2.3609750384275872e-05
+      },
+      "0.75": {
+        "mean": 9.208376416656848e-06,
+        "standard_error": 1.104379004630734e-05
+      },
+      "1.00": {
+        "mean": 0.0,
+        "standard_error": 0.0
+      }
+    },
+    "parsimony_tie_band_se": 1.0,
+    "pooled_game_clustered_log_loss": {
+      "0.00": 0.3471666824026414,
+      "0.25": 0.34715078476312017,
+      "0.50": 0.3471360704961906,
+      "0.75": 0.3471227975308936,
+      "1.00": 0.347113589154477
+    },
+    "pooled_game_clustered_log_loss_se": {
+      "0.00": 0.00694062592883133,
+      "0.25": 0.006939772000263986,
+      "0.50": 0.006938975219619827,
+      "0.75": 0.006938209175984918,
+      "1.00": 0.006937535309134782
+    },
+    "reason": "the full dependence model has the best game-clustered log loss",
+    "selected": "1.00"
+  },
+  "temperature_grid": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+  ],
+  "title": "Final upstream remediation: dependence temperature",
+  "upstream_choices": {
+    "cross_team_prior": "gaussian",
+    "role_scale": "log_shrunk",
+    "temporal": "A2_robust_student_t",
+    "transmission_cap": 0.15,
+    "uncertainty": "U0_raw"
+  }
+}

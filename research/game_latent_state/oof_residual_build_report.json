@@ -1,0 +1,940 @@
+{
+  "ensemble_weights_by_season": {
+    "2017": {},
+    "2018": {
+      "blk": {
+        "decay": 1.1102230246251565e-16,
+        "kalman": 0.0,
+        "xgb": 1.0
+      },
+      "reb": {
+        "decay": 0.0,
+        "kalman": 0.0,
+        "xgb": 1.0
+      }
+    },
+    "2019": {
+      "blk": {
+        "decay": 4.163336342344337e-17,
+        "kalman": 5.506858502013995e-18,
+        "xgb": 1.0
+      },
+      "reb": {
+        "decay": 1.0438871989038034e-13,
+        "kalman": 1.359329315775426e-13,
+        "xgb": 0.9999999999997597
+      }
+    },
+    "2020": {
+      "blk": {
+        "decay": 0.0016898000466131552,
+        "kalman": 1.9702032331411288e-19,
+        "xgb": 0.9983101999533869
+      },
+      "reb": {
+        "decay": 7.269185253733212e-14,
+        "kalman": 7.849276784099857e-14,
+        "xgb": 0.9999999999998488
+      }
+    },
+    "2021": {
+      "blk": {
+        "decay": 9.71445146547012e-17,
+        "kalman": 0.0,
+        "xgb": 1.0
+      },
+      "reb": {
+        "decay": 0.0,
+        "kalman": 0.0,
+        "xgb": 1.0
+      }
+    },
+    "2022": {
+      "blk": {
+        "decay": 8.521829075736065e-17,
+        "kalman": 2.127683112776613e-18,
+        "xgb": 1.0
+      },
+      "reb": {
+        "decay": 6.986078382453798e-14,
+        "kalman": 6.107614414219142e-14,
+        "xgb": 0.9999999999998691
+      }
+    },
+    "2023": {
+      "blk": {
+        "decay": 4.8572257327350605e-17,
+        "kalman": 3.989150757548228e-18,
+        "xgb": 1.0
+      },
+      "reb": {
+        "decay": 0.0,
+        "kalman": 0.0,
+        "xgb": 1.0
+      }
+    },
+    "2024": {
+      "blk": {
+        "decay": 5.551115123125783e-17,
+        "kalman": 0.0,
+        "xgb": 1.0
+      },
+      "reb": {
+        "decay": 1.239286451237831e-13,
+        "kalman": 1.359329315775426e-13,
+        "xgb": 0.9999999999997402
+      }
+    },
+    "2025": {
+      "blk": {
+        "decay": 0.0,
+        "kalman": 0.0,
+        "xgb": 1.0
+      },
+      "reb": {
+        "decay": 6.350475700855895e-14,
+        "kalman": 4.4922399133895397e-14,
+        "xgb": 0.9999999999998916
+      }
+    }
+  },
+  "marginals": {
+    "by_season": {
+      "2020": {
+        "marginal_training_rows": 51855,
+        "marginal_training_seasons": [
+          2018,
+          2019
+        ],
+        "residual_rows": 24952,
+        "stats": {
+          "ast": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_ast",
+              "decay_prior_ast_rate",
+              "kalman_prior_ast_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.492418412418511,
+            "pit_variance": 0.08186975729955753,
+            "z_mean": -0.01642168769157565,
+            "z_sd": 0.9953274581575409
+          },
+          "blk": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_blk",
+              "decay_prior_blk_rate",
+              "kalman_prior_blk_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.505675702256142,
+            "pit_variance": 0.08387598523737334,
+            "z_mean": 0.01871079488468564,
+            "z_sd": 1.0021884394892417
+          },
+          "fg3m": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_fg3m",
+              "decay_prior_fg3m_rate",
+              "kalman_prior_fg3m_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.4968389398578217,
+            "pit_variance": 0.08263009166546187,
+            "z_mean": -0.008953201997056107,
+            "z_sd": 0.9993002381158108
+          },
+          "pts": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_pts",
+              "decay_prior_pts_rate",
+              "kalman_prior_pts_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.4984110737214954,
+            "pit_variance": 0.08247226875438825,
+            "z_mean": -0.0029423111495477006,
+            "z_sd": 1.0038502992602008
+          },
+          "reb": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_reb",
+              "decay_prior_reb_rate",
+              "kalman_prior_reb_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.502073398802327,
+            "pit_variance": 0.08231378930646792,
+            "z_mean": 0.013316981929241595,
+            "z_sd": 1.0001565710779168
+          },
+          "stl": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_stl",
+              "decay_prior_stl_rate",
+              "kalman_prior_stl_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.4980757520975578,
+            "pit_variance": 0.08425555790210604,
+            "z_mean": -0.006026768472319288,
+            "z_sd": 1.0092491182164698
+          }
+        }
+      },
+      "2021": {
+        "marginal_training_rows": 76807,
+        "marginal_training_seasons": [
+          2018,
+          2019,
+          2020
+        ],
+        "residual_rows": 27945,
+        "stats": {
+          "ast": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_ast",
+              "decay_prior_ast_rate",
+              "kalman_prior_ast_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.49681268609132695,
+            "pit_variance": 0.08366850119376111,
+            "z_mean": -0.005532135534315071,
+            "z_sd": 1.0131520663613498
+          },
+          "blk": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_blk",
+              "decay_prior_blk_rate",
+              "kalman_prior_blk_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.5009254783012121,
+            "pit_variance": 0.08270530791890636,
+            "z_mean": 0.0031036855756231474,
+            "z_sd": 0.9945198242375552
+          },
+          "fg3m": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_fg3m",
+              "decay_prior_fg3m_rate",
+              "kalman_prior_fg3m_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.4912208740017647,
+            "pit_variance": 0.08333815004939303,
+            "z_mean": -0.02760729774666391,
+            "z_sd": 1.011211001837683
+          },
+          "pts": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_pts",
+              "decay_prior_pts_rate",
+              "kalman_prior_pts_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.4995319818797159,
+            "pit_variance": 0.0832942300668809,
+            "z_mean": 0.004364859214337867,
+            "z_sd": 1.0105970470651418
+          },
+          "reb": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_reb",
+              "decay_prior_reb_rate",
+              "kalman_prior_reb_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.5020052567032213,
+            "pit_variance": 0.08263746919410564,
+            "z_mean": 0.01598536699329717,
+            "z_sd": 1.007672756157847
+          },
+          "stl": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_stl",
+              "decay_prior_stl_rate",
+              "kalman_prior_stl_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.5050017302331176,
+            "pit_variance": 0.08325954819333198,
+            "z_mean": 0.015098580074910096,
+            "z_sd": 1.0022713935643581
+          }
+        }
+      },
+      "2022": {
+        "marginal_training_rows": 104752,
+        "marginal_training_seasons": [
+          2018,
+          2019,
+          2020,
+          2021
+        ],
+        "residual_rows": 27638,
+        "stats": {
+          "ast": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_ast",
+              "decay_prior_ast_rate",
+              "kalman_prior_ast_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.5004336162792634,
+            "pit_variance": 0.08128815113862795,
+            "z_mean": 0.008066903810806986,
+            "z_sd": 0.9922032391886694
+          },
+          "blk": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_blk",
+              "decay_prior_blk_rate",
+              "kalman_prior_blk_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.5013894464640133,
+            "pit_variance": 0.08386409323619204,
+            "z_mean": 0.0052882658300628495,
+            "z_sd": 1.0073753624166648
+          },
+          "fg3m": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_fg3m",
+              "decay_prior_fg3m_rate",
+              "kalman_prior_fg3m_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.49867439261570423,
+            "pit_variance": 0.08202522469630442,
+            "z_mean": -0.0015484919047225316,
+            "z_sd": 0.9978128472735691
+          },
+          "pts": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_pts",
+              "decay_prior_pts_rate",
+              "kalman_prior_pts_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.5006737891356146,
+            "pit_variance": 0.0812096287343907,
+            "z_mean": 0.005422104387038986,
+            "z_sd": 0.9997887861153696
+          },
+          "reb": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_reb",
+              "decay_prior_reb_rate",
+              "kalman_prior_reb_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.4931113411012321,
+            "pit_variance": 0.08221609770907931,
+            "z_mean": -0.014720442068019932,
+            "z_sd": 0.9987632016107443
+          },
+          "stl": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_stl",
+              "decay_prior_stl_rate",
+              "kalman_prior_stl_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.4967797314117972,
+            "pit_variance": 0.08264895455956964,
+            "z_mean": -0.008845672774397123,
+            "z_sd": 0.9935534567124216
+          }
+        }
+      },
+      "2023": {
+        "marginal_training_rows": 132390,
+        "marginal_training_seasons": [
+          2018,
+          2019,
+          2020,
+          2021,
+          2022
+        ],
+        "residual_rows": 28168,
+        "stats": {
+          "ast": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_ast",
+              "decay_prior_ast_rate",
+              "kalman_prior_ast_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.5003402316198515,
+            "pit_variance": 0.08282285963005168,
+            "z_mean": 0.008135769062563003,
+            "z_sd": 1.0054531750384754
+          },
+          "blk": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_blk",
+              "decay_prior_blk_rate",
+              "kalman_prior_blk_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.5052550960732987,
+            "pit_variance": 0.08501844432575802,
+            "z_mean": 0.02047675340124401,
+            "z_sd": 1.01577216862083
+          },
+          "fg3m": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_fg3m",
+              "decay_prior_fg3m_rate",
+              "kalman_prior_fg3m_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.4941785246792433,
+            "pit_variance": 0.08181920107915983,
+            "z_mean": -0.019512780204534994,
+            "z_sd": 0.9879362159693564
+          },
+          "pts": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_pts",
+              "decay_prior_pts_rate",
+              "kalman_prior_pts_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.4918444196882498,
+            "pit_variance": 0.08031325027884907,
+            "z_mean": -0.027803506745649038,
+            "z_sd": 0.9823544637723652
+          },
+          "reb": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_reb",
+              "decay_prior_reb_rate",
+              "kalman_prior_reb_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.4942076290732797,
+            "pit_variance": 0.08213895662183551,
+            "z_mean": -0.012128101237949562,
+            "z_sd": 0.9982028907252275
+          },
+          "stl": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_stl",
+              "decay_prior_stl_rate",
+              "kalman_prior_stl_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.4989583571809893,
+            "pit_variance": 0.08214963255866632,
+            "z_mean": -0.004913121123552307,
+            "z_sd": 0.9917159254923873
+          }
+        }
+      },
+      "2024": {
+        "marginal_training_rows": 160558,
+        "marginal_training_seasons": [
+          2018,
+          2019,
+          2020,
+          2021,
+          2022,
+          2023
+        ],
+        "residual_rows": 28154,
+        "stats": {
+          "ast": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_ast",
+              "decay_prior_ast_rate",
+              "kalman_prior_ast_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.4959572776779911,
+            "pit_variance": 0.08207454660392824,
+            "z_mean": -0.008343882350820571,
+            "z_sd": 0.9985055646390489
+          },
+          "blk": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_blk",
+              "decay_prior_blk_rate",
+              "kalman_prior_blk_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.49679425162801505,
+            "pit_variance": 0.08340011430828922,
+            "z_mean": -0.009737291453475723,
+            "z_sd": 0.9991591595230579
+          },
+          "fg3m": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_fg3m",
+              "decay_prior_fg3m_rate",
+              "kalman_prior_fg3m_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.500985032386331,
+            "pit_variance": 0.08315122489826836,
+            "z_mean": 0.0031480315894291014,
+            "z_sd": 1.0032918155073283
+          },
+          "pts": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_pts",
+              "decay_prior_pts_rate",
+              "kalman_prior_pts_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.5053419327462852,
+            "pit_variance": 0.08247699471357928,
+            "z_mean": 0.02397242028271388,
+            "z_sd": 1.0066022542967497
+          },
+          "reb": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_reb",
+              "decay_prior_reb_rate",
+              "kalman_prior_reb_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.4985656198601929,
+            "pit_variance": 0.08336525881190915,
+            "z_mean": 0.0032110995651087985,
+            "z_sd": 1.010464050979237
+          },
+          "stl": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_stl",
+              "decay_prior_stl_rate",
+              "kalman_prior_stl_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.5066647213566557,
+            "pit_variance": 0.0846384347664843,
+            "z_mean": 0.024509707973612686,
+            "z_sd": 1.0085754475760782
+          }
+        }
+      },
+      "2025": {
+        "marginal_training_rows": 188712,
+        "marginal_training_seasons": [
+          2018,
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024
+        ],
+        "residual_rows": 28670,
+        "stats": {
+          "ast": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_ast",
+              "decay_prior_ast_rate",
+              "kalman_prior_ast_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.4963461194397899,
+            "pit_variance": 0.08241191112857839,
+            "z_mean": -0.008010297565903296,
+            "z_sd": 1.007588247255227
+          },
+          "blk": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_blk",
+              "decay_prior_blk_rate",
+              "kalman_prior_blk_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.49814551841653043,
+            "pit_variance": 0.08210388170859685,
+            "z_mean": -0.007643869452655706,
+            "z_sd": 0.9888250003687225
+          },
+          "fg3m": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_fg3m",
+              "decay_prior_fg3m_rate",
+              "kalman_prior_fg3m_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.4988096546124516,
+            "pit_variance": 0.08276142351602013,
+            "z_mean": -0.0018176003532091962,
+            "z_sd": 0.9985999818922825
+          },
+          "pts": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_pts",
+              "decay_prior_pts_rate",
+              "kalman_prior_pts_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.5040233943793667,
+            "pit_variance": 0.08142230368494538,
+            "z_mean": 0.015895795757718247,
+            "z_sd": 0.9970835060913993
+          },
+          "reb": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_reb",
+              "decay_prior_reb_rate",
+              "kalman_prior_reb_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.4880687676947354,
+            "pit_variance": 0.0822648479546803,
+            "z_mean": -0.034551745386031216,
+            "z_sd": 1.0018597880406968
+          },
+          "stl": {
+            "clipped_fraction": 0.0,
+            "inflation_features": [
+              "expected_minutes",
+              "mu_selected_stl",
+              "decay_prior_stl_rate",
+              "kalman_prior_stl_rate",
+              "opp_pace_prior",
+              "days_rest",
+              "is_home",
+              "b2b",
+              "pos_G",
+              "pos_F",
+              "pos_C"
+            ],
+            "marginal_kind": "zinb",
+            "pit_mean": 0.4988269223408952,
+            "pit_variance": 0.08345935018414721,
+            "z_mean": -0.0038854832191568926,
+            "z_sd": 1.0026904277506936
+          }
+        }
+      }
+    }
+  },
+  "role_bucket_thresholds": {
+    "high": 28.23894691467285,
+    "low": 18.478050231933594
+  }
+}

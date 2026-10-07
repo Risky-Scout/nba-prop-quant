@@ -1,0 +1,273 @@
+{
+  "note": "Immutable control. Every number here is copied from the accepted V1 report and is never recomputed by the repair branch.",
+  "parent_shadow_v1_sha": "1c5b8c93569ee25afd4eb4222158300702bd9471",
+  "pr_16_head_sha_at_fork": "1c5b8c93569ee25afd4eb4222158300702bd9471",
+  "pr_16_number": 16,
+  "source_production_ref": "origin/production/wizardofodds-integration",
+  "source_production_sha": "a30ed672001f8774b6cfec9ad7a3ccb382506c4b",
+  "v1_acceptance_gates": [
+    {
+      "evidence": {
+        "bonferroni_z_critical": 4.973525209266083,
+        "family_wise_alpha": 0.01,
+        "limit_over_probability_error": 0.01,
+        "limit_three_sigma_exceedance_fraction": 0.00809938818978056,
+        "limit_variance_relative_error": 0.05,
+        "max_abs_mean_z": 3.819162849874026,
+        "max_abs_over_probability_error": 0.004124012909645813,
+        "max_abs_over_z": 3.826977235156293,
+        "max_abs_variance_relative_error_well_conditioned": 0.013031455768865892,
+        "max_abs_variance_z": 3.399444361653908,
+        "three_sigma_exceedance_fraction": 0.0024326101249178174,
+        "variance_relative_error_min_variance": 1.0,
+        "z_probe_count": 15210
+      },
+      "gate": "A",
+      "name": "marginal calibration preserved within Monte Carlo tolerance",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "baseline_independence_rmse": 0.01631847608331577,
+        "candidate_rmse": 0.004333624692735095,
+        "limit_rmse_reduction": 0.5,
+        "rmse_reduction": 0.7344344735005095
+      },
+      "gate": "B",
+      "name": "held-out cross-player dependence beats conditional independence",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "best_baseline_brier": 0.1654106637222222,
+        "candidate_brier": 0.1654372268013889,
+        "limit_regression": 0.0005
+      },
+      "gate": "C",
+      "name": "2-leg joint calibration no worse than baseline",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "3_leg_best_baseline_brier": 0.09736770679513888,
+        "3_leg_candidate_brier": 0.09740255686319445,
+        "4_leg_best_baseline_brier": 0.0554234989625,
+        "4_leg_candidate_brier": 0.05546628825104167,
+        "limit_regression": 0.002
+      },
+      "gate": "D",
+      "name": "3-leg / 4-leg calibration shows no material degradation",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "games_checked": 600,
+        "limit_block_deviation": 1e-09,
+        "max_block_deviation": 2.220446049250313e-16
+      },
+      "gate": "E",
+      "name": "no same-player dependence double counting",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "games_tested": 600,
+        "limit_min_eigenvalue": -1e-10,
+        "min_covariance_eigenvalue": 0.09120195337954856,
+        "numerical_failures": 0
+      },
+      "gate": "F",
+      "name": "PSD and numerical stability on every held-out game tested",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "pairwise_parameter_count": 0,
+        "unseen_player_simulation_ok": true
+      },
+      "gate": "G",
+      "name": "unseen / sparse player fallback without pair-specific overfitting",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "modified_production_paths": []
+      },
+      "gate": "H",
+      "name": "production model remains untouched",
+      "passed": true
+    }
+  ],
+  "v1_count_space_buckets": {
+    "opponent_ast_ast": 0.004059503985164732,
+    "opponent_fg3m_reb": -0.0022302047998760508,
+    "opponent_pts_pts": 0.010981068859214559,
+    "opponent_pts_reb": -0.00220073112170297,
+    "opponent_reb_reb": 0.009388222860807828,
+    "opponent_stl_pts": 0.00016155291262332858,
+    "passer_ast_teammate_pts": 0.03731635017376758,
+    "teammate_ast_ast": 0.0007956769150374383,
+    "teammate_fg3m_fg3m": -0.0023787268417548805,
+    "teammate_pts_pts": -0.002390066197177987,
+    "teammate_pts_reb": 0.010493430875379893,
+    "teammate_reb_reb": 0.0011982139716605305
+  },
+  "v1_count_space_cross_player_rmse": {
+    "baseline_independence": 0.0201317558321108,
+    "baseline_production": 0.020140080578426665,
+    "candidate": 0.009012476913945227
+  },
+  "v1_count_space_observed": {
+    "opponent_ast_ast": 0.008016281714482333,
+    "opponent_fg3m_reb": -0.0031515159875850347,
+    "opponent_pts_pts": 0.020778246595965544,
+    "opponent_pts_reb": -0.002192456857431943,
+    "opponent_reb_reb": 0.015097543563116296,
+    "opponent_stl_pts": -0.00048596525953109506,
+    "passer_ast_teammate_pts": 0.05841310281774328,
+    "teammate_ast_ast": 0.013049925536504187,
+    "teammate_fg3m_fg3m": 0.0033349058958697607,
+    "teammate_pts_pts": 0.002394062854748624,
+    "teammate_pts_reb": 0.020982467835459016,
+    "teammate_reb_reb": 0.009468560207535106
+  },
+  "v1_factor_spec_hash": "e575024c01c0a9812e5ac3fa3d6b2cadb73d1c909388b552d0165b5070dc07bf",
+  "v1_joint_events": {
+    "2": {
+      "base_rate": 0.2313888888888889,
+      "baseline_independence_brier": 0.1654365174493056,
+      "baseline_production_brier": 0.1654106637222222,
+      "candidate_brier": 0.1654372268013889,
+      "candidate_brier_ci95": [
+        0.15763758552460075,
+        0.17233740722623261
+      ],
+      "candidate_log_loss": 0.5042607790042981,
+      "candidate_minus_independence_brier": 7.093520832945899e-07,
+      "candidate_minus_independence_brier_ci95": [
+        -3.8537398784727754e-05,
+        4.748259652772868e-05
+      ],
+      "events": 3600,
+      "games": 600
+    },
+    "3": {
+      "base_rate": 0.11666666666666667,
+      "baseline_independence_brier": 0.09739232988333334,
+      "baseline_production_brier": 0.09736770679513888,
+      "candidate_brier": 0.09740255686319445,
+      "candidate_brier_ci95": [
+        0.08958509656086805,
+        0.10516644266430555
+      ],
+      "candidate_log_loss": 0.3338049202524619,
+      "candidate_minus_independence_brier": 1.0226979861110985e-05,
+      "candidate_minus_independence_brier_ci95": [
+        -2.2399415833337236e-05,
+        4.540008020831354e-05
+      ],
+      "events": 3600,
+      "games": 600
+    },
+    "4": {
+      "base_rate": 0.060833333333333336,
+      "baseline_independence_brier": 0.055435561340624995,
+      "baseline_production_brier": 0.0554234989625,
+      "candidate_brier": 0.05546628825104167,
+      "candidate_brier_ci95": [
+        0.04714525350315104,
+        0.06299541805164062
+      ],
+      "candidate_log_loss": 0.2139759175521949,
+      "candidate_minus_independence_brier": 3.072691041667436e-05,
+      "candidate_minus_independence_brier_ci95": [
+        6.451484140617033e-06,
+        5.1206956536463736e-05
+      ],
+      "events": 2400,
+      "games": 600
+    }
+  },
+  "v1_latent_dependence": {
+    "baseline_independence_rmse": 0.01631847608331577,
+    "candidate_implied_buckets": {
+      "opponent_ast_ast": 0.004838420867529496,
+      "opponent_fg3m_reb": -0.0029036643381710244,
+      "opponent_pts_pts": 0.01212316479506658,
+      "opponent_pts_reb": -0.002459580687614912,
+      "opponent_reb_reb": 0.01046748365433485,
+      "opponent_stl_pts": 0.00019807679375208028,
+      "passer_ast_teammate_pts": 0.042799798361597786,
+      "teammate_ast_ast": 0.0009374772272764849,
+      "teammate_fg3m_fg3m": -0.003588192021672725,
+      "teammate_pts_pts": -0.002645739759020528,
+      "teammate_pts_reb": 0.011624107591980425,
+      "teammate_reb_reb": 0.0012898703250657628
+    },
+    "candidate_max_abs_error": 0.008127328602571805,
+    "candidate_rms_z_error": 2.0911651351971035,
+    "candidate_rmse": 0.004333624692735095,
+    "games": 2643,
+    "observed_bucket_se": {
+      "opponent_ast_ast": 0.0020031252822746903,
+      "opponent_fg3m_reb": 0.0014572549628187297,
+      "opponent_pts_pts": 0.0018926910112859532,
+      "opponent_pts_reb": 0.0016244818466885972,
+      "opponent_reb_reb": 0.002089468072158388,
+      "opponent_stl_pts": 0.0013488940419171189,
+      "passer_ast_teammate_pts": 0.0019230572625832168,
+      "teammate_ast_ast": 0.002239369118875806,
+      "teammate_fg3m_fg3m": 0.0018982923821767935,
+      "teammate_pts_pts": 0.002235072848412542,
+      "teammate_pts_reb": 0.0018055146869235834,
+      "teammate_reb_reb": 0.0021738712953258796
+    },
+    "observed_buckets": {
+      "opponent_ast_ast": 0.005341368590022398,
+      "opponent_fg3m_reb": -0.001518008220700275,
+      "opponent_pts_pts": 0.016008373578163027,
+      "opponent_pts_reb": -0.002643665457434456,
+      "opponent_reb_reb": 0.015928005526501563,
+      "opponent_stl_pts": -0.0006447135500236283,
+      "passer_ast_teammate_pts": 0.04701135502623302,
+      "teammate_ast_ast": 0.008971395319402322,
+      "teammate_fg3m_fg3m": -0.0017159555455812522,
+      "teammate_pts_pts": -0.0006200938532631293,
+      "teammate_pts_reb": 0.016270749051048704,
+      "teammate_reb_reb": 0.009417198927637567
+    }
+  },
+  "v1_marginal_preservation_candidate": {
+    "dimensions_probed": 3042,
+    "max_abs_mean_z": 3.819162849874026,
+    "max_abs_over_probability_error": 0.004124012909645813,
+    "max_abs_over_z": 3.826977235156293,
+    "max_abs_quantile_error": 1.0,
+    "max_abs_variance_relative_error_all_dimensions": 0.06547411577724216,
+    "max_abs_variance_relative_error_well_conditioned": 0.013031455768865892,
+    "max_abs_variance_z": 3.399444361653908,
+    "mean_abs_mean_error": 0.003730056199944223,
+    "median_abs_over_probability_error": 0.001053071840777367,
+    "three_sigma_exceedance_fraction": 0.0024326101249178174,
+    "variance_ratio_min_variance": 1.0,
+    "well_conditioned_variance_dimensions": 2007,
+    "z_probe_count": 15210
+  },
+  "v1_same_player_contract": {
+    "games_checked": 600,
+    "integration_strategy": "B: the incumbent within-player block is pinned exactly and orthogonal shared factors are added around it",
+    "max_block_deviation": 2.220446049250313e-16
+  },
+  "v1_stability": {
+    "failure_detail": [],
+    "games_tested": 600,
+    "max_dimensions": 168,
+    "min_covariance_eigenvalue": 0.09120195337954856,
+    "numerical_failures": 0,
+    "pairwise_parameter_count": 0,
+    "shared_shrink_engaged_on_any_game": true,
+    "unseen_player_simulation_ok": true
+  },
+  "v1_validation_report_sha256": "844937c453404e4ad585efcd87d1cdd352248455f68950f8fcdfaea5588a792f",
+  "v1_verdict": "SHADOW V1 ACCEPTED FOR PRODUCTION-INTEGRATION DESIGN."
+}

@@ -1,0 +1,80 @@
+{
+  "probability": 0.04511,
+  "monte_carlo_standard_error": 0.0004640855950145404,
+  "simulations": 200000,
+  "satisfying_draws": 9022,
+  "push_fraction": 0.0,
+  "seed": 73,
+  "game_id": 18446819,
+  "legs": [
+    "player 89 pts > 8.5",
+    "player 89 ast > 2.5",
+    "player 175 reb > 5.5",
+    "player 3 pts < 5.5"
+  ],
+  "leg_marginal_probabilities": [
+    0.44567,
+    0.435755,
+    0.37325,
+    0.52618
+  ],
+  "independent_product": 0.03814081183622424,
+  "dependence_model_version": "game-latent-state-shadow-v1",
+  "artifact_version": "e575024c01c0a9812e5ac3fa3d6b2cadb73d1c909388b552d0165b5070dc07bf",
+  "dependence_lift_vs_independent_product": 1.182722596301864,
+  "realized_outcome": {
+    "all_legs_hit": false,
+    "legs": [
+      {
+        "leg": "player 89 pts > 8.5",
+        "realized": 8.0,
+        "hit": false
+      },
+      {
+        "leg": "player 89 ast > 2.5",
+        "realized": 3.0,
+        "hit": true
+      },
+      {
+        "leg": "player 175 reb > 5.5",
+        "realized": 5.0,
+        "hit": false
+      },
+      {
+        "leg": "player 3 pts < 5.5",
+        "realized": 4.0,
+        "hit": true
+      }
+    ]
+  },
+  "legs_detail": [
+    {
+      "player_id": 89,
+      "stat": "pts",
+      "side": "over",
+      "line": 8.5,
+      "marginal_probability": 0.44567
+    },
+    {
+      "player_id": 89,
+      "stat": "ast",
+      "side": "over",
+      "line": 2.5,
+      "marginal_probability": 0.435755
+    },
+    {
+      "player_id": 175,
+      "stat": "reb",
+      "side": "over",
+      "line": 5.5,
+      "marginal_probability": 0.37325
+    },
+    {
+      "player_id": 3,
+      "stat": "pts",
+      "side": "under",
+      "line": 5.5,
+      "marginal_probability": 0.52618
+    }
+  ]
+}

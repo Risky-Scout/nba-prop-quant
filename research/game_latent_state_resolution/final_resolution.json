@@ -1,0 +1,332 @@
+{
+  "all_v2_structural_additions_screened_and_not_carried": true,
+  "clean_branch": "research/nba-game-latent-state-shadow-clean",
+  "code_sha": "e45fcfece1e6598df7513bf6b1a13f4f8a8ce181",
+  "code_sha_note": "code_sha is HEAD at generation time, which is the commit *before* the one that carries this file. A head SHA cannot name the commit that contains it, so the clean branch head is reported in the pull request rather than claimed here.",
+  "equivalence_proof": {
+    "bitwise_identical_everywhere": true,
+    "by_refit_window": {
+      "2024": {
+        "bitwise_identical_everywhere": true,
+        "games_checked": 300
+      },
+      "2025": {
+        "bitwise_identical_everywhere": true,
+        "games_checked": 300
+      }
+    },
+    "claim": "The frozen V2 candidate's point-probability model is the accepted repair's, so the repair's committed grades are the candidate's grades and no further holdout simulation is required.",
+    "covariance_assemblies_compared": 1800,
+    "games_checked": 600,
+    "loadings_payload_bitwise_identical": true,
+    "max_abs_cholesky_difference": 0.0,
+    "max_abs_correlation_difference": 0.0,
+    "model_enters_only_through_loadings": true,
+    "monte_carlo_rerun_required": false,
+    "source": "game_latent_state_v2/equivalence_and_calibration.json",
+    "source_sha256": "888254e34ee7ca5dd2266812609ce9bd6100dec408ee4d1761d886520049d37c",
+    "why_it_holds_in_every_refit_window": "A refit window changes the marginals and the within-player block, not the dependence model: fit_season takes (history, season, stats) and no factor-model argument, so whatever a window refits is the same object under both models. The loadings are the only model-bearing input the simulator reads, and they are fixed by the frozen factor spec rather than refitted per window. So the two models agree in every window for the same reason they agree in one, and the per-window split above checks it rather than assuming it."
+  },
+  "further_holdout_simulation_required": false,
+  "merge_path_audit": {
+    "base": "a30ed672001f8774b6cfec9ad7a3ccb382506c4b",
+    "ceiling_bytes": 10485760,
+    "notable_bytes": 5242880,
+    "snapshot_at_generation_time": {
+      "base": "a30ed672001f8774b6cfec9ad7a3ccb382506c4b",
+      "base_resolved": true,
+      "ceiling_bytes": 10485760,
+      "generated_artifacts": [],
+      "largest": {
+        "bytes": 489996,
+        "path": "research/game_latent_state_v2/inner_screening.json",
+        "sha": "d009be4183c6da3613bf7c71382cd4323e3c1bbe"
+      },
+      "new_blob_count": 73,
+      "notable": [],
+      "notable_bytes": 5242880,
+      "over_ceiling": [],
+      "passed": true
+    },
+    "snapshot_is_not_the_verdict": "This file is written before the commit that carries it, so at generation time the merge path is empty and the snapshot above reports zero new objects. That is an artefact of ordering, not a clean result. The verdict is whatever research/game_latent_state_resolution/audit_merge_path_blobs.py reports against the pushed branch head, which is also what test_no_new_object_in_the_merge_path_breaches_the_blob_contract enforces on every run."
+  },
+  "parameter_accounting": {
+    "accounting_discrepancy": "A request to report active_role_indexed_parameters = 0 cannot be satisfied truthfully. The rejected additive role_deviation layer does contribute 0. The accepted repair's multiplicative role_scale contributes 3 fitted values under 1 normalisation constraint, it is active, and it was accepted in PR #17 as part of the winning model. Both numbers are reported above instead of one number that would be wrong.",
+    "active_role_deviation_parameters": 0,
+    "active_symmetric_subspace_parameters": 0,
+    "frozen_candidate_reported_role_indexed": 3,
+    "frozen_candidate_role_indexed_note": "The freeze record charges one parameter per role whenever a role column is configured, even with the additive layer off, so it reports 3. That is a deliberate over-count on the conservative side and it refers to role_scale, not to role_deviation. It is preserved here rather than corrected, because correcting a frozen record after the fact is how provenance is lost.",
+    "measured_not_refitted": true,
+    "pairwise_parameter_count": 0,
+    "player_indexed": 0,
+    "role_scale": {
+      "active": true,
+      "distinct_from": "the rejected additive role_deviation layer",
+      "free_parameters": 2,
+      "layer": "multiplicative role_scale, fitted by the accepted bucket repair",
+      "normalisation": "player-weighted mean scale is 1 (sum_r p_r s_r == 1)",
+      "normalisation_constraints": 1,
+      "note": "Active, and materially so: the per-pair multiplier s_a * s_b ranges from 0.695 to 1.540 across the fitted roles. The normalisation keeps the *pooled* block fixed, so a pooled-level check cannot see this layer at all, which is exactly why it would be easy to misreport as absent. Reporting zero active role-indexed parameters would therefore be false. The layer is part of the model accepted in PR #17 and is carried unchanged; nothing here refits it.",
+      "pair_multipliers": {
+        "bench+bench": 1.5399173406942865,
+        "bench+rotation": 1.0348114656515555,
+        "bench+starter": 1.1398689728287772,
+        "rotation+rotation": 0.6953845775651336,
+        "rotation+starter": 0.7659823363583067,
+        "starter+starter": 0.8437474148008032
+      },
+      "pair_weighted_mean_of_s_a_times_s_b": null,
+      "pair_weighted_mean_unavailable_reason": "The accepted repair's committed loadings payload predates role_pair_shares, so the ordered role-pair shares needed to average s_a * s_b are not in it. The weaker invariant the payload does support -- that dropping role_scale leaves the pooled same-team correlation unchanged -- is checked above and holds.",
+      "pooled_same_team_block_unchanged": true,
+      "value_count": 3,
+      "values": {
+        "bench": 1.2409340597688043,
+        "rotation": 0.8338972224232034,
+        "starter": 0.9185572463384104
+      }
+    },
+    "scalar_hyperparameters": 4,
+    "stat_indexed_competition": 21,
+    "stat_indexed_contrast": 36,
+    "stat_indexed_game": 36
+  },
+  "parent_bucket_repair_sha": "c965451de2662b953f45c791157f3826207f753f",
+  "parent_shadow_v1_sha": "1c5b8c93569ee25afd4eb4222158300702bd9471",
+  "predictive_sd_verdict": {
+    "calibrated_mean_squared_z": 0.390769082372168,
+    "cause": "The inflation factor double-counts one season of heterogeneity. It is sqrt of a mean over two folds that disagree by a factor of 8.9, so it is effectively fold 2023's number. Fold 2023 is large because the pooled control was fitted on seasons before it and could not have known that season would depart from the level. For a holdout window that season is inside the training set, the random-effects tau^2 absorbs its departure, and the reported predictive SD widens on its own -- by up to x3.41 across the departing buckets. Multiplying that already-widened SD by a factor fitted on the unwidened one applies the same correction twice, which is why the calibrated mean z^2 lands further from 1 than the raw one. The correspondence is exact across the four buckets: the three that departed are the three whose predictive SD widens and the three with a large fold-2023 z^2, and the one that did not depart is the one whose SD does not widen and whose fold z^2 is near zero.",
+    "component": "predictive-SD inflation factor",
+    "double_counting_established": true,
+    "pre_registered_criteria": {
+      "calibrated_must_beat_raw": true,
+      "declared": "in this driver, before any 2024 or 2025 bucket value was read, and judging a reported uncertainty rather than a fitted parameter of the probability model",
+      "max_calibrated_mean_squared_z": 2.0,
+      "min_calibrated_mean_squared_z": 0.25
+    },
+    "raw_mean_squared_z": 0.6652266156010309,
+    "replacement_tuned_against_holdout": false,
+    "runtime_behaviour_carried": false,
+    "scope": "untouched 2024 and 2025, both refit windows",
+    "sub_verdicts": {
+      "calibrated_inside_ceiling": true,
+      "calibrated_inside_floor": true,
+      "calibration_beats_raw": false
+    },
+    "target": 1.0,
+    "value_screened": 1.7658707871961534,
+    "verdict": "REJECTED"
+  },
+  "production_base": "a30ed672001f8774b6cfec9ad7a3ccb382506c4b",
+  "promotion_eligibility": "SHADOW_RESEARCH_ONLY__NOT_ELIGIBLE_FOR_PROMOTION",
+  "protected_production_paths_modified": [],
+  "rejected_components": {
+    "bridge_weight > 0": {
+      "evidence": "game_latent_state_v2/inner_screening.json",
+      "final_value": "bridge_weight = 0",
+      "why": "Positive weights cut primary count-space error by about 45% and pushed global latent RMSE to 0.004636, outside the 0.003750 pre-registered bound. Every positive-weight grid point sat outside that bound."
+    },
+    "dynamic temporal treatment": {
+      "evidence": "game_latent_state_v2/temporal_diagnostic.json",
+      "final_value": "temporal_treatment = T0_pooled_empirical_bayes",
+      "why": "T0 -- what the accepted repair already does -- had the lowest predictive MSE within the parsimony tie band on the inner walk-forward folds. The random-walk state treatment could not even be supported: four training seasons is below the six a one-state walk needs, so it fell back to pooled."
+    },
+    "predictive-SD inflation factor 1.7659": {
+      "evidence": "game_latent_state_v2/sd_calibration_blocker.json",
+      "final_value": "no predictive-SD inflation; the layer is not carried",
+      "why": "Failed its pre-registered out-of-sample criterion on untouched 2024-2025. Raw mean z^2 was 0.6652 and the inflated value was 0.3908, against a target near 1, so inflating moved the reported uncertainty away from calibration. The factor is sqrt of a mean over two inner folds that disagree by a factor of 8.9, and it double-counts the one season of heterogeneity the random-effects tau^2 already absorbs."
+    },
+    "r_symmetric > 0": {
+      "evidence": "game_latent_state_v2/axis_indifference_resolution.json",
+      "final_value": "r_symmetric = 0",
+      "why": "At full rank the three-family construction is already exact, so every admissible symmetric rank reproduced the axis's null value on every judged metric. The worst relative deviation across the admissible points was 6.5e-15 against a 1e-9 tolerance, which makes those points the same model written differently rather than a better one."
+    },
+    "role_deviation = true": {
+      "evidence": "game_latent_state_v2/inner_screening.json",
+      "final_value": "role_deviation = false",
+      "why": "The layer cut support-weighted role-conditioned RMSE by 44.1% but left two role cells worse, by up to 23.1%, so it bought an aggregate gain by moving error into specific cells."
+    }
+  },
+  "research_branches_left_open": [
+    "research/nba-game-latent-state-shadow-v1 (PR #16)",
+    "research/nba-game-latent-state-shadow-v1-bucket-repair (PR #17)",
+    "research/nba-game-latent-state-shadow-v2-structural (PR #18)"
+  ],
+  "research_branches_must_not_be_merged_directly": "All three reach a 65 MB residual parquet object that was committed in 43e4d2a and removed in 4e15feb. Deleting a file does not remove the object, so an ordinary merge commit would carry it into production history forever. This branch was built fresh from the production base and copies only the files it should carry, which is why its merge path is clean.",
+  "reused_holdout_metrics": {
+    "by_legs": {
+      "2": {
+        "base_rate": 0.2313888888888889,
+        "brier": {
+          "baseline_independence": 0.1654365174493056,
+          "baseline_production": 0.1654106637222222,
+          "candidate": 0.16544182069166666
+        },
+        "events": 3600,
+        "log_loss": {
+          "baseline_independence": 0.5042296491965073,
+          "baseline_production": 0.5041986698064743,
+          "candidate": 0.504275463245007
+        }
+      },
+      "3": {
+        "base_rate": 0.11666666666666667,
+        "brier": {
+          "baseline_independence": 0.09739232988333334,
+          "baseline_production": 0.09736770679513888,
+          "candidate": 0.09740873114166668
+        },
+        "events": 3600,
+        "log_loss": {
+          "baseline_independence": 0.3338401619761879,
+          "baseline_production": 0.3338069180846833,
+          "candidate": 0.33382198292909226
+        }
+      },
+      "4": {
+        "base_rate": 0.060833333333333336,
+        "brier": {
+          "baseline_independence": 0.055435561340624995,
+          "baseline_production": 0.0554234989625,
+          "candidate": 0.05545531043958333
+        },
+        "events": 2400,
+        "log_loss": {
+          "baseline_independence": 0.2137188040140093,
+          "baseline_production": 0.2138652650624971,
+          "candidate": 0.21393894006493108
+        }
+      }
+    },
+    "count_space_cross_player_rmse": {
+      "baseline_independence": 0.0201317558321108,
+      "baseline_production": 0.020140080578426665,
+      "candidate": 0.00786120589118823
+    },
+    "games_simulated": 600,
+    "latent_bucket_rmse": {
+      "baseline_independence": 0.01631847608331577,
+      "candidate": 0.002765903474390802
+    },
+    "latent_dependence_cross_player_rmse": {
+      "baseline_independence": 0.01631847608331577,
+      "candidate": 0.002765903474390802
+    },
+    "marginal_preservation": {
+      "baseline_independence": {
+        "dimensions_probed": 3042,
+        "max_abs_mean_z": 3.819162849874026,
+        "max_abs_over_probability_error": 0.004471319923495365,
+        "max_abs_over_z": 4.389839205428432,
+        "max_abs_quantile_error": 1.0,
+        "max_abs_variance_relative_error_all_dimensions": 0.0734722614631659,
+        "max_abs_variance_relative_error_well_conditioned": 0.013809400576731214,
+        "max_abs_variance_z": 3.508377113323439,
+        "mean_abs_mean_error": 0.0037240400951569254,
+        "median_abs_over_probability_error": 0.001030756659558374,
+        "three_sigma_exceedance_fraction": 0.0026298487836949377,
+        "variance_ratio_min_variance": 1.0,
+        "well_conditioned_variance_dimensions": 2007,
+        "z_probe_count": 15210
+      },
+      "baseline_production": {
+        "dimensions_probed": 3042,
+        "max_abs_mean_z": 3.4623404223819785,
+        "max_abs_over_probability_error": 0.0040318030457758836,
+        "max_abs_over_z": 4.097170233411995,
+        "max_abs_quantile_error": 1.0,
+        "max_abs_variance_relative_error_all_dimensions": 0.05573652222641844,
+        "max_abs_variance_relative_error_well_conditioned": 0.014768430850971064,
+        "max_abs_variance_z": 3.710575053096762,
+        "mean_abs_mean_error": 0.003909254144162436,
+        "median_abs_over_probability_error": 0.0010085775958593862,
+        "three_sigma_exceedance_fraction": 0.002892833662064431,
+        "variance_ratio_min_variance": 1.0,
+        "well_conditioned_variance_dimensions": 2007,
+        "z_probe_count": 15210
+      },
+      "candidate": {
+        "dimensions_probed": 3042,
+        "max_abs_mean_z": 3.819162849874026,
+        "max_abs_over_probability_error": 0.004094012909645783,
+        "max_abs_over_z": 3.7991380116693168,
+        "max_abs_quantile_error": 1.0,
+        "max_abs_variance_relative_error_all_dimensions": 0.07147278567166754,
+        "max_abs_variance_relative_error_well_conditioned": 0.013041891211510588,
+        "max_abs_variance_z": 3.473708778939228,
+        "mean_abs_mean_error": 0.003722895688194704,
+        "median_abs_over_probability_error": 0.0010489836626853544,
+        "three_sigma_exceedance_fraction": 0.002366863905325444,
+        "variance_ratio_min_variance": 1.0,
+        "well_conditioned_variance_dimensions": 2007,
+        "z_probe_count": 15210
+      }
+    },
+    "repair_gates": {
+      "all_passed": true,
+      "count": 12,
+      "verdict": "BUCKET REPAIR ACCEPTED FOR SHADOW V2 DESIGN."
+    },
+    "same_player_contract": {
+      "games_checked": 600,
+      "integration_strategy": "B: the incumbent within-player block is pinned exactly and orthogonal shared factors are added around it",
+      "max_block_deviation": 2.220446049250313e-16
+    },
+    "scope": "untouched 2024-2025, 600 graded games, from the accepted repair's committed validation run; nothing re-simulated",
+    "seed": 73,
+    "simulations_per_game": 20000,
+    "source": "game_latent_state_bucket_repair/validation_report.json",
+    "source_sha256": "421751bdf70ee29cd36ed3f2cab19ae32ed81642c701e99d7b67220fd154a4a8",
+    "stability_and_psd": {
+      "games_tested": 600,
+      "max_dimensions": 168,
+      "min_covariance_eigenvalue": 0.10253262301389846,
+      "numerical_failures": 0,
+      "pairwise_parameter_count": 0,
+      "shared_shrink_engaged_on_any_game": true,
+      "unseen_player_simulation_ok": true
+    }
+  },
+  "status": "STRUCTURAL RESEARCH CLOSED",
+  "title": "Latent-state structural research: final resolution",
+  "winning_dependence_model": {
+    "bridge_weight": 0.0,
+    "eb_family": "block_diagonal",
+    "factor_families": [
+      "game_pace_volume",
+      "game_rebound_environment",
+      "team_contrast_own_minus_opponent",
+      "within_team_zero_sum_competition",
+      "player_within_block_incumbent",
+      "idiosyncratic_residual"
+    ],
+    "factor_spec_hash": "c9b46e3a7497cfee52832f29397397b843aafb8e5f770a39157ce508f8157bc0",
+    "k_game": 6,
+    "model": "accepted bucket repair",
+    "predictive_sd_inflation": null,
+    "r_contrast": 6,
+    "r_symmetric": 0,
+    "role_column": "role_bucket",
+    "role_deviation": false,
+    "shrink_z": 1.96,
+    "shrinkage": "empirical_bayes",
+    "stats": [
+      "pts",
+      "reb",
+      "ast",
+      "stl",
+      "blk",
+      "fg3m"
+    ],
+    "temporal_treatment": "T0_pooled_empirical_bayes",
+    "training_seasons": [
+      2020,
+      2021,
+      2022,
+      2023
+    ],
+    "validation_seasons": [
+      2024,
+      2025
+    ]
+  }
+}

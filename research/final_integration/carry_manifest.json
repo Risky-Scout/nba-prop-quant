@@ -1,0 +1,172 @@
+{
+  "title": "final clean integration carry manifest",
+  "study": "final_clean_integration_v1",
+  "production_base": "a30ed672001f8774b6cfec9ad7a3ccb382506c4b",
+  "production_base_ref": "production/wizardofodds-integration",
+  "integration_method": "explicit path allowlist applied onto a fresh branch cut from the production base; no merge commit from any research branch",
+  "why_not_a_merge": "a merge transfers every object the merged history reaches, including blobs that were committed once and deleted later. The research line committed a 65 MB residual parquet that is absent from every current tree and still reachable from those heads. An allowlist carries the files; it does not carry the history that reaches them.",
+  "superseded_research_pull_requests": [16, 17, 18, 20, 21, 22],
+  "superseded_research_branches": [
+    "research/nba-game-latent-state-shadow-v1",
+    "research/nba-game-latent-state-shadow-v1-bucket-repair",
+    "research/nba-game-latent-state-shadow-v2-structural",
+    "research/nba-game-latent-state-shadow-clean",
+    "research/nba-final-upstream-remediation",
+    "research/nba-count-space-forensic"
+  ],
+  "superseded_handling": "marked superseded, histories not merged; their evidence is carried as files and their hashes are recorded here",
+  "reachability_contract": "none of the branches named above may be an ancestor of this lineage. Counting merge commits is the wrong proxy for that: GitHub tests a pull request on a synthetic merge of the head into the base, and merging this branch into production is itself a merge commit. Both join this lineage to production, which is the branch's purpose. What must never become reachable is a third lineage.",
+  "carry": {
+    "runtime_source": {
+      "reason": "the final accepted runtime: the simulator, the joint query engine, the shared-factor covariance assembly, the production shadow, and the containment guard",
+      "paths": [
+        "src/nba_prop_quant/research/__init__.py",
+        "src/nba_prop_quant/research/game_latent_state/__init__.py",
+        "src/nba_prop_quant/research/game_latent_state/artifacts.py",
+        "src/nba_prop_quant/research/game_latent_state/covariance.py",
+        "src/nba_prop_quant/research/game_latent_state/paths.py",
+        "src/nba_prop_quant/research/game_latent_state/query.py",
+        "src/nba_prop_quant/research/game_latent_state/safety.py",
+        "src/nba_prop_quant/research/game_latent_state/shadow_runtime.py",
+        "src/nba_prop_quant/research/game_latent_state/simulator.py",
+        "src/nba_prop_quant/research/game_latent_state/validation.py"
+      ]
+    },
+    "retraining_source": {
+      "reason": "required to reproduce the frozen factor spec from raw history: the role and bucket remediation layer, the count-transmission bridge, the PIT gaussianization, the factor fit, the acceptance gates and the exact joint pricer the temperature choice was made with",
+      "paths": [
+        "src/nba_prop_quant/research/game_latent_state/factors.py",
+        "src/nba_prop_quant/research/game_latent_state/gates.py",
+        "src/nba_prop_quant/research/game_latent_state/pit.py",
+        "src/nba_prop_quant/research/game_latent_state/remediation.py",
+        "src/nba_prop_quant/research/game_latent_state/repair.py",
+        "src/nba_prop_quant/research/game_latent_state/temperature.py",
+        "src/nba_prop_quant/research/game_latent_state/transmission.py"
+      ]
+    },
+    "final_model_specification": {
+      "reason": "the authoritative specification of the frozen model and the four recorded dispositions",
+      "paths": [
+        "research/final_model/00_write_final_model_spec.py",
+        "research/final_model/final_model_spec.json",
+        "research/final_model/SHA256SUMS.final_model.txt"
+      ]
+    },
+    "role_scale_selection_evidence": {
+      "reason": "the one role-scale ablation that selected the final role treatment, its pre-registered rule, and the holdout confirmation that proved equivalence to the already-graded model",
+      "paths": [
+        "research/final_role_scale_ablation/01_role_scale_ablation.py",
+        "research/final_role_scale_ablation/02_holdout_confirmation.py",
+        "research/final_role_scale_ablation/role_scale_ablation.json",
+        "research/final_role_scale_ablation/holdout_confirmation.json",
+        "research/final_role_scale_ablation/SHA256SUMS.ablation.txt",
+        "research/final_role_scale_ablation/SHA256SUMS.confirmation.txt"
+      ]
+    },
+    "retraining_drivers_and_evidence": {
+      "reason": "the pipeline that produces the residual dataset, fits the factors, freezes the spec and grades it; plus the evidence those runs emitted",
+      "paths": [
+        "research/game_latent_state/",
+        "research/final_upstream_remediation/"
+      ]
+    },
+    "control_lineage_evidence": {
+      "reason": "the accepted bucket repair is the control the final model is measured against, and the resolution directory carries the merge-path blob audit that CI enforces",
+      "paths": [
+        "research/game_latent_state_bucket_repair/",
+        "research/game_latent_state_resolution/"
+      ]
+    },
+    "rejected_structure_evidence": {
+      "reason": "the V2 structural study is carried as evidence only. There are no V2 runtime modules to exclude: the symmetric cross-player subspace, the additive role-deviation layer and the predictive-SD inflation were rejected and are absent from the frozen payload rather than present and disabled.",
+      "paths": [
+        "research/game_latent_state_v2/"
+      ]
+    },
+    "closed_study_evidence_only": {
+      "reason": "the count-space forensic study and the marginal-convention audit are both CLOSED with no parameter change adopted. Their reports are carried so the conclusions and hashes survive; their drivers are not, because nothing at runtime or in retraining calls them. Their .gitignore files are carried even though the drivers are not: both directories hold a ~56 MB untracked cache on a machine that has run the study, and dropping the ignore rules would leave that cache one 'git add -A' away from the merge path. An ignore rule that prevents a generated blob from being committed belongs on a production branch whether or not the thing that generates it does.",
+      "paths": [
+        "research/count_space_forensic/README.md",
+        "research/count_space_forensic/count_space_forensic.json",
+        "research/count_space_forensic/.gitignore",
+        "research/marginal_convention_audit/README.md",
+        "research/marginal_convention_audit/marginal_convention_audit.json",
+        "research/marginal_convention_audit/.gitignore"
+      ]
+    },
+    "integration_record": {
+      "reason": "this manifest and the verifier that checks the tree against it. The verifier's own report is written by the run rather than listed as a prerequisite, so a first run on a fresh branch is not a failure.",
+      "paths": [
+        "research/final_integration/carry_manifest.json",
+        "research/final_integration/00_verify_integration.py"
+      ],
+      "written_by_the_verifier": "research/final_integration/integration_verification.json"
+    },
+    "production_documentation": {
+      "reason": "the production-facing record of what the shadow is, what it may not be said to be, and which original requirement was retired rather than met. The only protected production path this integration changes; it is declared in safety.DECLARED_INTEGRATION_PATHS and carries no model, config, script or release change.",
+      "paths": [
+        "docs/wizardofodds/SAME_GAME_DEPENDENCE_SHADOW_V1.md"
+      ]
+    },
+    "tests": {
+      "reason": "every test whose subject is carried",
+      "paths": [
+        "tests/test_game_latent_state_shadow_production_doc.py",
+        "tests/test_game_latent_state_shadow.py",
+        "tests/test_game_latent_state_shadow_artifact_budget.py",
+        "tests/test_game_latent_state_shadow_bucket_repair.py",
+        "tests/test_game_latent_state_shadow_clean_candidate.py",
+        "tests/test_game_latent_state_shadow_final_audit.py",
+        "tests/test_game_latent_state_shadow_final_integration.py",
+        "tests/test_game_latent_state_shadow_final_upstream_remediation.py",
+        "tests/test_game_latent_state_shadow_hermite.py",
+        "tests/test_game_latent_state_shadow_marginal_convention_audit.py",
+        "tests/test_game_latent_state_shadow_residual_convention.py",
+        "tests/test_game_latent_state_shadow_runtime.py",
+        "tests/test_game_latent_state_shadow_safety.py"
+      ]
+    }
+  },
+  "exclude": {
+    "generated_datasets_and_model_binaries": {
+      "reason": "regenerable from the carried drivers, and the blob contract forbids them at any size",
+      "paths": [
+        "research/game_latent_state/oof_gaussian_residuals.parquet",
+        "research/game_latent_state/factor_loadings.parquet",
+        "**/joint_event_grades.parquet",
+        "**/*.pkl",
+        "**/*.joblib"
+      ],
+      "note": "none of these are tracked on any research branch; they are gitignored. Listed so the exclusion is declared rather than incidental."
+    },
+    "forensic_experimentation_drivers": {
+      "reason": "not required at runtime and not required to retrain. The count-space forensic study is closed and its parameter change was not adopted, so the interval-censored estimator it was built on is dead code on a production branch.",
+      "paths": [
+        "research/count_space_forensic/01_count_space_forensic.py",
+        "research/count_space_forensic/forensic_lib.py",
+        "research/count_space_forensic/holdout_lib.py",
+        "research/count_space_forensic/marginal.py",
+        "research/marginal_convention_audit/01_marginal_convention_audit.py",
+        "src/nba_prop_quant/research/game_latent_state/censored.py",
+        "tests/test_game_latent_state_shadow_count_space_forensic.py"
+      ],
+      "evidence_preserved_as": [
+        "research/count_space_forensic/count_space_forensic.json",
+        "research/marginal_convention_audit/marginal_convention_audit.json"
+      ]
+    },
+    "historical_large_blobs": {
+      "reason": "reachable from the research branch heads and carried by any merge commit; an allowlist cut from the production base cannot reach them",
+      "paths": [
+        "research/game_latent_state/oof_gaussian_residuals.parquet @ the commit that added it"
+      ]
+    }
+  },
+  "verification": [
+    "no new blob in the merge path exceeds 10 MiB",
+    "no generated parquet, pickle or model binary appears anywhere in the merge path",
+    "every carried SHA256SUMS file verifies",
+    "every provenance hash recorded in final_model_spec.json resolves to a carried file",
+    "the full repository test suite passes on the integration tree"
+  ]
+}

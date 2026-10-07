@@ -1,0 +1,382 @@
+{
+  "audit_only": true,
+  "code_sha": "83aad597204ce3bd9b41566efb9eedec8e540898",
+  "count_space_rmse_by_run": {
+    "paired_candidate_400": {
+      "baseline_independence": 0.01872631948208243,
+      "baseline_production": 0.018750015242188722,
+      "candidate": 0.0060780406040194315
+    },
+    "paired_control_400": {
+      "baseline_independence": 0.01872631948208243,
+      "baseline_production": 0.018750015242188722,
+      "candidate": 0.006404740266967676
+    },
+    "published_repair_600": {
+      "baseline_independence": 0.0201317558321108,
+      "baseline_production": 0.020140080578426665,
+      "candidate": 0.00786120589118823
+    }
+  },
+  "count_target_gate": {
+    "absolute_error_reduction": 0.0009644042965301775,
+    "bucket": "passer_ast_teammate_pts",
+    "candidate_abs_error": 0.017582879760824087,
+    "candidate_error": -0.017582879760824087,
+    "candidate_predicted": 0.03828239955187032,
+    "control_abs_error": 0.018547284057354264,
+    "control_error": -0.018547284057354264,
+    "control_predicted": 0.037317995255340145,
+    "fractional_error_reduction": 0.0519970629418261,
+    "gate_reference": "accepted bucket repair control",
+    "observed": 0.05586527931269441,
+    "original_requirement": 0.2,
+    "original_requirement_met": false,
+    "percentage_error_reduction": 5.19970629418261,
+    "reduction_against_other_references": {
+      "baseline_independence": {
+        "fractional_error_reduction": 0.6851133199195585,
+        "percentage_error_reduction": 68.51133199195584,
+        "reference_abs_error": 0.05583875366316648,
+        "reference_error": -0.05583875366316648
+      },
+      "baseline_production": {
+        "fractional_error_reduction": 0.6853745442117305,
+        "percentage_error_reduction": 68.53745442117304,
+        "reference_abs_error": 0.05588511494332699,
+        "reference_error": -0.05588511494332699
+      }
+    },
+    "space": "count"
+  },
+  "half_life": {
+    "a2_differs_from_a3": true,
+    "a2_half_life": null,
+    "a2_model_label": "A2_robust_student_t",
+    "a2_posterior_mean": 0.006794894123659106,
+    "a2_reproduces_the_frozen_posterior_mean": true,
+    "a3_model_label": "A3_recency_weighted_robust",
+    "a3_posterior_mean": 0.005792002432044351,
+    "frozen_posterior_mean": 0.006794894123659106,
+    "half_life_carried_in_the_diagnostics_header": 4.0,
+    "half_life_is_null_in_every_bucket_fit": true,
+    "half_life_reaches_the_selected_treatment": false,
+    "half_life_recorded_inside_each_bucket_fit": {
+      "opponent_ast_ast": null,
+      "opponent_fg3m_reb": null,
+      "opponent_pts_pts": null,
+      "opponent_pts_reb": null,
+      "opponent_reb_reb": null,
+      "opponent_stl_pts": null,
+      "passer_ast_teammate_pts": null,
+      "teammate_ast_ast": null,
+      "teammate_fg3m_fg3m": null,
+      "teammate_pts_pts": null,
+      "teammate_pts_reb": null,
+      "teammate_reb_reb": null
+    },
+    "probe_bucket": "teammate_ast_ast",
+    "reason": "temporal_fitter passes half_life only on the A3 branch; the A2 branch calls fit_student_t_random_effects(series, nu=nu), leaving half_life at its None default, which is the uniform-weight case. Every fit record in the artifacts carries half_life = null. The selected value was chosen on the A3 grid and carried into the frozen choices, where it has no computational effect.",
+    "recorded_half_life_in_choices": 4.0,
+    "selected_treatment": "A2_robust_student_t",
+    "status": "INACTIVE / NOT APPLICABLE"
+  },
+  "latent_space_rmse_by_run": {
+    "paired_candidate_400": {
+      "baseline_independence": 0.01631847608331577,
+      "candidate": 0.0023619028949932452
+    },
+    "paired_control_400": {
+      "baseline_independence": 0.01631847608331577,
+      "candidate": 0.002765903474390802
+    },
+    "published_repair_600": {
+      "baseline_independence": 0.01631847608331577,
+      "candidate": 0.002765903474390802
+    }
+  },
+  "nothing_was_refitted_or_reselected": true,
+  "paired_log_loss": {
+    "bootstrap_draws": 4000,
+    "by_legs": {
+      "2": {
+        "base_rate": 0.22791666666666666,
+        "candidate_minus_control": {
+          "ci95": [
+            -2.342971911692144e-05,
+            1.4384761139506785e-05
+          ],
+          "delta": -4.2125104790473164e-06,
+          "favours_candidate": false,
+          "significant": false,
+          "standard_error": 9.620917522030806e-06
+        },
+        "candidate_minus_production": {
+          "ci95": [
+            -0.00013731910174634443,
+            0.0007253409807678592
+          ],
+          "delta": 0.00028727750335954573,
+          "favours_candidate": false,
+          "significant": false,
+          "standard_error": 0.00021993254557965998
+        },
+        "control_minus_production": {
+          "ci95": [
+            -0.00012744821652447937,
+            0.0007277228363912991
+          ],
+          "delta": 0.00029149001383859297,
+          "favours_candidate": false,
+          "significant": false,
+          "standard_error": 0.00021892178956178722
+        },
+        "events": 2400,
+        "games": 400,
+        "log_loss_candidate": 0.49920665128817415,
+        "log_loss_control": 0.4992108637986533,
+        "log_loss_independence": 0.4991540394619894,
+        "log_loss_production": 0.49891937378481466
+      },
+      "3": {
+        "base_rate": 0.10708333333333334,
+        "candidate_minus_control": {
+          "ci95": [
+            -2.6019057600866896e-05,
+            1.782536656258337e-05
+          ],
+          "delta": -3.984248452822489e-06,
+          "favours_candidate": false,
+          "significant": false,
+          "standard_error": 1.1133090251566987e-05
+        },
+        "candidate_minus_production": {
+          "ci95": [
+            -0.000718449819276965,
+            0.0002833921324379702
+          ],
+          "delta": -0.0002115597224144264,
+          "favours_candidate": false,
+          "significant": false,
+          "standard_error": 0.00025185027616206974
+        },
+        "control_minus_production": {
+          "ci95": [
+            -0.0007163934866208767,
+            0.0002841688894918753
+          ],
+          "delta": -0.00020757547396160398,
+          "favours_candidate": false,
+          "significant": false,
+          "standard_error": 0.00025055608687057007
+        },
+        "events": 2400,
+        "games": 400,
+        "log_loss_candidate": 0.3241359894961688,
+        "log_loss_control": 0.32413997374462167,
+        "log_loss_independence": 0.3242560011046743,
+        "log_loss_production": 0.3243475492185832
+      },
+      "4": {
+        "base_rate": 0.058125,
+        "candidate_minus_control": {
+          "ci95": [
+            -2.1483717938451433e-05,
+            3.302524662095877e-05
+          ],
+          "delta": 6.215072181487888e-06,
+          "favours_candidate": false,
+          "significant": false,
+          "standard_error": 1.398286884675823e-05
+        },
+        "candidate_minus_production": {
+          "ci95": [
+            -0.0005052400167838701,
+            0.0005479593226051633
+          ],
+          "delta": 2.639581120754353e-05,
+          "favours_candidate": false,
+          "significant": false,
+          "standard_error": 0.00026660907691936666
+        },
+        "control_minus_production": {
+          "ci95": [
+            -0.0005111784492450245,
+            0.0005427511994320431
+          ],
+          "delta": 2.0180739026055687e-05,
+          "favours_candidate": false,
+          "significant": false,
+          "standard_error": 0.00026731424367159435
+        },
+        "events": 1600,
+        "games": 400,
+        "log_loss_candidate": 0.19818289628107294,
+        "log_loss_control": 0.19817668120889145,
+        "log_loss_independence": 0.19800983246160606,
+        "log_loss_production": 0.19815650046986544
+      }
+    },
+    "clip": 1e-06,
+    "events": 6400,
+    "games": 400,
+    "seed": 73
+  },
+  "promotion_eligibility": "SHADOW_RESEARCH_ONLY__NOT_ELIGIBLE_FOR_PROMOTION",
+  "provenance": {
+    "branch_head": "83aad597204ce3bd9b41566efb9eedec8e540898",
+    "candidate_factor_spec_hash": "3229bbc83a4388c270a21008a75afacc3479cfd6f6390c8737f041412d2f2eb4",
+    "clean_control_artifact_dir": "research/game_latent_state_bucket_repair",
+    "clean_control_spec_hash": "c9b46e3a7497cfee52832f29397397b843aafb8e5f770a39157ce508f8157bc0",
+    "confirmatory_validation_code_sha": "9343de38107feca14090697dabbd85f6a895d223",
+    "dependence_temperature_code_sha": "a1af6fccbaa70ec9b30d8c930f5ae4766c6304b4",
+    "frozen_spec_candidate_hash": "3229bbc83a4388c270a21008a75afacc3479cfd6f6390c8737f041412d2f2eb4",
+    "frozen_spec_code_sha": "a1af6fccbaa70ec9b30d8c930f5ae4766c6304b4",
+    "gate_report_code_sha": "9343de38107feca14090697dabbd85f6a895d223",
+    "inner_selection_code_sha": "23992e53769c69ba796a7ae83e3300327eb7212b"
+  },
+  "role_cells": {
+    "by_cell": {
+      "bench+bench": {
+        "candidate_max_abs_error": 0.10955156480232495,
+        "candidate_rms_z": 6.556060319340803,
+        "candidate_rmse": 0.046704434782173884,
+        "control_max_abs_error": 0.10993970492882539,
+        "control_rms_z": 6.641303913406575,
+        "control_rmse": 0.04734395621786696,
+        "delta_rms_z": -0.08524359406577187,
+        "delta_rmse": -0.0006395214356930759,
+        "games": 2569,
+        "pairs": 71948.0,
+        "present": true,
+        "supported": true
+      },
+      "rotation+bench": {
+        "candidate_max_abs_error": 0.009900370639594196,
+        "candidate_rms_z": 1.2985265175472656,
+        "candidate_rmse": 0.0048201804277264535,
+        "control_max_abs_error": 0.010209076963764016,
+        "control_rms_z": 1.2912035637307915,
+        "control_rmse": 0.0048035150722081565,
+        "delta_rms_z": 0.007322953816474076,
+        "delta_rmse": 1.6665355518297002e-05,
+        "games": 2630,
+        "pairs": 63609.0,
+        "present": true,
+        "supported": true
+      },
+      "rotation+rotation": {
+        "candidate_max_abs_error": 0.024228252606675486,
+        "candidate_rms_z": 1.9977038685328168,
+        "candidate_rmse": 0.008542422812513358,
+        "control_max_abs_error": 0.02479396086660459,
+        "control_rms_z": 2.0124266074823587,
+        "control_rmse": 0.008624401958861532,
+        "delta_rms_z": -0.014722738949541903,
+        "delta_rmse": -8.197914634817428e-05,
+        "games": 2602,
+        "pairs": 69616.0,
+        "present": true,
+        "supported": true
+      },
+      "starter+bench": {
+        "candidate_max_abs_error": 0.05216731800345104,
+        "candidate_rms_z": 6.215770288622994,
+        "candidate_rmse": 0.02199707377609352,
+        "control_max_abs_error": 0.049904956301168514,
+        "control_rms_z": 6.0819807665942385,
+        "control_rmse": 0.021519395130636318,
+        "delta_rms_z": 0.1337895220287555,
+        "delta_rmse": 0.0004776786454572038,
+        "games": 2621,
+        "pairs": 65600.0,
+        "present": true,
+        "supported": true
+      },
+      "starter+rotation": {
+        "candidate_max_abs_error": 0.026781565054837083,
+        "candidate_rms_z": 3.4336356874349625,
+        "candidate_rmse": 0.010776230137943179,
+        "control_max_abs_error": 0.026522241709348828,
+        "control_rms_z": 3.422907031799657,
+        "control_rmse": 0.010719134809439571,
+        "delta_rms_z": 0.01072865563530545,
+        "delta_rmse": 5.709532850360806e-05,
+        "games": 2634,
+        "pairs": 58143.0,
+        "present": true,
+        "supported": true
+      },
+      "starter+starter": {
+        "candidate_max_abs_error": 0.04618266014236704,
+        "candidate_rms_z": 3.641090038917299,
+        "candidate_rmse": 0.015727561524509343,
+        "control_max_abs_error": 0.04578672372795511,
+        "control_rms_z": 3.652816025792309,
+        "control_rmse": 0.01576270681149803,
+        "delta_rms_z": -0.01172598687500992,
+        "delta_rmse": -3.51452869886866e-05,
+        "games": 2614,
+        "pairs": 51368.0,
+        "present": true,
+        "supported": true
+      }
+    },
+    "cell_bootstrap_draws": 400,
+    "definition": "per cell, the root mean square over the 6x6 stat block of (model-implied same-team correlation for the ordered role pair minus the held-out observed one); rms z divides each entry by its game-clustered bootstrap standard error",
+    "holdout_seasons": [
+      2024,
+      2025
+    ],
+    "min_cell_games": 200,
+    "min_cell_pairs": 2000,
+    "pooled_supported_rmse": {
+      "candidate": 0.022821283696694054,
+      "control": 0.02296864311923573
+    },
+    "supported_cells": 6,
+    "worst_supported_cell_deterioration": {
+      "cell": "starter+bench",
+      "delta_rmse": 0.0004776786454572038
+    }
+  },
+  "title": "Final remediation audit: reconciliation of committed artifacts",
+  "uncertainty": {
+    "candidates_better_than_raw": {},
+    "coverage_loss": {
+      "U0_raw": 0.14500000000000002,
+      "U1_huber_m_scale": 0.1866666666666667,
+      "U2_median_of_forward_fold_scales": 0.1866666666666667,
+      "U3_student_t_predictive": 0.2491666666666667
+    },
+    "improved_over_raw": false,
+    "raw_loss": 0.14500000000000002,
+    "selected": "U0_raw",
+    "statement": "NO CALIBRATION IMPROVEMENT - RAW RETAINED"
+  },
+  "validation_universe": {
+    "by_season": {
+      "2024": {
+        "games_available": 1321,
+        "overlap": 44,
+        "picked_200": 200,
+        "picked_300": 300
+      },
+      "2025": {
+        "games_available": 1322,
+        "overlap": 48,
+        "picked_200": 200,
+        "picked_300": 300
+      }
+    },
+    "games_per_season_large": 300,
+    "games_per_season_small": 200,
+    "in_small_only": 308,
+    "overlap": 92,
+    "overlap_fraction_of_small": 0.23,
+    "rule": "numpy.linspace over the sorted held-out game ids of each season, rounded to an index: an evenly spaced subsample that spans the whole calendar",
+    "small_is_subset_of_large": false,
+    "total_large": 600,
+    "total_small": 400
+  }
+}
