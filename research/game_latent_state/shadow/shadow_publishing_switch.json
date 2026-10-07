@@ -1,0 +1,14 @@
+{
+  "state": "DISABLED",
+  "reason": "The final model is frozen and graded but has not yet run beside production for a single live slate. Shadow probabilities are logged and graded; the incumbent remains the published authority. Activation is a separate, reviewable decision taken after the shadow has accumulated live evidence.",
+  "approval_token": "no-approval-has-been-granted",
+  "published_authority": "incumbent",
+  "promotion_authority": "NONE__SHADOW_HAS_NO_AUTONOMOUS_PROMOTION_AUTHORITY",
+  "what_enabling_requires": [
+    "this file's \"state\" set to ENABLED in a reviewed commit",
+    "the NBA_PROP_SHADOW_PUBLISH environment variable set to the same state",
+    "the NBA_PROP_SHADOW_PUBLISH_APPROVAL environment variable set to this file's approval_token"
+  ],
+  "note": "A missing switch file reads as DISABLED. The absence of a prohibition is not an approval. Even with all three conditions met, publish_shadow_probabilities still refuses: no shadow publisher has been built, so flipping this switch cannot by itself put a candidate probability on a WizardOfOdds feed.",
+  "fallback": "Every shadow row carries the incumbent probability in served_probability, in the success branch as well as the failure branch, so the fallback path is the only path anything downstream has ever seen."
+}

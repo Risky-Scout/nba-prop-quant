@@ -144,6 +144,29 @@ def test_shadow_changes_live_only_in_research_and_test_namespaces():
 # ----------------------------------------------------------------------
 
 
+#: Names in the shadow namespace that read as a promotion or publishing entry
+#: point and are in fact refusals. Every one of them must raise on every
+#: reachable input, which ``test_every_exempt_name_is_a_refusal_not_a_path``
+#: checks by calling them rather than by reading their names.
+#:
+#: The publication guards joined this list when the controlled shadow was
+#: built: the brief requires a *declared, disabled* publishing switch and a
+#: prepared fallback, and a declared switch has to be nameable. A name scan
+#: cannot tell a switch that refuses from a switch that publishes, so the
+#: exemption is paired with the behavioural test below.
+REFUSAL_GUARD_NAMES: frozenset[str] = frozenset(
+    {
+        "assert_promotable",
+        "ShadowPromotionRefused",
+        "assert_no_promotion_authority",
+        "publish_shadow_probabilities",
+        "read_publishing_switch",
+        "PublishingSwitch",
+        "ShadowPublishingDisabled",
+    }
+)
+
+
 def test_shadow_package_defines_no_promotion_entry_point():
     """No callable in the shadow namespace may promote, register or publish."""
     forbidden = ("promote", "register_fit", "publish", "deploy")
@@ -155,12 +178,55 @@ def test_shadow_package_defines_no_promotion_entry_point():
                 continue
             lowered = node.name.lower()
             if any(token in lowered for token in forbidden):
-                # The refusal guards are the one permitted exception: their
-                # whole purpose is to deny promotion.
-                if node.name in {"assert_promotable", "ShadowPromotionRefused"}:
+                if node.name in REFUSAL_GUARD_NAMES:
                     continue
                 offenders.append(f"{path.relative_to(PROJECT)}::{node.name}")
     assert offenders == []
+
+
+def test_every_exempt_name_is_a_refusal_not_a_path():
+    """The exemption list is checked by behaviour, not taken on trust.
+
+    Each exempt name is called. A promotion guard must raise for every input.
+    A publication guard must refuse for every switch state, including the
+    state where every declared activation condition is satisfied -- otherwise
+    the exemption would be a hole rather than a guard.
+    """
+    from nba_prop_quant.research.game_latent_state import shadow_runtime as runtime
+
+    passing = evaluate_gates(passing_report())
+    assert shadow_verdict(passing) == VERDICT_ACCEPTED
+    with pytest.raises(ShadowPromotionRefused):
+        assert_promotable(passing)
+
+    for context in ("", "an operator with a reason", "ci"):
+        with pytest.raises(runtime.ShadowPromotionRefused):
+            runtime.assert_no_promotion_authority(context)
+
+    # A missing switch, a disabled switch and a fully enabled switch all end
+    # in a refusal. There is no fourth state.
+    for switch in (
+        runtime.read_publishing_switch(None, environment={}),
+        runtime.PublishingSwitch(state=runtime.PUBLISHING_DISABLED, reason="test"),
+        runtime.PublishingSwitch(
+            state=runtime.PUBLISHING_ENABLED,
+            reason="test",
+            approval_token="token",
+            environment_agrees=True,
+            approval_supplied=True,
+        ),
+    ):
+        with pytest.raises(runtime.ShadowPublishingDisabled):
+            runtime.publish_shadow_probabilities([], switch)
+
+    # And the exemption list does not name anything that no longer exists.
+    declared = {
+        node.name
+        for path in python_sources()
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+    }
+    assert REFUSAL_GUARD_NAMES <= declared
 
 
 def test_shadow_package_never_imports_the_promotion_machinery():
@@ -188,15 +254,69 @@ def test_shadow_package_never_imports_the_promotion_machinery():
     assert offenders == []
 
 
+#: The real WizardOfOdds publishing surface: the bundle builder script, its
+#: entry point and the staging directory it writes. Banning these by name is
+#: precise, because these are the things that actually publish.
+WIZARDOFODDS_SURFACE_TOKENS: tuple[str, ...] = (
+    "wizardofodds_bundle",
+    "runtime_bundle",
+    "build_runtime_bundle",
+    "19_build_wizardofodds_runtime_bundle",
+    "docs/wizardofodds",
+)
+
+
 def test_shadow_package_contains_no_wizardofodds_publishing_surface():
-    tokens = ("wizardofodds_bundle", "runtime_bundle", "SHADOW_PUBLISH")
     offenders = [
         f"{path.relative_to(PROJECT)}: {token}"
         for path in python_sources()
-        for token in tokens
+        for token in WIZARDOFODDS_SURFACE_TOKENS
         if token in path.read_text(encoding="utf-8")
     ]
     assert offenders == []
+
+
+def test_the_shadow_publication_switch_is_a_declared_disabled_file():
+    """The one publication-shaped thing the shadow may own, pinned.
+
+    This replaces a blanket ban on the token ``SHADOW_PUBLISH``. That ban was
+    a proxy for "no environment variable can turn publishing on", and it
+    stopped being the right check once the brief required a declared switch.
+    The property is checked directly instead, which is strictly stronger than
+    the token scan: a rename could evade a token, but nothing can evade the
+    requirements that the committed state is disabled, that enabling needs
+    three independent conditions, and that the entry point refuses anyway.
+    """
+    import json
+
+    from nba_prop_quant.research.game_latent_state import shadow_runtime as runtime
+
+    switch_path = PROJECT / runtime.PUBLISHING_SWITCH_PATH
+    assert switch_path.exists()
+    payload = json.loads(switch_path.read_text(encoding="utf-8"))
+    assert payload["state"] == runtime.PUBLISHING_DISABLED
+    assert payload["published_authority"] == "incumbent"
+    assert len(payload["what_enabling_requires"]) == 3
+
+    # Only the shadow runtime may carry the switch's environment variables,
+    # and no shadow *script* may read them: activation cannot be a side effect
+    # of running a research driver.
+    bearers = {
+        path.relative_to(PROJECT).as_posix()
+        for path in python_sources()
+        if runtime.PUBLISH_ENV_VAR in path.read_text(encoding="utf-8")
+    }
+    assert bearers == {
+        "src/nba_prop_quant/research/game_latent_state/shadow_runtime.py"
+    }
+
+    # The environment is read in exactly one place, and that place defaults to
+    # refusing. No other module may consult os.environ for the switch.
+    source = (
+        PROJECT
+        / "src/nba_prop_quant/research/game_latent_state/shadow_runtime.py"
+    ).read_text(encoding="utf-8")
+    assert source.count("os.environ") == 1
 
 
 def code_string_literals(path: Path) -> list[str]:
