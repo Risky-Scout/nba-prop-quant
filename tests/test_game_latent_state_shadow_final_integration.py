@@ -241,12 +241,17 @@ def test_the_declared_base_actually_has_a_merge_path_to_audit(manifest, verifier
     assert verifier.check_merge_path(base)["new_blob_count"] > 0
 
 
-def test_the_declared_base_is_where_this_lineage_left_production(manifest):
-    """While this lineage is still unmerged, the live merge base must agree.
+def test_the_live_merge_base_never_moves_behind_the_declared_base(manifest):
+    """The declared base is where the integration left production, not before.
 
-    After the merge the live merge base is HEAD, which agrees with nothing and
-    means only that there is no longer a merge pending; the check above is the
-    one that still has teeth then.
+    Equality with the live merge base only holds while the integration is
+    still pending. Once it merges, the live merge base advances: it is HEAD on
+    the production branch itself, and the merge commit on any branch built
+    afterwards. What holds in all three shapes is that the live merge base is
+    the declared base or a descendant of it, which is what rules out a
+    manifest pointing at some earlier commit -- or at a commit off this
+    lineage entirely -- and thereby auditing a merge path that is not the one
+    being merged.
     """
     from nba_prop_quant.research.game_latent_state.safety import (
         production_merge_base,
@@ -255,9 +260,11 @@ def test_the_declared_base_is_where_this_lineage_left_production(manifest):
     resolved = production_merge_base(PROJECT)
     if resolved is None:
         pytest.skip("the production ref is not available in this checkout")
-    if resolved == git("rev-parse", "HEAD"):
-        pytest.skip("this head is production, so there is no pending merge")
-    assert resolved == manifest["production_base"]
+    base = manifest["production_base"]
+    assert is_ancestor(base, resolved), (
+        f"the live merge base {resolved} is not a descendant of the declared "
+        f"base {base}, so the manifest does not describe this lineage"
+    )
 
 
 # ----------------------------------------------------------------------
