@@ -209,7 +209,7 @@
     "lines_verified": 72,
     "passed": true
   },
-  "head_sha": "1176da28e3fbf8ef27750637d8b7ae571277890f",
+  "head_sha": "80e9bc492ce22fb4bf771f1bc9e732cd53cbf003",
   "manifest_sha256": "726a7384dffdcf1459f00cb2d00a4f79def5a5a8e69d397952e6ab8a971f98bb",
   "merge_path_blob_audit": {
     "base": "a30ed672001f8774b6cfec9ad7a3ccb382506c4b",
@@ -222,7 +222,7 @@
       "path": "research/game_latent_state_v2/inner_screening.json",
       "sha": "d009be4183c6da3613bf7c71382cd4323e3c1bbe"
     },
-    "new_blob_count": 130,
+    "new_blob_count": 134,
     "notable": [],
     "over_ceiling": [],
     "passed": true,
