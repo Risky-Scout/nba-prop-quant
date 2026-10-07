@@ -150,6 +150,7 @@ def resolves(rev: str) -> bool:
             ["git", "rev-parse", "-q", "--verify", rev],
             cwd=str(PROJECT),
             capture_output=True,
+            check=False,
         ).returncode
         == 0
     )
@@ -161,6 +162,7 @@ def is_ancestor(ancestor: str, descendant: str) -> bool:
             ["git", "merge-base", "--is-ancestor", ancestor, descendant],
             cwd=str(PROJECT),
             capture_output=True,
+            check=False,
         ).returncode
         == 0
     )
