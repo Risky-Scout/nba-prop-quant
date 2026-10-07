@@ -132,10 +132,17 @@ on pts, ast, stl and fg3m", which was a fair statement of the typical size but
 understated the tail: the maximum is 5.8e-2, not 1e-2.
 
 The marginal-calibration diagnostics move in the direction more training data
-predicts, though not uniformly. Kolmogorov-Smirnov distance from the uniform
-improves on seven of the sixteen affected stat-seasons and worsens on the
-rest; for 2020, where a third of the training data was being discarded, it
-improves on all four (`ast` 0.01711 to 0.01617, `pts` 0.00823 to 0.00787).
+predicts. Kolmogorov-Smirnov distance from the uniform improves on 12 of the
+16 affected stat-seasons, and the four that worsen do so by at most 0.00061
+against improvements up to 0.00097. For 2020, the fold where a third of the
+training data was being discarded, all four improve (`ast` 0.01711 to 0.01617,
+`fg3m` 0.00893 to 0.00796, `pts` 0.00823 to 0.00787, `stl` 0.00672 to
+0.00657).
+
+So the live convention's marginals are mildly *better* calibrated, which is
+what one would expect from a fifth to a third more training rows. That is an
+argument for the live convention on its own terms; it is not an argument that
+the dependence layer is affected, which is what this audit measures.
 
 ## 2. The effect on the twelve dependence buckets
 
