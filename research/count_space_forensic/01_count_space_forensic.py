@@ -1546,19 +1546,25 @@ def trade_curve(
     interpolated, so the five answers below are read off evaluated points and
     not off a fit.
     """
-    # Rounded to one precision throughout, so the frozen entry and the
-    # boundaries do not each appear twice under float representations that
-    # differ in their last bits.
-    probes = {
-        round(float(value), 10)
+    # Keyed on the entry rounded to ten decimals so nothing appears twice
+    # under two float representations differing in their last bits, but
+    # *evaluated* at full precision wherever the point matters: a boundary
+    # rounded to ten decimals falls just the wrong side of itself, which would
+    # put a feasible boundary row in the curve marked infeasible.
+    probes: dict[float, float] = {
+        round(float(value), 10): float(value)
         for value in np.round(np.arange(base, 0.0565, 0.00025), 10)
     }
-    probes.add(round(base, 10))
-    for entry in readings.values():
-        probes.add(round(float(entry["max_feasible_entry"]), 10))  # type: ignore[index]
+    exact = [base] + [
+        float(entry["max_feasible_entry"]) for entry in readings.values()  # type: ignore[index]
+    ]
     if needed is not None:
-        probes.add(round(float(needed), 10))
-    curve = [tradeoff_row(evaluate(entry)) for entry in sorted(probes)]
+        exact.append(float(needed))
+    for value in exact:
+        probes[round(value, 10)] = value
+    curve = [
+        tradeoff_row(evaluate(probes[key])) for key in sorted(probes)
+    ]
 
     def crossing(fraction: float) -> dict[str, object] | None:
         """The first curve point whose ``reb_reb`` give-back exceeds a budget."""

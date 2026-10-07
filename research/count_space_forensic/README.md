@@ -66,7 +66,9 @@ through the exact predictor, not a fit. `red%` is the focal bucket's
 count-space absolute-error reduction against the accepted repair; `reb deg%` is
 `teammate_reb_reb`'s count-space absolute-error degradation against the same
 control. Negative degradation means the candidate is still *better* than the
-control on that bucket.
+control on that bucket. The curve in `count_space_forensic.json` has 47
+evaluated points on a 0.00025 grid plus the three exact boundaries and the
+exact 20% crossing; the rows below are an excerpt of it.
 
 | entry | focal count corr | focal abs err | red% | reb_reb abs err | reb deg% | latent RMSE ratio | mean w^2 | pipeline | original |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -209,9 +211,9 @@ twelve buckets.
 | entry | inflation | mean w^2 | focal count | reduction | latent RMSE | count RMSE | fails |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 0.045773 (candidate) | 3.0e-18 | 0.940013 | +0.03823120 | 5.19% | 0.0023619 | 0.0060989 | -- |
-| 0.048007 (commissioned max) | 1.9e-03 | 0.924433 | +0.03952614 | 12.15% | 0.0023523 | 0.0058293 | -- |
+| 0.048007 (commissioned max) | 1.9e-03 | 0.924431 | +0.03952614 | 12.15% | 0.0023523 | 0.0058293 | -- |
 | 0.051500 | 5.1e-03 | -- | +0.04131637 | 21.77% | 0.0026702 | 0.0054976 | reb_reb |
-| 0.052667 (latent max) | 6.2e-03 | 0.887140 | +0.04186018 | 24.70% | 0.0028489 | 0.0054080 | reb_reb |
+| 0.052667 (latent max) | 6.2e-03 | 0.887142 | +0.04186018 | 24.70% | 0.0028489 | 0.0054080 | reb_reb |
 | 0.070000 | 2.3e-02 | -- | +0.04732252 | 54.07% | 0.0070350 | 0.0050044 | latent, reb_reb |
 | 0.200000 | 1.5e-01 | -- | +0.03448618 | -14.95% | 0.0442257 | 0.0102315 | latent, count, both teammates |
 
@@ -405,7 +407,7 @@ Everything in `cache/` is a derived intermediate of committed fits and is
 rebuilt from them if absent; the first run takes about twenty minutes, later
 runs about ten.
 
-The measurement tools are locked in `tests/test_game_latent_state_shadow_count_space_forensic.py` (54
+The measurement tools are locked in `tests/test_game_latent_state_shadow_count_space_forensic.py` (57
 tests) against independent references: synthetic data with a known latent
 correlation, direct quadrature, an independent bivariate-normal CDF, and both
 published Monte Carlo runs.
