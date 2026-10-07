@@ -204,13 +204,37 @@ def test_every_merge_in_this_lineage_only_joins_production(manifest):
     content: every merge after the declared base must have a parent that is
     production history, so the only joins possible are production-into-lineage
     and lineage-into-production.
+
+    "Production history" is resolved against the production ref rather than
+    against the declared base. Those agree only while the integration is
+    pending; afterwards production has advanced past the declared base, and a
+    parent that is the current production tip -- which is what GitHub's
+    synthetic pull-request merge has, and what a second deployment branch
+    merges into -- is production history even though it is a descendant of the
+    base rather than an ancestor of it.
     """
+    from nba_prop_quant.research.game_latent_state.safety import PRODUCTION_REF
+
     base = manifest["production_base"]
+    production = next(
+        (
+            ref
+            for ref in (f"origin/{PRODUCTION_REF}", PRODUCTION_REF)
+            if resolves(ref)
+        ),
+        None,
+    )
+
+    def is_production_history(commit: str) -> bool:
+        if commit == base or is_ancestor(commit, base):
+            return True
+        return production is not None and is_ancestor(commit, production)
+
     merges = [line for line in git("rev-list", "--merges", f"{base}..HEAD").splitlines()]
     for merge in merges:
         parents = git("rev-list", "--parents", "-n", "1", merge).split()[1:]
         joins_production = [
-            parent for parent in parents if is_ancestor(parent, base) or parent == base
+            parent for parent in parents if is_production_history(parent)
         ]
         assert joins_production, (
             f"merge {merge} has no production parent, so it joins a lineage "
@@ -241,12 +265,17 @@ def test_the_declared_base_actually_has_a_merge_path_to_audit(manifest, verifier
     assert verifier.check_merge_path(base)["new_blob_count"] > 0
 
 
-def test_the_declared_base_is_where_this_lineage_left_production(manifest):
-    """While this lineage is still unmerged, the live merge base must agree.
+def test_the_live_merge_base_never_moves_behind_the_declared_base(manifest):
+    """The declared base is where the integration left production, not before.
 
-    After the merge the live merge base is HEAD, which agrees with nothing and
-    means only that there is no longer a merge pending; the check above is the
-    one that still has teeth then.
+    Equality with the live merge base only holds while the integration is
+    still pending. Once it merges, the live merge base advances: it is HEAD on
+    the production branch itself, and the merge commit on any branch built
+    afterwards. What holds in all three shapes is that the live merge base is
+    the declared base or a descendant of it, which is what rules out a
+    manifest pointing at some earlier commit -- or at a commit off this
+    lineage entirely -- and thereby auditing a merge path that is not the one
+    being merged.
     """
     from nba_prop_quant.research.game_latent_state.safety import (
         production_merge_base,
@@ -255,9 +284,11 @@ def test_the_declared_base_is_where_this_lineage_left_production(manifest):
     resolved = production_merge_base(PROJECT)
     if resolved is None:
         pytest.skip("the production ref is not available in this checkout")
-    if resolved == git("rev-parse", "HEAD"):
-        pytest.skip("this head is production, so there is no pending merge")
-    assert resolved == manifest["production_base"]
+    base = manifest["production_base"]
+    assert is_ancestor(base, resolved), (
+        f"the live merge base {resolved} is not a descendant of the declared "
+        f"base {base}, so the manifest does not describe this lineage"
+    )
 
 
 # ----------------------------------------------------------------------

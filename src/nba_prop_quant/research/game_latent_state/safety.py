@@ -66,14 +66,36 @@ PROTECTED_PRODUCTION_SOURCES: frozenset[str] = frozenset(
 #: Nothing here may be a model artifact, a pricing path or a publishing path.
 #: The branch-safety tests pin that, so widening this mapping cannot quietly
 #: become permission to edit the served model.
+#:
+#: A declaration is permission for a *pending* change, so it is removed once
+#: that change has landed in production; otherwise it sits here as standing
+#: permission to edit a protected path unreviewed. The shadow's production
+#: documentation was declared here while it was pending and has since merged,
+#: which is why only the deployment surface remains.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
-        "docs/wizardofodds/SAME_GAME_DEPENDENCE_SHADOW_V1.md": (
-            "production-facing record of what the same-game dependence shadow "
-            "is, what it is not permitted to do, and which original "
-            "requirement was retired rather than met"
+        "ops/run_production_shadow.py": (
+            "the shadow's production entry point. Reads the marginals and the "
+            "copula the live pricing path reads, records what the candidate "
+            "would have said, and publishes nothing. It is additive: no "
+            "existing production script calls it and it writes no production "
+            "state"
+        ),
+        ".github/workflows/nba_production_lifecycle.yml": (
+            "one added non-blocking step that invokes the shadow entry point "
+            "after the daily fit. Additive only: every pre-existing step is "
+            "unchanged, and the step cannot fail the lifecycle"
         ),
     }
+)
+
+#: Workflows whose pre-existing steps must survive a declared change intact.
+#: Declaring a workflow buys the right to *add* a step, not to rewrite the
+#: lifecycle: the modelling, refresh and registration steps are the production
+#: path, and the branch-safety tests check them line by line against the
+#: production ref rather than trusting the declaration.
+ADDITIVE_ONLY_WORKFLOWS: tuple[str, ...] = (
+    ".github/workflows/nba_production_lifecycle.yml",
 )
 
 
