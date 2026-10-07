@@ -41,6 +41,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy.stats import norm
 
 from nba_prop_quant.adaptive_training import load_script_module
 from nba_prop_quant.research.game_latent_state.bridge import (
@@ -583,6 +584,170 @@ def isolated_same_team_shift(
         role_offset=dict(loadings.role_offset),
         role_pair_shares=dict(loadings.role_pair_shares),
     )
+
+
+def conditional_hermite_moments(
+    cdf_lower: np.ndarray,
+    cdf_upper: np.ndarray,
+    order: int,
+) -> list[np.ndarray]:
+    """``M_k(y) = E[He_k(Z) | Y = y]`` for ``k = 1 .. order``, by recurrence.
+
+    ``Y = y`` is exactly ``Z in (t_l, t_u]`` with ``t = Phi^{-1}(F)``, and
+    ``int He_k phi = -He_{k-1} phi``, so
+
+        M_k = (He_{k-1}(t_l) phi(t_l) - He_{k-1}(t_u) phi(t_u)) / (F_u - F_l)
+
+    with ``He_{k+1}(z) = z He_k(z) - k He_{k-1}(z)`` for the probabilists'
+    Hermite polynomials.
+
+    Reimplemented here rather than taken from
+    :func:`transmission.conditional_hermite_moments`, which carries that
+    recurrence as ``z He_k - (k - 1) He_{k-1}``. The shifted coefficient is
+    exact for ``He_0`` and ``He_1``, so the committed function is correct at
+    the orders anything in the pipeline asks it for -- ``DEFAULT_BRIDGE_ORDER``
+    is 2, and both the inner selection and the frozen spec builder pass it --
+    and wrong from ``M_3`` on. This study needs tens of orders, so it cannot
+    use it; the discrepancy is measured against direct quadrature in the test
+    suite and reported rather than fixed, because the frozen candidate is not
+    this study's to touch.
+    """
+    lower = np.clip(np.asarray(cdf_lower, dtype=float), 1e-15, 1.0 - 1e-15)
+    upper = np.clip(np.asarray(cdf_upper, dtype=float), 1e-15, 1.0 - 1e-15)
+    t_lower, t_upper = norm.ppf(lower), norm.ppf(upper)
+    mass = np.clip(upper - lower, 1e-300, None)
+    density_lower, density_upper = norm.pdf(t_lower), norm.pdf(t_upper)
+
+    hermite_lower = [np.ones_like(t_lower), t_lower]
+    hermite_upper = [np.ones_like(t_upper), t_upper]
+    out: list[np.ndarray] = []
+    for k in range(1, int(order) + 1):
+        out.append(
+            (
+                hermite_lower[k - 1] * density_lower
+                - hermite_upper[k - 1] * density_upper
+            )
+            / mass
+        )
+        hermite_lower.append(
+            t_lower * hermite_lower[k] - float(k) * hermite_lower[k - 1]
+        )
+        hermite_upper.append(
+            t_upper * hermite_upper[k] - float(k) * hermite_upper[k - 1]
+        )
+    return out
+
+
+def statistic_hermite_coefficients(
+    cdf: np.ndarray,
+    statistic: str,
+    terms: int,
+    tail_mass: float = 1e-12,
+) -> tuple[np.ndarray, float]:
+    """``(tau_k, sigma)`` for one statistic of one tabulated margin.
+
+    Any statistic ``t(Y)`` of a count whose latent is standard normal has a
+    Hermite expansion in that latent, and the coefficients are available in
+    closed form from the margin alone::
+
+        tau_k = sum_x p_x t(x) M_k(x),
+        M_k(x) = E[He_k(Z) | Y = x]
+
+    because conditioning on the count is conditioning on a latent interval.
+    Two margins' pooled correlation at latent ``rho`` is then
+    ``sum_k rho^k tau_k^a tau_k^b / (k! sigma_a sigma_b)``, which is the same
+    series :mod:`bridge` builds from its weight vectors. Having both is the
+    point: they are independent derivations of one quantity, and the test
+    suite asserts they agree.
+
+    Three statistics matter to the study, and they differ only in ``t`` and in
+    what ``sigma`` is:
+
+    ``"count"``
+        ``t(x) = x``, ``sigma = sd(Y)``. The count-space bucket.
+    ``"randomized_pit"``
+        ``t(x) = m(x) = E[Z | Y = x]``, ``sigma = 1``. The *one* is the whole
+        attenuation story: the randomized PIT's variance is exactly one
+        because it includes the jitter, while its covariance only sees the
+        conditional mean, so the reading is ``E[m_a m_b]`` and is biased low.
+    ``"mid_pit"``
+        ``t(x) = Phi^{-1}(F(x - 1) + p_x / 2)``, ``sigma = sd(t(Y))``. Being
+        a deterministic function of the count, it carries no jitter variance,
+        so standardising by its own spread removes part of the attenuation
+        the randomized PIT keeps -- which is why it reads *higher*, not lower.
+    """
+    grid = np.maximum.accumulate(np.clip(np.asarray(cdf, dtype=float), 0.0, 1.0))
+    keep = int(np.searchsorted(grid, 1.0 - tail_mass, side="left"))
+    keep = max(min(keep, grid.size - 1), 1)
+    upper = grid[: keep + 1]
+    lower = np.concatenate(([0.0], upper[:-1]))
+    mass = upper - lower
+    support = np.arange(upper.size, dtype=float)
+
+    moments = conditional_hermite_moments(lower, upper, int(terms))
+    if statistic == "count":
+        values = support
+    elif statistic == "randomized_pit":
+        values = moments[0]
+    elif statistic == "mid_pit":
+        values = norm.ppf(np.clip(lower + 0.5 * mass, 1e-15, 1.0 - 1e-15))
+    else:
+        raise ValueError(f"unknown statistic {statistic!r}")
+
+    coefficients = np.array(
+        [float(np.sum(mass * values * moments[order])) for order in range(terms)]
+    )
+    if statistic == "randomized_pit":
+        sigma = 1.0
+    else:
+        mean = float(np.sum(mass * values))
+        sigma = float(
+            np.sqrt(max(float(np.sum(mass * values * values)) - mean**2, 1e-300))
+        )
+    return coefficients, sigma
+
+
+def pooled_statistic_series(
+    coefficients: Sequence[tuple[np.ndarray, float]],
+    partners: Sequence[tuple[np.ndarray, float]],
+    terms: int,
+) -> np.ndarray:
+    """Pool per-pair Hermite series into one coefficient vector.
+
+    Entry ``j`` multiplies ``rho ** (j + 1)``, matching
+    :class:`bridge.BridgeCurve`'s convention. The expansion starts at order
+    one because the order-zero term is ``E[t_a] E[t_b]``, which the covariance
+    subtracts; that is also what pins the reading to zero at ``rho = 0``,
+    where it has to be for any margins.
+    """
+    factorial = np.cumprod(np.arange(1.0, terms + 1.0))
+    total = np.zeros(terms, dtype=float)
+    for (left, sigma_left), (right, sigma_right) in zip(coefficients, partners):
+        total += (left * right) / (factorial * sigma_left * sigma_right)
+    return total / float(len(coefficients))
+
+
+@dataclass(frozen=True)
+class StatisticSeries:
+    """A pooled statistic series, evaluable and invertible in ``rho``."""
+
+    statistic: str
+    coefficients: np.ndarray
+
+    def evaluate(self, rho: float) -> float:
+        order = np.arange(self.coefficients.size, dtype=float)
+        return float(self.coefficients @ (float(rho) ** (order + 1.0)))
+
+    def invert(self, target: float, bound: float = 0.60) -> float:
+        low, high = -abs(bound), abs(bound)
+        rising = self.evaluate(high) > self.evaluate(low)
+        for _ in range(200):
+            middle = 0.5 * (low + high)
+            if (self.evaluate(middle) < target) == rising:
+                low = middle
+            else:
+                high = middle
+        return 0.5 * (low + high)
 
 
 @dataclass(frozen=True)
