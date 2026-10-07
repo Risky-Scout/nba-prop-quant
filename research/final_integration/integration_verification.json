@@ -209,7 +209,7 @@
     "lines_verified": 72,
     "passed": true
   },
-  "head_sha": "1e01810193679da86ee3a3fa5814ab337d0aa831",
+  "head_sha": "5072043a93a76043e5315e9bdda8cfa5f0c8d922",
   "manifest_sha256": "06f4fd1e0623ddae79c82286eb32c5529a484cefefad4867159ba547a579f9ce",
   "merge_path_blob_audit": {
     "base": "a30ed672001f8774b6cfec9ad7a3ccb382506c4b",
@@ -222,7 +222,7 @@
       "path": "research/game_latent_state_v2/inner_screening.json",
       "sha": "d009be4183c6da3613bf7c71382cd4323e3c1bbe"
     },
-    "new_blob_count": 138,
+    "new_blob_count": 139,
     "notable": [],
     "over_ceiling": [],
     "passed": true,
@@ -248,6 +248,7 @@
     "factor_spec_hash_is_the_authoritative_one": true,
     "passed": true
   },
+  "snapshot_is_a_record_not_the_contract": "Committing this file adds an object to the merge path, so the counts below describe head_sha and read low for any later commit. The suite re-derives every check against the live head; this file is evidence that it was run, not the thing CI trusts.",
   "study": "final_clean_integration_verification_v1",
   "verdict": "CLEAN INTEGRATION TREE VERIFIED"
 }

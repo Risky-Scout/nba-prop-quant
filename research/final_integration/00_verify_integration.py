@@ -101,6 +101,12 @@ def main() -> None:
         "merge_path_blob_audit": blobs,
         "checksum_files": checksums,
         "provenance_hashes": provenance,
+        "snapshot_is_a_record_not_the_contract": (
+            "Committing this file adds an object to the merge path, so the counts "
+            "below describe head_sha and read low for any later commit. The suite "
+            "re-derives every check against the live head; this file is evidence "
+            "that it was run, not the thing CI trusts."
+        ),
         "passed": passed,
         "verdict": (
             "CLEAN INTEGRATION TREE VERIFIED"
