@@ -234,6 +234,15 @@ def conditional_hermite_moments(
     density_lower = stats.norm.pdf(t_lower)
     density_upper = stats.norm.pdf(t_upper)
 
+    # Probabilists' Hermite recurrence, ``He_{k+1}(z) = z He_k(z) - k He_{k-1}(z)``.
+    # An earlier version of this loop subtracted ``(k - 1) He_{k-1}`` instead,
+    # which is right only at ``k = 1`` by accident of the coefficient being
+    # zero there -- it made ``He_2`` come out as ``z^2`` rather than
+    # ``z^2 - 1``. Nothing read those entries, because ``M_k`` reads
+    # ``He_{k-1}`` and the bridge has only ever been run at order 2, so every
+    # output this function has ever produced is unaffected; see
+    # ``test_game_latent_state_shadow_hermite.py``, which pins that claim
+    # rather than leaving it as a comment.
     hermite_lower = [np.ones_like(t_lower), t_lower]
     hermite_upper = [np.ones_like(t_upper), t_upper]
     out: list[np.ndarray] = []
@@ -245,12 +254,8 @@ def conditional_hermite_moments(
             )
             / mass
         )
-        hermite_lower.append(
-            t_lower * hermite_lower[k] - (k - 1) * hermite_lower[k - 1]
-        )
-        hermite_upper.append(
-            t_upper * hermite_upper[k] - (k - 1) * hermite_upper[k - 1]
-        )
+        hermite_lower.append(t_lower * hermite_lower[k] - k * hermite_lower[k - 1])
+        hermite_upper.append(t_upper * hermite_upper[k] - k * hermite_upper[k - 1])
     return out
 
 

@@ -99,6 +99,70 @@ MIN_MARGINAL_TRAIN_SEASONS = 2
 
 ROLE_BUCKET_QUANTILES = (1.0 / 3.0, 2.0 / 3.0)
 
+#: How the rows that train each stat's marginal are chosen. Versioned because
+#: the two conventions produce different datasets and a dataset that does not
+#: say which one it used cannot be reproduced.
+#:
+#: ``v1`` filtered to rows carrying *every* stat and *every* selected mean
+#: before splitting by stat, so the per-stat filter below it could never
+#: remove anything and the effective convention was the six-way intersection.
+#: The validator (``04_validate_shadow_v1.py``) and production
+#: (``scripts/07_fit_marginals.py::candidate_frame``) both filter per target,
+#: so ``v1`` was the odd one out: a season missing one stat's selected mean
+#: removed its rows from all six marginals rather than from that one.
+#:
+#: ``v2`` is the live convention. It is the default, so future retraining is
+#: aligned without anyone having to remember to ask for it.
+#:
+#: The frozen candidate was built under ``v1`` and is NOT regenerated for
+#: this. ``research/marginal_convention_audit/`` is the certification that the
+#: historical mismatch was non-material: the largest robust dependence-bucket
+#: shift was 0.027 z against a 0.25 z threshold, and the global latent target
+#: structure moved 0.95% against a 3% threshold. Passing
+#: ``--residual-convention v1_joint_marginal_training`` reproduces the
+#: historical dataset bitwise.
+RESIDUAL_CONVENTION_V1 = "v1_joint_marginal_training"
+RESIDUAL_CONVENTION_V2 = "v2_per_stat_marginal_training"
+RESIDUAL_CONVENTIONS = (RESIDUAL_CONVENTION_V1, RESIDUAL_CONVENTION_V2)
+DEFAULT_RESIDUAL_CONVENTION = RESIDUAL_CONVENTION_V2
+
+#: The audit that licenses leaving the frozen candidate on ``v1``.
+RESIDUAL_CONVENTION_CERTIFICATION = {
+    "audit": "research/marginal_convention_audit/marginal_convention_audit.json",
+    "classification": "NON_MATERIAL",
+    "max_robust_bucket_shift_z": 0.026981581357138806,
+    "bucket_threshold_z": 0.25,
+    "global_latent_movement": 0.009508657357762074,
+    "global_threshold": 0.03,
+}
+
+
+def marginal_training_pool(
+    frame: pd.DataFrame,
+    target_pool: pd.DataFrame,
+    convention: str,
+) -> pd.DataFrame:
+    """The rows a per-stat marginal fit is allowed to draw on.
+
+    Under ``v2`` this is the whole frame, and the per-stat ``dropna`` that
+    follows is what selects: a row missing ``blk`` still trains the ``pts``
+    marginal. Under ``v1`` it is the already-intersected target pool, which is
+    what made that per-stat ``dropna`` a no-op.
+
+    Only the *training* side moves. Which rows *receive* a residual is
+    unchanged in both conventions, because a row has to carry all six
+    residuals before it can contribute to a cross-stat second moment, and the
+    factor fit drops incomplete rows anyway.
+    """
+    if convention == RESIDUAL_CONVENTION_V1:
+        return target_pool
+    if convention == RESIDUAL_CONVENTION_V2:
+        return frame
+    raise ValueError(
+        f"unknown residual convention {convention!r}; "
+        f"expected one of {RESIDUAL_CONVENTIONS}"
+    )
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -113,6 +177,16 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--n-jobs", type=int, default=4, help="XGBoost threads for the OOF refits."
+    )
+    parser.add_argument(
+        "--residual-convention",
+        choices=RESIDUAL_CONVENTIONS,
+        default=DEFAULT_RESIDUAL_CONVENTION,
+        help=(
+            "Which rows train each stat's marginal. The default is the live "
+            "per-stat convention; v1 reproduces the frozen candidate's "
+            "historical dataset."
+        ),
     )
     parser.add_argument(
         "--force",
@@ -269,6 +343,7 @@ def build_residuals(
     residual_seasons: list[int],
     stats: tuple[str, ...],
     seed: int,
+    convention: str = DEFAULT_RESIDUAL_CONVENTION,
 ) -> tuple[pd.DataFrame, dict[str, object]]:
     """Randomized-PIT Gaussian residuals with walk-forward marginals."""
     marginals_module = load_script_module(PROJECT_ROOT, "scripts/07_fit_marginals.py")
@@ -276,6 +351,11 @@ def build_residuals(
     selected_columns = [f"mu_selected_{stat}" for stat in stats]
     usable = frame.dropna(subset=[*stats, *selected_columns]).copy()
     usable["season"] = usable["season"].astype(int)
+
+    training_pool = marginal_training_pool(frame, usable, convention)
+    if training_pool is not usable:
+        training_pool = training_pool.copy()
+        training_pool["season"] = training_pool["season"].astype(int)
 
     context_columns = [
         "game_id",
@@ -300,10 +380,17 @@ def build_residuals(
     usable["game_date"] = pd.to_datetime(usable["date"]).dt.normalize()
 
     records: list[pd.DataFrame] = []
-    marginal_report: dict[str, object] = {"by_season": {}}
+    marginal_report: dict[str, object] = {
+        "residual_convention": convention,
+        "residual_convention_is_the_live_one": convention == RESIDUAL_CONVENTION_V2,
+        "residual_convention_certification": RESIDUAL_CONVENTION_CERTIFICATION,
+        "marginal_training_pool_rows": int(len(training_pool)),
+        "residual_target_pool_rows": int(len(usable)),
+        "by_season": {},
+    }
 
     for season in residual_seasons:
-        train = usable.loc[usable["season"] < season]
+        train = training_pool.loc[training_pool["season"] < season]
         target_rows = usable.loc[usable["season"] == season]
         if target_rows.empty:
             continue
@@ -364,6 +451,7 @@ def build_residuals(
 
             season_report["stats"][stat] = {
                 "marginal_kind": marginal.kind,
+                "marginal_training_rows": int(len(fit_rows)),
                 "inflation_features": list(inflation),
                 "clipped_fraction": gaussian.clipped_fraction,
                 "pit_mean": float(np.mean(gaussian.u)),
@@ -423,7 +511,11 @@ def main() -> None:
     console.print(f"wrote {selected_path}")
 
     residuals, marginal_report = build_residuals(
-        oof, residual_seasons, SUPPORTED_STATS, seed=args.seed
+        oof,
+        residual_seasons,
+        SUPPORTED_STATS,
+        seed=args.seed,
+        convention=args.residual_convention,
     )
 
     residual_path = artifact_dir / RESIDUAL_DATASET_NAME
@@ -462,11 +554,17 @@ def main() -> None:
             "marginal_fit": "walk-forward, seasons strictly before each residual season",
             "mean_fit": "season_walk_forward_oof_target / _minutes",
             "role_bucket_thresholds": role_thresholds,
+            "residual_convention": args.residual_convention,
+            "residual_convention_certification": RESIDUAL_CONVENTION_CERTIFICATION,
         },
         notes=[
             "Randomized PIT with a keyed deterministic v; no in-sample residuals.",
             "Every parameter applied to season S is fitted on seasons < S only.",
             "Research raw window is narrower than production history_start_season.",
+            f"Marginal training convention: {args.residual_convention}. The "
+            "frozen candidate was built under "
+            f"{RESIDUAL_CONVENTION_V1} and is not regenerated for this; the "
+            "marginal-convention audit certifies that mismatch NON_MATERIAL.",
         ],
     )
     finalize_manifest(
