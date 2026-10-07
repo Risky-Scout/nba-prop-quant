@@ -6,7 +6,16 @@
   "integration_method": "explicit path allowlist applied onto a fresh branch cut from the production base; no merge commit from any research branch",
   "why_not_a_merge": "a merge transfers every object the merged history reaches, including blobs that were committed once and deleted later. The research line committed a 65 MB residual parquet that is absent from every current tree and still reachable from those heads. An allowlist carries the files; it does not carry the history that reaches them.",
   "superseded_research_pull_requests": [16, 17, 18, 20, 21, 22],
+  "superseded_research_branches": [
+    "research/nba-game-latent-state-shadow-v1",
+    "research/nba-game-latent-state-shadow-v1-bucket-repair",
+    "research/nba-game-latent-state-shadow-v2-structural",
+    "research/nba-game-latent-state-shadow-clean",
+    "research/nba-final-upstream-remediation",
+    "research/nba-count-space-forensic"
+  ],
   "superseded_handling": "marked superseded, histories not merged; their evidence is carried as files and their hashes are recorded here",
+  "reachability_contract": "none of the branches named above may be an ancestor of this lineage. Counting merge commits is the wrong proxy for that: GitHub tests a pull request on a synthetic merge of the head into the base, and merging this branch into production is itself a merge commit. Both join this lineage to production, which is the branch's purpose. What must never become reachable is a third lineage.",
   "carry": {
     "runtime_source": {
       "reason": "the final accepted runtime: the simulator, the joint query engine, the shared-factor covariance assembly, the production shadow, and the containment guard",

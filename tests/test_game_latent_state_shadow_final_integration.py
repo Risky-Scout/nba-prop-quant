@@ -144,17 +144,76 @@ def git(*args: str) -> str:
     ).stdout.strip()
 
 
-def test_no_merge_commit_joins_a_research_branch_into_this_lineage(manifest):
-    """Every commit after the production base has exactly one parent.
+def resolves(rev: str) -> bool:
+    return (
+        subprocess.run(
+            ["git", "rev-parse", "-q", "--verify", rev],
+            cwd=str(PROJECT),
+            capture_output=True,
+        ).returncode
+        == 0
+    )
 
-    This is the structural statement behind "do not merge the research PRs".
-    A squash would also satisfy the blob contract, but a merge commit would
-    not, and the only way to be sure which happened is to look at the shape of
-    the history rather than at the tree.
+
+def is_ancestor(ancestor: str, descendant: str) -> bool:
+    return (
+        subprocess.run(
+            ["git", "merge-base", "--is-ancestor", ancestor, descendant],
+            cwd=str(PROJECT),
+            capture_output=True,
+        ).returncode
+        == 0
+    )
+
+
+def superseded_research_heads(manifest) -> dict[str, str]:
+    """The superseded research branch tips that this checkout can resolve."""
+    found = {}
+    for ref in manifest["superseded_research_branches"]:
+        for candidate in (f"origin/{ref}", ref):
+            if resolves(candidate):
+                found[ref] = candidate
+                break
+    return found
+
+
+def test_no_superseded_research_history_is_reachable(manifest):
+    """None of the superseded research tips is an ancestor of this head.
+
+    This is the structural statement behind "do not merge the research PRs",
+    and it is the one worth making. Counting merge commits was a proxy, and a
+    wrong one: GitHub builds a synthetic merge of the head into the base to
+    test a pull request, and merging this branch into production is itself a
+    merge commit. Both are joins between this lineage and production, which is
+    the whole point of the branch. What must never happen is a *third* lineage
+    becoming reachable, and that is checkable directly.
+    """
+    heads = superseded_research_heads(manifest)
+    if not heads:
+        pytest.skip("no superseded research ref is available in this checkout")
+    reachable = sorted(ref for ref, rev in heads.items() if is_ancestor(rev, "HEAD"))
+    assert reachable == [], f"superseded research history is reachable: {reachable}"
+
+
+def test_every_merge_in_this_lineage_only_joins_production(manifest):
+    """A merge commit here may join production, and nothing else.
+
+    Complements the reachability check above by constraining shape as well as
+    content: every merge after the declared base must have a parent that is
+    production history, so the only joins possible are production-into-lineage
+    and lineage-into-production.
     """
     base = manifest["production_base"]
-    merges = git("rev-list", "--merges", f"{base}..HEAD")
-    assert merges == "", f"the integration lineage contains merge commits: {merges}"
+    merges = [line for line in git("rev-list", "--merges", f"{base}..HEAD").splitlines()]
+    for merge in merges:
+        parents = git("rev-list", "--parents", "-n", "1", merge).split()[1:]
+        joins_production = [
+            parent for parent in parents if is_ancestor(parent, base) or parent == base
+        ]
+        assert joins_production, (
+            f"merge {merge} has no production parent, so it joins a lineage "
+            f"other than production: parents {parents}"
+        )
 
 
 def test_the_production_base_is_an_ancestor_of_this_branch(manifest):
@@ -166,8 +225,27 @@ def test_the_production_base_is_an_ancestor_of_this_branch(manifest):
     )
 
 
-def test_the_declared_base_is_the_actual_merge_base(manifest, verifier):
-    """A manifest naming the wrong base would audit an empty merge path."""
+def test_the_declared_base_actually_has_a_merge_path_to_audit(manifest, verifier):
+    """A manifest naming the wrong base would audit an empty merge path.
+
+    Stated as the property that matters rather than as an equality against the
+    live merge base, because once this branch is merged the live merge base is
+    HEAD and the live merge path is empty by definition. The declared base is
+    what keeps the blob contract enforceable on the production branch too.
+    """
+    base = manifest["production_base"]
+    assert is_ancestor(base, "HEAD")
+    assert git("rev-parse", base) != git("rev-parse", "HEAD")
+    assert verifier.check_merge_path(base)["new_blob_count"] > 0
+
+
+def test_the_declared_base_is_where_this_lineage_left_production(manifest):
+    """While this lineage is still unmerged, the live merge base must agree.
+
+    After the merge the live merge base is HEAD, which agrees with nothing and
+    means only that there is no longer a merge pending; the check above is the
+    one that still has teeth then.
+    """
     from nba_prop_quant.research.game_latent_state.safety import (
         production_merge_base,
     )
@@ -175,6 +253,8 @@ def test_the_declared_base_is_the_actual_merge_base(manifest, verifier):
     resolved = production_merge_base(PROJECT)
     if resolved is None:
         pytest.skip("the production ref is not available in this checkout")
+    if resolved == git("rev-parse", "HEAD"):
+        pytest.skip("this head is production, so there is no pending merge")
     assert resolved == manifest["production_base"]
 
 
