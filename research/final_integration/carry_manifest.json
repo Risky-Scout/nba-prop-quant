@@ -111,7 +111,7 @@
     "tests": {
       "reason": "every test whose subject is carried",
       "paths": [
-        "tests/test_same_game_dependence_shadow_doc.py",
+        "tests/test_game_latent_state_shadow_production_doc.py",
         "tests/test_game_latent_state_shadow.py",
         "tests/test_game_latent_state_shadow_artifact_budget.py",
         "tests/test_game_latent_state_shadow_bucket_repair.py",

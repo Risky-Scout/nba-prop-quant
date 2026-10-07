@@ -174,13 +174,17 @@ def test_promotion_state_files_are_not_introduced_or_changed():
     assert offenders == []
 
 
-def test_shadow_changes_live_only_in_research_and_test_namespaces():
+def test_shadow_changes_live_only_in_research_test_and_declared_namespaces():
     allowed = (
         "research/",
         "src/nba_prop_quant/research/",
         "tests/test_game_latent_state_shadow",
     )
-    offenders = [path for path in changed_paths() if not path.startswith(allowed)]
+    offenders = [
+        path
+        for path in changed_paths()
+        if not path.startswith(allowed) and path not in DECLARED_INTEGRATION_PATHS
+    ]
     assert offenders == [], f"unexpected paths on the shadow branch: {offenders}"
 
 

@@ -209,8 +209,8 @@
     "lines_verified": 72,
     "passed": true
   },
-  "head_sha": "22b1e160a53b770b8633ca9a9c5740b74f23c44c",
-  "manifest_sha256": "8e66078a1939127431fd308b66412e4ace8611ec187076dc7ce0a38973256ced",
+  "head_sha": "0fd5b2320501d30129f2977115bdd8e4824fd0fa",
+  "manifest_sha256": "ba8eb641eedbdea5584eda99f33a53c5b4fd0128eaadd7d24250220e6d2c7ed0",
   "merge_path_blob_audit": {
     "base": "a30ed672001f8774b6cfec9ad7a3ccb382506c4b",
     "base_resolved": true,
@@ -222,7 +222,7 @@
       "path": "research/game_latent_state_v2/inner_screening.json",
       "sha": "d009be4183c6da3613bf7c71382cd4323e3c1bbe"
     },
-    "new_blob_count": 144,
+    "new_blob_count": 151,
     "notable": [],
     "over_ceiling": [],
     "passed": true,
