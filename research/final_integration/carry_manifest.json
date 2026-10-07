@@ -101,6 +101,7 @@
         "tests/test_game_latent_state_shadow_bucket_repair.py",
         "tests/test_game_latent_state_shadow_clean_candidate.py",
         "tests/test_game_latent_state_shadow_final_audit.py",
+        "tests/test_game_latent_state_shadow_final_integration.py",
         "tests/test_game_latent_state_shadow_final_upstream_remediation.py",
         "tests/test_game_latent_state_shadow_hermite.py",
         "tests/test_game_latent_state_shadow_marginal_convention_audit.py",
