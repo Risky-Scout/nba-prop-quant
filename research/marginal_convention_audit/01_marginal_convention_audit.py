@@ -355,6 +355,49 @@ def mean_availability(history: pd.DataFrame) -> dict[str, object]:
     }
 
 
+def target_row_scope(history: pd.DataFrame) -> dict[str, object]:
+    """Does the joint filter also change *which* rows get residuals?
+
+    ``build_residuals`` uses the jointly filtered frame for both the marginal
+    training rows and the target rows, so in principle the convention has two
+    channels. The brief scopes this audit to the training convention, and the
+    data closes the other channel on its own: inside the residual seasons
+    every history row is already complete on all six stats and means, so the
+    joint filter removes nothing there. Even if it did, ``pair_moments``
+    applies its own joint ``dropna`` before estimating, so a row missing one
+    stat could never enter a bucket anyway.
+    """
+    selected = [f"mu_selected_{stat}" for stat in STATS]
+    rows = history.loc[history["season"].isin(list(PRE_2024_SEASONS))]
+    joint = rows.dropna(subset=[*STATS, *selected])
+    usable_for_any = rows.loc[
+        np.logical_or.reduce(
+            [
+                rows[[stat, f"mu_selected_{stat}"]].notna().all(axis=1).to_numpy()
+                for stat in STATS
+            ]
+        )
+    ]
+    return {
+        "scope": (
+            "this audit swaps the marginal *training* rows only; the target "
+            "rows are held at the published set so the comparison is paired "
+            "on the same player-games"
+        ),
+        "pre_2024_history_rows": int(len(rows)),
+        "rows_surviving_the_joint_filter": int(len(joint)),
+        "rows_usable_for_at_least_one_stat": int(len(usable_for_any)),
+        "extra_target_rows_a_per_stat_filter_would_emit": int(
+            len(usable_for_any) - len(joint)
+        ),
+        "the_target_row_channel_is_empty": len(usable_for_any) == len(joint),
+        "and_would_be_closed_anyway_by": (
+            "pair_moments' own dropna across every zs_ column, which drops any "
+            "row missing a stat before the pair moments are accumulated"
+        ),
+    }
+
+
 def row_accounting(history: pd.DataFrame) -> dict[str, object]:
     """How many training rows each convention sees, per stat per season.
 
@@ -850,44 +893,80 @@ def frozen_spec_moment_check(buckets: Mapping[str, object]) -> dict[str, object]
     }
 
 
+def _score(
+    shifts: Mapping[str, float],
+    ses: Mapping[str, float],
+) -> dict[str, object]:
+    """Summarise a set of bucket shifts two ways.
+
+    ``matched`` divides each bucket's shift by *its own* standard error, which
+    is the quantity the gates would read. ``bound`` divides the largest shift
+    by the smallest standard error over all twelve, which no bucket actually
+    realises but which no bucket can exceed either -- so a verdict that holds
+    on the bound holds however the pairing is done.
+    """
+    matched = {
+        bucket: float(shifts[bucket]) / ses[bucket] if ses[bucket] else None
+        for bucket in shifts
+    }
+    worst_bucket = max(shifts, key=lambda bucket: abs(float(shifts[bucket])))
+    return {
+        "absolute_shift_by_bucket": dict(shifts),
+        "shift_in_z_by_bucket": matched,
+        "largest_absolute_shift": abs(float(shifts[worst_bucket])),
+        "largest_shift_bucket": worst_bucket,
+        "largest_matched_shift_z": max(
+            abs(float(value)) for value in matched.values() if value is not None
+        ),
+        "conservative_bound_z": abs(float(shifts[worst_bucket]))
+        / min(ses.values()),
+    }
+
+
 def standardization_sensitivity(
     pits: Mapping[int, Mapping[str, object]],
+    ses: Mapping[str, float],
 ) -> dict[str, object]:
     """Is the verdict an artefact of the pipeline's standardization?
 
     ``standardize_residuals`` divides by each stat's empirical spread, and the
-    convention moves that spread by up to 0.3%, so the standardization could
-    in principle absorb part of the convention's effect. Re-reading the
-    buckets with the scaling held fixed, and with no scaling at all, shows
-    whether it does.
+    convention moves that spread by up to 0.3%, so the standardization
+    absorbs the part of the marginal change that is pure level and scale.
+    Re-reading the buckets with the scaling held fixed, and with no scaling at
+    all, shows how much it absorbs -- and the unstandardized row can absorb
+    nothing at all, so the verdict can be taken there.
     """
     out: dict[str, object] = {}
     for mode, label in (
-        ("own", "each convention standardized with its own moments (the pipeline's choice)"),
+        (
+            "own",
+            "each convention standardized with its own moments (the pipeline's choice)",
+        ),
         ("frozen", "both standardized with the frozen spec's moments"),
         ("none", "no standardization at all"),
     ):
-        # The point estimates are all this needs, and the bootstrap is the
-        # expensive part, so the z below is taken against the primary
-        # reading's standard errors rather than re-bootstrapped per mode.
+        # Point estimates only: the bootstrap is the expensive part and the z
+        # below is taken against the primary reading's standard errors, which
+        # the convention barely moves.
         reading = bucket_readings(pits, moment_mode=mode, bootstrap=0)
         shifts = {
-            bucket: entry["absolute_shift"]
+            bucket: float(entry["absolute_shift"])  # type: ignore[index]
             for bucket, entry in reading["shift_by_bucket"].items()  # type: ignore[union-attr]
         }
-        out[mode] = {
-            "label": label,
-            "absolute_shift_by_bucket": shifts,
-            "largest_absolute_shift": max(abs(float(v)) for v in shifts.values()),
-            "largest_shift_bucket": max(
-                shifts, key=lambda bucket: abs(float(shifts[bucket]))
-            ),
-        }
+        out[mode] = {"label": label, **_score(shifts, ses)}
     return {
         "statement": (
             "the convention's effect on the buckets is reported under three "
             "standardizations so the verdict cannot rest on the pipeline's "
             "scaling absorbing it"
+        ),
+        "what_the_standardization_absorbs": (
+            "the unstandardized reading is the larger one, so the pipeline's "
+            "per-stat rescaling does absorb part of the convention's effect: "
+            "a marginal refitted on more rows shifts each residual's level "
+            "and spread as well as its shape, and standardization removes the "
+            "first two. The verdict is therefore taken on the unstandardized "
+            "row, where nothing is absorbed"
         ),
         "by_mode": out,
     }
@@ -896,6 +975,7 @@ def standardization_sensitivity(
 def jitter_robustness(
     pits: Mapping[int, Mapping[str, object]],
     seeds: Sequence[int],
+    ses: Mapping[str, float],
 ) -> dict[str, object]:
     """Is the measured bucket shift stable across the randomized-PIT jitter?
 
@@ -942,16 +1022,18 @@ def jitter_robustness(
             bucket: readings["validator"][bucket] - readings["residual_build"][bucket]
             for bucket in readings["residual_build"]
         }
-        worst_bucket = max(shifts, key=lambda bucket: abs(shifts[bucket]))
-        largest = max(largest, abs(shifts[worst_bucket]))
-        per_seed[str(seed)] = {
-            "largest_absolute_shift": abs(shifts[worst_bucket]),
-            "largest_shift_bucket": worst_bucket,
-            "absolute_shift_by_bucket": shifts,
-        }
+        scored = _score(shifts, ses)
+        largest = max(largest, float(scored["largest_absolute_shift"]))
+        per_seed[str(seed)] = scored
     return {
         "seeds": list(seeds),
         "largest_absolute_shift_over_all_seeds_and_buckets": largest,
+        "largest_matched_shift_z_over_all_seeds": max(
+            float(entry["largest_matched_shift_z"]) for entry in per_seed.values()  # type: ignore[index]
+        ),
+        "largest_conservative_bound_z_over_all_seeds": max(
+            float(entry["conservative_bound_z"]) for entry in per_seed.values()  # type: ignore[index]
+        ),
         "by_seed": per_seed,
     }
 
@@ -1132,23 +1214,22 @@ def decision(
 
     global_worst = float(movement["largest_of_the_four_readings"])
 
-    # The jitter sweep and the standardization sweep report absolute shifts.
-    # Scoring them against the smallest bucket standard error turns each into
-    # an upper bound in z, so neither can hide a breach.
-    smallest_se = min(
-        float(entry["se_oof_convention"]) for entry in shift.values()  # type: ignore[union-attr,index]
+    # Both sweeps are scored two ways: each bucket against its own standard
+    # error, which is what the gates read, and the largest shift against the
+    # smallest standard error over all twelve, which no bucket realises but
+    # none can exceed. The decision is taken on the latter.
+    jitter_matched = float(jitter["largest_matched_shift_z_over_all_seeds"])
+    jitter_bound = float(jitter["largest_conservative_bound_z_over_all_seeds"])
+    sensitivity_matched = max(
+        float(entry["largest_matched_shift_z"])  # type: ignore[index]
+        for entry in sensitivity["by_mode"].values()  # type: ignore[union-attr]
     )
-    jitter_bound_z = (
-        float(jitter["largest_absolute_shift_over_all_seeds_and_buckets"]) / smallest_se
+    sensitivity_bound = max(
+        float(entry["conservative_bound_z"])  # type: ignore[index]
+        for entry in sensitivity["by_mode"].values()  # type: ignore[union-attr]
     )
-    sensitivity_bound_z = (
-        max(
-            float(entry["largest_absolute_shift"])  # type: ignore[index]
-            for entry in sensitivity["by_mode"].values()  # type: ignore[union-attr]
-        )
-        / smallest_se
-    )
-    strictest_z = max(all_twelve_max, jitter_bound_z, sensitivity_bound_z)
+    matched_z = max(all_twelve_max, jitter_matched, sensitivity_matched)
+    strictest_z = max(matched_z, jitter_bound, sensitivity_bound)
 
     buckets_held = strictest_z < MAX_KEY_BUCKET_SHIFT_Z
     global_held = global_worst < MAX_GLOBAL_LATENT_MOVEMENT
@@ -1175,9 +1256,20 @@ def decision(
             "largest_key_bucket": key_max_bucket,
             "largest_shift_z_over_all_twelve": all_twelve_max,
             "largest_bucket_over_all_twelve": all_max_bucket,
-            "upper_bound_z_over_every_jitter_seed": jitter_bound_z,
-            "upper_bound_z_over_every_standardization": sensitivity_bound_z,
+            "largest_matched_shift_z_over_every_jitter_seed": jitter_matched,
+            "largest_matched_shift_z_over_every_standardization": (
+                sensitivity_matched
+            ),
+            "largest_matched_shift_z_anywhere": matched_z,
+            "conservative_bound_z_over_every_jitter_seed": jitter_bound,
+            "conservative_bound_z_over_every_standardization": sensitivity_bound,
             "strictest_bucket_shift_z": strictest_z,
+            "strictest_reading_note": (
+                "the strictest figure pairs the largest shift found anywhere "
+                "with the smallest bucket standard error, a pairing no bucket "
+                "realises; the largest shift any bucket actually realises "
+                "against its own standard error is the matched figure"
+            ),
             "largest_global_latent_movement": global_worst,
             "buckets_at_or_over_the_z_threshold": breached,
         },
@@ -1254,6 +1346,7 @@ def main() -> None:
         per_stat_filter_is_a_no_op(history)
     )
     report["section_1_mean_availability"] = mean_availability(history)
+    report["section_1_target_row_scope"] = target_row_scope(history)
     report["section_1_row_accounting"] = row_accounting(history)
 
     print("section 2: PITs under both conventions")
@@ -1284,12 +1377,17 @@ def main() -> None:
             "the frozen candidate was fitted on"
         )
 
+    primary_ses = {
+        bucket: float(entry["se_oof_convention"])  # type: ignore[index]
+        for bucket, entry in buckets["shift_by_bucket"].items()  # type: ignore[union-attr]
+    }
+
     print("section 4b: standardization sensitivity")
-    sensitivity = standardization_sensitivity(pits)
+    sensitivity = standardization_sensitivity(pits, primary_ses)
     report["section_4_standardization_sensitivity"] = sensitivity
 
     print("section 4c: jitter robustness")
-    jitter = jitter_robustness(pits, JITTER_SEEDS)
+    jitter = jitter_robustness(pits, JITTER_SEEDS, primary_ses)
     report["section_4_jitter_robustness"] = jitter
 
     print("section 5: global latent structure")
@@ -1317,9 +1415,14 @@ def main() -> None:
         f"  ({verdict['measured']['largest_bucket_over_all_twelve']})"  # type: ignore[index]
     )
     print(
+        f"  largest matched anywhere   "
+        f"{verdict['measured']['largest_matched_shift_z_anywhere']:+.4f} z"  # type: ignore[index]
+        "  (every jitter seed, every standardization)"
+    )
+    print(
         f"  strictest bound            "
         f"{verdict['measured']['strictest_bucket_shift_z']:+.4f} z"  # type: ignore[index]
-        "  (over every jitter seed and standardization)"
+        "  (largest shift over smallest se)"
     )
     print(
         f"  global latent movement     "

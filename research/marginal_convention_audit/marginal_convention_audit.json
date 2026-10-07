@@ -4,7 +4,7 @@
   "scope": "audit only the marginal-training convention mismatch. The dependence architecture is not touched, no factor family is fitted, no Monte Carlo is run and no held-out season is read",
   "provenance": {
     "branch": "cursor/oof-validator-marginal-convention-audit-68db",
-    "head": "e90c6ab6dc69e57642c9c1d69ac6ca5c92b5a1d0",
+    "head": "1c06a104226776202441621cad9886519fb5e88b",
     "worktree_clean": false,
     "candidate_spec_hash": "3229bbc83a4388c270a21008a75afacc3479cfd6f6390c8737f041412d2f2eb4",
     "candidate_spec_hash_confirmed": true,
@@ -306,6 +306,15 @@
         }
       }
     }
+  },
+  "section_1_target_row_scope": {
+    "scope": "this audit swaps the marginal *training* rows only; the target rows are held at the published set so the comparison is paired on the same player-games",
+    "pre_2024_history_rows": 108703,
+    "rows_surviving_the_joint_filter": 108703,
+    "rows_usable_for_at_least_one_stat": 108703,
+    "extra_target_rows_a_per_stat_filter_would_emit": 0,
+    "the_target_row_channel_is_empty": true,
+    "and_would_be_closed_anyway_by": "pair_moments' own dropna across every zs_ column, which drops any row missing a stat before the pair moments are accumulated"
   },
   "section_1_row_accounting": {
     "note": "the joint filter discards rows that are complete for the stat being fitted but missing some *other* stat or mean, so each marginal is trained on less data than production would give it",
@@ -648,50 +657,50 @@
   },
   "section_2_marginal_fits": {
     "residual_build_2020": {
-      "training_seasons": [
+      "window_seasons_before_the_per_stat_filter": [
         2018,
         2019
       ],
-      "training_rows": 51855
+      "window_rows_before_the_per_stat_filter": 51855
     },
     "validator_2020": {
-      "training_seasons": [
+      "window_seasons_before_the_per_stat_filter": [
         2016,
         2017,
         2018,
         2019
       ],
-      "training_rows": 107555
+      "window_rows_before_the_per_stat_filter": 107555
     },
     "residual_build_2021": {
-      "training_seasons": [
+      "window_seasons_before_the_per_stat_filter": [
         2018,
         2019,
         2020
       ],
-      "training_rows": 76807
+      "window_rows_before_the_per_stat_filter": 76807
     },
     "validator_2021": {
-      "training_seasons": [
+      "window_seasons_before_the_per_stat_filter": [
         2016,
         2017,
         2018,
         2019,
         2020
       ],
-      "training_rows": 132507
+      "window_rows_before_the_per_stat_filter": 132507
     },
     "residual_build_2022": {
-      "training_seasons": [
+      "window_seasons_before_the_per_stat_filter": [
         2018,
         2019,
         2020,
         2021
       ],
-      "training_rows": 104752
+      "window_rows_before_the_per_stat_filter": 104752
     },
     "validator_2022": {
-      "training_seasons": [
+      "window_seasons_before_the_per_stat_filter": [
         2016,
         2017,
         2018,
@@ -699,20 +708,20 @@
         2020,
         2021
       ],
-      "training_rows": 160452
+      "window_rows_before_the_per_stat_filter": 160452
     },
     "residual_build_2023": {
-      "training_seasons": [
+      "window_seasons_before_the_per_stat_filter": [
         2018,
         2019,
         2020,
         2021,
         2022
       ],
-      "training_rows": 132390
+      "window_rows_before_the_per_stat_filter": 132390
     },
     "validator_2023": {
-      "training_seasons": [
+      "window_seasons_before_the_per_stat_filter": [
         2016,
         2017,
         2018,
@@ -721,7 +730,7 @@
         2021,
         2022
       ],
-      "training_rows": 188090
+      "window_rows_before_the_per_stat_filter": 188090
     }
   },
   "section_2_reproduction_check": {
@@ -1878,6 +1887,7 @@
     "by_convention": {
       "residual_build": {
         "label": "02_build_oof_residuals.py joint dropna across all stats",
+        "moment_mode": "own",
         "rows": 108703,
         "games": 5133,
         "same_team_pairs": 1068528.0,
@@ -1939,6 +1949,7 @@
       },
       "validator": {
         "label": "04_validate_shadow_v1.py per-stat dropna (the live convention)",
+        "moment_mode": "own",
         "rows": 108703,
         "games": 5133,
         "same_team_pairs": 1068528.0,
@@ -2146,6 +2157,478 @@
       }
     }
   },
+  "section_4_frozen_spec_moment_check": {
+    "max_abs_difference": 0.0,
+    "agrees": true,
+    "by_stat": {
+      "pts": {
+        "frozen_spec": {
+          "mean": -0.0053793696036107674,
+          "sd": 0.9991308805566164
+        },
+        "recomputed": {
+          "mean": -0.0053793696036107674,
+          "sd": 0.9991308805566164
+        },
+        "max_abs_difference": 0.0
+      },
+      "reb": {
+        "frozen_spec": {
+          "mean": 0.0002808430326635653,
+          "sd": 1.0013353417506248
+        },
+        "recomputed": {
+          "mean": 0.0002808430326635653,
+          "sd": 1.0013353417506248
+        },
+        "max_abs_difference": 0.0
+      },
+      "ast": {
+        "frozen_spec": {
+          "mean": -0.0010324282522954516,
+          "sd": 1.0018251209835307
+        },
+        "recomputed": {
+          "mean": -0.0010324282522954516,
+          "sd": 1.0018251209835307
+        },
+        "max_abs_difference": 0.0
+      },
+      "stl": {
+        "frozen_spec": {
+          "mean": -0.001024071154199583,
+          "sd": 0.9989914748108051
+        },
+        "recomputed": {
+          "mean": -0.001024071154199583,
+          "sd": 0.9989914748108051
+        },
+        "max_abs_difference": 0.0
+      },
+      "blk": {
+        "frozen_spec": {
+          "mean": 0.011743471000717397,
+          "sd": 1.0051165427505493
+        },
+        "recomputed": {
+          "mean": 0.011743471000717397,
+          "sd": 1.0051165427505493
+        },
+        "max_abs_difference": 0.0
+      },
+      "fg3m": {
+        "frozen_spec": {
+          "mean": -0.014602351764211935,
+          "sd": 0.9991247889890215
+        },
+        "recomputed": {
+          "mean": -0.014602351764211935,
+          "sd": 0.9991247889890215
+        },
+        "max_abs_difference": 0.0
+      }
+    }
+  },
+  "section_4_standardization_sensitivity": {
+    "statement": "the convention's effect on the buckets is reported under three standardizations so the verdict cannot rest on the pipeline's scaling absorbing it",
+    "what_the_standardization_absorbs": "the unstandardized reading is the larger one, so the pipeline's per-stat rescaling does absorb part of the convention's effect: a marginal refitted on more rows shifts each residual's level and spread as well as its shape, and standardization removes the first two. The verdict is therefore taken on the unstandardized row, where nothing is absorbed",
+    "by_mode": {
+      "own": {
+        "label": "each convention standardized with its own moments (the pipeline's choice)",
+        "absolute_shift_by_bucket": {
+          "teammate_pts_pts": 2.047324285500132e-05,
+          "teammate_reb_reb": 0.0,
+          "teammate_ast_ast": 1.2450116536749656e-06,
+          "passer_ast_teammate_pts": -4.013689708574908e-05,
+          "teammate_pts_reb": 5.666615691094987e-06,
+          "teammate_fg3m_fg3m": -1.3176629288362465e-05,
+          "opponent_pts_pts": 6.881017820623697e-06,
+          "opponent_reb_reb": 0.0,
+          "opponent_pts_reb": -4.8326901362942196e-06,
+          "opponent_fg3m_reb": -1.028529786533186e-05,
+          "opponent_ast_ast": -2.5052932731389754e-05,
+          "opponent_stl_pts": 1.0513133668261761e-05
+        },
+        "shift_in_z_by_bucket": {
+          "teammate_pts_pts": 0.012110985676806395,
+          "teammate_reb_reb": 0.0,
+          "teammate_ast_ast": 0.000762065626008195,
+          "passer_ast_teammate_pts": -0.026981581357138806,
+          "teammate_pts_reb": 0.003961197757048369,
+          "teammate_fg3m_fg3m": -0.009814542042588886,
+          "opponent_pts_pts": 0.004687643762624376,
+          "opponent_reb_reb": 0.0,
+          "opponent_pts_reb": -0.004175853484777376,
+          "opponent_fg3m_reb": -0.010032560956960142,
+          "opponent_ast_ast": -0.01682508920147462,
+          "opponent_stl_pts": 0.010587063322666446
+        },
+        "largest_absolute_shift": 4.013689708574908e-05,
+        "largest_shift_bucket": "passer_ast_teammate_pts",
+        "largest_matched_shift_z": 0.026981581357138806,
+        "conservative_bound_z": 0.04041914470325859
+      },
+      "frozen": {
+        "label": "both standardized with the frozen spec's moments",
+        "absolute_shift_by_bucket": {
+          "teammate_pts_pts": 3.3410307098599365e-05,
+          "teammate_reb_reb": 0.0,
+          "teammate_ast_ast": -3.673913863608963e-05,
+          "passer_ast_teammate_pts": -1.4979727781527785e-05,
+          "teammate_pts_reb": 6.36432762614221e-05,
+          "teammate_fg3m_fg3m": -1.6227696947905155e-05,
+          "opponent_pts_pts": 0.00010950464974736687,
+          "opponent_reb_reb": 0.0,
+          "opponent_pts_reb": -1.3962458563641228e-05,
+          "opponent_fg3m_reb": -1.0116795074981665e-05,
+          "opponent_ast_ast": -6.605257365510653e-05,
+          "opponent_stl_pts": 1.1257346169929504e-05
+        },
+        "shift_in_z_by_bucket": {
+          "teammate_pts_pts": 0.01976393058953014,
+          "teammate_reb_reb": 0.0,
+          "teammate_ast_ast": -0.022487849492068154,
+          "passer_ast_teammate_pts": -0.010069954909110062,
+          "teammate_pts_reb": 0.044489271360705206,
+          "teammate_fg3m_fg3m": -0.012087113514703696,
+          "opponent_pts_pts": 0.07459925286461239,
+          "opponent_reb_reb": 0.0,
+          "opponent_pts_reb": -0.012064746467223376,
+          "opponent_fg3m_reb": -0.009868198724797246,
+          "opponent_ast_ast": -0.04435969455750383,
+          "opponent_stl_pts": 0.011336509218561644
+        },
+        "largest_absolute_shift": 0.00010950464974736687,
+        "largest_shift_bucket": "opponent_pts_pts",
+        "largest_matched_shift_z": 0.07459925286461239,
+        "conservative_bound_z": 0.11027469996902144
+      },
+      "none": {
+        "label": "no standardization at all",
+        "absolute_shift_by_bucket": {
+          "teammate_pts_pts": 4.229665654118886e-05,
+          "teammate_reb_reb": 0.0,
+          "teammate_ast_ast": -3.8528561241238726e-05,
+          "passer_ast_teammate_pts": -1.844781819049235e-05,
+          "teammate_pts_reb": 6.343939228805467e-05,
+          "teammate_fg3m_fg3m": -2.4690550813628604e-05,
+          "opponent_pts_pts": 0.0001178044556142191,
+          "opponent_reb_reb": 0.0,
+          "opponent_pts_reb": -1.4190574271273626e-05,
+          "opponent_fg3m_reb": -1.0045115305861406e-05,
+          "opponent_ast_ast": -6.788429001410197e-05,
+          "opponent_stl_pts": 1.2585611452000213e-05
+        },
+        "shift_in_z_by_bucket": {
+          "teammate_pts_pts": 0.025020667471934054,
+          "teammate_reb_reb": 0.0,
+          "teammate_ast_ast": -0.02358314643467988,
+          "passer_ast_teammate_pts": -0.012401340001571896,
+          "teammate_pts_reb": 0.04434674806602151,
+          "teammate_fg3m_fg3m": -0.018390625076555558,
+          "opponent_pts_pts": 0.08025343575106457,
+          "opponent_reb_reb": 0.0,
+          "opponent_pts_reb": -0.012261857754267254,
+          "opponent_fg3m_reb": -0.009798280316745714,
+          "opponent_ast_ast": -0.04558984160105872,
+          "opponent_stl_pts": 0.012674115026146425
+        },
+        "largest_absolute_shift": 0.0001178044556142191,
+        "largest_shift_bucket": "opponent_pts_pts",
+        "largest_matched_shift_z": 0.08025343575106457,
+        "conservative_bound_z": 0.11863287109581654
+      }
+    }
+  },
+  "section_4_jitter_robustness": {
+    "seeds": [
+      73,
+      1000,
+      1001,
+      1002,
+      1003,
+      1004,
+      1005,
+      1006
+    ],
+    "largest_absolute_shift_over_all_seeds_and_buckets": 5.457952748036399e-05,
+    "largest_matched_shift_z_over_all_seeds": 0.03669047853897274,
+    "largest_conservative_bound_z_over_all_seeds": 0.054963337458579696,
+    "by_seed": {
+      "73": {
+        "absolute_shift_by_bucket": {
+          "teammate_pts_pts": 2.047324285500132e-05,
+          "teammate_reb_reb": 0.0,
+          "teammate_ast_ast": 1.2450116536749656e-06,
+          "passer_ast_teammate_pts": -4.013689708574908e-05,
+          "teammate_pts_reb": 5.666615691094987e-06,
+          "teammate_fg3m_fg3m": -1.3176629288362465e-05,
+          "opponent_pts_pts": 6.881017820623697e-06,
+          "opponent_reb_reb": 0.0,
+          "opponent_pts_reb": -4.8326901362942196e-06,
+          "opponent_fg3m_reb": -1.028529786533186e-05,
+          "opponent_ast_ast": -2.5052932731389754e-05,
+          "opponent_stl_pts": 1.0513133668261761e-05
+        },
+        "shift_in_z_by_bucket": {
+          "teammate_pts_pts": 0.012110985676806395,
+          "teammate_reb_reb": 0.0,
+          "teammate_ast_ast": 0.000762065626008195,
+          "passer_ast_teammate_pts": -0.026981581357138806,
+          "teammate_pts_reb": 0.003961197757048369,
+          "teammate_fg3m_fg3m": -0.009814542042588886,
+          "opponent_pts_pts": 0.004687643762624376,
+          "opponent_reb_reb": 0.0,
+          "opponent_pts_reb": -0.004175853484777376,
+          "opponent_fg3m_reb": -0.010032560956960142,
+          "opponent_ast_ast": -0.01682508920147462,
+          "opponent_stl_pts": 0.010587063322666446
+        },
+        "largest_absolute_shift": 4.013689708574908e-05,
+        "largest_shift_bucket": "passer_ast_teammate_pts",
+        "largest_matched_shift_z": 0.026981581357138806,
+        "conservative_bound_z": 0.04041914470325859
+      },
+      "1000": {
+        "absolute_shift_by_bucket": {
+          "teammate_pts_pts": 1.0045699586241994e-05,
+          "teammate_reb_reb": 0.0,
+          "teammate_ast_ast": 7.28952348824554e-06,
+          "passer_ast_teammate_pts": -4.754378613700677e-05,
+          "teammate_pts_reb": 2.638442679274433e-06,
+          "teammate_fg3m_fg3m": -1.0088544330727955e-05,
+          "opponent_pts_pts": 6.856635206609063e-06,
+          "opponent_reb_reb": 0.0,
+          "opponent_pts_reb": -4.507853747183141e-06,
+          "opponent_fg3m_reb": -6.085277005848672e-06,
+          "opponent_ast_ast": -3.3607260562208696e-05,
+          "opponent_stl_pts": 1.4401241076817837e-05
+        },
+        "shift_in_z_by_bucket": {
+          "teammate_pts_pts": 0.00594255266076503,
+          "teammate_reb_reb": 0.0,
+          "teammate_ast_ast": 0.004461882155057758,
+          "passer_ast_teammate_pts": -0.031960779901382234,
+          "teammate_pts_reb": 0.0018443801014539954,
+          "teammate_fg3m_fg3m": -0.007514398433437021,
+          "opponent_pts_pts": 0.004671033282680608,
+          "opponent_reb_reb": 0.0,
+          "opponent_pts_reb": -0.003895167339132591,
+          "opponent_fg3m_reb": -0.0059357456925915545,
+          "opponent_ast_ast": -0.0225700185618546,
+          "opponent_stl_pts": 0.014502512382729402
+        },
+        "largest_absolute_shift": 4.754378613700677e-05,
+        "largest_shift_bucket": "passer_ast_teammate_pts",
+        "largest_matched_shift_z": 0.031960779901382234,
+        "conservative_bound_z": 0.047878119913130096
+      },
+      "1001": {
+        "absolute_shift_by_bucket": {
+          "teammate_pts_pts": 1.3851038782806014e-05,
+          "teammate_reb_reb": 0.0,
+          "teammate_ast_ast": 3.4225634882303554e-06,
+          "passer_ast_teammate_pts": -4.650368191871229e-05,
+          "teammate_pts_reb": 1.8247696726859247e-06,
+          "teammate_fg3m_fg3m": -1.6328463167961446e-05,
+          "opponent_pts_pts": 9.861666528668961e-06,
+          "opponent_reb_reb": 0.0,
+          "opponent_pts_reb": -4.665096366897152e-06,
+          "opponent_fg3m_reb": -6.4077561605264954e-06,
+          "opponent_ast_ast": -3.177094584720652e-05,
+          "opponent_stl_pts": 3.432674859804802e-06
+        },
+        "shift_in_z_by_bucket": {
+          "teammate_pts_pts": 0.008193608286460327,
+          "teammate_reb_reb": 0.0,
+          "teammate_ast_ast": 0.0020949345972081823,
+          "passer_ast_teammate_pts": -0.031261581442521294,
+          "teammate_pts_reb": 0.001275589157375276,
+          "teammate_fg3m_fg3m": -0.012162168696235494,
+          "opponent_pts_pts": 0.006718189197772855,
+          "opponent_reb_reb": 0.0,
+          "opponent_pts_reb": -0.004031038277051194,
+          "opponent_fg3m_reb": -0.006250300683513041,
+          "opponent_ast_ast": -0.02133678334691383,
+          "opponent_stl_pts": 0.0034568138533795866
+        },
+        "largest_absolute_shift": 4.650368191871229e-05,
+        "largest_shift_bucket": "passer_ast_teammate_pts",
+        "largest_matched_shift_z": 0.031261581442521294,
+        "conservative_bound_z": 0.04683070155351204
+      },
+      "1002": {
+        "absolute_shift_by_bucket": {
+          "teammate_pts_pts": 1.8314997917327075e-05,
+          "teammate_reb_reb": 0.0,
+          "teammate_ast_ast": -1.7429025402256049e-06,
+          "passer_ast_teammate_pts": -4.772770047307279e-05,
+          "teammate_pts_reb": 5.388202123660091e-06,
+          "teammate_fg3m_fg3m": -1.2940688880761572e-05,
+          "opponent_pts_pts": 8.7328332765476e-06,
+          "opponent_reb_reb": 0.0,
+          "opponent_pts_reb": -1.872857956368261e-06,
+          "opponent_fg3m_reb": -8.786914903244954e-06,
+          "opponent_ast_ast": -3.440539177640943e-05,
+          "opponent_stl_pts": 7.786722726726633e-06
+        },
+        "shift_in_z_by_bucket": {
+          "teammate_pts_pts": 0.01083427178676296,
+          "teammate_reb_reb": 0.0,
+          "teammate_ast_ast": -0.0010668222353323068,
+          "passer_ast_teammate_pts": -0.03208441426232219,
+          "teammate_pts_reb": 0.003766575206486477,
+          "teammate_fg3m_fg3m": -0.009638803088470349,
+          "opponent_pts_pts": 0.00594917968620178,
+          "opponent_reb_reb": 0.0,
+          "opponent_pts_reb": -0.0016183078581550713,
+          "opponent_fg3m_reb": -0.008570997218035567,
+          "opponent_ast_ast": -0.023106028817315962,
+          "opponent_stl_pts": 0.007841479922658604
+        },
+        "largest_absolute_shift": 4.772770047307279e-05,
+        "largest_shift_bucket": "passer_ast_teammate_pts",
+        "largest_matched_shift_z": 0.03208441426232219,
+        "conservative_bound_z": 0.0480633275575221
+      },
+      "1003": {
+        "absolute_shift_by_bucket": {
+          "teammate_pts_pts": 2.0742539630335885e-05,
+          "teammate_reb_reb": 0.0,
+          "teammate_ast_ast": 3.6872296258214435e-06,
+          "passer_ast_teammate_pts": -5.457952748036399e-05,
+          "teammate_pts_reb": 4.594158193369988e-06,
+          "teammate_fg3m_fg3m": -2.5365318379390192e-05,
+          "opponent_pts_pts": 9.2246433426868e-06,
+          "opponent_reb_reb": 0.0,
+          "opponent_pts_reb": -3.6226667403608387e-06,
+          "opponent_fg3m_reb": -8.371429269695384e-06,
+          "opponent_ast_ast": -2.6907185007977313e-05,
+          "opponent_stl_pts": 1.2834786043938685e-05
+        },
+        "shift_in_z_by_bucket": {
+          "teammate_pts_pts": 0.012270288695482322,
+          "teammate_reb_reb": 0.0,
+          "teammate_ast_ast": 0.0022569354630082544,
+          "passer_ast_teammate_pts": -0.03669047853897274,
+          "teammate_pts_reb": 0.0032115057951964316,
+          "teammate_fg3m_fg3m": -0.01889322209876908,
+          "opponent_pts_pts": 0.0062842217466980484,
+          "opponent_reb_reb": 0.0,
+          "opponent_pts_reb": -0.0031302908122148045,
+          "opponent_fg3m_reb": -0.008165721162844454,
+          "opponent_ast_ast": -0.018070370953120963,
+          "opponent_stl_pts": 0.012925041844590306
+        },
+        "largest_absolute_shift": 5.457952748036399e-05,
+        "largest_shift_bucket": "passer_ast_teammate_pts",
+        "largest_matched_shift_z": 0.03669047853897274,
+        "conservative_bound_z": 0.054963337458579696
+      },
+      "1004": {
+        "absolute_shift_by_bucket": {
+          "teammate_pts_pts": 2.0461514786624183e-05,
+          "teammate_reb_reb": 0.0,
+          "teammate_ast_ast": 7.776965580612132e-06,
+          "passer_ast_teammate_pts": -5.274565662571201e-05,
+          "teammate_pts_reb": 1.9261258978053863e-06,
+          "teammate_fg3m_fg3m": -1.8600167015554725e-05,
+          "opponent_pts_pts": 1.272047614729599e-05,
+          "opponent_reb_reb": 0.0,
+          "opponent_pts_reb": -2.2704608565096013e-06,
+          "opponent_fg3m_reb": -6.148895602578301e-06,
+          "opponent_ast_ast": -3.6305918837168175e-05,
+          "opponent_stl_pts": 4.901563862636351e-06
+        },
+        "shift_in_z_by_bucket": {
+          "teammate_pts_pts": 0.012104047915693606,
+          "teammate_reb_reb": 0.0,
+          "teammate_ast_ast": 0.004760243107877456,
+          "passer_ast_teammate_pts": -0.03545767931292478,
+          "teammate_pts_reb": 0.0013464413332581475,
+          "teammate_fg3m_fg3m": -0.013854235190069895,
+          "opponent_pts_pts": 0.008665732631990103,
+          "opponent_reb_reb": 0.0,
+          "opponent_pts_reb": -0.0019618704308189943,
+          "opponent_fg3m_reb": -0.0059978010125291146,
+          "opponent_ast_ast": -0.024382387863577146,
+          "opponent_stl_pts": 0.004936032265097662
+        },
+        "largest_absolute_shift": 5.274565662571201e-05,
+        "largest_shift_bucket": "passer_ast_teammate_pts",
+        "largest_matched_shift_z": 0.03545767931292478,
+        "conservative_bound_z": 0.05311657059758124
+      },
+      "1005": {
+        "absolute_shift_by_bucket": {
+          "teammate_pts_pts": 1.6416738050486178e-05,
+          "teammate_reb_reb": 0.0,
+          "teammate_ast_ast": 1.459553466170039e-05,
+          "passer_ast_teammate_pts": -4.320496246185135e-05,
+          "teammate_pts_reb": 2.6174116765469158e-06,
+          "teammate_fg3m_fg3m": -1.806150221261133e-05,
+          "opponent_pts_pts": 5.774283645822165e-06,
+          "opponent_reb_reb": 0.0,
+          "opponent_pts_reb": -2.4303283635241854e-06,
+          "opponent_fg3m_reb": -5.614795829887373e-06,
+          "opponent_ast_ast": -3.237655021644248e-05,
+          "opponent_stl_pts": 7.77067448641533e-06
+        },
+        "shift_in_z_by_bucket": {
+          "teammate_pts_pts": 0.009711352558920633,
+          "teammate_reb_reb": 0.0,
+          "teammate_ast_ast": 0.008933856342678721,
+          "passer_ast_teammate_pts": -0.029044054083355506,
+          "teammate_pts_reb": 0.001829678564350705,
+          "teammate_fg3m_fg3m": -0.013453013584782719,
+          "opponent_pts_pts": 0.003933689088093189,
+          "opponent_reb_reb": 0.0,
+          "opponent_pts_reb": -0.002100009493627072,
+          "opponent_fg3m_reb": -0.005476825480582534,
+          "opponent_ast_ast": -0.02174349611154083,
+          "opponent_stl_pts": 0.007825318829139356
+        },
+        "largest_absolute_shift": 4.320496246185135e-05,
+        "largest_shift_bucket": "passer_ast_teammate_pts",
+        "largest_matched_shift_z": 0.029044054083355506,
+        "conservative_bound_z": 0.043508785094014284
+      },
+      "1006": {
+        "absolute_shift_by_bucket": {
+          "teammate_pts_pts": 2.0187051432763066e-05,
+          "teammate_reb_reb": 0.0,
+          "teammate_ast_ast": 1.3091458523058729e-05,
+          "passer_ast_teammate_pts": -4.166854268195658e-05,
+          "teammate_pts_reb": 3.5010826639272907e-06,
+          "teammate_fg3m_fg3m": -3.56626853127511e-06,
+          "opponent_pts_pts": 6.78620816130758e-06,
+          "opponent_reb_reb": 0.0,
+          "opponent_pts_reb": -4.019563767247367e-06,
+          "opponent_fg3m_reb": -8.696312773276774e-06,
+          "opponent_ast_ast": -2.0040335058325517e-05,
+          "opponent_stl_pts": 1.2717511598266552e-05
+        },
+        "shift_in_z_by_bucket": {
+          "teammate_pts_pts": 0.011941688597682184,
+          "teammate_reb_reb": 0.0,
+          "teammate_ast_ast": 0.008013218595413759,
+          "passer_ast_teammate_pts": -0.02801121302438219,
+          "teammate_pts_reb": 0.002447400979985964,
+          "teammate_fg3m_fg3m": -0.002656316093393798,
+          "opponent_pts_pts": 0.00462305536600699,
+          "opponent_reb_reb": 0.0,
+          "opponent_pts_reb": -0.0034732434506169006,
+          "opponent_fg3m_reb": -0.008482621421472589,
+          "opponent_ast_ast": -0.013458720725390363,
+          "opponent_stl_pts": 0.012806942710531947
+        },
+        "largest_absolute_shift": 4.166854268195658e-05,
+        "largest_shift_bucket": "passer_ast_teammate_pts",
+        "largest_matched_shift_z": 0.02801121302438219,
+        "conservative_bound_z": 0.041961561020468136
+      }
+    }
+  },
   "section_5_global_latent_structure": {
     "target_vector_relative_l2_movement": 0.0010624693547338392,
     "pair_moment_matrix_relative_frobenius_movement": {
@@ -2219,6 +2702,38 @@
     "largest_of_the_four_readings": 0.009508657357762074,
     "no_model_was_refitted": true
   },
+  "section_5_transmission_consequence": {
+    "where_the_conventions_meet": "the latent dependence parameters are calibrated on OOF-convention PITs and the held-out simulation inverts validator-convention marginals, so the latent space the parameters mean is not the latent space the simulator assumes",
+    "fixing_the_oof_convention_aligns_them": true,
+    "simulator_would_not_change": "fit_season already uses the live per-stat filter, so aligning the residual builder changes only the calibration side",
+    "size_of_the_misalignment_in_latent_units": {
+      "pts": {
+        "rms_z": 0.00607066136931173,
+        "max_abs_z": 0.12634640893136084
+      },
+      "reb": {
+        "rms_z": 0.0,
+        "max_abs_z": 0.0
+      },
+      "ast": {
+        "rms_z": 0.006491716378472179,
+        "max_abs_z": 0.14115951098666213
+      },
+      "stl": {
+        "rms_z": 0.003700769558408226,
+        "max_abs_z": 0.10195866965061517
+      },
+      "blk": {
+        "rms_z": 0.0,
+        "max_abs_z": 0.0
+      },
+      "fg3m": {
+        "rms_z": 0.004372621064091179,
+        "max_abs_z": 0.11195901084007165
+      }
+    },
+    "count_space_magnitude": "not estimated here: the brief defers the Monte Carlo rerun, and the count-space consequence cannot be read off the latent shift without re-inverting the margins"
+  },
   "decision": {
     "rule": "non-material if every key bucket moves under 0.25 z and the global latent target structure moves under 3%; an upstream consistency bug otherwise",
     "thresholds": {
@@ -2230,6 +2745,13 @@
       "largest_key_bucket": "passer_ast_teammate_pts",
       "largest_shift_z_over_all_twelve": 0.026981581357138806,
       "largest_bucket_over_all_twelve": "passer_ast_teammate_pts",
+      "largest_matched_shift_z_over_every_jitter_seed": 0.03669047853897274,
+      "largest_matched_shift_z_over_every_standardization": 0.08025343575106457,
+      "largest_matched_shift_z_anywhere": 0.08025343575106457,
+      "conservative_bound_z_over_every_jitter_seed": 0.054963337458579696,
+      "conservative_bound_z_over_every_standardization": 0.11863287109581654,
+      "strictest_bucket_shift_z": 0.11863287109581654,
+      "strictest_reading_note": "the strictest figure pairs the largest shift found anywhere with the smallest bucket standard error, a pairing no bucket realises; the largest shift any bucket actually realises against its own standard error is the matched figure",
       "largest_global_latent_movement": 0.009508657357762074,
       "buckets_at_or_over_the_z_threshold": {}
     },
