@@ -626,6 +626,115 @@ def role_pair_cell_moments(
     return out
 
 
+def per_game_role_cells(
+    frame: pd.DataFrame,
+    stats: Sequence[str],
+    role_column: str = "role_bucket",
+    value_prefix: str = "zs_",
+) -> dict[tuple[str, str], dict[str, object]]:
+    """:func:`role_pair_cell_moments` with the per-game terms kept.
+
+    The accumulation is the same team-sum identity inside each ordered role
+    pair, summed in the same game order, so ``correlation`` agrees with
+    :func:`role_pair_cell_moments` entry for entry. What this adds is the
+    per-game blocks and pair counts, which is what a game-clustered standard
+    error and an effective sample size need; the pooled form discards them.
+    """
+    stats = tuple(stats)
+    columns = [f"{value_prefix}{stat}" for stat in stats]
+    usable = frame.dropna(subset=["game_id", "team_id", role_column, *columns])
+    roles = sorted(str(value) for value in usable[role_column].unique())
+    width = len(stats)
+
+    blocks: dict[tuple[str, str], list[np.ndarray]] = {
+        (a, b): [] for a in roles for b in roles
+    }
+    counts: dict[tuple[str, str], list[float]] = {key: [] for key in blocks}
+
+    for _, game in usable.groupby("game_id", sort=True):
+        game_block: dict[tuple[str, str], np.ndarray] = {}
+        game_count: dict[tuple[str, str], float] = {}
+        for _, team in game.groupby("team_id", sort=True):
+            totals: dict[str, np.ndarray] = {}
+            own: dict[str, np.ndarray] = {}
+            size: dict[str, int] = {}
+            for role, members in team.groupby(role_column, sort=True):
+                values = members[columns].to_numpy(dtype=float)
+                label = str(role)
+                totals[label] = values.sum(axis=0)
+                own[label] = values.T @ values
+                size[label] = values.shape[0]
+            for first in totals:
+                for second in totals:
+                    block = np.outer(totals[first], totals[second])
+                    count = size[first] * size[second]
+                    if first == second:
+                        block = block - own[first]
+                        count -= size[first]
+                    if count <= 0:
+                        continue
+                    key = (first, second)
+                    if key in game_block:
+                        game_block[key] = game_block[key] + block
+                        game_count[key] = game_count[key] + count
+                    else:
+                        game_block[key] = block
+                        game_count[key] = float(count)
+        for key, block in game_block.items():
+            blocks[key].append(block)
+            counts[key].append(game_count[key])
+
+    out: dict[tuple[str, str], dict[str, object]] = {}
+    for key, terms in blocks.items():
+        if not terms:
+            continue
+        stacked = np.stack(terms)
+        count = np.asarray(counts[key], dtype=float)
+        total = float(count.sum())
+        if total <= 0:
+            continue
+        matrix = stacked.sum(axis=0) / total
+        out[key] = {
+            "correlation": 0.5 * (matrix + matrix.T),
+            "per_game_blocks": stacked,
+            "per_game_counts": count,
+            "pairs": total,
+            "games": int(len(count)),
+            # Kish effective number of clusters for a pair-count-weighted mean
+            # over games. The cell's estimate is one such mean, so this is the
+            # number of equally sized games carrying the same weight
+            # concentration -- not a claim about independence across stats.
+            "effective_games": float(total**2 / float(np.sum(np.square(count)))),
+            "supported": bool(
+                len(count) >= MIN_CELL_GAMES and total >= MIN_CELL_PAIRS
+            ),
+        }
+    return out
+
+
+def cell_standard_errors(
+    cell: Mapping[str, object],
+    draws: int = 400,
+    seed: int = 73,
+) -> np.ndarray:
+    """Game-clustered bootstrap standard error of every entry of one cell.
+
+    Games are the resampling unit because a roster's residuals are shared
+    within a game; resampling player-rows would treat the same game's pairs as
+    independent and understate the error by roughly the roster size.
+    """
+    blocks = np.asarray(cell["per_game_blocks"], dtype=float)
+    counts = np.asarray(cell["per_game_counts"], dtype=float)
+    rng = np.random.default_rng(seed)
+    games = len(counts)
+    drawn = np.empty((draws, blocks.shape[1], blocks.shape[2]))
+    for draw in range(draws):
+        picks = rng.integers(0, games, size=games)
+        matrix = blocks[picks].sum(axis=0) / counts[picks].sum()
+        drawn[draw] = 0.5 * (matrix + matrix.T)
+    return drawn.std(axis=0, ddof=1)
+
+
 def role_scale_components(
     frame: pd.DataFrame,
     stats: Sequence[str],
