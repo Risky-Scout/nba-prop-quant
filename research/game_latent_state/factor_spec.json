@@ -1,0 +1,163 @@
+{
+  "competition_rank_note": "The competition Gram is Q = (A + B) - S by construction, so it is carried at whatever rank represents that difference exactly; truncating it would stop the model from reproducing the observed same-team block. Its eigenvalue spectrum reports the effective rank. The family is activated only when the bias-corrected bootstrap bound on min eig(S_hat) is negative.",
+  "dependence_model_version": "game-latent-state-shadow-v1",
+  "factor_families": [
+    "game_pace_volume",
+    "game_rebound_environment",
+    "team_contrast_own_minus_opponent",
+    "within_team_zero_sum_competition",
+    "player_within_block_incumbent",
+    "idiosyncratic_residual"
+  ],
+  "identification_note": "Only the antisymmetric part of the own-team/opponent-team loadings is separately identified; the symmetric part is absorbed into the game-level factors. See covariance.py.",
+  "k_game": 2,
+  "loadings": {
+    "competition_loadings": [
+      [
+        -0.14331114892075666,
+        0.03914243673244677,
+        0.010711044407682327,
+        -0.004874944984018574,
+        0.007796973568937205,
+        0.0003367095155136977
+      ],
+      [
+        0.02453381342791927,
+        -0.11597677250390519,
+        0.016423407648505795,
+        -0.009848490583640193,
+        0.0030369968100316365,
+        0.00029224474106685544
+      ],
+      [
+        0.15523540699401928,
+        0.03914513319846956,
+        0.012792826842969143,
+        0.005216405475326963,
+        0.002885769395300614,
+        0.0007533318572877354
+      ],
+      [
+        0.005301331916269096,
+        -0.036593183787359165,
+        -0.04053668000291611,
+        0.02086645774983406,
+        0.00547961052981203,
+        -0.00021454779059135588
+      ],
+      [
+        0.0007931585790100737,
+        0.0046260662639447244,
+        -0.07703149017271585,
+        -0.011908010042459258,
+        -0.0010802919619854316,
+        0.0004011112195233666
+      ],
+      [
+        -0.10212098332978634,
+        -0.025151665403175233,
+        0.005658189128827474,
+        0.01339547266965362,
+        -0.005549477989231761,
+        0.00073481650105317
+      ]
+    ],
+    "game_loadings": [
+      [
+        -0.12517898289464624,
+        -0.014273804824638924
+      ],
+      [
+        -0.01829840012275864,
+        0.11295184967323879
+      ],
+      [
+        -0.12554933192900572,
+        -0.006354687856168675
+      ],
+      [
+        -0.008106712799979243,
+        0.03576221973003927
+      ],
+      [
+        -0.01613869765487162,
+        0.0658261435085677
+      ],
+      [
+        -0.06816917501058645,
+        -0.012241503981305744
+      ]
+    ],
+    "k_game": 2,
+    "r_competition": 6,
+    "role_scale": {
+      "bench": 1.2265879211931596,
+      "rotation": 0.8405928052763975,
+      "starter": 0.9264541908679231
+    },
+    "stats": [
+      "pts",
+      "reb",
+      "ast",
+      "stl",
+      "blk",
+      "fg3m"
+    ],
+    "team_contrast_loadings": [
+      -0.06124013771737813,
+      -0.05123932217861258,
+      -0.10471196654651987,
+      -0.005000810515143476,
+      -0.011175217368738218,
+      -0.05402785484617145
+    ]
+  },
+  "role_column": "role_bucket",
+  "shrink_z": 1.96,
+  "spec_hash": "e575024c01c0a9812e5ac3fa3d6b2cadb73d1c909388b552d0165b5070dc07bf",
+  "standardization_moments": {
+    "ast": {
+      "mean": -0.0010324282522954516,
+      "sd": 1.0018251209835307
+    },
+    "blk": {
+      "mean": 0.011743471000717397,
+      "sd": 1.0051165427505493
+    },
+    "fg3m": {
+      "mean": -0.014602351764211935,
+      "sd": 0.9991247889890215
+    },
+    "pts": {
+      "mean": -0.0053793696036107674,
+      "sd": 0.9991308805566164
+    },
+    "reb": {
+      "mean": 0.0002808430326635653,
+      "sd": 1.0013353417506248
+    },
+    "stl": {
+      "mean": -0.001024071154199583,
+      "sd": 0.9989914748108051
+    }
+  },
+  "stats": [
+    "pts",
+    "reb",
+    "ast",
+    "stl",
+    "blk",
+    "fg3m"
+  ],
+  "training_seasons": [
+    2020,
+    2021,
+    2022,
+    2023
+  ],
+  "validation_seasons": [
+    2024,
+    2025
+  ],
+  "within_player_block_source": "incumbent nba_prop_quant.copula.GaussianCopula; pinned, not refitted"
+}

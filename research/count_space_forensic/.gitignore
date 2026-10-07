@@ -1,0 +1,5 @@
+# Cached ZINB marginal refits and scored held-out universes. Both are derived
+# intermediates of committed fits, reproducible from them, and far too large
+# to carry in the repository.
+cache/
+__pycache__/

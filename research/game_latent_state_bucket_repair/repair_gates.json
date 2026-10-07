@@ -1,0 +1,314 @@
+{
+  "all_passed": true,
+  "gates": [
+    {
+      "evidence": {
+        "buckets": {
+          "teammate_ast_ast": {
+            "abs_error_reduction_fraction": 0.47347936170839344,
+            "abs_z_improvement": 1.6986455596864096,
+            "improved": true,
+            "observed": 0.008971395319402322,
+            "repair_abs_error": 0.004230023681848582,
+            "repair_implied": 0.00474137163755374,
+            "repair_z": -1.8889354355177104,
+            "se": 0.002239369118875806,
+            "v1_abs_error": 0.008033918092125837,
+            "v1_implied": 0.0009374772272764849,
+            "v1_z": -3.58758099520412
+          },
+          "teammate_reb_reb": {
+            "abs_error_reduction_fraction": 0.47991628310700785,
+            "abs_z_improvement": 1.7942356306567027,
+            "improved": true,
+            "observed": 0.009417198927637567,
+            "repair_abs_error": 0.004226891268036272,
+            "repair_implied": 0.005190307659601295,
+            "repair_z": -1.9444073239867816,
+            "se": 0.0021738712953258796,
+            "v1_abs_error": 0.008127328602571805,
+            "v1_implied": 0.0012898703250657628,
+            "v1_z": -3.7386429546434843
+          }
+        },
+        "min_abs_error_reduction": 0.3,
+        "min_abs_z_improvement": 1.0
+      },
+      "gate": 1,
+      "name": "both target buckets improve materially on untouched 2024-2025",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "limit_overshoot_z": 1.96,
+        "note": "overshoot is the signed z-error in the positive direction; V1 undershot both targets, so any positive z is the direction this gate guards",
+        "overshoot_z": {
+          "teammate_ast_ast": 0.0,
+          "teammate_reb_reb": 0.0
+        }
+      },
+      "gate": 2,
+      "name": "neither target bucket materially overshoots in the opposite direction",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "limit_ratio": 1.05,
+        "ratio": 0.6382425037930887,
+        "repair_rmse": 0.002765903474390802,
+        "v1_rmse": 0.004333624692735095
+      },
+      "gate": 3,
+      "name": "global latent-space bucket RMSE does not worsen by more than 5%",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "limit_ratio": 1.05,
+        "ratio": 0.8722580891191403,
+        "repair_rmse": 0.00786120589118823,
+        "v1_rmse": 0.009012476913945227
+      },
+      "gate": 4,
+      "name": "count-space bucket RMSE does not worsen by more than 5%",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "buckets": {
+          "passer_ast_teammate_pts": {
+            "abs_z_degradation": -0.6241815212806767,
+            "observed": 0.04701135502623302,
+            "repair_implied": 0.04400013516926683,
+            "repair_z": -1.565850334025549,
+            "v1_implied": 0.042799798361597786,
+            "v1_z": -2.1900318553062257
+          },
+          "teammate_pts_reb": {
+            "abs_z_degradation": -1.5457690390842949,
+            "observed": 0.016270749051048704,
+            "repair_implied": 0.014415016294638873,
+            "repair_z": -1.02781371420014,
+            "v1_implied": 0.011624107591980425,
+            "v1_z": -2.573582753284435
+          }
+        },
+        "limit_abs_z_degradation": 1.0
+      },
+      "gate": 5,
+      "name": "protected neighbour buckets do not each worsen by more than 1.0 z",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "games_checked": 600,
+        "limit": 1e-09,
+        "repair_max_block_deviation": 2.220446049250313e-16,
+        "v1_max_block_deviation": 2.220446049250313e-16
+      },
+      "gate": 6,
+      "name": "same-player copula block preserved to 1e-9",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "failure_detail": [],
+        "games_tested": 600,
+        "repair_min_covariance_eigenvalue": 0.10253262301389846,
+        "repair_numerical_failures": 0,
+        "v1_min_covariance_eigenvalue": 0.09120195337954856,
+        "v1_numerical_failures": 0
+      },
+      "gate": 7,
+      "name": "every held-out covariance PSD within tolerance and no numerical failures",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "gate_a": {
+          "evidence": {
+            "bonferroni_z_critical": 4.973525209266083,
+            "family_wise_alpha": 0.01,
+            "limit_over_probability_error": 0.01,
+            "limit_three_sigma_exceedance_fraction": 0.00809938818978056,
+            "limit_variance_relative_error": 0.05,
+            "max_abs_mean_z": 3.819162849874026,
+            "max_abs_over_probability_error": 0.004094012909645783,
+            "max_abs_over_z": 3.7991380116693168,
+            "max_abs_variance_relative_error_well_conditioned": 0.013041891211510588,
+            "max_abs_variance_z": 3.473708778939228,
+            "three_sigma_exceedance_fraction": 0.002366863905325444,
+            "variance_relative_error_min_variance": 1.0,
+            "z_probe_count": 15210
+          },
+          "gate": "A",
+          "name": "marginal calibration preserved within Monte Carlo tolerance",
+          "passed": true
+        },
+        "v1_gate_a": {
+          "evidence": {
+            "bonferroni_z_critical": 4.973525209266083,
+            "family_wise_alpha": 0.01,
+            "limit_over_probability_error": 0.01,
+            "limit_three_sigma_exceedance_fraction": 0.00809938818978056,
+            "limit_variance_relative_error": 0.05,
+            "max_abs_mean_z": 3.819162849874026,
+            "max_abs_over_probability_error": 0.004124012909645813,
+            "max_abs_over_z": 3.826977235156293,
+            "max_abs_variance_relative_error_well_conditioned": 0.013031455768865892,
+            "max_abs_variance_z": 3.399444361653908,
+            "three_sigma_exceedance_fraction": 0.0024326101249178174,
+            "variance_relative_error_min_variance": 1.0,
+            "z_probe_count": 15210
+          },
+          "gate": "A",
+          "name": "marginal calibration preserved within Monte Carlo tolerance",
+          "passed": true
+        }
+      },
+      "gate": 8,
+      "name": "marginal preservation Gate A still passes unchanged",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "brier_repair": 0.16544182069166666,
+        "brier_v1": 0.1654372268013889,
+        "indistinguishable_from_zero": true,
+        "paired_delta": 4.593890277765356e-06,
+        "paired_delta_ci95": [
+          -9.647012604140082e-06,
+          1.8498904687488245e-05
+        ]
+      },
+      "gate": 9,
+      "name": "2-leg Brier does not materially worsen against accepted V1",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "by_legs": {
+          "3": {
+            "brier_repair": 0.09740873114166668,
+            "brier_v1": 0.09740255686319445,
+            "paired_delta": 6.174278472229067e-06,
+            "paired_delta_ci95": [
+              -3.807833177079875e-06,
+              1.599814902775096e-05
+            ],
+            "repair_minus_independence": {
+              "ci95": [
+                -1.9383376197915078e-05,
+                5.181215083333268e-05
+              ],
+              "delta": 1.6401258333340052e-05
+            },
+            "v1_minus_independence": {
+              "ci95": [
+                -2.479813625001423e-05,
+                4.478433623262661e-05
+              ],
+              "delta": 1.0226979861110985e-05
+            },
+            "within_tolerance": true
+          },
+          "4": {
+            "brier_repair": 0.05545531043958333,
+            "brier_v1": 0.05546628825104167,
+            "paired_delta": -1.0977811458340314e-05,
+            "paired_delta_ci95": [
+              -1.8896327291673815e-05,
+              -3.2832715885449863e-06
+            ],
+            "repair_minus_independence": {
+              "ci95": [
+                -1.7163034895784765e-06,
+                4.1473085729164254e-05
+              ],
+              "delta": 1.9749098958334044e-05
+            },
+            "v1_minus_independence": {
+              "ci95": [
+                9.042222083331838e-06,
+                5.2803584036459876e-05
+              ],
+              "delta": 3.072691041667436e-05
+            },
+            "within_tolerance": true
+          }
+        },
+        "four_leg_regression_not_worsened": true,
+        "limit_degradation": 0.0005
+      },
+      "gate": 10,
+      "name": "3-leg and 4-leg Brier within 0.0005 of V1, and V1's 4-leg regression not deepened",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "frozen_candidate_parameter_counts": {
+          "pairwise": 0,
+          "player_indexed": 0,
+          "role_indexed": 3,
+          "scalar_hyperparameters": 2,
+          "stat_indexed_competition": 21,
+          "stat_indexed_contrast": 36,
+          "stat_indexed_game": 36
+        },
+        "repair_pairwise_parameter_count": 0,
+        "v1_pairwise_parameter_count": 0
+      },
+      "gate": 11,
+      "name": "pairwise_parameter_count remains 0",
+      "passed": true
+    },
+    {
+      "evidence": {
+        "allowed_repair_prefixes": [
+          "research/",
+          "src/nba_prop_quant/research/",
+          "tests/test_game_latent_state_shadow"
+        ],
+        "changed_paths_since_parent": [
+          "research/game_latent_state/04_validate_shadow_v1.py",
+          "research/game_latent_state_bucket_repair/.gitignore",
+          "research/game_latent_state_bucket_repair/01_diagnose_buckets.py",
+          "research/game_latent_state_bucket_repair/02_inner_validation.py",
+          "research/game_latent_state_bucket_repair/03_fit_repair_candidate.py",
+          "research/game_latent_state_bucket_repair/04_compare_joint_calibration.py",
+          "research/game_latent_state_bucket_repair/05_evaluate_repair_gates.py",
+          "research/game_latent_state_bucket_repair/README.md",
+          "research/game_latent_state_bucket_repair/SHA256SUMS.factors.txt",
+          "research/game_latent_state_bucket_repair/SHA256SUMS.validation.txt",
+          "research/game_latent_state_bucket_repair/bucket_diagnostics.json",
+          "research/game_latent_state_bucket_repair/bucket_repair_candidate.json",
+          "research/game_latent_state_bucket_repair/covariance_diagnostics.json",
+          "research/game_latent_state_bucket_repair/factor_loadings.parquet",
+          "research/game_latent_state_bucket_repair/factor_spec.json",
+          "research/game_latent_state_bucket_repair/inner_validation.json",
+          "research/game_latent_state_bucket_repair/joint_event_grades.parquet",
+          "research/game_latent_state_bucket_repair/manifest.json",
+          "research/game_latent_state_bucket_repair/manifest.validation.json",
+          "research/game_latent_state_bucket_repair/paired_joint_calibration.json",
+          "research/game_latent_state_bucket_repair/repair_gates.json",
+          "research/game_latent_state_bucket_repair/v1_control_baseline.json",
+          "research/game_latent_state_bucket_repair/validation_report.json",
+          "src/nba_prop_quant/research/game_latent_state/artifacts.py",
+          "src/nba_prop_quant/research/game_latent_state/covariance.py",
+          "src/nba_prop_quant/research/game_latent_state/repair.py",
+          "tests/test_game_latent_state_shadow_bucket_repair.py"
+        ],
+        "driver_surface_modified_paths": [],
+        "offenders": [],
+        "parent_shadow_v1_sha": "1c5b8c93569ee25afd4eb4222158300702bd9471"
+      },
+      "gate": 12,
+      "name": "production remains untouched",
+      "passed": true
+    }
+  ],
+  "parent_shadow_v1_sha": "1c5b8c93569ee25afd4eb4222158300702bd9471",
+  "repair_factor_spec_hash": "c9b46e3a7497cfee52832f29397397b843aafb8e5f770a39157ce508f8157bc0",
+  "scope": "repair acceptance gates, untouched 2024-2025 holdout",
+  "verdict": "BUCKET REPAIR ACCEPTED FOR SHADOW V2 DESIGN."
+}

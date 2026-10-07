@@ -1,0 +1,2015 @@
+{
+  "2024_2025_NOT_USED_FOR_ROLE_SELECTION": "YES",
+  "ROLE_SCALE_SELECTION_FROZEN": "YES",
+  "arms": {
+    "R0_ratio": "accepted bucket-repair multiplicative role scale (ratio)",
+    "R1_log_shrunk": "log-shrunk multiplicative role scale"
+  },
+  "bootstrap": 400,
+  "bridge_bootstrap": 400,
+  "cell_bootstrap": 400,
+  "code_sha": "fc54c67b1eb8a5805efd0d448a2c6555af9134f8",
+  "decision": {
+    "2024_2025_NOT_USED_FOR_ROLE_SELECTION": "YES",
+    "ROLE_SCALE_SELECTION_FROZEN": "YES",
+    "criterion_A_rmse_improves_by_more_than_one_paired_se": true,
+    "criterion_B_no_cell_worsens_by_more_than_half_a_z": true,
+    "criterion_C_identification_and_contracts_hold": true,
+    "identification_checks": [
+      {
+        "arm": "R0_ratio",
+        "pooled_neutrality_holds": true,
+        "psd_holds": true,
+        "same_player_holds": true,
+        "target_season": 2021,
+        "weighted_mean_holds": true
+      },
+      {
+        "arm": "R0_ratio",
+        "pooled_neutrality_holds": true,
+        "psd_holds": true,
+        "same_player_holds": true,
+        "target_season": 2022,
+        "weighted_mean_holds": true
+      },
+      {
+        "arm": "R0_ratio",
+        "pooled_neutrality_holds": true,
+        "psd_holds": true,
+        "same_player_holds": true,
+        "target_season": 2023,
+        "weighted_mean_holds": true
+      },
+      {
+        "arm": "R1_log_shrunk",
+        "pooled_neutrality_holds": true,
+        "psd_holds": true,
+        "same_player_holds": true,
+        "target_season": 2021,
+        "weighted_mean_holds": true
+      },
+      {
+        "arm": "R1_log_shrunk",
+        "pooled_neutrality_holds": true,
+        "psd_holds": true,
+        "same_player_holds": true,
+        "target_season": 2022,
+        "weighted_mean_holds": true
+      },
+      {
+        "arm": "R1_log_shrunk",
+        "pooled_neutrality_holds": true,
+        "psd_holds": true,
+        "same_player_holds": true,
+        "target_season": 2023,
+        "weighted_mean_holds": true
+      }
+    ],
+    "reason": "all three criteria hold, so the log-shrunk form is selected",
+    "rule": {
+      "criterion_A": "the support-weighted role-cell RMSE improves by more than one standard error of the paired per-fold difference, i.e. mean(R1 - R0) < -1.0 * se(R1 - R0) with a finite positive se",
+      "criterion_B": "no supported role cell worsens by more than 0.5 in rms z, where a cell's deterioration is the mean over folds of (rms z of R1 - rms z of R0)",
+      "criterion_C": "pooled neutrality, same-player preservation and PSD all hold for both arms in every fold",
+      "holdout_role": "none; 2024 and 2025 are excluded from every frame this file touches",
+      "improvement_standard_errors": 1.0,
+      "max_cell_deterioration_rms_z": 0.5,
+      "pairing_unit": "forward fold",
+      "primary_objective": "support-weighted RMSE over supported cells: sqrt(sum_c pairs_c * rmse_c^2 / sum_c pairs_c)",
+      "primary_universe": "frozen_architecture",
+      "secondary_objective_reported_not_decisive": "equal-weighted RMSE over supported cells: sqrt(mean_c rmse_c^2), the convention the stored inner selection used",
+      "statement": "select R1 only if all three criteria hold on the pre-2024 forward folds of the primary universe; otherwise select R0",
+      "tie_default": "R0, the accepted repair's treatment"
+    },
+    "selected": "R1_log_shrunk"
+  },
+  "forward_fold_target_seasons": [
+    2021,
+    2022,
+    2023
+  ],
+  "frozen_upstream_choices": {
+    "cross_team_nu": null,
+    "cross_team_prior": "gaussian",
+    "dependence_temperature": 1.0,
+    "role_scale_mode": "log_shrunk",
+    "temporal_half_life": 4.0,
+    "temporal_nu": 3.0,
+    "temporal_treatment": "A2_robust_student_t",
+    "transmission_weight_cap": 0.15,
+    "uncertainty_model": "U0_raw"
+  },
+  "holdout_seasons_excluded": [
+    2024,
+    2025
+  ],
+  "holdout_used_for_role_selection": false,
+  "min_fold_training_seasons": 1,
+  "promotion_eligibility": "SHADOW_RESEARCH_ONLY__NOT_ELIGIBLE_FOR_PROMOTION",
+  "psd_games_per_fold": 120,
+  "role_column": "role_bucket",
+  "role_pair_cells": [
+    "starter+starter",
+    "starter+rotation",
+    "starter+bench",
+    "rotation+rotation",
+    "rotation+bench",
+    "bench+bench"
+  ],
+  "scope": "SHADOW / RESEARCH ONLY. NOT PROMOTABLE.",
+  "seasons_available_in_the_residual_frame": [
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "seasons_used": [
+    2020,
+    2021,
+    2022,
+    2023
+  ],
+  "seed": 73,
+  "stats": [
+    "pts",
+    "reb",
+    "ast",
+    "stl",
+    "blk",
+    "fg3m"
+  ],
+  "support_threshold": {
+    "min_cell_games": 200,
+    "min_cell_pairs": 2000
+  },
+  "third_candidate_offered": false,
+  "title": "final role-scale ablation: R0 ratio against R1 log-shrunk",
+  "tolerances": {
+    "pooled_block": 1e-10,
+    "same_player_block": 1e-09,
+    "weighted_mean_scale": 1e-12
+  },
+  "universes": {
+    "control_architecture": {
+      "arms": {
+        "R0_ratio": {
+          "equal_weighted_rmse_by_fold": {
+            "2021": 0.023151598951758445,
+            "2022": 0.024652550428732014,
+            "2023": 0.019574858124264783
+          },
+          "folds": [
+            {
+              "by_cell": {
+                "bench+bench": {
+                  "effective_games": 736.5489824476349,
+                  "games": 1271,
+                  "implied_scalar": 0.0031094058144445456,
+                  "max_abs_error": 0.10214274811309797,
+                  "observed_scalar": 0.05482302022809179,
+                  "pairs": 32704.0,
+                  "present": true,
+                  "rms_z": 4.137196265033952,
+                  "rmse": 0.04721034323534463,
+                  "supported": true
+                },
+                "rotation+bench": {
+                  "effective_games": 1067.96072310168,
+                  "games": 1323,
+                  "implied_scalar": 0.002262502974613762,
+                  "max_abs_error": 0.01959261563875095,
+                  "observed_scalar": 0.008070393546774036,
+                  "pairs": 28986.0,
+                  "present": true,
+                  "rms_z": 1.0502505876437658,
+                  "rmse": 0.0061327757524928675,
+                  "supported": true
+                },
+                "rotation+rotation": {
+                  "effective_games": 898.7443851676217,
+                  "games": 1314,
+                  "implied_scalar": 0.0016462694211082085,
+                  "max_abs_error": 0.021473145530767422,
+                  "observed_scalar": 0.0060771014136037195,
+                  "pairs": 29552.0,
+                  "present": true,
+                  "rms_z": 1.4139517916047932,
+                  "rmse": 0.009957314755823043,
+                  "supported": true
+                },
+                "starter+bench": {
+                  "effective_games": 1033.824629513753,
+                  "games": 1320,
+                  "implied_scalar": 0.0025208823325455643,
+                  "max_abs_error": 0.047819835685049376,
+                  "observed_scalar": -0.010441893488326243,
+                  "pairs": 32543.0,
+                  "present": true,
+                  "rms_z": 4.840209628451199,
+                  "rmse": 0.02295217094706649,
+                  "supported": true
+                },
+                "starter+rotation": {
+                  "effective_games": 1217.064439654042,
+                  "games": 1322,
+                  "implied_scalar": 0.0018342744937120644,
+                  "max_abs_error": 0.036415661719814064,
+                  "observed_scalar": -0.014215733709935466,
+                  "pairs": 30466.0,
+                  "present": true,
+                  "rms_z": 2.4118072041788343,
+                  "rmse": 0.011314737135078945,
+                  "supported": true
+                },
+                "starter+starter": {
+                  "effective_games": 1081.1566973594809,
+                  "games": 1319,
+                  "implied_scalar": 0.0020437498717662803,
+                  "max_abs_error": 0.038223317806321794,
+                  "observed_scalar": -0.0012967844087200188,
+                  "pairs": 27172.0,
+                  "present": true,
+                  "rms_z": 2.408404304918599,
+                  "rmse": 0.013984928049265474,
+                  "supported": true
+                }
+              },
+              "equal_weighted_rmse": 0.023151598951758445,
+              "identification": {
+                "min_covariance_eigenvalue": 0.10247051712721045,
+                "pairwise_parameter_count": 0,
+                "player_indexed": 0,
+                "player_share_weights": {
+                  "bench": 0.33352035908945177,
+                  "rotation": 0.34337928823340813,
+                  "starter": 0.3231003526771401
+                },
+                "pooled_cross_team_block_max_change": 0.0,
+                "pooled_neutrality_holds": true,
+                "pooled_same_team_block_max_change": 0.0,
+                "psd_failure_detail": [],
+                "psd_failures": 0,
+                "psd_holds": true,
+                "role_deviation_layer": false,
+                "role_scale": {
+                  "bench": 1.1829831249946758,
+                  "rotation": 0.8607763022712619,
+                  "starter": 0.9590775336063181
+                },
+                "role_scale_parameter_count": 3,
+                "same_player_games_checked": 120,
+                "same_player_holds": true,
+                "same_player_max_block_deviation": 6.938893903907228e-17,
+                "shared_shrink_engaged_games": 50,
+                "weighted_mean_holds": true,
+                "weighted_mean_scale": 1.0,
+                "weighted_mean_scale_minus_one": 0.0
+              },
+              "role_scale_fit": {
+                "mode": "ratio"
+              },
+              "support_weighted_rmse": 0.023858350543666303,
+              "supported_cells": 6,
+              "target_season": 2021,
+              "training_seasons": [
+                2020
+              ],
+              "upstream_layers": {}
+            },
+            {
+              "by_cell": {
+                "bench+bench": {
+                  "effective_games": 743.5854665565648,
+                  "games": 1283,
+                  "implied_scalar": 0.004282495607365011,
+                  "max_abs_error": 0.1258558191918965,
+                  "observed_scalar": 0.059348458744182285,
+                  "pairs": 32208.0,
+                  "present": true,
+                  "rms_z": 3.970609341441363,
+                  "rmse": 0.05253469281770935,
+                  "supported": true
+                },
+                "rotation+bench": {
+                  "effective_games": 1037.792703141877,
+                  "games": 1317,
+                  "implied_scalar": 0.0028406517051734765,
+                  "max_abs_error": 0.02260149285888825,
+                  "observed_scalar": 0.008081176788224648,
+                  "pairs": 27603.0,
+                  "present": true,
+                  "rms_z": 1.1602979489193577,
+                  "rmse": 0.006698167013008357,
+                  "supported": true
+                },
+                "rotation+rotation": {
+                  "effective_games": 831.1275421225512,
+                  "games": 1297,
+                  "implied_scalar": 0.0018842522794950314,
+                  "max_abs_error": 0.02332318764020057,
+                  "observed_scalar": 0.001456305247026021,
+                  "pairs": 26522.0,
+                  "present": true,
+                  "rms_z": 1.298634524276667,
+                  "rmse": 0.009435241875575873,
+                  "supported": true
+                },
+                "starter+bench": {
+                  "effective_games": 1070.3719666568568,
+                  "games": 1314,
+                  "implied_scalar": 0.003259141415704865,
+                  "max_abs_error": 0.051511330036278245,
+                  "observed_scalar": -0.01440955284381136,
+                  "pairs": 33142.0,
+                  "present": true,
+                  "rms_z": 5.122377299199547,
+                  "rmse": 0.02335922490226063,
+                  "supported": true
+                },
+                "starter+rotation": {
+                  "effective_games": 1204.9362791726896,
+                  "games": 1316,
+                  "implied_scalar": 0.0021618435764420925,
+                  "max_abs_error": 0.024700591405210918,
+                  "observed_scalar": -0.0056079607543085275,
+                  "pairs": 28958.0,
+                  "present": true,
+                  "rms_z": 2.01734923088693,
+                  "rmse": 0.008802231472064008,
+                  "supported": true
+                },
+                "starter+starter": {
+                  "effective_games": 1087.447825998742,
+                  "games": 1309,
+                  "implied_scalar": 0.002480330102217749,
+                  "max_abs_error": 0.03768305528224555,
+                  "observed_scalar": -0.005536877435329293,
+                  "pairs": 29284.0,
+                  "present": true,
+                  "rms_z": 1.9501156575598764,
+                  "rmse": 0.011383040406192308,
+                  "supported": true
+                }
+              },
+              "equal_weighted_rmse": 0.024652550428732014,
+              "identification": {
+                "min_covariance_eigenvalue": 0.07437032435687918,
+                "pairwise_parameter_count": 0,
+                "player_indexed": 0,
+                "player_share_weights": {
+                  "bench": 0.33251413123617596,
+                  "rotation": 0.3375049624742424,
+                  "starter": 0.32998090628958165
+                },
+                "pooled_cross_team_block_max_change": 0.0,
+                "pooled_neutrality_holds": true,
+                "pooled_same_team_block_max_change": 0.0,
+                "psd_failure_detail": [],
+                "psd_failures": 0,
+                "psd_holds": true,
+                "role_deviation_layer": false,
+                "role_scale": {
+                  "bench": 1.2383673214682216,
+                  "rotation": 0.8214299711854869,
+                  "starter": 0.9424444518545376
+                },
+                "role_scale_parameter_count": 3,
+                "same_player_games_checked": 120,
+                "same_player_holds": true,
+                "same_player_max_block_deviation": 1.6653345369377348e-16,
+                "shared_shrink_engaged_games": 74,
+                "weighted_mean_holds": true,
+                "weighted_mean_scale": 1.0,
+                "weighted_mean_scale_minus_one": 0.0
+              },
+              "role_scale_fit": {
+                "mode": "ratio"
+              },
+              "support_weighted_rmse": 0.02561578612994217,
+              "supported_cells": 6,
+              "target_season": 2022,
+              "training_seasons": [
+                2020,
+                2021
+              ],
+              "upstream_layers": {}
+            },
+            {
+              "by_cell": {
+                "bench+bench": {
+                  "effective_games": 758.0871080293946,
+                  "games": 1289,
+                  "implied_scalar": 0.004801633710157119,
+                  "max_abs_error": 0.08199203329888902,
+                  "observed_scalar": 0.038708247384384706,
+                  "pairs": 36974.0,
+                  "present": true,
+                  "rms_z": 3.8278140564811807,
+                  "rmse": 0.03218171465961629,
+                  "supported": true
+                },
+                "rotation+bench": {
+                  "effective_games": 1015.3695019697772,
+                  "games": 1317,
+                  "implied_scalar": 0.003090785638474704,
+                  "max_abs_error": 0.014257740293559128,
+                  "observed_scalar": 0.005998222226377663,
+                  "pairs": 29384.0,
+                  "present": true,
+                  "rms_z": 1.335468560885193,
+                  "rmse": 0.006844125179937033,
+                  "supported": true
+                },
+                "rotation+rotation": {
+                  "effective_games": 821.9560408244097,
+                  "games": 1297,
+                  "implied_scalar": 0.0019895219918157586,
+                  "max_abs_error": 0.025585449506585888,
+                  "observed_scalar": 0.008384733375847735,
+                  "pairs": 26090.0,
+                  "present": true,
+                  "rms_z": 1.3660420916059597,
+                  "rmse": 0.009785869845974916,
+                  "supported": true
+                },
+                "starter+bench": {
+                  "effective_games": 1067.6038527973963,
+                  "games": 1317,
+                  "implied_scalar": 0.0033752377377193068,
+                  "max_abs_error": 0.06559447116103952,
+                  "observed_scalar": -0.021047410703912417,
+                  "pairs": 35786.0,
+                  "present": true,
+                  "rms_z": 6.736880852113438,
+                  "rmse": 0.029392937647524823,
+                  "supported": true
+                },
+                "starter+rotation": {
+                  "effective_games": 1210.3017558320673,
+                  "games": 1319,
+                  "implied_scalar": 0.002172622268981722,
+                  "max_abs_error": 0.029462641101427565,
+                  "observed_scalar": -0.00638265631174521,
+                  "pairs": 28521.0,
+                  "present": true,
+                  "rms_z": 2.017057309515526,
+                  "rmse": 0.00941931785634263,
+                  "supported": true
+                },
+                "starter+starter": {
+                  "effective_games": 1098.5020822722233,
+                  "games": 1318,
+                  "implied_scalar": 0.0023725736850826484,
+                  "max_abs_error": 0.030235283089317166,
+                  "observed_scalar": -0.003070081383062338,
+                  "pairs": 29664.0,
+                  "present": true,
+                  "rms_z": 2.394325633601206,
+                  "rmse": 0.012965879627950488,
+                  "supported": true
+                }
+              },
+              "equal_weighted_rmse": 0.019574858124264783,
+              "identification": {
+                "min_covariance_eigenvalue": 0.12039869205491827,
+                "pairwise_parameter_count": 0,
+                "player_indexed": 0,
+                "player_share_weights": {
+                  "bench": 0.3334823368721674,
+                  "rotation": 0.32984416713230275,
+                  "starter": 0.33667349599552987
+                },
+                "pooled_cross_team_block_max_change": 0.0,
+                "pooled_neutrality_holds": true,
+                "pooled_same_team_block_max_change": 0.0,
+                "psd_failure_detail": [],
+                "psd_failures": 0,
+                "psd_holds": true,
+                "role_deviation_layer": false,
+                "role_scale": {
+                  "bench": 1.2780190977328885,
+                  "rotation": 0.8226539780852955,
+                  "starter": 0.8983647126329579
+                },
+                "role_scale_parameter_count": 3,
+                "same_player_games_checked": 120,
+                "same_player_holds": true,
+                "same_player_max_block_deviation": 1.3877787807814457e-16,
+                "shared_shrink_engaged_games": 104,
+                "weighted_mean_holds": true,
+                "weighted_mean_scale": 1.0,
+                "weighted_mean_scale_minus_one": 0.0
+              },
+              "role_scale_fit": {
+                "mode": "ratio"
+              },
+              "support_weighted_rmse": 0.020793512320057328,
+              "supported_cells": 6,
+              "target_season": 2023,
+              "training_seasons": [
+                2020,
+                2021,
+                2022
+              ],
+              "upstream_layers": {}
+            }
+          ],
+          "mode": "ratio",
+          "pooled_equal_weighted_rmse": 0.022459669168251747,
+          "pooled_support_weighted_rmse": 0.02342254966455527,
+          "support_weighted_rmse_by_fold": {
+            "2021": 0.023858350543666303,
+            "2022": 0.02561578612994217,
+            "2023": 0.020793512320057328
+          }
+        },
+        "R1_log_shrunk": {
+          "equal_weighted_rmse_by_fold": {
+            "2021": 0.022968208606796586,
+            "2022": 0.0245527811959937,
+            "2023": 0.019585873049685443
+          },
+          "folds": [
+            {
+              "by_cell": {
+                "bench+bench": {
+                  "effective_games": 736.5489824476349,
+                  "games": 1271,
+                  "implied_scalar": 0.003329891346508412,
+                  "max_abs_error": 0.10215140056075982,
+                  "observed_scalar": 0.05482302022809179,
+                  "pairs": 32704.0,
+                  "present": true,
+                  "rms_z": 4.049355342963532,
+                  "rmse": 0.04632726278760783,
+                  "supported": true
+                },
+                "rotation+bench": {
+                  "effective_games": 1067.96072310168,
+                  "games": 1323,
+                  "implied_scalar": 0.002251474152850537,
+                  "max_abs_error": 0.019592182838003503,
+                  "observed_scalar": 0.008070393546774036,
+                  "pairs": 28986.0,
+                  "present": true,
+                  "rms_z": 1.0492252679895917,
+                  "rmse": 0.0061298269105548725,
+                  "supported": true
+                },
+                "rotation+rotation": {
+                  "effective_games": 898.7443851676217,
+                  "games": 1314,
+                  "implied_scalar": 0.001522312692355362,
+                  "max_abs_error": 0.023600570847734335,
+                  "observed_scalar": 0.0060771014136037195,
+                  "pairs": 29552.0,
+                  "present": true,
+                  "rms_z": 1.4785621202193855,
+                  "rmse": 0.010474065606098358,
+                  "supported": true
+                },
+                "starter+bench": {
+                  "effective_games": 1033.824629513753,
+                  "games": 1320,
+                  "implied_scalar": 0.0025884935801247498,
+                  "max_abs_error": 0.04922398024654446,
+                  "observed_scalar": -0.010441893488326243,
+                  "pairs": 32543.0,
+                  "present": true,
+                  "rms_z": 4.922473073532276,
+                  "rmse": 0.023320937851919098,
+                  "supported": true
+                },
+                "starter+rotation": {
+                  "effective_games": 1217.064439654042,
+                  "games": 1322,
+                  "implied_scalar": 0.0017501851514108262,
+                  "max_abs_error": 0.036418961612674924,
+                  "observed_scalar": -0.014215733709935466,
+                  "pairs": 30466.0,
+                  "present": true,
+                  "rms_z": 2.4052018372707327,
+                  "rmse": 0.011304969624398467,
+                  "supported": true
+                },
+                "starter+starter": {
+                  "effective_games": 1081.1566973594809,
+                  "games": 1319,
+                  "implied_scalar": 0.002012167460470656,
+                  "max_abs_error": 0.03868372818603172,
+                  "observed_scalar": -0.0012967844087200188,
+                  "pairs": 27172.0,
+                  "present": true,
+                  "rms_z": 2.4372521230468593,
+                  "rmse": 0.014144506123015271,
+                  "supported": true
+                }
+              },
+              "equal_weighted_rmse": 0.022968208606796586,
+              "identification": {
+                "min_covariance_eigenvalue": 0.11326095627085797,
+                "pairwise_parameter_count": 0,
+                "player_indexed": 0,
+                "player_share_weights": {
+                  "bench": 0.33352035908945177,
+                  "rotation": 0.34337928823340813,
+                  "starter": 0.3231003526771401
+                },
+                "pooled_cross_team_block_max_change": 0.0,
+                "pooled_neutrality_holds": true,
+                "pooled_same_team_block_max_change": 0.0,
+                "psd_failure_detail": [],
+                "psd_failures": 0,
+                "psd_holds": true,
+                "role_deviation_layer": false,
+                "role_scale": {
+                  "bench": 1.224207054498685,
+                  "rotation": 0.827735879079415,
+                  "starter": 0.9516382883291385
+                },
+                "role_scale_parameter_count": 3,
+                "same_player_games_checked": 120,
+                "same_player_holds": true,
+                "same_player_max_block_deviation": 1.1102230246251565e-16,
+                "shared_shrink_engaged_games": 67,
+                "weighted_mean_holds": true,
+                "weighted_mean_scale": 1.0,
+                "weighted_mean_scale_minus_one": 0.0
+              },
+              "role_scale_fit": {
+                "log_standard_errors": {
+                  "bench": 0.05139272733795769,
+                  "rotation": 0.07241105390496297,
+                  "starter": 0.045187258041609085
+                },
+                "mode": "log_shrunk",
+                "player_shares": {
+                  "bench": 0.33352035908945177,
+                  "rotation": 0.34337928823340813,
+                  "starter": 0.3231003526771401
+                },
+                "raw_scales": {
+                  "bench": 1.6222069560287031,
+                  "rotation": 1.087191674133121,
+                  "starter": 1.2503502933718253
+                },
+                "scales": {
+                  "bench": 1.224207054498685,
+                  "rotation": 0.827735879079415,
+                  "starter": 0.9516382883291385
+                },
+                "tau_log": 0.3060668265079096,
+                "weighted_mean_scale_minus_one": 0.0
+              },
+              "support_weighted_rmse": 0.023658845261700378,
+              "supported_cells": 6,
+              "target_season": 2021,
+              "training_seasons": [
+                2020
+              ],
+              "upstream_layers": {}
+            },
+            {
+              "by_cell": {
+                "bench+bench": {
+                  "effective_games": 743.5854665565648,
+                  "games": 1283,
+                  "implied_scalar": 0.0044585745095615205,
+                  "max_abs_error": 0.12591971730446538,
+                  "observed_scalar": 0.059348458744182285,
+                  "pairs": 32208.0,
+                  "present": true,
+                  "rms_z": 3.9348053554313194,
+                  "rmse": 0.052078963992799404,
+                  "supported": true
+                },
+                "rotation+bench": {
+                  "effective_games": 1037.792703141877,
+                  "games": 1317,
+                  "implied_scalar": 0.002828233130268098,
+                  "max_abs_error": 0.022596986223014502,
+                  "observed_scalar": 0.008081176788224648,
+                  "pairs": 27603.0,
+                  "present": true,
+                  "rms_z": 1.1535533477957958,
+                  "rmse": 0.006667374057141506,
+                  "supported": true
+                },
+                "rotation+rotation": {
+                  "effective_games": 831.1275421225512,
+                  "games": 1297,
+                  "implied_scalar": 0.0017940493361706172,
+                  "max_abs_error": 0.02485274091750395,
+                  "observed_scalar": 0.001456305247026021,
+                  "pairs": 26522.0,
+                  "present": true,
+                  "rms_z": 1.3568713860058281,
+                  "rmse": 0.009837166455544971,
+                  "supported": true
+                },
+                "starter+bench": {
+                  "effective_games": 1070.3719666568568,
+                  "games": 1314,
+                  "implied_scalar": 0.003307688628930888,
+                  "max_abs_error": 0.05233453542578254,
+                  "observed_scalar": -0.01440955284381136,
+                  "pairs": 33142.0,
+                  "present": true,
+                  "rms_z": 5.172092954703996,
+                  "rmse": 0.023574821584600964,
+                  "supported": true
+                },
+                "starter+rotation": {
+                  "effective_games": 1204.9362791726896,
+                  "games": 1316,
+                  "implied_scalar": 0.0020981850914213846,
+                  "max_abs_error": 0.024723692736438426,
+                  "observed_scalar": -0.0056079607543085275,
+                  "pairs": 28958.0,
+                  "present": true,
+                  "rms_z": 2.014009898037114,
+                  "rmse": 0.008793050194700587,
+                  "supported": true
+                },
+                "starter+starter": {
+                  "effective_games": 1087.447825998742,
+                  "games": 1309,
+                  "implied_scalar": 0.002453879382860122,
+                  "max_abs_error": 0.037692654109941305,
+                  "observed_scalar": -0.005536877435329293,
+                  "pairs": 29284.0,
+                  "present": true,
+                  "rms_z": 1.959171045536064,
+                  "rmse": 0.011423757307581406,
+                  "supported": true
+                }
+              },
+              "equal_weighted_rmse": 0.0245527811959937,
+              "identification": {
+                "min_covariance_eigenvalue": 0.06650217542534098,
+                "pairwise_parameter_count": 0,
+                "player_indexed": 0,
+                "player_share_weights": {
+                  "bench": 0.33251413123617596,
+                  "rotation": 0.3375049624742424,
+                  "starter": 0.32998090628958165
+                },
+                "pooled_cross_team_block_max_change": 0.0,
+                "pooled_neutrality_holds": true,
+                "pooled_same_team_block_max_change": 0.0,
+                "psd_failure_detail": [],
+                "psd_failures": 0,
+                "psd_holds": true,
+                "role_deviation_layer": false,
+                "role_scale": {
+                  "bench": 1.2635692092656516,
+                  "rotation": 0.8015271007287107,
+                  "starter": 0.9374057776520645
+                },
+                "role_scale_parameter_count": 3,
+                "same_player_games_checked": 120,
+                "same_player_holds": true,
+                "same_player_max_block_deviation": 1.6653345369377348e-16,
+                "shared_shrink_engaged_games": 111,
+                "weighted_mean_holds": true,
+                "weighted_mean_scale": 1.0,
+                "weighted_mean_scale_minus_one": 0.0
+              },
+              "role_scale_fit": {
+                "log_standard_errors": {
+                  "bench": 0.0365886531200587,
+                  "rotation": 0.053500091046402694,
+                  "starter": 0.028360113560456392
+                },
+                "mode": "log_shrunk",
+                "player_shares": {
+                  "bench": 0.33251413123617596,
+                  "rotation": 0.3375049624742424,
+                  "starter": 0.32998090628958165
+                },
+                "raw_scales": {
+                  "bench": 1.686162365370534,
+                  "rotation": 1.0644213364312853,
+                  "starter": 1.2448767674987566
+                },
+                "scales": {
+                  "bench": 1.2635692092656516,
+                  "rotation": 0.8015271007287107,
+                  "starter": 0.9374057776520645
+                },
+                "tau_log": 0.32651124581142776,
+                "weighted_mean_scale_minus_one": 0.0
+              },
+              "support_weighted_rmse": 0.025507528036925672,
+              "supported_cells": 6,
+              "target_season": 2022,
+              "training_seasons": [
+                2020,
+                2021
+              ],
+              "upstream_layers": {}
+            },
+            {
+              "by_cell": {
+                "bench+bench": {
+                  "effective_games": 758.0871080293946,
+                  "games": 1289,
+                  "implied_scalar": 0.004947579667973014,
+                  "max_abs_error": 0.08172302047609793,
+                  "observed_scalar": 0.038708247384384706,
+                  "pairs": 36974.0,
+                  "present": true,
+                  "rms_z": 3.804134715266386,
+                  "rmse": 0.03198388859512547,
+                  "supported": true
+                },
+                "rotation+bench": {
+                  "effective_games": 1015.3695019697772,
+                  "games": 1317,
+                  "implied_scalar": 0.0030888480244988486,
+                  "max_abs_error": 0.014257209617918536,
+                  "observed_scalar": 0.005998222226377663,
+                  "pairs": 29384.0,
+                  "present": true,
+                  "rms_z": 1.334466631967705,
+                  "rmse": 0.006838999199966303,
+                  "supported": true
+                },
+                "rotation+rotation": {
+                  "effective_games": 821.9560408244097,
+                  "games": 1297,
+                  "implied_scalar": 0.0019284140445906775,
+                  "max_abs_error": 0.026551081609653724,
+                  "observed_scalar": 0.008384733375847735,
+                  "pairs": 26090.0,
+                  "present": true,
+                  "rms_z": 1.4033562502624117,
+                  "rmse": 0.01004844513612862,
+                  "supported": true
+                },
+                "starter+bench": {
+                  "effective_games": 1067.6038527973963,
+                  "games": 1317,
+                  "implied_scalar": 0.003400900015965612,
+                  "max_abs_error": 0.06599998829649846,
+                  "observed_scalar": -0.021047410703912417,
+                  "pairs": 35786.0,
+                  "present": true,
+                  "rms_z": 6.763150619766348,
+                  "rmse": 0.029500869461338633,
+                  "supported": true
+                },
+                "starter+rotation": {
+                  "effective_games": 1210.3017558320673,
+                  "games": 1319,
+                  "implied_scalar": 0.0021232327725482078,
+                  "max_abs_error": 0.029476167945775844,
+                  "observed_scalar": -0.00638265631174521,
+                  "pairs": 28521.0,
+                  "present": true,
+                  "rms_z": 2.019211506189698,
+                  "rmse": 0.009427948399453016,
+                  "supported": true
+                },
+                "starter+starter": {
+                  "effective_games": 1098.5020822722233,
+                  "games": 1318,
+                  "implied_scalar": 0.002337733133124757,
+                  "max_abs_error": 0.030641271115951264,
+                  "observed_scalar": -0.003070081383062338,
+                  "pairs": 29664.0,
+                  "present": true,
+                  "rms_z": 2.4235122465130643,
+                  "rmse": 0.01310491279392397,
+                  "supported": true
+                }
+              },
+              "equal_weighted_rmse": 0.019585873049685443,
+              "identification": {
+                "min_covariance_eigenvalue": 0.12429733316260161,
+                "pairwise_parameter_count": 0,
+                "player_indexed": 0,
+                "player_share_weights": {
+                  "bench": 0.3334823368721674,
+                  "rotation": 0.32984416713230275,
+                  "starter": 0.33667349599552987
+                },
+                "pooled_cross_team_block_max_change": 0.0,
+                "pooled_neutrality_holds": true,
+                "pooled_same_team_block_max_change": 0.0,
+                "psd_failure_detail": [],
+                "psd_failures": 0,
+                "psd_holds": true,
+                "role_deviation_layer": false,
+                "role_scale": {
+                  "bench": 1.2972964455019416,
+                  "rotation": 0.809921584248031,
+                  "starter": 0.891744205915382
+                },
+                "role_scale_parameter_count": 3,
+                "same_player_games_checked": 120,
+                "same_player_holds": true,
+                "same_player_max_block_deviation": 1.3877787807814457e-16,
+                "shared_shrink_engaged_games": 104,
+                "weighted_mean_holds": true,
+                "weighted_mean_scale": 1.0,
+                "weighted_mean_scale_minus_one": 0.0
+              },
+              "role_scale_fit": {
+                "log_standard_errors": {
+                  "bench": 0.03036629751421601,
+                  "rotation": 0.03901126099947621,
+                  "starter": 0.025414331943151867
+                },
+                "mode": "log_shrunk",
+                "player_shares": {
+                  "bench": 0.3334823368721674,
+                  "rotation": 0.32984416713230275,
+                  "starter": 0.33667349599552987
+                },
+                "raw_scales": {
+                  "bench": 1.737085935687067,
+                  "rotation": 1.0807572545314381,
+                  "starter": 1.189888746056173
+                },
+                "scales": {
+                  "bench": 1.2972964455019416,
+                  "rotation": 0.809921584248031,
+                  "starter": 0.891744205915382
+                },
+                "tau_log": 0.3357099294365641,
+                "weighted_mean_scale_minus_one": 0.0
+              },
+              "support_weighted_rmse": 0.020794043531815163,
+              "supported_cells": 6,
+              "target_season": 2023,
+              "training_seasons": [
+                2020,
+                2021,
+                2022
+              ],
+              "upstream_layers": {}
+            }
+          ],
+          "mode": "log_shrunk",
+          "pooled_equal_weighted_rmse": 0.02236895428415858,
+          "pooled_support_weighted_rmse": 0.023320138943480406,
+          "support_weighted_rmse_by_fold": {
+            "2021": 0.023658845261700378,
+            "2022": 0.025507528036925672,
+            "2023": 0.020794043531815163
+          }
+        }
+      },
+      "comparison": {
+        "by_cell": {
+          "bench+bench": {
+            "delta_rms_z_by_fold": [
+              -0.08784092207042082,
+              -0.03580398601004342,
+              -0.023679341214794647
+            ],
+            "folds_compared": 3,
+            "mean_delta_rms_z": -0.04910808309841963,
+            "mean_delta_rmse": -0.0005122117790458564,
+            "supported_in_every_fold": true,
+            "worst_fold_delta_rms_z": -0.023679341214794647
+          },
+          "rotation+bench": {
+            "delta_rms_z_by_fold": [
+              -0.0010253196541740728,
+              -0.0067446011235619,
+              -0.0010019289174880708
+            ],
+            "folds_compared": 3,
+            "mean_delta_rms_z": -0.0029239498984080146,
+            "mean_delta_rmse": -1.2955925925191812e-05,
+            "supported_in_every_fold": true,
+            "worst_fold_delta_rms_z": -0.0010019289174880708
+          },
+          "rotation+rotation": {
+            "delta_rms_z_by_fold": [
+              0.06461032861459226,
+              0.058236861729161093,
+              0.037314158656452046
+            ],
+            "folds_compared": 3,
+            "mean_delta_rms_z": 0.0533871163334018,
+            "mean_delta_rmse": 0.000393750240132706,
+            "supported_in_every_fold": true,
+            "worst_fold_delta_rms_z": 0.06461032861459226
+          },
+          "starter+bench": {
+            "delta_rms_z_by_fold": [
+              0.08226344508107708,
+              0.0497156555044489,
+              0.026269767652910225
+            ],
+            "folds_compared": 3,
+            "mean_delta_rms_z": 0.0527496227461454,
+            "mean_delta_rmse": 0.0002307651336689182,
+            "supported_in_every_fold": true,
+            "worst_fold_delta_rms_z": 0.08226344508107708
+          },
+          "starter+rotation": {
+            "delta_rms_z_by_fold": [
+              -0.006605366908101651,
+              -0.0033393328498156905,
+              0.0021541966741720486
+            ],
+            "folds_compared": 3,
+            "mean_delta_rms_z": -0.002596834361248431,
+            "mean_delta_rmse": -3.439414977837729e-06,
+            "supported_in_every_fold": true,
+            "worst_fold_delta_rms_z": 0.0021541966741720486
+          },
+          "starter+starter": {
+            "delta_rms_z_by_fold": [
+              0.02884781812826054,
+              0.009055387976187657,
+              0.029186612911858312
+            ],
+            "folds_compared": 3,
+            "mean_delta_rms_z": 0.022363273005435502,
+            "mean_delta_rmse": 0.00011310938037079228,
+            "supported_in_every_fold": true,
+            "worst_fold_delta_rms_z": 0.029186612911858312
+          }
+        },
+        "paired_difference_by_fold_and_cell": {
+          "mean": 3.483627237058841e-05,
+          "observations": 18,
+          "pairing_unit": "(fold, supported cell)",
+          "standard_error": 7.549709439338383e-05
+        },
+        "paired_difference_equal_weighted": {
+          "mean": -9.07148840931712e-05,
+          "standard_error": 5.630227411086827e-05
+        },
+        "paired_difference_r1_minus_r0": {
+          "mean": -0.00010241072107486256,
+          "objective": "support-weighted supported-cell RMSE",
+          "pairing_unit": "forward fold",
+          "standard_error": 5.781952820138388e-05,
+          "standard_errors_of_improvement": 1.771213364421943
+        },
+        "worst_supported_cell_deterioration_rms_z": {
+          "cell": "rotation+rotation",
+          "mean_delta_rms_z": 0.0533871163334018
+        }
+      },
+      "folds_scored": [
+        2021,
+        2022,
+        2023
+      ],
+      "universe": "control_architecture"
+    },
+    "frozen_architecture": {
+      "arms": {
+        "R0_ratio": {
+          "equal_weighted_rmse_by_fold": {
+            "2021": 0.02311634363139437,
+            "2022": 0.02463452910656582,
+            "2023": 0.019568291523566993
+          },
+          "folds": [
+            {
+              "by_cell": {
+                "bench+bench": {
+                  "effective_games": 736.5489824476349,
+                  "games": 1271,
+                  "implied_scalar": 0.003146696530018426,
+                  "max_abs_error": 0.10214301296912678,
+                  "observed_scalar": 0.05482302022809179,
+                  "pairs": 32704.0,
+                  "present": true,
+                  "rms_z": 4.118647595016161,
+                  "rmse": 0.04705750714269279,
+                  "supported": true
+                },
+                "rotation+bench": {
+                  "effective_games": 1067.96072310168,
+                  "games": 1323,
+                  "implied_scalar": 0.002285649603776983,
+                  "max_abs_error": 0.019592653403270852,
+                  "observed_scalar": 0.008070393546774036,
+                  "pairs": 28986.0,
+                  "present": true,
+                  "rms_z": 1.0372729445100617,
+                  "rmse": 0.006056898792739542,
+                  "supported": true
+                },
+                "rotation+rotation": {
+                  "effective_games": 898.7443851676217,
+                  "games": 1314,
+                  "implied_scalar": 0.0016602154231934432,
+                  "max_abs_error": 0.02125291414205583,
+                  "observed_scalar": 0.0060771014136037195,
+                  "pairs": 29552.0,
+                  "present": true,
+                  "rms_z": 1.4030540524340134,
+                  "rmse": 0.009884819979633582,
+                  "supported": true
+                },
+                "starter+bench": {
+                  "effective_games": 1033.824629513753,
+                  "games": 1320,
+                  "implied_scalar": 0.0025461227219750835,
+                  "max_abs_error": 0.047840945365496906,
+                  "observed_scalar": -0.010441893488326243,
+                  "pairs": 32543.0,
+                  "present": true,
+                  "rms_z": 4.866176860336503,
+                  "rmse": 0.02306427944586319,
+                  "supported": true
+                },
+                "starter+rotation": {
+                  "effective_games": 1217.064439654042,
+                  "games": 1322,
+                  "implied_scalar": 0.001849413928268401,
+                  "max_abs_error": 0.03641577202321366,
+                  "observed_scalar": -0.014215733709935466,
+                  "pairs": 30466.0,
+                  "present": true,
+                  "rms_z": 2.4310086110746965,
+                  "rmse": 0.011393941351146858,
+                  "supported": true
+                },
+                "starter+starter": {
+                  "effective_games": 1081.1566973594809,
+                  "games": 1319,
+                  "implied_scalar": 0.002060173535488612,
+                  "max_abs_error": 0.03797886919647511,
+                  "observed_scalar": -0.0012967844087200188,
+                  "pairs": 27172.0,
+                  "present": true,
+                  "rms_z": 2.406829908017277,
+                  "rmse": 0.01398586800803456,
+                  "supported": true
+                }
+              },
+              "equal_weighted_rmse": 0.02311634363139437,
+              "identification": {
+                "min_covariance_eigenvalue": 0.10367372175912437,
+                "pairwise_parameter_count": 0,
+                "player_indexed": 0,
+                "player_share_weights": {
+                  "bench": 0.33352035908945177,
+                  "rotation": 0.34337928823340813,
+                  "starter": 0.3231003526771401
+                },
+                "pooled_cross_team_block_max_change": 0.0,
+                "pooled_neutrality_holds": true,
+                "pooled_same_team_block_max_change": 0.0,
+                "psd_failure_detail": [],
+                "psd_failures": 0,
+                "psd_holds": true,
+                "role_deviation_layer": false,
+                "role_scale": {
+                  "bench": 1.184310880788271,
+                  "rotation": 0.8602417391061955,
+                  "starter": 0.9582750718702715
+                },
+                "role_scale_parameter_count": 3,
+                "same_player_games_checked": 120,
+                "same_player_holds": true,
+                "same_player_max_block_deviation": 6.938893903907228e-17,
+                "shared_shrink_engaged_games": 50,
+                "weighted_mean_holds": true,
+                "weighted_mean_scale": 1.0,
+                "weighted_mean_scale_minus_one": 0.0
+              },
+              "role_scale_fit": {
+                "mode": "ratio"
+              },
+              "support_weighted_rmse": 0.023821691820577532,
+              "supported_cells": 6,
+              "target_season": 2021,
+              "training_seasons": [
+                2020
+              ],
+              "upstream_layers": {
+                "temporal_max_abs_shift": 1.734723475976807e-18,
+                "temporal_treatment": "A2_robust_student_t",
+                "transmission_cap": 0.15,
+                "transmission_mean_bridge_weight": 0.11077574242175442
+              }
+            },
+            {
+              "by_cell": {
+                "bench+bench": {
+                  "effective_games": 743.5854665565648,
+                  "games": 1283,
+                  "implied_scalar": 0.004261117902347018,
+                  "max_abs_error": 0.12583524469149,
+                  "observed_scalar": 0.059348458744182285,
+                  "pairs": 32208.0,
+                  "present": true,
+                  "rms_z": 3.959245816913723,
+                  "rmse": 0.05245624267482232,
+                  "supported": true
+                },
+                "rotation+bench": {
+                  "effective_games": 1037.792703141877,
+                  "games": 1317,
+                  "implied_scalar": 0.002824011619873886,
+                  "max_abs_error": 0.02258696016192968,
+                  "observed_scalar": 0.008081176788224648,
+                  "pairs": 27603.0,
+                  "present": true,
+                  "rms_z": 1.1613188167160855,
+                  "rmse": 0.0066994257940812575,
+                  "supported": true
+                },
+                "rotation+rotation": {
+                  "effective_games": 831.1275421225512,
+                  "games": 1297,
+                  "implied_scalar": 0.0018715843616507507,
+                  "max_abs_error": 0.023346736079141825,
+                  "observed_scalar": 0.001456305247026021,
+                  "pairs": 26522.0,
+                  "present": true,
+                  "rms_z": 1.3004852101986586,
+                  "rmse": 0.009448890771390668,
+                  "supported": true
+                },
+                "starter+bench": {
+                  "effective_games": 1070.3719666568568,
+                  "games": 1314,
+                  "implied_scalar": 0.003239381544105723,
+                  "max_abs_error": 0.05150730119581911,
+                  "observed_scalar": -0.01440955284381136,
+                  "pairs": 33142.0,
+                  "present": true,
+                  "rms_z": 5.134859785908125,
+                  "rmse": 0.0234027815715679,
+                  "supported": true
+                },
+                "starter+rotation": {
+                  "effective_games": 1204.9362791726896,
+                  "games": 1316,
+                  "implied_scalar": 0.002146866463544893,
+                  "max_abs_error": 0.024712483892615128,
+                  "observed_scalar": -0.0056079607543085275,
+                  "pairs": 28958.0,
+                  "present": true,
+                  "rms_z": 2.022994663201928,
+                  "rmse": 0.008820400380838225,
+                  "supported": true
+                },
+                "starter+starter": {
+                  "effective_games": 1087.447825998742,
+                  "games": 1309,
+                  "implied_scalar": 0.0024626384504669364,
+                  "max_abs_error": 0.03769688264448451,
+                  "observed_scalar": -0.005536877435329293,
+                  "pairs": 29284.0,
+                  "present": true,
+                  "rms_z": 1.9512733138263945,
+                  "rmse": 0.01139514191700563,
+                  "supported": true
+                }
+              },
+              "equal_weighted_rmse": 0.02463452910656582,
+              "identification": {
+                "min_covariance_eigenvalue": 0.07384277279458007,
+                "pairwise_parameter_count": 0,
+                "player_indexed": 0,
+                "player_share_weights": {
+                  "bench": 0.33251413123617596,
+                  "rotation": 0.3375049624742424,
+                  "starter": 0.32998090628958165
+                },
+                "pooled_cross_team_block_max_change": 0.0,
+                "pooled_neutrality_holds": true,
+                "pooled_same_team_block_max_change": 0.0,
+                "psd_failure_detail": [],
+                "psd_failures": 0,
+                "psd_holds": true,
+                "role_deviation_layer": false,
+                "role_scale": {
+                  "bench": 1.2390810677711503,
+                  "rotation": 0.821188104516922,
+                  "starter": 0.941972607793333
+                },
+                "role_scale_parameter_count": 3,
+                "same_player_games_checked": 120,
+                "same_player_holds": true,
+                "same_player_max_block_deviation": 1.1102230246251565e-16,
+                "shared_shrink_engaged_games": 74,
+                "weighted_mean_holds": true,
+                "weighted_mean_scale": 1.0,
+                "weighted_mean_scale_minus_one": 0.0
+              },
+              "role_scale_fit": {
+                "mode": "ratio"
+              },
+              "support_weighted_rmse": 0.025596763233213388,
+              "supported_cells": 6,
+              "target_season": 2022,
+              "training_seasons": [
+                2020,
+                2021
+              ],
+              "upstream_layers": {
+                "temporal_max_abs_shift": 4.598446784183016e-05,
+                "temporal_treatment": "A2_robust_student_t",
+                "transmission_cap": 0.15,
+                "transmission_mean_bridge_weight": 0.06236936617969032
+              }
+            },
+            {
+              "by_cell": {
+                "bench+bench": {
+                  "effective_games": 758.0871080293946,
+                  "games": 1289,
+                  "implied_scalar": 0.004855726500874636,
+                  "max_abs_error": 0.08193332917667522,
+                  "observed_scalar": 0.038708247384384706,
+                  "pairs": 36974.0,
+                  "present": true,
+                  "rms_z": 3.8169128337346367,
+                  "rmse": 0.03211401115366818,
+                  "supported": true
+                },
+                "rotation+bench": {
+                  "effective_games": 1015.3695019697772,
+                  "games": 1317,
+                  "implied_scalar": 0.003123134111152342,
+                  "max_abs_error": 0.01423604838803232,
+                  "observed_scalar": 0.005998222226377663,
+                  "pairs": 29384.0,
+                  "present": true,
+                  "rms_z": 1.3318347073783763,
+                  "rmse": 0.006828472871189586,
+                  "supported": true
+                },
+                "rotation+rotation": {
+                  "effective_games": 821.9560408244097,
+                  "games": 1297,
+                  "implied_scalar": 0.0020087553684266196,
+                  "max_abs_error": 0.025485101798218474,
+                  "observed_scalar": 0.008384733375847735,
+                  "pairs": 26090.0,
+                  "present": true,
+                  "rms_z": 1.3624341461313765,
+                  "rmse": 0.00976060318357334,
+                  "supported": true
+                },
+                "starter+bench": {
+                  "effective_games": 1067.6038527973963,
+                  "games": 1317,
+                  "implied_scalar": 0.003409965966240243,
+                  "max_abs_error": 0.06579766242296535,
+                  "observed_scalar": -0.021047410703912417,
+                  "pairs": 35786.0,
+                  "present": true,
+                  "rms_z": 6.751020366668437,
+                  "rmse": 0.029452574627064236,
+                  "supported": true
+                },
+                "starter+rotation": {
+                  "effective_games": 1210.3017558320673,
+                  "games": 1319,
+                  "implied_scalar": 0.0021932415314402836,
+                  "max_abs_error": 0.029478448895986956,
+                  "observed_scalar": -0.00638265631174521,
+                  "pairs": 28521.0,
+                  "present": true,
+                  "rms_z": 2.0199771621474967,
+                  "rmse": 0.009435056134796898,
+                  "supported": true
+                },
+                "starter+starter": {
+                  "effective_games": 1098.5020822722233,
+                  "games": 1318,
+                  "implied_scalar": 0.0023946710937739774,
+                  "max_abs_error": 0.030217769163673285,
+                  "observed_scalar": -0.003070081383062338,
+                  "pairs": 29664.0,
+                  "present": true,
+                  "rms_z": 2.3904859503770184,
+                  "rmse": 0.012954791925792866,
+                  "supported": true
+                }
+              },
+              "equal_weighted_rmse": 0.019568291523566993,
+              "identification": {
+                "min_covariance_eigenvalue": 0.12208422009399755,
+                "pairwise_parameter_count": 0,
+                "player_indexed": 0,
+                "player_share_weights": {
+                  "bench": 0.3334823368721674,
+                  "rotation": 0.32984416713230275,
+                  "starter": 0.33667349599552987
+                },
+                "pooled_cross_team_block_max_change": 0.0,
+                "pooled_neutrality_holds": true,
+                "pooled_same_team_block_max_change": 0.0,
+                "psd_failure_detail": [],
+                "psd_failures": 0,
+                "psd_holds": true,
+                "role_deviation_layer": false,
+                "role_scale": {
+                  "bench": 1.2786667663857831,
+                  "rotation": 0.822420248376218,
+                  "starter": 0.8979521714727141
+                },
+                "role_scale_parameter_count": 3,
+                "same_player_games_checked": 120,
+                "same_player_holds": true,
+                "same_player_max_block_deviation": 1.1102230246251565e-16,
+                "shared_shrink_engaged_games": 104,
+                "weighted_mean_holds": true,
+                "weighted_mean_scale": 1.0,
+                "weighted_mean_scale_minus_one": 0.0
+              },
+              "role_scale_fit": {
+                "mode": "ratio"
+              },
+              "support_weighted_rmse": 0.02078646845465657,
+              "supported_cells": 6,
+              "target_season": 2023,
+              "training_seasons": [
+                2020,
+                2021,
+                2022
+              ],
+              "upstream_layers": {
+                "temporal_max_abs_shift": 0.00021602643223330754,
+                "temporal_treatment": "A2_robust_student_t",
+                "transmission_cap": 0.15,
+                "transmission_mean_bridge_weight": 0.03819952513012472
+              }
+            }
+          ],
+          "mode": "ratio",
+          "pooled_equal_weighted_rmse": 0.022439721420509064,
+          "pooled_support_weighted_rmse": 0.023401641169482495,
+          "support_weighted_rmse_by_fold": {
+            "2021": 0.023821691820577532,
+            "2022": 0.025596763233213388,
+            "2023": 0.02078646845465657
+          }
+        },
+        "R1_log_shrunk": {
+          "equal_weighted_rmse_by_fold": {
+            "2021": 0.022929535156766163,
+            "2022": 0.024533528085573048,
+            "2023": 0.019579425033722404
+          },
+          "folds": [
+            {
+              "by_cell": {
+                "bench+bench": {
+                  "effective_games": 736.5489824476349,
+                  "games": 1271,
+                  "implied_scalar": 0.003371143957359378,
+                  "max_abs_error": 0.10215173540339681,
+                  "observed_scalar": 0.05482302022809179,
+                  "pairs": 32704.0,
+                  "present": true,
+                  "rms_z": 4.028984914234964,
+                  "rmse": 0.04615872258236884,
+                  "supported": true
+                },
+                "rotation+bench": {
+                  "effective_games": 1067.96072310168,
+                  "games": 1323,
+                  "implied_scalar": 0.0022746416817789514,
+                  "max_abs_error": 0.019592225615448933,
+                  "observed_scalar": 0.008070393546774036,
+                  "pairs": 28986.0,
+                  "present": true,
+                  "rms_z": 1.0361800405058401,
+                  "rmse": 0.006053758607046747,
+                  "supported": true
+                },
+                "rotation+rotation": {
+                  "effective_games": 898.7443851676217,
+                  "games": 1314,
+                  "implied_scalar": 0.0015347890347996217,
+                  "max_abs_error": 0.023644717484512245,
+                  "observed_scalar": 0.0060771014136037195,
+                  "pairs": 29552.0,
+                  "present": true,
+                  "rms_z": 1.4689902540396615,
+                  "rmse": 0.010411207953188062,
+                  "supported": true
+                },
+                "starter+bench": {
+                  "effective_games": 1033.824629513753,
+                  "games": 1320,
+                  "implied_scalar": 0.002614363858678449,
+                  "max_abs_error": 0.04924468785387606,
+                  "observed_scalar": -0.010441893488326243,
+                  "pairs": 32543.0,
+                  "present": true,
+                  "rms_z": 4.948871221207015,
+                  "rmse": 0.023434920636458263,
+                  "supported": true
+                },
+                "starter+rotation": {
+                  "effective_games": 1217.064439654042,
+                  "games": 1322,
+                  "implied_scalar": 0.0017640127741517589,
+                  "max_abs_error": 0.03641909086701683,
+                  "observed_scalar": -0.014215733709935466,
+                  "pairs": 30466.0,
+                  "present": true,
+                  "rms_z": 2.4233861093520077,
+                  "rmse": 0.011380041688381097,
+                  "supported": true
+                },
+                "starter+starter": {
+                  "effective_games": 1081.1566973594809,
+                  "games": 1319,
+                  "implied_scalar": 0.0020274715265846586,
+                  "max_abs_error": 0.038455680879249735,
+                  "observed_scalar": -0.0012967844087200188,
+                  "pairs": 27172.0,
+                  "present": true,
+                  "rms_z": 2.4364775145960005,
+                  "rmse": 0.014149619295686313,
+                  "supported": true
+                }
+              },
+              "equal_weighted_rmse": 0.022929535156766163,
+              "identification": {
+                "min_covariance_eigenvalue": 0.11454047538016132,
+                "pairwise_parameter_count": 0,
+                "player_indexed": 0,
+                "player_share_weights": {
+                  "bench": 0.33352035908945177,
+                  "rotation": 0.34337928823340813,
+                  "starter": 0.3231003526771401
+                },
+                "pooled_cross_team_block_max_change": 0.0,
+                "pooled_neutrality_holds": true,
+                "pooled_same_team_block_max_change": 0.0,
+                "psd_failure_detail": [],
+                "psd_failures": 0,
+                "psd_holds": true,
+                "role_deviation_layer": false,
+                "role_scale": {
+                  "bench": 1.2258206637241071,
+                  "rotation": 0.8271087830603576,
+                  "starter": 0.9506390949177418
+                },
+                "role_scale_parameter_count": 3,
+                "same_player_games_checked": 120,
+                "same_player_holds": true,
+                "same_player_max_block_deviation": 6.938893903907228e-17,
+                "shared_shrink_engaged_games": 67,
+                "weighted_mean_holds": true,
+                "weighted_mean_scale": 1.0,
+                "weighted_mean_scale_minus_one": 0.0
+              },
+              "role_scale_fit": {
+                "log_standard_errors": {
+                  "bench": 0.05155309343090235,
+                  "rotation": 0.07275574680617429,
+                  "starter": 0.04548705787248849
+                },
+                "mode": "log_shrunk",
+                "player_shares": {
+                  "bench": 0.33352035908945177,
+                  "rotation": 0.34337928823340813,
+                  "starter": 0.3231003526771401
+                },
+                "raw_scales": {
+                  "bench": 1.623616825584816,
+                  "rotation": 1.0857263014359326,
+                  "starter": 1.2483750171719379
+                },
+                "scales": {
+                  "bench": 1.2258206637241071,
+                  "rotation": 0.8271087830603576,
+                  "starter": 0.9506390949177418
+                },
+                "tau_log": 0.30596874779729016,
+                "weighted_mean_scale_minus_one": 0.0
+              },
+              "support_weighted_rmse": 0.023618483779834165,
+              "supported_cells": 6,
+              "target_season": 2021,
+              "training_seasons": [
+                2020
+              ],
+              "upstream_layers": {
+                "temporal_max_abs_shift": 1.734723475976807e-18,
+                "temporal_treatment": "A2_robust_student_t",
+                "transmission_cap": 0.15,
+                "transmission_mean_bridge_weight": 0.11077574242175442
+              }
+            },
+            {
+              "by_cell": {
+                "bench+bench": {
+                  "effective_games": 743.5854665565648,
+                  "games": 1283,
+                  "implied_scalar": 0.004436792022289738,
+                  "max_abs_error": 0.12589846751590764,
+                  "observed_scalar": 0.059348458744182285,
+                  "pairs": 32208.0,
+                  "present": true,
+                  "rms_z": 3.922862652102216,
+                  "rmse": 0.05199631442416935,
+                  "supported": true
+                },
+                "rotation+bench": {
+                  "effective_games": 1037.792703141877,
+                  "games": 1317,
+                  "implied_scalar": 0.0028117139694673328,
+                  "max_abs_error": 0.02258253439794887,
+                  "observed_scalar": 0.008081176788224648,
+                  "pairs": 27603.0,
+                  "present": true,
+                  "rms_z": 1.1545479828032643,
+                  "rmse": 0.006668554753387051,
+                  "supported": true
+                },
+                "rotation+rotation": {
+                  "effective_games": 831.1275421225512,
+                  "games": 1297,
+                  "implied_scalar": 0.0017818584703498798,
+                  "max_abs_error": 0.024877369251248855,
+                  "observed_scalar": 0.001456305247026021,
+                  "pairs": 26522.0,
+                  "present": true,
+                  "rms_z": 1.3585841386389594,
+                  "rmse": 0.009850031589833356,
+                  "supported": true
+                },
+                "starter+bench": {
+                  "effective_games": 1070.3719666568568,
+                  "games": 1314,
+                  "implied_scalar": 0.003287594361145517,
+                  "max_abs_error": 0.05232976320775255,
+                  "observed_scalar": -0.01440955284381136,
+                  "pairs": 33142.0,
+                  "present": true,
+                  "rms_z": 5.184671212623886,
+                  "rmse": 0.023618656526612058,
+                  "supported": true
+                },
+                "starter+rotation": {
+                  "effective_games": 1204.9362791726896,
+                  "games": 1316,
+                  "implied_scalar": 0.002083436623744278,
+                  "max_abs_error": 0.024735311464632353,
+                  "observed_scalar": -0.0056079607543085275,
+                  "pairs": 28958.0,
+                  "present": true,
+                  "rms_z": 2.01944908493956,
+                  "rmse": 0.008810617253144148,
+                  "supported": true
+                },
+                "starter+starter": {
+                  "effective_games": 1087.447825998742,
+                  "games": 1309,
+                  "implied_scalar": 0.0024360566438852076,
+                  "max_abs_error": 0.0377064490899619,
+                  "observed_scalar": -0.005536877435329293,
+                  "pairs": 29284.0,
+                  "present": true,
+                  "rms_z": 1.9604188461246805,
+                  "rmse": 0.011436198272739756,
+                  "supported": true
+                }
+              },
+              "equal_weighted_rmse": 0.024533528085573048,
+              "identification": {
+                "min_covariance_eigenvalue": 0.06664430710387848,
+                "pairwise_parameter_count": 0,
+                "player_indexed": 0,
+                "player_share_weights": {
+                  "bench": 0.33251413123617596,
+                  "rotation": 0.3375049624742424,
+                  "starter": 0.32998090628958165
+                },
+                "pooled_cross_team_block_max_change": 0.0,
+                "pooled_neutrality_holds": true,
+                "pooled_same_team_block_max_change": 0.0,
+                "psd_failure_detail": [],
+                "psd_failures": 0,
+                "psd_holds": true,
+                "role_deviation_layer": false,
+                "role_scale": {
+                  "bench": 1.2643650473144756,
+                  "rotation": 0.8012620037586652,
+                  "starter": 0.9368749716231587
+                },
+                "role_scale_parameter_count": 3,
+                "same_player_games_checked": 120,
+                "same_player_holds": true,
+                "same_player_max_block_deviation": 1.1102230246251565e-16,
+                "shared_shrink_engaged_games": 111,
+                "weighted_mean_holds": true,
+                "weighted_mean_scale": 1.0,
+                "weighted_mean_scale_minus_one": 0.0
+              },
+              "role_scale_fit": {
+                "log_standard_errors": {
+                  "bench": 0.03660328110198027,
+                  "rotation": 0.0536039203916642,
+                  "starter": 0.028453655407762287
+                },
+                "mode": "log_shrunk",
+                "player_shares": {
+                  "bench": 0.33251413123617596,
+                  "rotation": 0.3375049624742424,
+                  "starter": 0.32998090628958165
+                },
+                "raw_scales": {
+                  "bench": 1.6871021563663149,
+                  "rotation": 1.0639780846082467,
+                  "starter": 1.2440784517399108
+                },
+                "scales": {
+                  "bench": 1.2643650473144756,
+                  "rotation": 0.8012620037586652,
+                  "starter": 0.9368749716231587
+                },
+                "tau_log": 0.3266299484420144,
+                "weighted_mean_scale_minus_one": 0.0
+              },
+              "support_weighted_rmse": 0.025487219497967423,
+              "supported_cells": 6,
+              "target_season": 2022,
+              "training_seasons": [
+                2020,
+                2021
+              ],
+              "upstream_layers": {
+                "temporal_max_abs_shift": 4.598446784183016e-05,
+                "temporal_treatment": "A2_robust_student_t",
+                "transmission_cap": 0.15,
+                "transmission_mean_bridge_weight": 0.06236936617969032
+              }
+            },
+            {
+              "by_cell": {
+                "bench+bench": {
+                  "effective_games": 758.0871080293946,
+                  "games": 1289,
+                  "implied_scalar": 0.005003687991503598,
+                  "max_abs_error": 0.08166185063514898,
+                  "observed_scalar": 0.038708247384384706,
+                  "pairs": 36974.0,
+                  "present": true,
+                  "rms_z": 3.7931313885472786,
+                  "rmse": 0.031915465265824706,
+                  "supported": true
+                },
+                "rotation+bench": {
+                  "effective_games": 1015.3695019697772,
+                  "games": 1317,
+                  "implied_scalar": 0.0031211965413928486,
+                  "max_abs_error": 0.014235536678454022,
+                  "observed_scalar": 0.005998222226377663,
+                  "pairs": 29384.0,
+                  "present": true,
+                  "rms_z": 1.3308308328375535,
+                  "rmse": 0.006823330071806783,
+                  "supported": true
+                },
+                "rotation+rotation": {
+                  "effective_games": 821.9560408244097,
+                  "games": 1297,
+                  "implied_scalar": 0.0019469375121999308,
+                  "max_abs_error": 0.026455686936538523,
+                  "observed_scalar": 0.008384733375847735,
+                  "pairs": 26090.0,
+                  "present": true,
+                  "rms_z": 1.3999265739842375,
+                  "rmse": 0.01002443358877079,
+                  "supported": true
+                },
+                "starter+bench": {
+                  "effective_games": 1067.6038527973963,
+                  "games": 1317,
+                  "implied_scalar": 0.0034358667579795187,
+                  "max_abs_error": 0.06620432362196711,
+                  "observed_scalar": -0.021047410703912417,
+                  "pairs": 35786.0,
+                  "present": true,
+                  "rms_z": 6.777368679854393,
+                  "rmse": 0.029560850948693984,
+                  "supported": true
+                },
+                "starter+rotation": {
+                  "effective_games": 1210.3017558320673,
+                  "games": 1319,
+                  "implied_scalar": 0.002143222251247883,
+                  "max_abs_error": 0.02949165892088982,
+                  "observed_scalar": -0.00638265631174521,
+                  "pairs": 28521.0,
+                  "present": true,
+                  "rms_z": 2.021918388068581,
+                  "rmse": 0.00944276517586224,
+                  "supported": true
+                },
+                "starter+starter": {
+                  "effective_games": 1098.5020822722233,
+                  "games": 1318,
+                  "implied_scalar": 0.0023592958630982226,
+                  "max_abs_error": 0.03062644254229067,
+                  "observed_scalar": -0.003070081383062338,
+                  "pairs": 29664.0,
+                  "present": true,
+                  "rms_z": 2.4198803638894733,
+                  "rmse": 0.013094638588024999,
+                  "supported": true
+                }
+              },
+              "equal_weighted_rmse": 0.019579425033722404,
+              "identification": {
+                "min_covariance_eigenvalue": 0.12599977519104533,
+                "pairwise_parameter_count": 0,
+                "player_indexed": 0,
+                "player_share_weights": {
+                  "bench": 0.3334823368721674,
+                  "rotation": 0.32984416713230275,
+                  "starter": 0.33667349599552987
+                },
+                "pooled_cross_team_block_max_change": 0.0,
+                "pooled_neutrality_holds": true,
+                "pooled_same_team_block_max_change": 0.0,
+                "psd_failure_detail": [],
+                "psd_failures": 0,
+                "psd_holds": true,
+                "role_deviation_layer": false,
+                "role_scale": {
+                  "bench": 1.2980020538811807,
+                  "rotation": 0.8096666954802157,
+                  "starter": 0.891295004063461
+                },
+                "role_scale_parameter_count": 3,
+                "same_player_games_checked": 120,
+                "same_player_holds": true,
+                "same_player_max_block_deviation": 5.551115123125783e-17,
+                "shared_shrink_engaged_games": 104,
+                "weighted_mean_holds": true,
+                "weighted_mean_scale": 1.0,
+                "weighted_mean_scale_minus_one": 0.0
+              },
+              "role_scale_fit": {
+                "log_standard_errors": {
+                  "bench": 0.030375009891939052,
+                  "rotation": 0.03907809035505979,
+                  "starter": 0.025462509861206423
+                },
+                "mode": "log_shrunk",
+                "player_shares": {
+                  "bench": 0.3334823368721674,
+                  "rotation": 0.32984416713230275,
+                  "starter": 0.33667349599552987
+                },
+                "raw_scales": {
+                  "bench": 1.7361579456781389,
+                  "rotation": 1.0792230490646562,
+                  "starter": 1.1879867979778171
+                },
+                "scales": {
+                  "bench": 1.2980020538811807,
+                  "rotation": 0.8096666954802157,
+                  "starter": 0.891295004063461
+                },
+                "tau_log": 0.3350288912570991,
+                "weighted_mean_scale_minus_one": 0.0
+              },
+              "support_weighted_rmse": 0.020787108395664156,
+              "supported_cells": 6,
+              "target_season": 2023,
+              "training_seasons": [
+                2020,
+                2021,
+                2022
+              ],
+              "upstream_layers": {
+                "temporal_max_abs_shift": 0.00021602643223330754,
+                "temporal_treatment": "A2_robust_student_t",
+                "transmission_cap": 0.15,
+                "transmission_mean_bridge_weight": 0.03819952513012472
+              }
+            }
+          ],
+          "mode": "log_shrunk",
+          "pooled_equal_weighted_rmse": 0.02234749609202054,
+          "pooled_support_weighted_rmse": 0.023297603891155247,
+          "support_weighted_rmse_by_fold": {
+            "2021": 0.023618483779834165,
+            "2022": 0.025487219497967423,
+            "2023": 0.020787108395664156
+          }
+        }
+      },
+      "comparison": {
+        "by_cell": {
+          "bench+bench": {
+            "delta_rms_z_by_fold": [
+              -0.08966268078119732,
+              -0.03638316481150694,
+              -0.02378144518735814
+            ],
+            "folds_compared": 3,
+            "mean_delta_rms_z": -0.0499424302600208,
+            "mean_delta_rmse": -0.0005190862329401321,
+            "supported_in_every_fold": true,
+            "worst_fold_delta_rms_z": -0.02378144518735814
+          },
+          "rotation+bench": {
+            "delta_rms_z_by_fold": [
+              -0.0010929040042215732,
+              -0.006770833912821184,
+              -0.0010038745408227356
+            ],
+            "folds_compared": 3,
+            "mean_delta_rms_z": -0.0029558708192884975,
+            "mean_delta_rmse": -1.305134192326838e-05,
+            "supported_in_every_fold": true,
+            "worst_fold_delta_rms_z": -0.0010038745408227356
+          },
+          "rotation+rotation": {
+            "delta_rms_z_by_fold": [
+              0.06593620160564817,
+              0.058098928440300845,
+              0.037492427852861
+            ],
+            "folds_compared": 3,
+            "mean_delta_rms_z": 0.05384251929960334,
+            "mean_delta_rmse": 0.0003971197323982059,
+            "supported_in_every_fold": true,
+            "worst_fold_delta_rms_z": 0.06593620160564817
+          },
+          "starter+bench": {
+            "delta_rms_z_by_fold": [
+              0.08269436087051218,
+              0.04981142671576144,
+              0.026348313185955874
+            ],
+            "folds_compared": 3,
+            "mean_delta_rms_z": 0.0529513669240765,
+            "mean_delta_rmse": 0.00023159748908965888,
+            "supported_in_every_fold": true,
+            "worst_fold_delta_rms_z": 0.08269436087051218
+          },
+          "starter+rotation": {
+            "delta_rms_z_by_fold": [
+              -0.007622501722688746,
+              -0.003545578262367677,
+              0.0019412259210844773
+            ],
+            "folds_compared": 3,
+            "mean_delta_rms_z": -0.0030756180213239817,
+            "mean_delta_rmse": -5.324583131498366e-06,
+            "supported_in_every_fold": true,
+            "worst_fold_delta_rms_z": 0.0019412259210844773
+          },
+          "starter+starter": {
+            "delta_rms_z_by_fold": [
+              0.02964760657872345,
+              0.009145532298286074,
+              0.029394413512454864
+            ],
+            "folds_compared": 3,
+            "mean_delta_rms_z": 0.022729184129821462,
+            "mean_delta_rmse": 0.0001148847685393372,
+            "supported_in_every_fold": true,
+            "worst_fold_delta_rms_z": 0.02964760657872345
+          }
+        },
+        "paired_difference_by_fold_and_cell": {
+          "mean": 3.435663867205053e-05,
+          "observations": 18,
+          "pairing_unit": "(fold, supported cell)",
+          "standard_error": 7.648789026264132e-05
+        },
+        "paired_difference_equal_weighted": {
+          "mean": -9.222532848852244e-05,
+          "standard_error": 5.7309152611708186e-05
+        },
+        "paired_difference_r1_minus_r0": {
+          "mean": -0.00010403727832724909,
+          "objective": "support-weighted supported-cell RMSE",
+          "pairing_unit": "forward fold",
+          "standard_error": 5.891021619615258e-05,
+          "standard_errors_of_improvement": 1.766031174980542
+        },
+        "worst_supported_cell_deterioration_rms_z": {
+          "cell": "rotation+rotation",
+          "mean_delta_rms_z": 0.05384251929960334
+        }
+      },
+      "folds_scored": [
+        2021,
+        2022,
+        2023
+      ],
+      "universe": "frozen_architecture"
+    }
+  }
+}

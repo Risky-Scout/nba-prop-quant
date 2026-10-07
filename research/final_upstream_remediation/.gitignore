@@ -1,0 +1,17 @@
+# Generated data. Excluded by rule, identified by hash.
+#
+# The residual dataset is the accepted V1 lineage's OOF residuals, copied here
+# byte for byte by 03_freeze_spec.py so the candidate and the control are
+# scored on the same rows. It is a 65 MB derived artifact of
+# 02_build_oof_residuals.py; its hash and rebuild recipe are in
+# ../game_latent_state/residual_manifest.json.
+oof_gaussian_residuals.parquet
+__pycache__/
+
+# Regenerated exports, not inputs. factor_spec.json carries the full loadings
+# payload, validation_report.json carries every summary computed from the
+# grades, and paired_joint_calibration.json carries the paired comparison that
+# reads them, so nothing on this branch reads either parquet. Their SHA256s are
+# in SHA256SUMS.factors.txt and SHA256SUMS.validation.txt.
+factor_loadings.parquet
+joint_event_grades.parquet

@@ -1,0 +1,53 @@
+{
+  "artifact_name": "game_latent_state_validation",
+  "branch": "research/nba-game-latent-state-shadow-v1",
+  "code_sha": "8228e8de8e10dcf2a6287ae0dd0a7741c3699edb",
+  "created_at": "2026-10-05T05:46:11Z",
+  "dependence_model_version": "game-latent-state-shadow-v1",
+  "input_fingerprints": {
+    "factor_spec.json": "553f02cc5865d124cf58b14e514ad2862b413061818092b1e3a8e42b8b71fe4d",
+    "oof_gaussian_residuals.parquet": "d0005f0e4996670266bfb5f9cf5cd25d8cbf9189c305fdc009f0f805ac921174"
+  },
+  "notes": [
+    "Marginals and the incumbent copula are refitted per validation season on seasons strictly before it.",
+    "Joint-event lines come from the predictive marginal only; realized values are used solely for grading."
+  ],
+  "outputs": {
+    "joint_event_grades.parquet": "96b7711fa356f02c1defbb2592852c3fb62ea1592ea78334cfd7a558fb3f6d9f",
+    "validation_report.json": "844937c453404e4ad585efcd87d1cdd352248455f68950f8fcdfaea5588a792f"
+  },
+  "parameters": {
+    "bootstrap_draws": 400,
+    "games_per_season": 300,
+    "marginal_probe_games_per_season": 12,
+    "marginal_probe_simulations": 200000,
+    "min_expected_minutes": 8.0,
+    "models": [
+      "candidate",
+      "baseline_independence",
+      "baseline_production"
+    ],
+    "simulations_per_game": 20000,
+    "variance_ratio_min_variance": 1.0
+  },
+  "promotion_eligibility": "SHADOW_RESEARCH_ONLY__NOT_ELIGIBLE_FOR_PROMOTION",
+  "schema_version": 1,
+  "seasons_used": [
+    2024,
+    2025
+  ],
+  "seed": 73,
+  "source_production_ref": "origin/production/wizardofodds-integration",
+  "source_production_sha": "a30ed672001f8774b6cfec9ad7a3ccb382506c4b",
+  "training_cutoff": "season<2024",
+  "training_seasons": [
+    2020,
+    2021,
+    2022,
+    2023
+  ],
+  "validation_seasons": [
+    2024,
+    2025
+  ]
+}

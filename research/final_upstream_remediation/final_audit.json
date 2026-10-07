@@ -1,0 +1,1856 @@
+{
+  "audit_only": true,
+  "candidate_factor_spec_hash": "3229bbc83a4388c270a21008a75afacc3479cfd6f6390c8737f041412d2f2eb4",
+  "code_sha": "17143c1bbbf7b2b5e7085d53f770ebfc241299e9",
+  "count_rmse": {
+    "are_values_directly_comparable": "NO",
+    "by_run": {
+      "paired_candidate_400": {
+        "bucket_count": 12,
+        "buckets": [
+          "opponent_ast_ast",
+          "opponent_fg3m_reb",
+          "opponent_pts_pts",
+          "opponent_pts_reb",
+          "opponent_reb_reb",
+          "opponent_stl_pts",
+          "passer_ast_teammate_pts",
+          "teammate_ast_ast",
+          "teammate_fg3m_fg3m",
+          "teammate_pts_pts",
+          "teammate_pts_reb",
+          "teammate_reb_reb"
+        ],
+        "by_model": {
+          "baseline_independence": {
+            "matches": true,
+            "recomputed_unweighted_rmse": 0.018726319482082428,
+            "stored": 0.01872631948208243
+          },
+          "baseline_production": {
+            "matches": true,
+            "recomputed_unweighted_rmse": 0.018750015242188726,
+            "stored": 0.018750015242188722
+          },
+          "candidate": {
+            "matches": true,
+            "recomputed_unweighted_rmse": 0.0060780406040194315,
+            "stored": 0.0060780406040194315
+          }
+        },
+        "games_simulated": 400,
+        "simulations_per_game": 20000,
+        "validation_seasons": [
+          2024,
+          2025
+        ]
+      },
+      "paired_control_400": {
+        "bucket_count": 12,
+        "buckets": [
+          "opponent_ast_ast",
+          "opponent_fg3m_reb",
+          "opponent_pts_pts",
+          "opponent_pts_reb",
+          "opponent_reb_reb",
+          "opponent_stl_pts",
+          "passer_ast_teammate_pts",
+          "teammate_ast_ast",
+          "teammate_fg3m_fg3m",
+          "teammate_pts_pts",
+          "teammate_pts_reb",
+          "teammate_reb_reb"
+        ],
+        "by_model": {
+          "baseline_independence": {
+            "matches": true,
+            "recomputed_unweighted_rmse": 0.018726319482082428,
+            "stored": 0.01872631948208243
+          },
+          "baseline_production": {
+            "matches": true,
+            "recomputed_unweighted_rmse": 0.018750015242188726,
+            "stored": 0.018750015242188722
+          },
+          "candidate": {
+            "matches": true,
+            "recomputed_unweighted_rmse": 0.006404740266967676,
+            "stored": 0.006404740266967676
+          }
+        },
+        "games_simulated": 400,
+        "simulations_per_game": 20000,
+        "validation_seasons": [
+          2024,
+          2025
+        ]
+      },
+      "published_repair_600": {
+        "bucket_count": 12,
+        "buckets": [
+          "opponent_ast_ast",
+          "opponent_fg3m_reb",
+          "opponent_pts_pts",
+          "opponent_pts_reb",
+          "opponent_reb_reb",
+          "opponent_stl_pts",
+          "passer_ast_teammate_pts",
+          "teammate_ast_ast",
+          "teammate_fg3m_fg3m",
+          "teammate_pts_pts",
+          "teammate_pts_reb",
+          "teammate_reb_reb"
+        ],
+        "by_model": {
+          "baseline_independence": {
+            "matches": true,
+            "recomputed_unweighted_rmse": 0.020131755832110805,
+            "stored": 0.0201317558321108
+          },
+          "baseline_production": {
+            "matches": true,
+            "recomputed_unweighted_rmse": 0.020140080578426665,
+            "stored": 0.020140080578426665
+          },
+          "candidate": {
+            "matches": true,
+            "recomputed_unweighted_rmse": 0.00786120589118823,
+            "stored": 0.00786120589118823
+          }
+        },
+        "games_simulated": 600,
+        "simulations_per_game": 20000,
+        "validation_seasons": [
+          2024,
+          2025
+        ]
+      }
+    },
+    "control_latent_path_unchanged_by_the_refactor": {
+      "implied_buckets_identical": true,
+      "observed_buckets_identical": true,
+      "rmse_control_400": 0.002765903474390802,
+      "rmse_repair_600": 0.002765903474390802,
+      "statement": "the latent dependence summary reads all held-out games, not the simulated subset, so it isolates the control model from the universe change"
+    },
+    "definition": {
+      "bucket_count": 12,
+      "count_transform": "standardized count residuals e_<stat>, re-prefixed to zs_ and pooled by the same game-clustered pair_moments accumulator the latent space uses",
+      "identical_in_both_runs": true,
+      "implied_estimator": "simulated_pair_moments over the model's own draws for the same games",
+      "observed_estimator": "observed_count_pair_moments over the simulated held-out games",
+      "random_pit_enters": false,
+      "role_weighting": false,
+      "same_and_cross_team_both_included": true,
+      "se_weighting": false,
+      "statistic": "unweighted root mean square of the 12 cross-player bucket errors in count space",
+      "weighting": "none; every bucket enters with weight 1"
+    },
+    "is_this_a_bug": "No. A bug would require the same observations to produce two answers. Here the definition is provably one definition and the observations are provably two different samples. The reporting defect -- quoting 0.007861206 and 0.006404740 side by side as though they were a control-versus-candidate comparison -- is real, and the paired control number 0.006404740 is the only one comparable with the candidate's 0.006078041.",
+    "latent_control_rmse_identical_across_universes": true,
+    "latent_observed_buckets_identical": {
+      "repair_600_vs_control_400": true
+    },
+    "observed_count_bucket_difference_600_minus_400": {
+      "opponent_ast_ast": -0.0016196467173227157,
+      "opponent_fg3m_reb": -0.0033021216618615503,
+      "opponent_pts_pts": 0.0011707270993892016,
+      "opponent_pts_reb": 0.0037131140307524136,
+      "opponent_reb_reb": 0.0005342957204726925,
+      "opponent_stl_pts": 0.0042162623753362735,
+      "passer_ast_teammate_pts": 0.0025478235050488685,
+      "teammate_ast_ast": 0.0019220123675176889,
+      "teammate_fg3m_fg3m": 0.0021974952046402876,
+      "teammate_pts_pts": 0.0056556749769901835,
+      "teammate_pts_reb": 0.00758621317707159,
+      "teammate_reb_reb": 0.003816004556996772
+    },
+    "observed_count_buckets_identical": {
+      "control_400_vs_candidate_400": true,
+      "repair_600_vs_control_400": false
+    },
+    "why_the_values_differ": "the definition is identical in both runs and reproduces both stored numbers exactly, and the control model's latent reading is bitwise unchanged. The count-space statistic is measured on the simulated games only, and the two runs simulate differently spaced 400- and 600-game samples of the same held-out pool, so the observed count-space buckets themselves differ. The move from 0.007861206 to 0.006404740 is entirely the evaluation universe, not a changed metric and not a changed model."
+  },
+  "driver_equivalence": {
+    "by_file": {
+      "research/game_latent_state/04_validate_shadow_v1.py": {
+        "blob_at_paired_runs": "8ef5c21506ff870a9d3183dd214c3e68a56313af",
+        "blob_at_repair_run": "d2fc5fed09c3bc1a285786a6813bc06da4593b47",
+        "identical": false,
+        "numstat": "5\t1\tresearch/game_latent_state/04_validate_shadow_v1.py"
+      },
+      "src/nba_prop_quant/research/game_latent_state/covariance.py": {
+        "blob_at_paired_runs": "f04349435305d95a00f30defbee5f4bfedc9dc83",
+        "blob_at_repair_run": "e6e01b5815dfdb1f83af325d9cdfd9d6c2ad2e64",
+        "identical": false,
+        "numstat": "234\t15\tsrc/nba_prop_quant/research/game_latent_state/covariance.py"
+      },
+      "src/nba_prop_quant/research/game_latent_state/factors.py": {
+        "blob_at_paired_runs": "bb2e4e908d98ffb69641eb815c9740cf269bddee",
+        "blob_at_repair_run": "4e2cc0d3df9b8dde5b39e3d7fb660d1ef46c1ffb",
+        "identical": false,
+        "numstat": "16\t1\tsrc/nba_prop_quant/research/game_latent_state/factors.py"
+      },
+      "src/nba_prop_quant/research/game_latent_state/validation.py": {
+        "blob_at_paired_runs": "dd319f2ab77a421cd1498357792c703bd62b4825",
+        "blob_at_repair_run": "dd319f2ab77a421cd1498357792c703bd62b4825",
+        "identical": true,
+        "numstat": ""
+      }
+    },
+    "paired_runs_code_sha": "9343de38107feca14090697dabbd85f6a895d223",
+    "published_repair_code_sha": "2dd4cf32d0c2807a5009a4d4e8becca1b6ad9777"
+  },
+  "findings": [
+    {
+      "disposition": "the prose was corrected to match the artifacts. No parameter, artifact or hash moved; the candidate spec hash is unchanged",
+      "id": "F1",
+      "is_a_model_change": false,
+      "severity": "NON_BLOCKING",
+      "what": "the README recorded item 1's selection as A0_pooled_empirical_bayes while every artifact records A2_robust_student_t, and the accompanying sentence counted four of six items landing on control behaviour instead of three",
+      "where": "research/final_upstream_remediation/README.md"
+    },
+    {
+      "disposition": "a reporting defect, not a bug. Only 0.006404740 is comparable with the candidate's 0.006078041, and gate 4 already read the paired pair",
+      "id": "F2",
+      "is_a_model_change": false,
+      "severity": "NON_BLOCKING",
+      "what": "the count-space control RMSE was quoted as 0.007861206 in the repair round and 0.006404740 in the paired round as though the two were comparable. They are the same statistic on two differently spaced samples of the held-out pool",
+      "where": "the repair and remediation validation reports"
+    },
+    {
+      "disposition": "reported as a failure. Not reinterpreted and not replaced with the no-regression gate that was written",
+      "id": "F3",
+      "is_a_model_change": false,
+      "severity": "BLOCKING_FOR_THE_ORIGINAL_BRIEF",
+      "what": "the brief's >=20% count-space improvement on passer_ast_teammate_pts was never encoded as a gate and is not met: the absolute error falls 5.1997%",
+      "where": "research/final_upstream_remediation/05_evaluate_gates.py"
+    },
+    {
+      "disposition": "reported as NO CALIBRATION IMPROVEMENT -- RAW RETAINED. The raw intervals are too narrow on the scored fold and the sample is twelve correlated bucket-seasonal observations, which is the CAUTION verdict",
+      "id": "F4",
+      "is_a_model_change": false,
+      "severity": "NON_BLOCKING",
+      "what": "the brief asked for an uncertainty calibration improvement over the raw predictive interval. No gate was written and no improvement was found; U0_raw was kept because the three alternatives scored worse on the same folds",
+      "where": "item 6 of the inner selection"
+    },
+    {
+      "disposition": "reported as a failure of the original requirement. The pooled supported-cell RMSE still improves and four of six cells improve, but the per-cell no-regression requirement as stated is not met",
+      "id": "F5",
+      "is_a_model_change": false,
+      "severity": "NON_BLOCKING",
+      "what": "the brief asked that no supported role-pair cell regress. No gate reads the six held-out cells, and starter+bench deteriorates by 4.777e-04 in RMSE and 0.134 in rms z",
+      "where": "research/final_upstream_remediation/05_evaluate_gates.py"
+    },
+    {
+      "disposition": "marked INACTIVE_NOT_APPLICABLE and proven bitwise inert across six half-life probes",
+      "id": "F6",
+      "is_a_model_change": false,
+      "severity": "INFORMATIONAL",
+      "what": "half_life is carried in the frozen upstream choices at 4.0 but has no numerical effect, because recency weighting lives on the A3 branch and item 1 selected A2",
+      "where": "upstream_spec.temporal_fitter"
+    }
+  ],
+  "game_universes": {
+    "400_is_subset_of_600": false,
+    "by_season": {
+      "2024": {
+        "first_five_of_200": [
+          15907438,
+          15907445,
+          15907451,
+          15907458,
+          15907465
+        ],
+        "first_five_of_300": [
+          15907438,
+          15907442,
+          15907447,
+          15907451,
+          15907456
+        ],
+        "games_available": 1321,
+        "intersection": 44,
+        "picked_200": 200,
+        "picked_300": 300
+      },
+      "2025": {
+        "first_five_of_200": [
+          18446819,
+          18446826,
+          18446832,
+          18446839,
+          18446846
+        ],
+        "first_five_of_300": [
+          18446819,
+          18446823,
+          18446828,
+          18446832,
+          18446837
+        ],
+        "games_available": 1322,
+        "intersection": 48,
+        "picked_200": 200,
+        "picked_300": 300
+      }
+    },
+    "classification": {
+      "caveat": "the 400-game set is NOT a nested subset of the 600-game set. Evenly spaced indices at n=200 and n=300 over the same sorted pool coincide rarely, so the two are differently spaced samples of one pool, not a sample and its subsample. That is why a count-space statistic measured on the simulated games moves between the two runs.",
+      "label": "A",
+      "not_B_accidental_reduction": "the density is the driver's declared default, not a silent drop; both runs record games_simulated 400 and games_skipped 0",
+      "not_C_different_event_generation": "both universes use the same families, the same two events per family, the same probability levels and the same line rule; only the set of games differs",
+      "statement": "A -- pre-defined paired joint-event subset. The 400-game set is the validator's own deterministic subsample at the driver's default density, used identically by candidate and control, and fixed before the candidate existed."
+    },
+    "driver_default_games_per_season": 200,
+    "exclusions_grouped_by_reason": {
+      "failed_the_eligibility_filter": {
+        "count": 0,
+        "model_specific": false,
+        "performance_based": false,
+        "reason": "a game is skipped when fewer than two players clear the 8.0 expected-minute floor; games_skipped is 0 in all three runs, so this excluded nothing"
+      },
+      "not_selected_by_the_subsample_rule": {
+        "count": 2243,
+        "model_specific": false,
+        "performance_based": false,
+        "reason": "the season's held-out game ids are sorted and sampled at evenly spaced indices; a game outside those indices is not simulated. The rule reads only the season, the id ordering and the requested count"
+      }
+    },
+    "games_available_in_the_holdout_seasons": 2643,
+    "in_400_not_in_600": 308,
+    "in_600_not_in_400": 508,
+    "intersection": 92,
+    "paired_runs_invocation": "default (200), not overridden",
+    "published_repair_invocation": 300,
+    "rule": "sorted held-out game ids of the season, subsampled at numpy.linspace(0, n-1, games_per_season) rounded to an index",
+    "rule_depends_on_model_or_performance": false,
+    "rule_depends_only_on": [
+      "season",
+      "game_id ordering",
+      "games_per_season"
+    ],
+    "rule_location": "research/game_latent_state/04_validate_shadow_v1.py, the --games-per-season branch inside simulate_season",
+    "subsample_density_provenance": {
+      "default_introduced_at": "2026-10-06T01:58:26+00:00",
+      "default_introduced_in": "9f228ae7d891f7a9646b00402114a914fc567999",
+      "default_predates_the_remediation_fork": true,
+      "remediation_fork_point": "ec2d513c869437756139ca7245736289012f8fba",
+      "statement": "the 200-games-per-season default was committed before the branch the remediation candidate was built on, so it cannot have been chosen in response to the candidate's performance"
+    },
+    "total_400_universe": 400,
+    "total_600_universe": 600
+  },
+  "games_skipped_by_run": {
+    "paired_candidate_400": 0,
+    "paired_control_400": 0,
+    "published_repair_600": 0
+  },
+  "half_life": {
+    "a3_differs_from_a2": true,
+    "a3_posterior_mean_for_contrast": 0.005792002432044351,
+    "bitwise_identical_across_every_probe": true,
+    "dispatch_reason": "temporal_fitter returns lambda series: fit_student_t_random_effects(series, nu=nu) for A2 and forwards half_life only on the A3 branch, where half_life=None is documented as the A2 case",
+    "half_life_carried_in_frozen_choices": 4.0,
+    "half_life_grid": [
+      1.0,
+      2.0,
+      4.0
+    ],
+    "half_life_null_in_every_bucket_fit": true,
+    "half_life_recorded_in_every_bucket_fit": {
+      "opponent_ast_ast": null,
+      "opponent_fg3m_reb": null,
+      "opponent_pts_pts": null,
+      "opponent_pts_reb": null,
+      "opponent_reb_reb": null,
+      "opponent_stl_pts": null,
+      "passer_ast_teammate_pts": null,
+      "teammate_ast_ast": null,
+      "teammate_fg3m_fg3m": null,
+      "teammate_pts_pts": null,
+      "teammate_pts_reb": null,
+      "teammate_reb_reb": null
+    },
+    "half_life_status": "INACTIVE_NOT_APPLICABLE",
+    "probes": [
+      {
+        "half_life_passed": 0.5,
+        "half_life_recorded": null,
+        "model": "A2_robust_student_t",
+        "posterior_mean": 0.006794894123659106,
+        "posterior_mean_hex": "0x1.bd4f680a7851fp-8",
+        "posterior_sd_hex": "0x1.bdaa9c57de1bbp-10",
+        "tau_hex": "0x1.3d82a3eaf6702p-10",
+        "weights_hex": [
+          "0x1.4cd939625c35bp-2",
+          "0x1.097f2d7301b2cp-2",
+          "0x1.39302bc0bfae8p-2",
+          "0x1.c1ddb5a789a4ap-4"
+        ]
+      },
+      {
+        "half_life_passed": 1.0,
+        "half_life_recorded": null,
+        "model": "A2_robust_student_t",
+        "posterior_mean": 0.006794894123659106,
+        "posterior_mean_hex": "0x1.bd4f680a7851fp-8",
+        "posterior_sd_hex": "0x1.bdaa9c57de1bbp-10",
+        "tau_hex": "0x1.3d82a3eaf6702p-10",
+        "weights_hex": [
+          "0x1.4cd939625c35bp-2",
+          "0x1.097f2d7301b2cp-2",
+          "0x1.39302bc0bfae8p-2",
+          "0x1.c1ddb5a789a4ap-4"
+        ]
+      },
+      {
+        "half_life_passed": 2.0,
+        "half_life_recorded": null,
+        "model": "A2_robust_student_t",
+        "posterior_mean": 0.006794894123659106,
+        "posterior_mean_hex": "0x1.bd4f680a7851fp-8",
+        "posterior_sd_hex": "0x1.bdaa9c57de1bbp-10",
+        "tau_hex": "0x1.3d82a3eaf6702p-10",
+        "weights_hex": [
+          "0x1.4cd939625c35bp-2",
+          "0x1.097f2d7301b2cp-2",
+          "0x1.39302bc0bfae8p-2",
+          "0x1.c1ddb5a789a4ap-4"
+        ]
+      },
+      {
+        "half_life_passed": 4.0,
+        "half_life_recorded": null,
+        "model": "A2_robust_student_t",
+        "posterior_mean": 0.006794894123659106,
+        "posterior_mean_hex": "0x1.bd4f680a7851fp-8",
+        "posterior_sd_hex": "0x1.bdaa9c57de1bbp-10",
+        "tau_hex": "0x1.3d82a3eaf6702p-10",
+        "weights_hex": [
+          "0x1.4cd939625c35bp-2",
+          "0x1.097f2d7301b2cp-2",
+          "0x1.39302bc0bfae8p-2",
+          "0x1.c1ddb5a789a4ap-4"
+        ]
+      },
+      {
+        "half_life_passed": 8.0,
+        "half_life_recorded": null,
+        "model": "A2_robust_student_t",
+        "posterior_mean": 0.006794894123659106,
+        "posterior_mean_hex": "0x1.bd4f680a7851fp-8",
+        "posterior_sd_hex": "0x1.bdaa9c57de1bbp-10",
+        "tau_hex": "0x1.3d82a3eaf6702p-10",
+        "weights_hex": [
+          "0x1.4cd939625c35bp-2",
+          "0x1.097f2d7301b2cp-2",
+          "0x1.39302bc0bfae8p-2",
+          "0x1.c1ddb5a789a4ap-4"
+        ]
+      },
+      {
+        "half_life_passed": 1000.0,
+        "half_life_recorded": null,
+        "model": "A2_robust_student_t",
+        "posterior_mean": 0.006794894123659106,
+        "posterior_mean_hex": "0x1.bd4f680a7851fp-8",
+        "posterior_sd_hex": "0x1.bdaa9c57de1bbp-10",
+        "tau_hex": "0x1.3d82a3eaf6702p-10",
+        "weights_hex": [
+          "0x1.4cd939625c35bp-2",
+          "0x1.097f2d7301b2cp-2",
+          "0x1.39302bc0bfae8p-2",
+          "0x1.c1ddb5a789a4ap-4"
+        ]
+      }
+    ],
+    "selected_treatment": "A2_robust_student_t"
+  },
+  "model_changes_made": "NONE",
+  "original_gates_that_would_fail": [
+    "passer_ast_teammate_pts improves by at least 20% in count space against the control",
+    "predictive uncertainty calibration improves on the raw predictive interval",
+    "no supported role-pair cell regresses"
+  ],
+  "original_versus_implemented_gates": [
+    {
+      "evidence": {
+        "candidate_abs_error": 0.017582879760824087,
+        "candidate_predicted": 0.03828239955187032,
+        "control_abs_error": 0.018547284057354264,
+        "control_predicted": 0.037317995255340145,
+        "observed": 0.05586527931269441,
+        "percentage_error_reduction": 5.19970629418261,
+        "required_percentage_error_reduction": 20.0,
+        "shortfall_in_percentage_points": 14.80029370581739
+      },
+      "exact_difference": "the brief asked for a >=20% count-space absolute-error reduction on one named bucket; no gate encoding that threshold was ever written. Gate 4 is a different statistic: it asks that the 12-bucket count-space RMSE not worsen by more than 5%, which is a no-regression test and not a 20% improvement test",
+      "final_implemented_gate": "NOT IMPLEMENTED",
+      "identical": false,
+      "implemented_gate_passed": null,
+      "original_gate": "passer_ast_teammate_pts improves by at least 20% in count space against the control",
+      "would_the_original_gate_pass": false
+    },
+    {
+      "evidence": {
+        "candidates_better_than_raw": {},
+        "coverage_loss_by_candidate": {
+          "U0_raw": 0.14500000000000002,
+          "U1_huber_m_scale": 0.1866666666666667,
+          "U2_median_of_forward_fold_scales": 0.1866666666666667,
+          "U3_student_t_predictive": 0.2491666666666667
+        },
+        "raw_coverage_loss": 0.14500000000000002,
+        "scored_observations": 12,
+        "selected": "U0_raw",
+        "statement": "NO CALIBRATION IMPROVEMENT - RAW RETAINED"
+      },
+      "exact_difference": "no gate was written for item 6 at all. The inner selection scored four uncertainty models and kept the raw one because it had the lowest coverage loss, so the brief's improvement was sought and not found rather than skipped",
+      "final_implemented_gate": "NOT IMPLEMENTED",
+      "identical": false,
+      "implemented_gate_passed": null,
+      "original_gate": "predictive uncertainty calibration improves on the raw predictive interval",
+      "would_the_original_gate_pass": false
+    },
+    {
+      "evidence": {
+        "by_legs": {
+          "2": {
+            "log_loss_candidate": 0.49920665128817415,
+            "log_loss_candidate_minus_control": {
+              "ci95_high": 1.4384761139506785e-05,
+              "ci95_low": -2.342971911692144e-05,
+              "delta": -4.2125104790473164e-06,
+              "significant": false,
+              "standard_error": 9.620917522030806e-06
+            },
+            "log_loss_control": 0.4992108637986533
+          },
+          "3": {
+            "log_loss_candidate": 0.3241359894961688,
+            "log_loss_candidate_minus_control": {
+              "ci95_high": 1.782536656258337e-05,
+              "ci95_low": -2.6019057600866896e-05,
+              "delta": -3.984248452822489e-06,
+              "significant": false,
+              "standard_error": 1.1133090251566987e-05
+            },
+            "log_loss_control": 0.32413997374462167
+          },
+          "4": {
+            "log_loss_candidate": 0.19818289628107294,
+            "log_loss_candidate_minus_control": {
+              "ci95_high": 3.302524662095877e-05,
+              "ci95_low": -2.1483717938451433e-05,
+              "delta": 6.215072181487888e-06,
+              "significant": false,
+              "standard_error": 1.398286884675823e-05
+            },
+            "log_loss_control": 0.19817668120889145
+          }
+        },
+        "note": "reported as required; no threshold was attached in the brief, so there is nothing to fail"
+      },
+      "exact_difference": "gates 9 and 10 priced the multi-leg comparison in Brier score, not log loss. Log loss is recomputed here from the stored probabilities, so the quantity exists; it was simply never a gate",
+      "final_implemented_gate": "NOT IMPLEMENTED",
+      "identical": false,
+      "implemented_gate_passed": null,
+      "original_gate": "final 2-leg, 3-leg and 4-leg log loss is reported",
+      "would_the_original_gate_pass": true
+    },
+    {
+      "evidence": {
+        "note": "starter+bench deteriorates: rmse 0.021519395 -> 0.021997074, rms z 6.0820 -> 6.2158",
+        "supported_cells": 6,
+        "worst_supported_cell_deterioration": {
+          "cell": "starter+bench",
+          "delta_rmse": 0.0004776786454572038
+        }
+      },
+      "exact_difference": "gate 12 checks that the role layer is pooled-neutral and identified, which is an identification test, not a per-cell no-regression test. No gate reads the six held-out cells",
+      "final_implemented_gate": "NOT IMPLEMENTED",
+      "identical": false,
+      "implemented_gate_passed": null,
+      "original_gate": "no supported role-pair cell regresses",
+      "would_the_original_gate_pass": false
+    },
+    {
+      "evidence": {
+        "by_bucket": {
+          "opponent_ast_ast": {
+            "abs_z_degradation": 0.040477664647360356,
+            "candidate_abs_z": 1.7210843286942392,
+            "control_abs_z": 1.6806066640468789,
+            "observed": 0.005341368590022398,
+            "within_tolerance": true
+          },
+          "opponent_fg3m_reb": {
+            "abs_z_degradation": -0.08747878819956423,
+            "candidate_abs_z": 1.749362555717366,
+            "control_abs_z": 1.8368413439169302,
+            "observed": -0.001518008220700275,
+            "within_tolerance": true
+          },
+          "opponent_pts_reb": {
+            "abs_z_degradation": -0.028480557349539026,
+            "candidate_abs_z": 1.1777055165079795,
+            "control_abs_z": 1.2061860738575185,
+            "observed": -0.002643665457434456,
+            "within_tolerance": true
+          },
+          "passer_ast_teammate_pts": {
+            "abs_z_degradation": -0.9217849846162696,
+            "candidate_abs_z": 0.6440653494092794,
+            "control_abs_z": 1.565850334025549,
+            "observed": 0.04701135502623302,
+            "within_tolerance": true
+          },
+          "teammate_pts_reb": {
+            "abs_z_degradation": -0.2757418284960338,
+            "candidate_abs_z": 0.7520718857041062,
+            "control_abs_z": 1.02781371420014,
+            "observed": 0.016270749051048704,
+            "within_tolerance": true
+          }
+        },
+        "max_abs_z_degradation_allowed": 1.0
+      },
+      "exact_difference": "none",
+      "final_implemented_gate": "gate 5: no protected cross-team bucket worsens beyond one z",
+      "identical": true,
+      "implemented_gate_passed": true,
+      "original_gate": "no protected opponent (cross-team) bucket worsens",
+      "would_the_original_gate_pass": true
+    },
+    {
+      "evidence": {
+        "by_bucket": {
+          "teammate_ast_ast": {
+            "abs_z_degradation": -0.8268403558522626,
+            "candidate_abs_z": 1.0620950796654478,
+            "candidate_implied": 0.0065929723966895795,
+            "control_abs_z": 1.8889354355177104,
+            "control_implied": 0.00474137163755374,
+            "observed": 0.008971395319402322,
+            "se": 0.002239369118875806,
+            "within_tolerance": true
+          },
+          "teammate_reb_reb": {
+            "abs_z_degradation": -0.06925461217382667,
+            "candidate_abs_z": 1.875152711812955,
+            "candidate_implied": 0.005340858273074903,
+            "control_abs_z": 1.9444073239867816,
+            "control_implied": 0.005190307659601295,
+            "observed": 0.009417198927637567,
+            "se": 0.0021738712953258796,
+            "within_tolerance": true
+          }
+        },
+        "max_abs_z_degradation_allowed": 0.25
+      },
+      "exact_difference": "none",
+      "final_implemented_gate": "gate 1: the repaired target buckets are not given back",
+      "identical": true,
+      "implemented_gate_passed": true,
+      "original_gate": "the repaired target buckets are not given back",
+      "would_the_original_gate_pass": true
+    },
+    {
+      "evidence": {
+        "max_abs_z_allowed": 1.96,
+        "signed_z": {
+          "teammate_ast_ast": -1.0620950796654478,
+          "teammate_reb_reb": -1.875152711812955
+        }
+      },
+      "exact_difference": "none",
+      "final_implemented_gate": "gate 2: no target bucket overshoots the observed value",
+      "identical": true,
+      "implemented_gate_passed": true,
+      "original_gate": "no target bucket overshoots the observed value",
+      "would_the_original_gate_pass": true
+    },
+    {
+      "evidence": {
+        "candidate_rmse": 0.0023619028949932452,
+        "control_rmse": 0.002765903474390802,
+        "max_ratio_allowed": 1.05,
+        "ratio": 0.8539354018901405
+      },
+      "exact_difference": "none",
+      "final_implemented_gate": "gate 3: global latent-space bucket RMSE does not worsen materially",
+      "identical": true,
+      "implemented_gate_passed": true,
+      "original_gate": "global latent-space bucket RMSE does not worsen materially",
+      "would_the_original_gate_pass": true
+    },
+    {
+      "evidence": {
+        "candidate_rmse": 0.0060780406040194315,
+        "control_rmse": 0.006404740266967676,
+        "max_ratio_allowed": 1.05,
+        "ratio": 0.9489909583635746
+      },
+      "exact_difference": "none",
+      "final_implemented_gate": "gate 4: count-space cross-player RMSE does not worsen materially",
+      "identical": true,
+      "implemented_gate_passed": true,
+      "original_gate": "count-space cross-player RMSE does not worsen materially",
+      "would_the_original_gate_pass": true
+    },
+    {
+      "evidence": {
+        "games_checked": 400,
+        "max_block_deviation": 2.220446049250313e-16,
+        "tolerance": 1e-09
+      },
+      "exact_difference": "none",
+      "final_implemented_gate": "gate 6: every same-player block stays pinned at the incumbent's",
+      "identical": true,
+      "implemented_gate_passed": true,
+      "original_gate": "every same-player block stays pinned at the incumbent's",
+      "would_the_original_gate_pass": true
+    },
+    {
+      "evidence": {
+        "games_tested": 400,
+        "max_dimensions": 168,
+        "min_covariance_eigenvalue": 0.1030132441933305,
+        "numerical_failures": 0
+      },
+      "exact_difference": "none",
+      "final_implemented_gate": "gate 7: every held-out game covariance is PSD with no numerical failure",
+      "identical": true,
+      "implemented_gate_passed": true,
+      "original_gate": "every held-out game covariance is PSD",
+      "would_the_original_gate_pass": true
+    },
+    {
+      "evidence": {
+        "bonferroni_z_critical": 4.966912648873327,
+        "candidate_max_abs_mean_z": 4.15404976556398
+      },
+      "exact_difference": "none",
+      "final_implemented_gate": "gate 8: marginal calibration is preserved (lineage gate A)",
+      "identical": true,
+      "implemented_gate_passed": true,
+      "original_gate": "marginal calibration is preserved",
+      "would_the_original_gate_pass": true
+    },
+    {
+      "evidence": {
+        "brier_candidate": 0.16253013242708333,
+        "brier_control": 0.16253016416354163,
+        "candidate_minus_control": {
+          "ci95": [
+            -6.489680911447165e-06,
+            6.307715963538297e-06
+          ],
+          "delta": -3.173645829468441e-08
+        },
+        "tolerance": 0.0005
+      },
+      "exact_difference": "none",
+      "final_implemented_gate": "gate 9: 2-leg joint calibration does not worsen beyond tolerance (paired)",
+      "identical": true,
+      "implemented_gate_passed": true,
+      "original_gate": "multi-leg joint calibration does not worsen beyond tolerance",
+      "would_the_original_gate_pass": true
+    },
+    {
+      "evidence": {
+        "by_legs": {
+          "3": {
+            "brier_candidate": 0.09208906885520833,
+            "brier_control": 0.09209184253645834,
+            "candidate_minus_control": {
+              "ci95": [
+                -6.804829843761601e-06,
+                1.3258704427056983e-06
+              ],
+              "delta": -2.7736812500123165e-06
+            },
+            "candidate_minus_independence": {
+              "ci95": [
+                -7.473757992189078e-05,
+                2.325202234374319e-05
+              ],
+              "delta": -2.50822125000133e-05
+            }
+          },
+          "4": {
+            "brier_candidate": 0.0519674613140625,
+            "brier_control": 0.0519670592328125,
+            "candidate_minus_control": {
+              "ci95": [
+                -3.2596508593772317e-06,
+                4.093320312495951e-06
+              ],
+              "delta": 4.0208124999635553e-07
+            },
+            "candidate_minus_independence": {
+              "ci95": [
+                -6.1602746875069605e-06,
+                5.065316718750948e-05
+              ],
+              "delta": 2.12206437500001e-05
+            }
+          }
+        },
+        "tolerance": 0.0005
+      },
+      "exact_difference": "none",
+      "final_implemented_gate": "gate 10: 3-leg and 4-leg joint calibration does not worsen beyond tolerance (paired)",
+      "identical": true,
+      "implemented_gate_passed": true,
+      "original_gate": "3-leg and 4-leg joint calibration does not worsen beyond tolerance",
+      "would_the_original_gate_pass": true
+    },
+    {
+      "evidence": {
+        "active_role_deviation_parameters": 0,
+        "active_symmetric_subspace_parameters": 0,
+        "pairwise": 0,
+        "player_indexed": 0,
+        "role_scale_free_parameters": 2,
+        "role_scale_values": 3,
+        "scalar_hyperparameters": 4,
+        "stat_indexed_competition": 21,
+        "stat_indexed_contrast": 36,
+        "stat_indexed_game": 36
+      },
+      "exact_difference": "none",
+      "final_implemented_gate": "gate 11: no pairwise, player-indexed, role-deviation or symmetric parameter",
+      "identical": true,
+      "implemented_gate_passed": true,
+      "original_gate": "no pairwise or player-indexed parameter is introduced",
+      "would_the_original_gate_pass": true
+    },
+    {
+      "evidence": {
+        "player_shares": {
+          "bench": 0.33756198081009725,
+          "rotation": 0.3234041378802793,
+          "starter": 0.3390338813096235
+        },
+        "recomputed_from_published_shares_and_scales": 0.0,
+        "scales": {
+          "bench": 1.2567044927931688,
+          "rotation": 0.8251141919545149,
+          "starter": 0.9112334054183127
+        },
+        "tau_log": 0.32715358352547913,
+        "tolerance": 1e-10,
+        "weighted_mean_scale_minus_one": 0.0
+      },
+      "exact_difference": "none",
+      "final_implemented_gate": "gate 12: the multiplicative role layer is pooled-neutral and identified",
+      "identical": true,
+      "implemented_gate_passed": true,
+      "original_gate": "the multiplicative role layer is pooled-neutral and identified",
+      "would_the_original_gate_pass": true
+    },
+    {
+      "evidence": {
+        "inner_selection_holdout_used": false,
+        "parameters_equal_to_the_forbidden_factor": [],
+        "temperature_holdout_used": false
+      },
+      "exact_difference": "none",
+      "final_implemented_gate": "gate 13: every selection used pre-2024 folds only and no global inflation factor was revived",
+      "identical": true,
+      "implemented_gate_passed": true,
+      "original_gate": "every selection used pre-2024 folds only and the global inflation factor was not revived",
+      "would_the_original_gate_pass": true
+    },
+    {
+      "evidence": {
+        "paths_outside_the_research_surface": []
+      },
+      "exact_difference": "none",
+      "final_implemented_gate": "gate 14: the production surface is untouched",
+      "identical": true,
+      "implemented_gate_passed": true,
+      "original_gate": "the production surface is untouched",
+      "would_the_original_gate_pass": true
+    }
+  ],
+  "paired_grades_universe": {
+    "baselines_identical": true,
+    "candidate_events": 6400,
+    "candidate_games": 400,
+    "control_events": 6400,
+    "control_games": 400,
+    "event_keys_identical_row_for_row": true,
+    "events_by_legs": {
+      "2": 2400,
+      "3": 2400,
+      "4": 1600
+    },
+    "events_per_game": 16,
+    "families": [
+      "2leg_cross_team",
+      "2leg_same_player",
+      "2leg_same_team",
+      "3leg_cross_team",
+      "3leg_mixed",
+      "3leg_same_team",
+      "4leg_cross_team",
+      "4leg_mixed"
+    ],
+    "family_count": 8,
+    "game_sets_identical": true,
+    "realized_identical": true
+  },
+  "post_selection_refactors": [
+    {
+      "artifact": "inner_selection.json",
+      "behaviour_affecting": [
+        "research/final_upstream_remediation/01_inner_selection.py",
+        "research/final_upstream_remediation/upstream_spec.py"
+      ],
+      "equivalence_evidence": "research/final_upstream_remediation/01_inner_selection.py lost its local read_buckets/season_series/CROSS_PLAYER_BUCKETS to upstream_spec.py so a test could import them. The shared season_series reproduces the recorded primary-bucket series to 0.0 absolute difference in estimates and standard errors; the regression test is test_the_shared_season_series_reproduces_the_recorded_one in tests/test_game_latent_state_shadow_final_audit.py.",
+      "files_changed_since": [
+        "research/final_upstream_remediation/01_inner_selection.py",
+        "research/final_upstream_remediation/05_evaluate_gates.py",
+        "research/final_upstream_remediation/06_write_report.py",
+        "research/final_upstream_remediation/07_audit_reconciliation.py",
+        "research/final_upstream_remediation/08_final_audit.py",
+        "research/final_upstream_remediation/README.md",
+        "research/final_upstream_remediation/SHA256SUMS.factors.txt",
+        "research/final_upstream_remediation/SHA256SUMS.validation.txt",
+        "research/final_upstream_remediation/audit_reconciliation.json",
+        "research/final_upstream_remediation/covariance_diagnostics.json",
+        "research/final_upstream_remediation/dependence_temperature.json",
+        "research/final_upstream_remediation/factor_spec.json",
+        "research/final_upstream_remediation/final_audit.json",
+        "research/final_upstream_remediation/frozen_spec.json",
+        "research/final_upstream_remediation/gate_report.json",
+        "research/final_upstream_remediation/inner_selection.json",
+        "research/final_upstream_remediation/manifest.json",
+        "research/final_upstream_remediation/manifest.validation.json",
+        "research/final_upstream_remediation/paired_joint_calibration.json",
+        "research/final_upstream_remediation/upstream_spec.py",
+        "research/final_upstream_remediation/validation_report.json",
+        "tests/test_game_latent_state_shadow_final_audit.py",
+        "tests/test_game_latent_state_shadow_final_upstream_remediation.py"
+      ],
+      "head": "17143c1bbbf7b2b5e7085d53f770ebfc241299e9",
+      "per_file": [
+        {
+          "behaviour_unchanged_because": "the moved bodies are the same expressions over the same inputs; the estimator was not edited, only relocated",
+          "change": "the local read_buckets, season_series and CROSS_PLAYER_BUCKETS definitions were deleted and the names imported from upstream_spec instead",
+          "path": "research/final_upstream_remediation/01_inner_selection.py",
+          "proof": "test_the_shared_season_series_reproduces_the_recorded_one recomputes the recorded teammate_ast_ast series from the shared helper at the artifact's own bootstrap and seed and asserts 0.0 absolute difference in both the estimates and the standard errors"
+        },
+        {
+          "behaviour_unchanged_because": "the additions are the relocated bodies; no existing function in the module was altered",
+          "change": "gained read_buckets, season_series and CROSS_PLAYER_BUCKETS as the single definition the drivers and the tests share",
+          "path": "research/final_upstream_remediation/upstream_spec.py",
+          "proof": "the same regression test, plus test_the_uniform_weighted_student_t_fit_is_what_the_artifact_recorded, which reproduces the recorded posterior mean for the primary bucket exactly"
+        }
+      ],
+      "recorded_code_sha": "23992e53769c69ba796a7ae83e3300327eb7212b"
+    }
+  ],
+  "promotion_eligibility": "SHADOW_RESEARCH_ONLY__NOT_ELIGIBLE_FOR_PROMOTION",
+  "proper_scores": {
+    "bootstrap_draws": 4000,
+    "by_legs": {
+      "2": {
+        "base_rate": 0.22791666666666666,
+        "brier_candidate": 0.16253013242708333,
+        "brier_candidate_minus_control": {
+          "ci95_high": 6.307715963543589e-06,
+          "ci95_low": -6.489680911456291e-06,
+          "delta": -3.1736458332140525e-08,
+          "significant": false,
+          "standard_error": 3.231524806080403e-06
+        },
+        "brier_candidate_minus_production": {
+          "ci95_high": 0.00023514880174479302,
+          "ci95_low": -5.714919617187467e-05,
+          "delta": 8.871757500000034e-05,
+          "significant": false,
+          "standard_error": 7.41900357802192e-05
+        },
+        "brier_control": 0.16253016416354163,
+        "brier_independence": 0.16251145590833332,
+        "brier_production": 0.16244141485208333,
+        "events": 2400,
+        "games": 400,
+        "log_loss_candidate": 0.49920665128817415,
+        "log_loss_candidate_minus_control": {
+          "ci95_high": 1.4384761139506785e-05,
+          "ci95_low": -2.342971911692144e-05,
+          "delta": -4.2125104790473164e-06,
+          "significant": false,
+          "standard_error": 9.620917522030806e-06
+        },
+        "log_loss_candidate_minus_production": {
+          "ci95_high": 0.0007253409807678592,
+          "ci95_low": -0.00013731910174634443,
+          "delta": 0.00028727750335954573,
+          "significant": false,
+          "standard_error": 0.00021993254557965998
+        },
+        "log_loss_control": 0.4992108637986533,
+        "log_loss_independence": 0.4991540394619894,
+        "log_loss_production": 0.49891937378481466,
+        "probability_range": [
+          0.00085,
+          0.8422
+        ]
+      },
+      "3": {
+        "base_rate": 0.10708333333333334,
+        "brier_candidate": 0.09208906885520833,
+        "brier_candidate_minus_control": {
+          "ci95_high": 1.3258704427079489e-06,
+          "ci95_low": -6.804829843750188e-06,
+          "delta": -2.773681250000354e-06,
+          "significant": false,
+          "standard_error": 2.1028199187004383e-06
+        },
+        "brier_candidate_minus_production": {
+          "ci95_high": 4.3807864322916437e-05,
+          "ci95_low": -0.000150866430416668,
+          "delta": -5.4695461458333924e-05,
+          "significant": false,
+          "standard_error": 4.963006799682762e-05
+        },
+        "brier_control": 0.09209184253645834,
+        "brier_independence": 0.09211415106770834,
+        "brier_production": 0.09214376431666667,
+        "events": 2400,
+        "games": 400,
+        "log_loss_candidate": 0.3241359894961688,
+        "log_loss_candidate_minus_control": {
+          "ci95_high": 1.782536656258337e-05,
+          "ci95_low": -2.6019057600866896e-05,
+          "delta": -3.984248452822489e-06,
+          "significant": false,
+          "standard_error": 1.1133090251566987e-05
+        },
+        "log_loss_candidate_minus_production": {
+          "ci95_high": 0.0002833921324379702,
+          "ci95_low": -0.000718449819276965,
+          "delta": -0.0002115597224144264,
+          "significant": false,
+          "standard_error": 0.00025185027616206974
+        },
+        "log_loss_control": 0.32413997374462167,
+        "log_loss_independence": 0.3242560011046743,
+        "log_loss_production": 0.3243475492185832,
+        "probability_range": [
+          0.0002,
+          0.6822
+        ]
+      },
+      "4": {
+        "base_rate": 0.058125,
+        "brier_candidate": 0.0519674613140625,
+        "brier_candidate_minus_control": {
+          "ci95_high": 4.093320312499788e-06,
+          "ci95_low": -3.259650859375832e-06,
+          "delta": 4.0208124999979866e-07,
+          "significant": false,
+          "standard_error": 1.8557791835670901e-06
+        },
+        "brier_candidate_minus_production": {
+          "ci95_high": 9.889395101562513e-05,
+          "ci95_low": -3.708529660156367e-05,
+          "delta": 3.0345439062498996e-05,
+          "significant": false,
+          "standard_error": 3.507546545474337e-05
+        },
+        "brier_control": 0.0519670592328125,
+        "brier_independence": 0.0519462406703125,
+        "brier_production": 0.051937115875,
+        "events": 1600,
+        "games": 400,
+        "log_loss_candidate": 0.19818289628107294,
+        "log_loss_candidate_minus_control": {
+          "ci95_high": 3.302524662095877e-05,
+          "ci95_low": -2.1483717938451433e-05,
+          "delta": 6.215072181487888e-06,
+          "significant": false,
+          "standard_error": 1.398286884675823e-05
+        },
+        "log_loss_candidate_minus_production": {
+          "ci95_high": 0.0005479593226051633,
+          "ci95_low": -0.0005052400167838701,
+          "delta": 2.639581120754353e-05,
+          "significant": false,
+          "standard_error": 0.00026660907691936666
+        },
+        "log_loss_control": 0.19817668120889145,
+        "log_loss_independence": 0.19800983246160606,
+        "log_loss_production": 0.19815650046986544,
+        "probability_range": [
+          5e-05,
+          0.25195
+        ]
+      }
+    },
+    "clip": 1e-06,
+    "seed": 73,
+    "universe": {
+      "blk_excluded_from_legs": true,
+      "event_generation_rule": "8 declared families x 2 events per family per game, players stats sides and probability levels drawn from a per-game locked RNG",
+      "events": 6400,
+      "events_per_game": 16,
+      "games": 400,
+      "leg_eligibility_min_expected_minutes": 12.0,
+      "line_rule": "half-integer line placed at the predictive marginal's quantile of the drawn probability level, plus 0.5; the realized box score enters only when grading",
+      "probability_source": "Monte Carlo, 20,000 draws per game",
+      "pushes_possible": false,
+      "pushes_reason": "counts are integers and every line is a half-integer, so realized == line cannot occur",
+      "seasons": [
+        2024,
+        2025
+      ]
+    }
+  },
+  "provenance": {
+    "01_clean_control_base_sha": "a30ed672001f8774b6cfec9ad7a3ccb382506c4b",
+    "02_remediation_branch_fork_sha": "ec2d513c869437756139ca7245736289012f8fba",
+    "03_inner_selection_code_sha": "23992e53769c69ba796a7ae83e3300327eb7212b",
+    "04_inner_selection_artifact_sha256": "658062d62a13bf3e9df82a60ae41c0206d3c3f2aa1f887084172d23eb342e284",
+    "05_dependence_temperature_code_sha": "a1af6fccbaa70ec9b30d8c930f5ae4766c6304b4",
+    "06_dependence_temperature_artifact_sha256": "41664caebf11cd054b42bf34bc2db4da27601e86438d09520fa0d6df47544177",
+    "07_frozen_spec_code_sha": "a1af6fccbaa70ec9b30d8c930f5ae4766c6304b4",
+    "08_frozen_spec_file_sha256": "aa2ceed3844bea20807e1ff77053ad8c03dc2ab8aa6f46a015fa042a7b4009a9",
+    "09_candidate_factor_spec_hash": "3229bbc83a4388c270a21008a75afacc3479cfd6f6390c8737f041412d2f2eb4",
+    "09b_factor_spec_file_sha256": "e643c6d52d5fd547b925e2bfedc3b128fbc5a4815d0a1200b13571f67b33509a",
+    "09c_factor_spec_sha256_in_manifest": "e643c6d52d5fd547b925e2bfedc3b128fbc5a4815d0a1200b13571f67b33509a",
+    "10_confirmatory_validation_code_sha": "9343de38107feca14090697dabbd85f6a895d223",
+    "11_validation_artifact_sha256": "03d35ed1733ae105f00be0d00c56a0de1e5f61985cd2c29194878c5a15b89817",
+    "11b_validation_sha256_in_manifest": "03d35ed1733ae105f00be0d00c56a0de1e5f61985cd2c29194878c5a15b89817",
+    "12_gate_evaluator_code_sha": "9343de38107feca14090697dabbd85f6a895d223",
+    "13_gate_report_sha256": "391271776d1f17b8e55a7fc62686e3f5c79be38ef5373ac9e7ca7f3b02908a75",
+    "14_report_generator_sha": "17143c1bbbf7b2b5e7085d53f770ebfc241299e9",
+    "15_final_branch_head_sha": "17143c1bbbf7b2b5e7085d53f770ebfc241299e9",
+    "15_note": "HEAD when the audit ran. The commit carrying final_audit.json is its child, since a recorded hash cannot name the commit that contains it.",
+    "control_factor_spec_file_sha256": "d51b387fe4b102c14a245136e3587da1ebf00f15556819970b02b4cad2a032da",
+    "control_factor_spec_hash": "c9b46e3a7497cfee52832f29397397b843aafb8e5f770a39157ce508f8157bc0"
+  },
+  "role_scale": {
+    "by_cell": {
+      "bench+bench": {
+        "candidate_max_abs_error": 0.10955156480232495,
+        "candidate_rms_z": 6.556060319340803,
+        "candidate_rmse": 0.046704434782173884,
+        "candidate_scalar": 0.0040453550415087995,
+        "candidate_scalar_z": -6.598432156533342,
+        "control_max_abs_error": 0.10993970492882539,
+        "control_rms_z": 6.641303913406575,
+        "control_rmse": 0.04734395621786696,
+        "control_scalar": 0.0032713441190408564,
+        "control_scalar_z": -6.700446203100448,
+        "delta_abs_scalar_z": -0.10201404656710622,
+        "delta_rms_z": -0.08524359406577187,
+        "delta_rmse": -0.0006395214356930759,
+        "effective_games": 1533.865758607284,
+        "games": 2569,
+        "observed_scalar": 0.05410962297505165,
+        "pairs": 71948.0,
+        "present": true,
+        "scalar_se": 0.007587297519452775,
+        "supported": true
+      },
+      "rotation+bench": {
+        "candidate_max_abs_error": 0.009900370639594196,
+        "candidate_rms_z": 1.2985265175472656,
+        "candidate_rmse": 0.0048201804277264535,
+        "candidate_scalar": 0.0026560578683257814,
+        "candidate_scalar_z": -0.7797979676778674,
+        "control_max_abs_error": 0.010209076963764016,
+        "control_rms_z": 1.2912035637307915,
+        "control_rmse": 0.0048035150722081565,
+        "control_scalar": 0.002198315658260594,
+        "control_scalar_z": -0.8796687436531335,
+        "delta_abs_scalar_z": -0.09987077597526617,
+        "delta_rms_z": 0.007322953816474076,
+        "delta_rmse": 1.6665355518297002e-05,
+        "effective_games": 2088.104194524107,
+        "games": 2630,
+        "observed_scalar": 0.006230140893550391,
+        "pairs": 63609.0,
+        "present": true,
+        "scalar_se": 0.004583344883377607,
+        "supported": true
+      },
+      "rotation+rotation": {
+        "candidate_max_abs_error": 0.024228252606675486,
+        "candidate_rms_z": 1.9977038685328168,
+        "candidate_rmse": 0.008542422812513358,
+        "candidate_scalar": 0.001743887329420687,
+        "candidate_scalar_z": -0.7254584697114804,
+        "control_max_abs_error": 0.02479396086660459,
+        "control_rms_z": 2.0124266074823587,
+        "control_rmse": 0.008624401958861532,
+        "control_scalar": 0.0014772495822819784,
+        "control_scalar_z": -0.7732346394509575,
+        "delta_abs_scalar_z": -0.04777616973947707,
+        "delta_rms_z": -0.014722738949541903,
+        "delta_rmse": -8.197914634817428e-05,
+        "effective_games": 1671.5000827750616,
+        "games": 2602,
+        "observed_scalar": 0.005792655011329076,
+        "pairs": 69616.0,
+        "present": true,
+        "scalar_se": 0.005580977893219181,
+        "supported": true
+      },
+      "starter+bench": {
+        "candidate_max_abs_error": 0.05216731800345104,
+        "candidate_rms_z": 6.215770288622994,
+        "candidate_rmse": 0.02199707377609352,
+        "candidate_scalar": 0.002933277211738986,
+        "candidate_scalar_z": 3.9774151849457304,
+        "control_max_abs_error": 0.049904956301168514,
+        "control_rms_z": 6.0819807665942385,
+        "control_rmse": 0.021519395130636318,
+        "control_scalar": 0.0024214959869595007,
+        "control_scalar_z": 3.8572466703819535,
+        "delta_abs_scalar_z": 0.12016851456377697,
+        "delta_rms_z": 0.1337895220287555,
+        "delta_rmse": 0.0004776786454572038,
+        "effective_games": 2029.2990614982264,
+        "games": 2621,
+        "observed_scalar": -0.01400598863670184,
+        "pairs": 65600.0,
+        "present": true,
+        "scalar_se": 0.004258862869673474,
+        "supported": true
+      },
+      "starter+rotation": {
+        "candidate_max_abs_error": 0.026781565054837083,
+        "candidate_rms_z": 3.4336356874349625,
+        "candidate_rmse": 0.010776230137943179,
+        "candidate_scalar": 0.0019259011726481849,
+        "candidate_scalar_z": 2.2770802096185916,
+        "control_max_abs_error": 0.026522241709348828,
+        "control_rms_z": 3.422907031799657,
+        "control_rmse": 0.010719134809439571,
+        "control_scalar": 0.0016272248809180634,
+        "control_scalar_z": 2.203096905314262,
+        "delta_abs_scalar_z": 0.07398330430432942,
+        "delta_rms_z": 0.01072865563530545,
+        "delta_rmse": 5.709532850360806e-05,
+        "effective_games": 2394.0850179205377,
+        "games": 2634,
+        "observed_scalar": -0.007266846831459666,
+        "pairs": 58143.0,
+        "present": true,
+        "scalar_se": 0.004037076939704125,
+        "supported": true
+      },
+      "starter+starter": {
+        "candidate_max_abs_error": 0.04618266014236704,
+        "candidate_rms_z": 3.641090038917299,
+        "candidate_rmse": 0.015727561524509343,
+        "candidate_scalar": 0.002126912251859643,
+        "candidate_scalar_z": 0.4134123647173147,
+        "control_max_abs_error": 0.04578672372795511,
+        "control_rms_z": 3.652816025792309,
+        "control_rmse": 0.01576270681149803,
+        "control_scalar": 0.0017924261714723439,
+        "control_scalar_z": 0.3566219527703707,
+        "delta_abs_scalar_z": 0.05679041194694401,
+        "delta_rms_z": -0.01172598687500992,
+        "delta_rmse": -3.51452869886866e-05,
+        "effective_games": 2055.7573234274887,
+        "games": 2614,
+        "observed_scalar": -0.0003080178132211805,
+        "pairs": 51368.0,
+        "present": true,
+        "scalar_se": 0.005889833669454451,
+        "supported": true
+      }
+    },
+    "cell_bootstrap_draws": 400,
+    "cells_present": 6,
+    "cells_shrunk_to_pooled": 0,
+    "cells_shrunk_to_pooled_note": "a cell falls back to the pooled same-team block when it misses either support threshold; every one of the six clears both, so no cell is pooled away",
+    "cells_supported": 6,
+    "cells_total": 6,
+    "definition": "per cell, the root mean square over the 6x6 stat block of (model-implied same-team correlation for the ordered role pair minus the held-out observed one); rms z divides each entry by its game-clustered bootstrap standard error; the scalar column is the mean of the six same-stat diagonal entries",
+    "effective_sample_size_definition": "Kish effective number of games for the pair-count-weighted mean over games, (sum c_g)^2 / sum c_g^2",
+    "holdout_seasons": [
+      2024,
+      2025
+    ],
+    "identification": {
+      "constraint_holds_exactly_within_tolerance": true,
+      "log_standard_errors": {
+        "bench": 0.02464192550600618,
+        "rotation": 0.03902010236968852,
+        "starter": 0.020767663566233895
+      },
+      "player_share_weights": {
+        "bench": 0.33756198081009725,
+        "rotation": 0.3234041378802793,
+        "starter": 0.3390338813096235
+      },
+      "raw_scales": {
+        "bench": 1.687298416787376,
+        "rotation": 1.1061283548089613,
+        "starter": 1.2208279586467432
+      },
+      "recomputed_weighted_mean_scale": 1.0,
+      "recomputed_weighted_mean_scale_minus_one": 0.0,
+      "recorded_weighted_mean_scale_minus_one": 0.0,
+      "roles": [
+        "bench",
+        "rotation",
+        "starter"
+      ],
+      "roles_fully_shrunk_to_pooled": [],
+      "scales": {
+        "bench": 1.2567044927931688,
+        "rotation": 0.8251141919545149,
+        "starter": 0.9112334054183127
+      },
+      "shrinkage_factor_towards_pooled": {
+        "bench": 0.9943585734286504,
+        "rotation": 0.985973838440798,
+        "starter": 0.9959864806678772
+      },
+      "tau_log": 0.32715358352547913,
+      "tolerance": 1e-12
+    },
+    "pooled_supported_rmse": {
+      "candidate": 0.022821283696694054,
+      "control": 0.02296864311923573
+    },
+    "role_scale_was_redesigned": false,
+    "role_scale_was_refitted": false,
+    "support_threshold": {
+      "min_cell_games": 200,
+      "min_cell_pairs": 2000,
+      "rule": "a cell is supported when games >= 200 and pairs >= 2000"
+    },
+    "worst_supported_cell_deterioration_rms_z": {
+      "cell": "starter+bench",
+      "delta_rms_z": 0.1337895220287555
+    },
+    "worst_supported_cell_deterioration_rmse": {
+      "cell": "starter+bench",
+      "delta_rmse": 0.0004776786454572038
+    }
+  },
+  "support_threshold": {
+    "min_cell_games": 200,
+    "min_cell_pairs": 2000
+  },
+  "temperature_universe": {
+    "events": 7040,
+    "events_by_fold": {
+      "2022": 3520,
+      "2023": 3520
+    },
+    "events_by_legs": {
+      "2": 2640,
+      "3": 2640,
+      "4": 1760
+    },
+    "games": 440,
+    "holdout_seasons_excluded": [
+      2024,
+      2025
+    ],
+    "holdout_used_for_selection": false,
+    "pricing_note": "exact Gaussian orthant probabilities, not Monte Carlo: every leg is a threshold on one latent normal, so every conjunction is an orthant whose probability is an integral. The compared quantity is smaller than the Monte Carlo noise of any affordable draw count, so a simulated search would read its own noise.",
+    "probability_source": "exact Gaussian orthant integration, not Monte Carlo",
+    "score": "game-clustered log loss",
+    "seasons": [
+      2022,
+      2023
+    ],
+    "selected_temperature": 1.0
+  },
+  "title": "Final audit: uncertainty, universes, count RMSE, provenance",
+  "uncertainty": {
+    "all_reproduced": true,
+    "all_twelve_buckets_both_folds": {
+      "mean_squared_z": 1.6696205304611345,
+      "observations": 24
+    },
+    "binomial_reading": {
+      "coverage_68": {
+        "binomial_se_if_independent": 0.1346600658448277,
+        "nominal": 0.68,
+        "nominal_inside_95_interval": true,
+        "observed": 0.5,
+        "successes": 6.0,
+        "trials": 12.0,
+        "z_against_nominal": -1.3366991830185107
+      },
+      "coverage_80": {
+        "binomial_se_if_independent": 0.11547005383792514,
+        "nominal": 0.8,
+        "nominal_inside_95_interval": true,
+        "observed": 0.6666666666666666,
+        "successes": 8.0,
+        "trials": 12.0,
+        "z_against_nominal": -1.1547005383792524
+      },
+      "coverage_90": {
+        "binomial_se_if_independent": 0.08660254037844385,
+        "nominal": 0.9,
+        "nominal_inside_95_interval": true,
+        "observed": 0.75,
+        "successes": 9.0,
+        "trials": 12.0,
+        "z_against_nominal": -1.7320508075688779
+      },
+      "coverage_95": {
+        "binomial_se_if_independent": 0.06291528696058961,
+        "nominal": 0.95,
+        "nominal_inside_95_interval": true,
+        "observed": 0.8333333333333334,
+        "successes": 10.0,
+        "trials": 12.0,
+        "z_against_nominal": -1.8543452998910592
+      }
+    },
+    "coverage_and_mean_z2_share_observations": true,
+    "coverage_levels": [
+      0.68,
+      0.8,
+      0.9,
+      0.95
+    ],
+    "critical_values": {
+      "coverage_68": 0.9944578832097535,
+      "coverage_80": 1.2815515655446004,
+      "coverage_90": 1.6448536269514722,
+      "coverage_95": 1.959963984540054
+    },
+    "effective_independent_seasons": 1,
+    "folds_dropped_as_not_cross_fitted": [
+      2022
+    ],
+    "folds_present": [
+      2022,
+      2023
+    ],
+    "folds_scored": [
+      2023
+    ],
+    "forward_records_total": 24,
+    "independence": "NOT independent. All scored observations share one target season and therefore the same games; the buckets are different stat pairs measured on overlapping player pairs within those games. The effective sample size in the time dimension is one season, not twelve observations.",
+    "interval_formula": "prediction +/- Phi^-1(0.5 + level/2) * sqrt(predictive_sd^2 + observed_se^2); covered iff |z| <= Phi^-1(0.5 + level/2)",
+    "leave_one_out": [
+      {
+        "coverage_68": 0.5454545454545454,
+        "coverage_80": 0.7272727272727273,
+        "coverage_90": 0.7272727272727273,
+        "coverage_95": 0.8181818181818182,
+        "coverage_loss": 0.12795454545454546,
+        "mean_squared_z": 2.6679854396671634,
+        "removed_bucket": "teammate_pts_pts",
+        "removed_z": -1.6414599927888225
+      },
+      {
+        "coverage_68": 0.45454545454545453,
+        "coverage_80": 0.6363636363636364,
+        "coverage_90": 0.7272727272727273,
+        "coverage_95": 0.8181818181818182,
+        "coverage_loss": 0.17340909090909093,
+        "mean_squared_z": 2.9124759508126754,
+        "removed_bucket": "teammate_reb_reb",
+        "removed_z": -0.07067733247405489
+      },
+      {
+        "coverage_68": 0.5454545454545454,
+        "coverage_80": 0.7272727272727273,
+        "coverage_90": 0.8181818181818182,
+        "coverage_95": 0.9090909090909091,
+        "coverage_loss": 0.08250000000000002,
+        "mean_squared_z": 2.1136293865364535,
+        "removed_bucket": "teammate_ast_ast",
+        "removed_z": -2.9651825394676954
+      },
+      {
+        "coverage_68": 0.5454545454545454,
+        "coverage_80": 0.7272727272727273,
+        "coverage_90": 0.8181818181818182,
+        "coverage_95": 0.9090909090909091,
+        "coverage_loss": 0.08250000000000002,
+        "mean_squared_z": 1.6206560493749118,
+        "removed_bucket": "passer_ast_teammate_pts",
+        "removed_z": -3.7702803876026314
+      },
+      {
+        "coverage_68": 0.5454545454545454,
+        "coverage_80": 0.7272727272727273,
+        "coverage_90": 0.8181818181818182,
+        "coverage_95": 0.8181818181818182,
+        "coverage_loss": 0.10522727272727272,
+        "mean_squared_z": 2.602422360773555,
+        "removed_bucket": "teammate_pts_reb",
+        "removed_z": -1.8481300754427372
+      },
+      {
+        "coverage_68": 0.45454545454545453,
+        "coverage_80": 0.6363636363636364,
+        "coverage_90": 0.7272727272727273,
+        "coverage_95": 0.8181818181818182,
+        "coverage_loss": 0.17340909090909093,
+        "mean_squared_z": 2.911817062942694,
+        "removed_bucket": "teammate_fg3m_fg3m",
+        "removed_z": -0.11064832531695364
+      },
+      {
+        "coverage_68": 0.45454545454545453,
+        "coverage_80": 0.6363636363636364,
+        "coverage_90": 0.7272727272727273,
+        "coverage_95": 0.8181818181818182,
+        "coverage_loss": 0.17340909090909093,
+        "mean_squared_z": 2.8887741216835146,
+        "removed_bucket": "opponent_pts_pts",
+        "removed_z": -0.5154759021975919
+      },
+      {
+        "coverage_68": 0.5454545454545454,
+        "coverage_80": 0.6363636363636364,
+        "coverage_90": 0.7272727272727273,
+        "coverage_95": 0.8181818181818182,
+        "coverage_loss": 0.1506818181818182,
+        "mean_squared_z": 2.8095106076306497,
+        "removed_bucket": "opponent_reb_reb",
+        "removed_z": -1.066589921351186
+      },
+      {
+        "coverage_68": 0.45454545454545453,
+        "coverage_80": 0.6363636363636364,
+        "coverage_90": 0.7272727272727273,
+        "coverage_95": 0.8181818181818182,
+        "coverage_loss": 0.17340909090909093,
+        "mean_squared_z": 2.903496426463172,
+        "removed_bucket": "opponent_pts_reb",
+        "removed_z": -0.3221335952212793
+      },
+      {
+        "coverage_68": 0.45454545454545453,
+        "coverage_80": 0.6363636363636364,
+        "coverage_90": 0.7272727272727273,
+        "coverage_95": 0.8181818181818182,
+        "coverage_loss": 0.17340909090909093,
+        "mean_squared_z": 2.912182432661648,
+        "removed_bucket": "opponent_fg3m_reb",
+        "removed_z": 0.09068618961534582
+      },
+      {
+        "coverage_68": 0.5454545454545454,
+        "coverage_80": 0.6363636363636364,
+        "coverage_90": 0.7272727272727273,
+        "coverage_95": 0.8181818181818182,
+        "coverage_loss": 0.1506818181818182,
+        "mean_squared_z": 2.7874421338152326,
+        "removed_bucket": "opponent_ast_ast",
+        "removed_z": 1.1748903235185488
+      },
+      {
+        "coverage_68": 0.45454545454545453,
+        "coverage_80": 0.6363636363636364,
+        "coverage_90": 0.7272727272727273,
+        "coverage_95": 0.8181818181818182,
+        "coverage_loss": 0.17340909090909093,
+        "mean_squared_z": 2.911838771903409,
+        "removed_bucket": "opponent_stl_pts",
+        "removed_z": 0.10956392347656171
+      }
+    ],
+    "leave_one_out_envelope": {
+      "coverage_68": [
+        0.45454545454545453,
+        0.5454545454545454
+      ],
+      "coverage_80": [
+        0.6363636363636364,
+        0.7272727272727273
+      ],
+      "coverage_90": [
+        0.7272727272727273,
+        0.8181818181818182
+      ],
+      "coverage_95": [
+        0.8181818181818182,
+        0.9090909090909091
+      ],
+      "coverage_loss": [
+        0.08250000000000002,
+        0.17340909090909093
+      ],
+      "mean_squared_z": [
+        1.6206560493749118,
+        2.9124759508126754
+      ]
+    },
+    "mean_squared_z_formula": "mean over the scored observations of z^2",
+    "mean_z2_crosses_one_under_any_single_removal": false,
+    "predictive_sd_heterogeneity": {
+      "max_denominator": 0.00349547834567194,
+      "min_denominator": 0.0021259315027445003,
+      "ratio_max_over_min": 1.6442102396805376
+    },
+    "predictive_sd_in_u0_raw": "the temporal model's predictive SD for an unseen season, sqrt(var(level) + tau^2 * nu/(nu-2)) under A2, combined in quadrature with the game-clustered sampling SE of the observed next-season estimate. U0_raw multiplies it by exactly 1.0.",
+    "reproduced_coverage": {
+      "coverage_68": 0.5,
+      "coverage_80": 0.6666666666666666,
+      "coverage_90": 0.75,
+      "coverage_95": 0.8333333333333334,
+      "mean_squared_z": 2.670185895355423,
+      "median_squared_z": 0.7016647330371752,
+      "observations": 12.0
+    },
+    "reproduction_matches_stored": {
+      "coverage_68": true,
+      "coverage_80": true,
+      "coverage_90": true,
+      "coverage_95": true,
+      "mean_squared_z": true,
+      "median_squared_z": true,
+      "observations": true
+    },
+    "same_four_buckets_both_folds": {
+      "mean_squared_z": 3.7384142727224092,
+      "observations": 8
+    },
+    "same_four_buckets_on_the_scored_fold": {
+      "mean_squared_z": 6.606975438646692,
+      "observations": 4
+    },
+    "scored_bucket_count": 12,
+    "scored_buckets": [
+      "opponent_ast_ast",
+      "opponent_fg3m_reb",
+      "opponent_pts_pts",
+      "opponent_pts_reb",
+      "opponent_reb_reb",
+      "opponent_stl_pts",
+      "passer_ast_teammate_pts",
+      "teammate_ast_ast",
+      "teammate_fg3m_fg3m",
+      "teammate_pts_pts",
+      "teammate_pts_reb",
+      "teammate_reb_reb"
+    ],
+    "scored_observations": 12,
+    "stored_coverage": {
+      "coverage_68": 0.5,
+      "coverage_80": 0.6666666666666666,
+      "coverage_90": 0.75,
+      "coverage_95": 0.8333333333333334,
+      "mean_squared_z": 2.670185895355423,
+      "median_squared_z": 0.7016647330371752,
+      "observations": 12.0
+    },
+    "tension_resolution": {
+      "apparent_tension": "mean z^2 of 0.665 reads as intervals that are too wide, while coverage of 50/66.7/75/83.3 against 68/80/90/95 reads as intervals that are too narrow",
+      "direction_is_not_stable_across_universes": "the same statistic is 0.665 on the 2024-2025 holdout and 3.118 on the inner pooled fit. The sign of the error flips between universes, which is the clearest evidence that twelve bucket-seasonal observations cannot pin a scale",
+      "direction_within_the_final_artifact": "intervals are too NARROW on the scored fold: mean z^2 2.670186 implies the predictive standard deviation is understated by about a factor of 1.63, which is exactly the direction the coverage shortfall reports",
+      "explanation": "the two numbers were never computed on the same observations. 0.665 is the V2 structural round's raw mean z^2 on the 2024-2025 holdout over four buckets; the coverage table is the final round's item 6 on the pre-2024 cross-fitted fold over twelve buckets. The final artifact's own mean z^2 on the observations behind the coverage table is 2.670186, which is greater than one and therefore agrees with the under-coverage instead of contradicting it. There is no internal inconsistency to resolve.",
+      "resolution": "DIFFERENT EVALUATION UNIVERSES",
+      "ruled_out": {
+        "dependence": "material for the standard errors: all twelve observations come from one target season, so the binomial standard errors quoted against the coverage levels are optimistic and the effective number of independent seasons is one",
+        "different_evaluation_universes": "this is the cause of the quoted tension",
+        "heavy_tails": "present and material: mean z^2 is 3.8 times the median and two of twelve observations carry 72% of the sum of squares",
+        "one_or_two_extreme_folds_or_buckets": "present: passer_ast_teammate_pts at z -3.77 and teammate_ast_ast at z -2.97 dominate",
+        "small_sample": "contributing but not causal: the sign of the miscalibration is stable under every single-observation removal, with leave-one-out mean z^2 never below one",
+        "unequal_predictive_sds": "not causal: the twelve denominators span 0.00217 to 0.00350, a factor of 1.6, far too narrow to manufacture a factor-of-four discrepancy"
+      }
+    },
+    "the_quoted_0_665_is_a_different_universe": {
+      "final_item_6_bucket_count": 12,
+      "final_item_6_seasons": "pre-2024 forward fold 2023",
+      "note": "The coverage table the brief quotes and the mean z^2 of 0.665 are not computed on the same observations, the same seasons, the same buckets or by the same code. Within the final artifact, coverage and mean z^2 are computed on the same scored observations and both say the same thing.",
+      "quoted_calibrated_mean_squared_z": 0.390769082372168,
+      "quoted_raw_mean_squared_z": 0.6652266156010309,
+      "same_observations": false,
+      "source_artifact": "research/game_latent_state_v2/sd_calibration_blocker.json",
+      "source_bucket_count": 4,
+      "source_buckets": [
+        "passer_ast_teammate_pts",
+        "teammate_ast_ast",
+        "teammate_pts_reb",
+        "teammate_reb_reb"
+      ],
+      "source_round": "V2 structural refinement (rejected inflation factor)",
+      "source_seasons": "2024-2025 holdout"
+    },
+    "training_seasons_behind_the_scored_fold": [
+      3
+    ],
+    "unit_of_observation": "one (dependence bucket, forward target season) pair: a bucket-level seasonal estimate. Not a game, not a player-game.",
+    "verdict": "UNCERTAINTY AUDIT CAUTION -- RAW INTERVALS BEST AVAILABLE BUT SAMPLE TOO SMALL / TAIL-SENSITIVE",
+    "verdict_basis": {
+      "no_recalibration_performed": true,
+      "no_replacement_calibration_invented": true,
+      "not_fail_because": "no single coverage shortfall is significant even against the optimistic independent-binomial standard error, the scale is driven by two of twelve observations, the twelve observations are one season's worth of correlated bucket estimates, and the three fitted alternatives all scored worse on the same folds, so no better-calibrated option was available to select",
+      "not_pass_because": "mean z^2 is 2.670186 on the scored observations and every nominal coverage level is missed low, so the intervals are not demonstrably adequate"
+    },
+    "z_by_observation": [
+      {
+        "bucket": "teammate_pts_pts",
+        "denominator": 0.003119688005915827,
+        "error": -0.005120843051693969,
+        "observed": -0.006102596630266274,
+        "observed_se": 0.002648871880900206,
+        "prediction": -0.000981753578572305,
+        "predictive_sd": 0.0016480081956201777,
+        "squared_z": 2.694390907926281,
+        "target_season": 2023,
+        "z": -1.6414599927888225
+      },
+      {
+        "bucket": "teammate_reb_reb",
+        "denominator": 0.00349547834567194,
+        "error": -0.0002470510851929151,
+        "observed": 0.006210001488452904,
+        "observed_se": 0.0030513933502874365,
+        "prediction": 0.006457052573645819,
+        "predictive_sd": 0.0017051004330780805,
+        "squared_z": 0.004995285325648094,
+        "target_season": 2023,
+        "z": -0.07067733247405489
+      },
+      {
+        "bucket": "teammate_ast_ast",
+        "denominator": 0.0033196938395603703,
+        "error": -0.009843498209442882,
+        "observed": -0.0019321367170331552,
+        "observed_se": 0.0028694435739401087,
+        "prediction": 0.007911361492409726,
+        "predictive_sd": 0.0016693294355485647,
+        "squared_z": 8.79230749236409,
+        "target_season": 2023,
+        "z": -2.9651825394676954
+      },
+      {
+        "bucket": "passer_ast_teammate_pts",
+        "denominator": 0.0027826894845026148,
+        "error": -0.010491519588208285,
+        "observed": 0.03649899924319271,
+        "observed_se": 0.002284162469399155,
+        "prediction": 0.046990518831401,
+        "predictive_sd": 0.001589327713390093,
+        "squared_z": 14.215014201141049,
+        "target_season": 2023,
+        "z": -3.7702803876026314
+      },
+      {
+        "bucket": "teammate_pts_reb",
+        "denominator": 0.0027796693813346408,
+        "error": -0.0051371905834318565,
+        "observed": 0.011002248709355228,
+        "observed_se": 0.002406180832493212,
+        "prediction": 0.016139439292787085,
+        "predictive_sd": 0.001391709621606309,
+        "squared_z": 3.4155847757559776,
+        "target_season": 2023,
+        "z": -1.8481300754427372
+      },
+      {
+        "bucket": "teammate_fg3m_fg3m",
+        "denominator": 0.0030088418433380686,
+        "error": -0.00033292331110893305,
+        "observed": -0.0015653917696689073,
+        "observed_se": 0.002655749879482266,
+        "prediction": -0.0012324684585599743,
+        "predictive_sd": 0.0014142566301248,
+        "squared_z": 0.012243051895446402,
+        "target_season": 2023,
+        "z": -0.11064832531695364
+      },
+      {
+        "bucket": "opponent_pts_pts",
+        "denominator": 0.003058109039960715,
+        "error": -0.0015763815163923611,
+        "observed": 0.01487477928817596,
+        "observed_se": 0.002599714312626865,
+        "prediction": 0.01645116080456832,
+        "predictive_sd": 0.0016104398135330844,
+        "squared_z": 0.26571540574642133,
+        "target_season": 2023,
+        "z": -0.5154759021975919
+      },
+      {
+        "bucket": "opponent_reb_reb",
+        "denominator": 0.003292010060543531,
+        "error": -0.0035112247515624376,
+        "observed": 0.009627175384886904,
+        "observed_se": 0.0029196593742689017,
+        "prediction": 0.013138400136449341,
+        "predictive_sd": 0.0015208285166196573,
+        "squared_z": 1.1376140603279292,
+        "target_season": 2023,
+        "z": -1.066589921351186
+      },
+      {
+        "bucket": "opponent_pts_reb",
+        "denominator": 0.002593092274582563,
+        "error": -0.0008353221371518059,
+        "observed": -0.00509129063829844,
+        "observed_se": 0.0022026683357808607,
+        "prediction": -0.004255968501146634,
+        "predictive_sd": 0.0013683492781626126,
+        "squared_z": 0.10377005317018703,
+        "target_season": 2023,
+        "z": -0.3221335952212793
+      },
+      {
+        "bucket": "opponent_fg3m_reb",
+        "denominator": 0.0021724524872386896,
+        "error": 0.00019701143818805743,
+        "observed": -0.004196040546410523,
+        "observed_se": 0.00187172402331053,
+        "prediction": -0.00439305198459858,
+        "predictive_sd": 0.0011028141229925425,
+        "squared_z": 0.008223984986950456,
+        "target_season": 2023,
+        "z": 0.09068618961534582
+      },
+      {
+        "bucket": "opponent_ast_ast",
+        "denominator": 0.003083504463089335,
+        "error": 0.003622779556209918,
+        "observed": 0.011549749598080234,
+        "observed_se": 0.002637363765372742,
+        "prediction": 0.007926970041870316,
+        "predictive_sd": 0.0015975957382863666,
+        "squared_z": 1.3803672722975204,
+        "target_season": 2023,
+        "z": 1.1748903235185488
+      },
+      {
+        "bucket": "opponent_stl_pts",
+        "denominator": 0.0021259315027445003,
+        "error": 0.00023292539648311027,
+        "observed": -0.00042607517102023263,
+        "observed_se": 0.00187224607556335,
+        "prediction": -0.0006590005675033429,
+        "predictive_sd": 0.0010071143862040316,
+        "squared_z": 0.01200425332757787,
+        "target_season": 2023,
+        "z": 0.10956392347656171
+      }
+    ],
+    "z_definition": "z = (observed next-season bucket - prediction from strictly earlier seasons) / sqrt(predictive_sd^2 + observed_se^2)",
+    "z_distribution": {
+      "max_abs_z": 3.7702803876026314,
+      "mean_squared_z": 2.670185895355423,
+      "mean_to_median_squared_z_ratio": 3.80550107427724,
+      "median_abs_z": 0.791032911774389,
+      "median_squared_z": 0.7016647330371752,
+      "p90_abs_z": 2.8534772930652,
+      "share_of_sum_squares_from_largest": 0.4436337255852654,
+      "share_of_sum_squares_from_largest_two": 0.7180312094101936
+    }
+  }
+}

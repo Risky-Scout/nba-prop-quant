@@ -1,0 +1,84 @@
+{
+  "artifact_name": "final_upstream_remediation_factor_model",
+  "branch": "research/nba-final-upstream-remediation",
+  "code_sha": "a1af6fccbaa70ec9b30d8c930f5ae4766c6304b4",
+  "created_at": "2026-10-06T13:15:19Z",
+  "dependence_model_version": "game-latent-state-shadow-v1",
+  "input_fingerprints": {
+    "oof_gaussian_residuals.parquet": "d0005f0e4996670266bfb5f9cf5cd25d8cbf9189c305fdc009f0f805ac921174"
+  },
+  "notes": [
+    "All six decisions taken on strictly pre-2024 chronological folds.",
+    "Loadings estimated from cross-player pairs only; the incumbent same-player block is never re-estimated."
+  ],
+  "outputs": {
+    "covariance_diagnostics.json": "0c929ad3bd1932ca292a53f62860f042746566a5bd7436ec0c23325fc2198c87",
+    "factor_loadings.parquet": "b41906310615e0e4c4457ad61faeae45cc5c97e4e8d70a80f677cf1e65dc00c6",
+    "factor_spec.json": "e643c6d52d5fd547b925e2bfedc3b128fbc5a4815d0a1200b13571f67b33509a",
+    "frozen_spec.json": "aa2ceed3844bea20807e1ff77053ad8c03dc2ab8aa6f46a015fa042a7b4009a9"
+  },
+  "parameters": {
+    "bootstrap_draws": 400,
+    "parameter_counts": {
+      "active_role_deviation_parameters": 0,
+      "active_symmetric_subspace_parameters": 0,
+      "pairwise": 0,
+      "player_indexed": 0,
+      "role_scale_free_parameters": 2,
+      "role_scale_values": 3,
+      "scalar_hyperparameters": 4,
+      "stat_indexed_competition": 21,
+      "stat_indexed_contrast": 36,
+      "stat_indexed_game": 36
+    },
+    "remediation_spec": {
+      "bridge_mode": "inverse_variance",
+      "bridge_weight_cap": 0.15,
+      "cross_team_nu": null,
+      "cross_team_prior": "gaussian",
+      "dependence_temperature": 1.0,
+      "eb_family": "block_diagonal",
+      "k_game": 6,
+      "name": "final_upstream_candidate",
+      "r_contrast": 6,
+      "role_column": "role_bucket",
+      "role_scale_mode": "log_shrunk",
+      "role_tau_log": null,
+      "shrinkage": "empirical_bayes"
+    },
+    "spec_hash": "3229bbc83a4388c270a21008a75afacc3479cfd6f6390c8737f041412d2f2eb4",
+    "upstream_choices": {
+      "cross_team_nu": null,
+      "cross_team_prior": "gaussian",
+      "dependence_temperature": 1.0,
+      "role_scale_mode": "log_shrunk",
+      "temporal_half_life": 4.0,
+      "temporal_nu": 3.0,
+      "temporal_treatment": "A2_robust_student_t",
+      "transmission_weight_cap": 0.15,
+      "uncertainty_model": "U0_raw"
+    }
+  },
+  "promotion_eligibility": "SHADOW_RESEARCH_ONLY__NOT_ELIGIBLE_FOR_PROMOTION",
+  "schema_version": 1,
+  "seasons_used": [
+    2020,
+    2021,
+    2022,
+    2023
+  ],
+  "seed": 73,
+  "source_production_ref": "origin/production/wizardofodds-integration",
+  "source_production_sha": "a30ed672001f8774b6cfec9ad7a3ccb382506c4b",
+  "training_cutoff": "season<2024",
+  "training_seasons": [
+    2020,
+    2021,
+    2022,
+    2023
+  ],
+  "validation_seasons": [
+    2024,
+    2025
+  ]
+}

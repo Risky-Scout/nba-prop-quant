@@ -1,0 +1,5 @@
+# Cached ZINB marginal refits, shared with the count-space forensic study so
+# the two never disagree about what a convention's marginals are. Derived
+# intermediates of committed fits, reproducible from them.
+cache/
+__pycache__/

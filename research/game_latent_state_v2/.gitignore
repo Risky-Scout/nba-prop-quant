@@ -1,0 +1,25 @@
+# Generated data. Excluded by rule, identified by hash.
+#
+# The residual parquet is a derived artifact of 02_build_oof_residuals.py,
+# reproducible from the committed manifest in ../game_latent_state, and
+# production history must not inherit it.
+oof_gaussian_residuals.parquet
+
+# Fitted-marginal and moment caches. Hundreds of megabytes of pickle that
+# belong to the machine that produced them.
+*.pkl
+*.pickle
+
+# The V2 structural search was screened and not carried, so this directory
+# keeps only the evidence that settles the record: the equivalence proof, the
+# predictive-SD rejection, the frozen candidate it applies to, and the
+# screening and temporal artifacts that record why each dial is off. The
+# drivers that produced them, the search-space modules they import and the
+# duplicated screening passes are not on this branch; they remain on
+# research/nba-game-latent-state-shadow-v2-structural.
+factor_loadings.parquet
+factor_spec.json
+count_bridge.json
+covariance_diagnostics.json
+inner_screening_pass*.json
+repair_control_baseline.json

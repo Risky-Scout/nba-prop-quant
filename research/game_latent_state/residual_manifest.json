@@ -1,0 +1,96 @@
+{
+  "artifact_name": "oof_gaussian_residuals",
+  "branch": "research/nba-game-latent-state-shadow-v1",
+  "code_sha": "7da519af168d5c897c1e66d99f87575e86933452",
+  "created_at": "2026-10-05T01:41:59Z",
+  "dependence_model_version": "game-latent-state-shadow-v1",
+  "input_fingerprints": {
+    "advanced/season=2015/advanced.parquet": "42ad8e5750f10e425f65a0b07acf9df47c12a3ec75f06ccb36c4fe4134261f1f",
+    "advanced/season=2016/advanced.parquet": "ff72f6e8f8f8023df4dc50ce1c928db5145559c91faf32173e823b198a18da33",
+    "advanced/season=2017/advanced.parquet": "9e09d59f930fbaa7b16716b5ea8bc33eb86f5e2067e3bc80db41af8274bdfb4c",
+    "advanced/season=2018/advanced.parquet": "bdf354f14332d440abd9ecbcf502905472f662b98cce43829c7e2bdffe3aad36",
+    "advanced/season=2019/advanced.parquet": "63306f3bc683fd82a5de8d708eccc2ac6caf14e7f3f9b70acba4227797da659a",
+    "advanced/season=2020/advanced.parquet": "24c4cf4068bd919b059b05a8c382778d59dbb7cff2900ea7933437fca11e9a6e",
+    "advanced/season=2021/advanced.parquet": "6fc0de7b6bd955f0bf7374c40263d485b5173be46ceb87c137e3368c36c13c5a",
+    "advanced/season=2022/advanced.parquet": "511cd6f6138081f011ae19c53da3496640b2389620a209409b85d5b1618113e9",
+    "advanced/season=2023/advanced.parquet": "92397c22f37c87d680067d5c1813dd04ee9de81a39c14567260f957bdb1ec342",
+    "advanced/season=2024/advanced.parquet": "d0bdf768877f330c42d1e11874920309d90b44a5adbd1a426970f4262c9715c1",
+    "advanced/season=2025/advanced.parquet": "6a85e3e08c9354fbf8c8ab91129c57b99e4d9a467b4857cc47a0810f76992a3a",
+    "players.parquet": "e7a81cb06962e931746c98fdf7ac3fea2643354ab5d18226aebb5d4348f67034",
+    "seasons/season=2015/games.parquet": "7f570ab67268cc5cddf67477fcc87819e8c64f531610d9420d87cf0b60077bee",
+    "seasons/season=2015/stats.parquet": "0562f925e2bc60aa727d3bbae8b8542ad108579014aa2c579a5815cce197ae1c",
+    "seasons/season=2016/games.parquet": "21df3a3236f4ddaa004338ba8ae6a2d7894872103ca7efbecfd842e8c16c8399",
+    "seasons/season=2016/stats.parquet": "a97389c6bfb5a63c6c3a4a1fa940730d2211cfce13c23378838452ebcc1779d5",
+    "seasons/season=2017/games.parquet": "0d78ff67dc3c4e2d112f1e0816090833cf96663d9cdd7ee7a6a9d95f2afa4b34",
+    "seasons/season=2017/stats.parquet": "65d8953fabc4ca23a8364e4837928d5fd2e668ecfe6ae6e7f25e1ba4ed43c708",
+    "seasons/season=2018/games.parquet": "d92a9d929eb8fb443bc28411f5ca7025c8445c66c0455afabefde0d9c66d5d4b",
+    "seasons/season=2018/stats.parquet": "1a5c19931ac651fae86c687b8895cf804a9623e82e466ecbeeec812899889057",
+    "seasons/season=2019/games.parquet": "7cac2fe499f0bc749675295eee993339aebe1dcb282b580a62ab81086afe0f5d",
+    "seasons/season=2019/stats.parquet": "f21d1e938207c5789a934127f2dde9f760219a650832617c7aa211fb954f04a1",
+    "seasons/season=2020/games.parquet": "b8a2f47d4958af7f9d215e85096954d009cb9922fcc1334e4dce7177e481e696",
+    "seasons/season=2020/stats.parquet": "460dbde9fe318a1b1cdcc4054647e55867668decbab5c11de98db5daf6f4148a",
+    "seasons/season=2021/games.parquet": "39dee59ae790ba1884b2f3ee30c8a5a08f15dcc430fbbd96f68cce339af312ee",
+    "seasons/season=2021/stats.parquet": "29b8545c3241109be2711beaec625aede41273dd92f914a1deddade25e2f162a",
+    "seasons/season=2022/games.parquet": "3a88466df4e7c5469189043f1a1cf88a81843f716f98c4581c3f1ad4646d0704",
+    "seasons/season=2022/stats.parquet": "64a3188d65e0b9a6b9c8dc0de8c280530a26df006cd20ed0aae5c2058a214bb5",
+    "seasons/season=2023/games.parquet": "857768e40049b34085e273d862c52c4e57864ee7971c30f0c7bca23945e475b1",
+    "seasons/season=2023/stats.parquet": "fc34f92d283c540b158f0dc4f4f4b6d38c126c8b734bc0b9c369c730fd3c2347",
+    "seasons/season=2024/games.parquet": "8a1d0b3632404290ea7e4d944cc05a0987202a84f385d1798f6fdfed9bf2ec76",
+    "seasons/season=2024/stats.parquet": "a76cbce1684ce996b7f829a09091775f290d3dd398ef14d96b4beaba57edc4b0",
+    "seasons/season=2025/games.parquet": "0597e0fe8642058cd9eb3a8e4e61da39ea4e65f6069c37198d8221a74809ab07",
+    "seasons/season=2025/stats.parquet": "8c21f2a0a08f5d0bc893083ae7bfcfbe45342964214dec777df197caf8c7d4b2"
+  },
+  "notes": [
+    "Randomized PIT with a keyed deterministic v; no in-sample residuals.",
+    "Every parameter applied to season S is fitted on seasons < S only.",
+    "Research raw window is narrower than production history_start_season."
+  ],
+  "outputs": {
+    "oof_gaussian_residuals.parquet": "d0005f0e4996670266bfb5f9cf5cd25d8cbf9189c305fdc009f0f805ac921174",
+    "oof_residual_build_report.json": "61a34b1720f35edc96c8c8d30c68e7732d826221136b16d9a7e6005185693785"
+  },
+  "parameters": {
+    "advanced_start_season": 2015,
+    "first_residual_season": 2018,
+    "frozen_marginal_family": "zinb",
+    "frozen_mean_routes": {
+      "ast": "xgb",
+      "blk": "ensemble",
+      "fg3m": "xgb",
+      "pts": "xgb",
+      "reb": "ensemble",
+      "stl": "xgb"
+    },
+    "marginal_fit": "walk-forward, seasons strictly before each residual season",
+    "mean_fit": "season_walk_forward_oof_target / _minutes",
+    "pit_epsilon": 1e-12,
+    "role_bucket_thresholds": {
+      "high": 28.23894691467285,
+      "low": 18.478050231933594
+    },
+    "stats": [
+      "pts",
+      "reb",
+      "ast",
+      "stl",
+      "blk",
+      "fg3m"
+    ]
+  },
+  "promotion_eligibility": "SHADOW_RESEARCH_ONLY__NOT_ELIGIBLE_FOR_PROMOTION",
+  "schema_version": 1,
+  "seasons_used": [
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "seed": 73,
+  "source_production_ref": "origin/production/wizardofodds-integration",
+  "source_production_sha": "a30ed672001f8774b6cfec9ad7a3ccb382506c4b",
+  "training_cutoff": "2026-06-13",
+  "training_seasons": [],
+  "validation_seasons": []
+}
