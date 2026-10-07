@@ -1,0 +1,365 @@
+{
+  "MONTE_CARLO_RERUN": "NO",
+  "code_sha": "54c0eb68b3802f70119f331c688d4db1e334236e",
+  "final_model_is_bitwise_identical_to_an_already_graded_model": true,
+  "holdout_role_cells": {
+    "by_cell": {
+      "bench+bench": {
+        "R0_ratio_counterfactual_max_abs_error": 0.10948847849343173,
+        "R0_ratio_counterfactual_rms_z": 6.586203312053408,
+        "R0_ratio_counterfactual_rmse": 0.04690344890023141,
+        "R0_ratio_counterfactual_scalar": 0.0039631539746210745,
+        "R1_log_shrunk_selected_max_abs_error": 0.10955156480232495,
+        "R1_log_shrunk_selected_rms_z": 6.556060319340803,
+        "R1_log_shrunk_selected_rmse": 0.046704434782173884,
+        "R1_log_shrunk_selected_scalar": 0.0040453550415087995,
+        "delta_rms_z_selected_minus_counterfactual": -0.03014299271260512,
+        "delta_rmse_selected_minus_counterfactual": -0.0001990141180575264,
+        "effective_games": 1533.865758607284,
+        "games": 2569,
+        "observed_scalar": 0.05410962297505165,
+        "pairs": 71948.0,
+        "present": true,
+        "scalar_se": 0.007587297519452775,
+        "supported": true
+      },
+      "rotation+bench": {
+        "R0_ratio_counterfactual_max_abs_error": 0.009902178438881805,
+        "R0_ratio_counterfactual_rms_z": 1.2997795442280007,
+        "R0_ratio_counterfactual_rmse": 0.00482550197401453,
+        "R0_ratio_counterfactual_scalar": 0.002658413419518543,
+        "R1_log_shrunk_selected_max_abs_error": 0.009900370639594196,
+        "R1_log_shrunk_selected_rms_z": 1.2985265175472656,
+        "R1_log_shrunk_selected_rmse": 0.0048201804277264535,
+        "R1_log_shrunk_selected_scalar": 0.0026560578683257814,
+        "delta_rms_z_selected_minus_counterfactual": -0.0012530266807351254,
+        "delta_rmse_selected_minus_counterfactual": -5.321546288076379e-06,
+        "effective_games": 2088.104194524107,
+        "games": 2630,
+        "observed_scalar": 0.006230140893550391,
+        "pairs": 63609.0,
+        "present": true,
+        "scalar_se": 0.004583344883377607,
+        "supported": true
+      },
+      "rotation+rotation": {
+        "R0_ratio_counterfactual_max_abs_error": 0.023525450996591542,
+        "R0_ratio_counterfactual_rms_z": 1.9504363490422425,
+        "R0_ratio_counterfactual_rmse": 0.00834790008115776,
+        "R0_ratio_counterfactual_scalar": 0.0017832165881851655,
+        "R1_log_shrunk_selected_max_abs_error": 0.024228252606675486,
+        "R1_log_shrunk_selected_rms_z": 1.9977038685328168,
+        "R1_log_shrunk_selected_rmse": 0.008542422812513358,
+        "R1_log_shrunk_selected_scalar": 0.001743887329420687,
+        "delta_rms_z_selected_minus_counterfactual": 0.047267519490574283,
+        "delta_rmse_selected_minus_counterfactual": 0.0001945227313555984,
+        "effective_games": 1671.5000827750616,
+        "games": 2602,
+        "observed_scalar": 0.005792655011329076,
+        "pairs": 69616.0,
+        "present": true,
+        "scalar_se": 0.005580977893219181,
+        "supported": true
+      },
+      "starter+bench": {
+        "R0_ratio_counterfactual_max_abs_error": 0.05185704369074047,
+        "R0_ratio_counterfactual_rms_z": 6.1911737148670944,
+        "R0_ratio_counterfactual_rmse": 0.021916272943601097,
+        "R0_ratio_counterfactual_scalar": 0.002915914048995082,
+        "R1_log_shrunk_selected_max_abs_error": 0.05216731800345104,
+        "R1_log_shrunk_selected_rms_z": 6.215770288622994,
+        "R1_log_shrunk_selected_rmse": 0.02199707377609352,
+        "R1_log_shrunk_selected_scalar": 0.002933277211738986,
+        "delta_rms_z_selected_minus_counterfactual": 0.02459657375589952,
+        "delta_rmse_selected_minus_counterfactual": 8.080083249242462e-05,
+        "effective_games": 2029.2990614982264,
+        "games": 2621,
+        "observed_scalar": -0.01400598863670184,
+        "pairs": 65600.0,
+        "present": true,
+        "scalar_se": 0.004258862869673474,
+        "supported": true
+      },
+      "starter+rotation": {
+        "R0_ratio_counterfactual_max_abs_error": 0.026758508710893886,
+        "R0_ratio_counterfactual_rms_z": 3.4166846608020083,
+        "R0_ratio_counterfactual_rmse": 0.010729337888090329,
+        "R0_ratio_counterfactual_scalar": 0.001955943444955942,
+        "R1_log_shrunk_selected_max_abs_error": 0.026781565054837083,
+        "R1_log_shrunk_selected_rms_z": 3.4336356874349625,
+        "R1_log_shrunk_selected_rmse": 0.010776230137943179,
+        "R1_log_shrunk_selected_scalar": 0.0019259011726481849,
+        "delta_rms_z_selected_minus_counterfactual": 0.016951026632954225,
+        "delta_rmse_selected_minus_counterfactual": 4.689224985284998e-05,
+        "effective_games": 2394.0850179205377,
+        "games": 2634,
+        "observed_scalar": -0.007266846831459666,
+        "pairs": 58143.0,
+        "present": true,
+        "scalar_se": 0.004037076939704125,
+        "supported": true
+      },
+      "starter+starter": {
+        "R0_ratio_counterfactual_max_abs_error": 0.04594315578765555,
+        "R0_ratio_counterfactual_rms_z": 3.6187324171586415,
+        "R0_ratio_counterfactual_rmse": 0.015632168713813177,
+        "R0_ratio_counterfactual_scalar": 0.002145401060764954,
+        "R1_log_shrunk_selected_max_abs_error": 0.04618266014236704,
+        "R1_log_shrunk_selected_rms_z": 3.641090038917299,
+        "R1_log_shrunk_selected_rmse": 0.015727561524509343,
+        "R1_log_shrunk_selected_scalar": 0.002126912251859643,
+        "delta_rms_z_selected_minus_counterfactual": 0.02235762175865741,
+        "delta_rmse_selected_minus_counterfactual": 9.539281069616615e-05,
+        "effective_games": 2055.7573234274887,
+        "games": 2614,
+        "observed_scalar": -0.0003080178132211805,
+        "pairs": 51368.0,
+        "present": true,
+        "scalar_se": 0.005889833669454451,
+        "supported": true
+      }
+    },
+    "cell_bootstrap_draws": 400,
+    "cells_supported": 6,
+    "confirmation_may_change_the_selection": false,
+    "counterfactual_definition": "the final loadings with R0's role-scale vector substituted, fitted on the same pre-2024 training rows; nothing else differs",
+    "counterfactual_role_scale": {
+      "bench": 1.2438709315478835,
+      "rotation": 0.8343665670703816,
+      "starter": 0.9151854173881451
+    },
+    "definition": "per cell, the root mean square over the 6x6 stat block of (model-implied same-team correlation for the ordered role pair minus the held-out observed one); rms z divides each entry by its game-clustered bootstrap standard error",
+    "holdout_seasons": [
+      2024,
+      2025
+    ],
+    "monte_carlo_used": false,
+    "observations_are_identical_across_arms": true,
+    "pooled": {
+      "R0_ratio_counterfactual": {
+        "equal_weighted_rmse": 0.022849919160160364,
+        "support_weighted_rmse": 0.023797808691196565
+      },
+      "R1_log_shrunk_selected": {
+        "equal_weighted_rmse": 0.022821283696694054,
+        "support_weighted_rmse": 0.023760773323565656
+      }
+    },
+    "selected_role_scale": {
+      "bench": 1.2567044927931688,
+      "rotation": 0.8251141919545149,
+      "starter": 0.9112334054183127
+    },
+    "worst_supported_cell_deterioration_rms_z": {
+      "cell": "rotation+rotation",
+      "delta_rms_z": 0.047267519490574283
+    }
+  },
+  "may_change_the_selection": false,
+  "monte_carlo_rerun_justification": "the selected role treatment is the frozen candidate's, the frozen factor spec file is unchanged and hashes to the authoritative value, and every module on the path from that file to a joint probability is byte-identical to the commit that graded it; re-running the simulation would reproduce the stored grades draw for draw, because the seed, the game universe and the inverse-CDF tabulation are all the same",
+  "probability_path_equivalence": {
+    "by_file": {
+      "research/final_upstream_remediation/04_paired_joint_calibration.py": {
+        "blob_at_grading_commit": "c9824d977f41cfc36d08caea36ba9864c65e7e1a",
+        "blob_at_head": "c9824d977f41cfc36d08caea36ba9864c65e7e1a",
+        "identical": true
+      },
+      "research/final_upstream_remediation/factor_spec.json": {
+        "blob_at_grading_commit": "361481fba2eee3f5639de907f70fccd883309c11",
+        "blob_at_head": "361481fba2eee3f5639de907f70fccd883309c11",
+        "identical": true
+      },
+      "research/game_latent_state/04_validate_shadow_v1.py": {
+        "blob_at_grading_commit": "8ef5c21506ff870a9d3183dd214c3e68a56313af",
+        "blob_at_head": "8ef5c21506ff870a9d3183dd214c3e68a56313af",
+        "identical": true
+      },
+      "src/nba_prop_quant/research/game_latent_state/covariance.py": {
+        "blob_at_grading_commit": "f04349435305d95a00f30defbee5f4bfedc9dc83",
+        "blob_at_head": "f04349435305d95a00f30defbee5f4bfedc9dc83",
+        "identical": true
+      },
+      "src/nba_prop_quant/research/game_latent_state/factors.py": {
+        "blob_at_grading_commit": "bb2e4e908d98ffb69641eb815c9740cf269bddee",
+        "blob_at_head": "bb2e4e908d98ffb69641eb815c9740cf269bddee",
+        "identical": true
+      },
+      "src/nba_prop_quant/research/game_latent_state/gates.py": {
+        "blob_at_grading_commit": "ca94f7777c9934c099a60f4ba06c82a05b437d99",
+        "blob_at_head": "ca94f7777c9934c099a60f4ba06c82a05b437d99",
+        "identical": true
+      },
+      "src/nba_prop_quant/research/game_latent_state/pit.py": {
+        "blob_at_grading_commit": "ca909075fe8cecce0769ea4bacb51664ebd9cb0f",
+        "blob_at_head": "ca909075fe8cecce0769ea4bacb51664ebd9cb0f",
+        "identical": true
+      },
+      "src/nba_prop_quant/research/game_latent_state/query.py": {
+        "blob_at_grading_commit": "c99993ab390a555f9a7ea172b3fcae4969913293",
+        "blob_at_head": "c99993ab390a555f9a7ea172b3fcae4969913293",
+        "identical": true
+      },
+      "src/nba_prop_quant/research/game_latent_state/simulator.py": {
+        "blob_at_grading_commit": "3d2e9ad8e97f4f5b1f615e2de67dee2ba50b492b",
+        "blob_at_head": "3d2e9ad8e97f4f5b1f615e2de67dee2ba50b492b",
+        "identical": true
+      },
+      "src/nba_prop_quant/research/game_latent_state/validation.py": {
+        "blob_at_grading_commit": "dd319f2ab77a421cd1498357792c703bd62b4825",
+        "blob_at_head": "dd319f2ab77a421cd1498357792c703bd62b4825",
+        "identical": true
+      }
+    },
+    "changed_module_reachable_from_probability_path": {
+      "src/nba_prop_quant/research/game_latent_state/remediation.py": false,
+      "src/nba_prop_quant/research/game_latent_state/transmission.py": false
+    },
+    "conclusion": "the final point-probability model is bitwise identical to the graded one: the same factor spec file, the same simulator, the same inverse-CDF tabulation and the same event generator",
+    "every_probability_path_file_is_byte_identical": true,
+    "grading_code_sha": "9343de38107feca14090697dabbd85f6a895d223",
+    "head_sha": "54c0eb68b3802f70119f331c688d4db1e334236e",
+    "modules_changed_after_grading": [
+      "src/nba_prop_quant/research/game_latent_state/remediation.py",
+      "src/nba_prop_quant/research/game_latent_state/transmission.py"
+    ],
+    "no_changed_module_is_on_the_probability_path": true,
+    "probability_path_imports": [
+      "nba_prop_quant.research.game_latent_state.covariance",
+      "nba_prop_quant.research.game_latent_state.pit",
+      "nba_prop_quant.research.game_latent_state.query",
+      "nba_prop_quant.research.game_latent_state.simulator"
+    ]
+  },
+  "promotion_eligibility": "SHADOW_RESEARCH_ONLY__NOT_ELIGIBLE_FOR_PROMOTION",
+  "runs_after": "01_role_scale_ablation.py",
+  "scope": "SHADOW / RESEARCH ONLY. NOT PROMOTABLE.",
+  "selected_arm": "R1_log_shrunk",
+  "selection_equivalence": {
+    "authoritative_spec_hash": "3229bbc83a4388c270a21008a75afacc3479cfd6f6390c8737f041412d2f2eb4",
+    "frozen_candidate_recorded_mode": "log_shrunk",
+    "frozen_role_scale": {
+      "bench": 1.2567044927931688,
+      "rotation": 0.8251141919545149,
+      "starter": 0.9112334054183127
+    },
+    "recomputed_spec_hash": "3229bbc83a4388c270a21008a75afacc3479cfd6f6390c8737f041412d2f2eb4",
+    "recorded_spec_hash": "3229bbc83a4388c270a21008a75afacc3479cfd6f6390c8737f041412d2f2eb4",
+    "reproduced_role_scale": {
+      "bench": 1.2567044927931688,
+      "rotation": 0.8251141919545149,
+      "starter": 0.9112334054183127
+    },
+    "role_scale_max_abs_deviation": 0.0,
+    "role_scale_reproduced_bitwise": true,
+    "selected_arm": "R1_log_shrunk",
+    "selected_role_scale_mode": "log_shrunk",
+    "selection_is_the_frozen_candidates_treatment": true,
+    "spec_hash_matches_authoritative": true,
+    "spec_hash_matches_recorded": true,
+    "tau_log_recorded": 0.32715358352547913,
+    "tau_log_reproduced": 0.32715358352547913
+  },
+  "stored_holdout_grades": {
+    "brier_by_legs": {
+      "2": {
+        "base_rate": 0.22791666666666666,
+        "brier_candidate": 0.16253013242708333,
+        "brier_control": 0.16253016416354163,
+        "brier_independence": 0.16251145590833332,
+        "brier_production": 0.16244141485208333,
+        "candidate_minus_control": {
+          "ci95": [
+            -6.489680911447165e-06,
+            6.307715963538297e-06
+          ],
+          "delta": -3.173645829468441e-08
+        },
+        "candidate_minus_independence": {
+          "ci95": [
+            -3.140024570311012e-05,
+            6.965699656250186e-05
+          ],
+          "delta": 1.8676518750010418e-05
+        },
+        "events": 2400,
+        "games": 400
+      },
+      "3": {
+        "base_rate": 0.10708333333333334,
+        "brier_candidate": 0.09208906885520833,
+        "brier_control": 0.09209184253645834,
+        "brier_independence": 0.09211415106770834,
+        "brier_production": 0.09214376431666667,
+        "candidate_minus_control": {
+          "ci95": [
+            -6.804829843761601e-06,
+            1.3258704427056983e-06
+          ],
+          "delta": -2.7736812500123165e-06
+        },
+        "candidate_minus_independence": {
+          "ci95": [
+            -7.473757992189078e-05,
+            2.325202234374319e-05
+          ],
+          "delta": -2.50822125000133e-05
+        },
+        "events": 2400,
+        "games": 400
+      },
+      "4": {
+        "base_rate": 0.058125,
+        "brier_candidate": 0.0519674613140625,
+        "brier_control": 0.0519670592328125,
+        "brier_independence": 0.0519462406703125,
+        "brier_production": 0.051937115875,
+        "candidate_minus_control": {
+          "ci95": [
+            -3.2596508593772317e-06,
+            4.093320312495951e-06
+          ],
+          "delta": 4.0208124999635553e-07
+        },
+        "candidate_minus_independence": {
+          "ci95": [
+            -6.1602746875069605e-06,
+            5.065316718750948e-05
+          ],
+          "delta": 2.12206437500001e-05
+        },
+        "events": 1600,
+        "games": 400
+      }
+    },
+    "factor_spec_hash_in_validation_report": "3229bbc83a4388c270a21008a75afacc3479cfd6f6390c8737f041412d2f2eb4",
+    "log_loss_by_legs": {
+      "2": {
+        "baseline_independence": 0.4991540394619894,
+        "baseline_production": 0.49891937378481466,
+        "candidate": 0.4992066512881742
+      },
+      "3": {
+        "baseline_independence": 0.3242560011046743,
+        "baseline_production": 0.3243475492185832,
+        "candidate": 0.3241359894961688
+      },
+      "4": {
+        "baseline_independence": 0.19800983246160603,
+        "baseline_production": 0.19815650046986544,
+        "candidate": 0.19818289628107294
+      }
+    },
+    "regraded_here": false,
+    "source": {
+      "joint_event_grades.parquet": "58aa122344b11bf0d732524fc2af69d543317aa261a05d3e6a11e6dd07e54776",
+      "paired_joint_calibration.json": "eee2831e228d9e38c27a4bbc358eea93f77c0f3ed8c8e0fa0530b699e5fbd119",
+      "validation_report.json": "03d35ed1733ae105f00be0d00c56a0de1e5f61985cd2c29194878c5a15b89817"
+    },
+    "validation_seasons": [
+      2024,
+      2025
+    ],
+    "verdict": "SHADOW V1 ACCEPTED FOR PRODUCTION-INTEGRATION DESIGN."
+  },
+  "title": "holdout confirmation of the selected role treatment"
+}
