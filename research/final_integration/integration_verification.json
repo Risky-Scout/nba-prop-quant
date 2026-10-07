@@ -1,6 +1,6 @@
 {
   "carry_manifest_contents": {
-    "carried_paths_declared": 51,
+    "carried_paths_declared": 53,
     "carried_paths_not_tracked": [],
     "excluded_paths_on_disk_and_correctly_ignored": [
       "research/game_latent_state/oof_gaussian_residuals.parquet"
@@ -209,8 +209,8 @@
     "lines_verified": 72,
     "passed": true
   },
-  "head_sha": "756cb3a9ff90cca5db1b198395110281f1b2f323",
-  "manifest_sha256": "bcec0ada4cf46c7443b6ef2a2ae2594ee9621edc66816e84354d36226160a7e4",
+  "head_sha": "22b1e160a53b770b8633ca9a9c5740b74f23c44c",
+  "manifest_sha256": "8e66078a1939127431fd308b66412e4ace8611ec187076dc7ce0a38973256ced",
   "merge_path_blob_audit": {
     "base": "a30ed672001f8774b6cfec9ad7a3ccb382506c4b",
     "base_resolved": true,
@@ -222,7 +222,7 @@
       "path": "research/game_latent_state_v2/inner_screening.json",
       "sha": "d009be4183c6da3613bf7c71382cd4323e3c1bbe"
     },
-    "new_blob_count": 141,
+    "new_blob_count": 144,
     "notable": [],
     "over_ceiling": [],
     "passed": true,

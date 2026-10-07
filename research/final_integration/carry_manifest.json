@@ -102,9 +102,16 @@
       ],
       "written_by_the_verifier": "research/final_integration/integration_verification.json"
     },
+    "production_documentation": {
+      "reason": "the production-facing record of what the shadow is, what it may not be said to be, and which original requirement was retired rather than met. The only protected production path this integration changes; it is declared in safety.DECLARED_INTEGRATION_PATHS and carries no model, config, script or release change.",
+      "paths": [
+        "docs/wizardofodds/SAME_GAME_DEPENDENCE_SHADOW_V1.md"
+      ]
+    },
     "tests": {
       "reason": "every test whose subject is carried",
       "paths": [
+        "tests/test_same_game_dependence_shadow_doc.py",
         "tests/test_game_latent_state_shadow.py",
         "tests/test_game_latent_state_shadow_artifact_budget.py",
         "tests/test_game_latent_state_shadow_bucket_repair.py",

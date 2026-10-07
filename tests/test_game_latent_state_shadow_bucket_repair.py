@@ -846,24 +846,31 @@ def test_repair_drivers_declare_themselves_non_promotable():
         ), f"{name} must not reference a publishing surface"
 
 
-def test_repair_branch_modifies_no_protected_production_path():
+def test_repair_branch_modifies_no_undeclared_protected_production_path():
     from nba_prop_quant.research.game_latent_state.safety import (
-        modified_production_paths,
+        undeclared_production_paths,
     )
 
-    offenders = modified_production_paths(PROJECT)
-    assert offenders == [], f"repair branch touched production: {offenders}"
+    offenders = undeclared_production_paths(PROJECT)
+    assert offenders == [], f"repair branch touched undeclared production paths: {offenders}"
 
 
-def test_repair_changes_live_only_in_research_and_test_namespaces():
-    from nba_prop_quant.research.game_latent_state.safety import changed_paths
+def test_repair_changes_live_only_in_research_test_and_declared_namespaces():
+    from nba_prop_quant.research.game_latent_state.safety import (
+        DECLARED_INTEGRATION_PATHS,
+        changed_paths,
+    )
 
     allowed = (
         "research/",
         "src/nba_prop_quant/research/",
         "tests/test_game_latent_state_shadow",
     )
-    offenders = [path for path in changed_paths(PROJECT) if not path.startswith(allowed)]
+    offenders = [
+        path
+        for path in changed_paths(PROJECT)
+        if not path.startswith(allowed) and path not in DECLARED_INTEGRATION_PATHS
+    ]
     assert offenders == [], f"unexpected paths on the repair branch: {offenders}"
 
 

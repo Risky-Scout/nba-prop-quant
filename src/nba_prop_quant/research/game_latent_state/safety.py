@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import os
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
+from types import MappingProxyType
 
 PRODUCTION_REF = "production/wizardofodds-integration"
 
@@ -53,6 +55,28 @@ PROTECTED_PRODUCTION_SOURCES: frozenset[str] = frozenset(
 )
 
 
+#: Protected paths this integration is declared to change, each with its
+#: reason. Gate H's absolute form — no protected path changes at all — held for
+#: as long as the dependence work was pure research, and it is the right shape
+#: for a research branch. Integrating the work into production is a production
+#: change by construction, so the enforced invariant becomes "nothing
+#: *undeclared* changes" and the declaration lives here, next to the path lists
+#: it qualifies, rather than being implicit in whatever a diff happens to show.
+#:
+#: Nothing here may be a model artifact, a pricing path or a publishing path.
+#: The branch-safety tests pin that, so widening this mapping cannot quietly
+#: become permission to edit the served model.
+DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
+    {
+        "docs/wizardofodds/SAME_GAME_DEPENDENCE_SHADOW_V1.md": (
+            "production-facing record of what the same-game dependence shadow "
+            "is, what it is not permitted to do, and which original "
+            "requirement was retired rather than met"
+        ),
+    }
+)
+
+
 def _git(project_root: Path, *args: str) -> str:
     return subprocess.run(
         ["git", *args],
@@ -85,13 +109,40 @@ def changed_paths(project_root: Path) -> list[str]:
 
 
 def modified_production_paths(project_root: Path) -> list[str]:
-    """Protected paths this branch has modified. Empty means gate H passes."""
+    """Protected paths this branch has modified, declared or not.
+
+    Reported as-is. Gate H reads this, so a branch that changes a protected
+    path is still visibly a branch that changed production, even when the
+    change is a declared one.
+    """
     return sorted(
         path
         for path in changed_paths(project_root)
         if path.startswith(PROTECTED_PRODUCTION_PREFIXES)
         or path in PROTECTED_PRODUCTION_SOURCES
     )
+
+
+def undeclared_production_paths(project_root: Path) -> list[str]:
+    """Protected paths this branch changed without declaring them.
+
+    This is the invariant the branch-safety tests enforce. Empty means every
+    production path this branch touches is named in
+    :data:`DECLARED_INTEGRATION_PATHS` with a reason.
+    """
+    return sorted(
+        set(modified_production_paths(project_root)) - set(DECLARED_INTEGRATION_PATHS)
+    )
+
+
+def stale_integration_declarations(project_root: Path) -> list[str]:
+    """Declared paths this branch does not actually change.
+
+    A declaration that has outlived its change is permission left lying
+    around, so it is reported rather than ignored.
+    """
+    touched = set(modified_production_paths(project_root))
+    return sorted(set(DECLARED_INTEGRATION_PATHS) - touched)
 
 
 # ---------------------------------------------------------------------

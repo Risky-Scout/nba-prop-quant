@@ -29,11 +29,14 @@ from nba_prop_quant.research.game_latent_state.gates import (
     shadow_verdict,
 )
 from nba_prop_quant.research.game_latent_state.safety import (
+    DECLARED_INTEGRATION_PATHS,
     PRODUCTION_REF,
     PROTECTED_PRODUCTION_PREFIXES,
     PROTECTED_PRODUCTION_SOURCES,
     modified_production_paths,
     production_merge_base,
+    stale_integration_declarations,
+    undeclared_production_paths,
 )
 
 PROJECT = Path(__file__).resolve().parents[1]
@@ -86,13 +89,52 @@ def python_sources() -> list[Path]:
 # ----------------------------------------------------------------------
 
 
-def test_no_protected_production_path_is_modified():
+def test_no_undeclared_protected_production_path_is_modified():
+    """Every production path this branch touches is declared, with a reason.
+
+    The absolute form of this check — no protected path changes at all — was
+    right while the dependence work was pure research, and it is wrong for the
+    branch that integrates it, because integrating is a production change. So
+    the enforced invariant is that nothing *undeclared* changes, and the
+    declaration is reviewed like any other code.
+    """
     offenders = [
         path
         for path in changed_paths()
-        if path.startswith(PROTECTED_PREFIXES) or path in PROTECTED_SOURCE_FILES
+        if (path.startswith(PROTECTED_PREFIXES) or path in PROTECTED_SOURCE_FILES)
+        and path not in DECLARED_INTEGRATION_PATHS
     ]
-    assert offenders == [], f"shadow branch modified production paths: {offenders}"
+    assert offenders == [], f"undeclared production paths modified: {offenders}"
+
+
+def test_the_declared_integration_surface_cannot_reach_the_served_model():
+    """Declaring a path is not permission to edit the model it serves.
+
+    This is what stops the declaration mechanism from becoming a general
+    exemption: the model artifacts, the frozen configs, the production scripts,
+    the release surface and every protected production source module remain
+    undeclarable, so the only thing a declaration can buy is documentation and
+    the shadow's own operational surface.
+    """
+    undeclarable_prefixes = ("models/", "configs/", "scripts/", "release/", "review/")
+    for path in DECLARED_INTEGRATION_PATHS:
+        assert not path.startswith(undeclarable_prefixes), (
+            f"{path} is a model, config, production script or release path and "
+            "may not be declared"
+        )
+        assert path not in PROTECTED_PRODUCTION_SOURCES, (
+            f"{path} is a protected production source module and may not be declared"
+        )
+        assert DECLARED_INTEGRATION_PATHS[path].strip(), f"{path} is declared without a reason"
+
+
+def test_no_declaration_outlives_the_change_it_was_made_for():
+    """A declaration left behind after its change landed is loose permission."""
+    if production_base() is None:
+        pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
+    if not changed_paths():
+        pytest.skip("this head is production, so it changes nothing relative to itself")
+    assert stale_integration_declarations(PROJECT) == []
 
 
 def test_gate_h_evidence_comes_from_the_shared_protected_path_declaration():
@@ -100,11 +142,14 @@ def test_gate_h_evidence_comes_from_the_shared_protected_path_declaration():
 
     The report cannot claim a clean production surface by using a narrower
     definition of "production" than these tests enforce, because both sides
-    call the same function over the same declared path lists.
+    call the same function over the same declared path lists. Gate H still
+    reports every protected path touched, declared or not; what these tests
+    enforce is the narrower ``undeclared`` form.
     """
     if production_base() is None:
         pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
-    assert modified_production_paths(PROJECT) == []
+    assert undeclared_production_paths(PROJECT) == []
+    assert set(modified_production_paths(PROJECT)) <= set(DECLARED_INTEGRATION_PATHS)
     assert "src/nba_prop_quant/copula.py" in PROTECTED_PRODUCTION_SOURCES
     assert ".github/workflows/" in PROTECTED_PRODUCTION_PREFIXES
 
@@ -254,15 +299,37 @@ def test_shadow_package_never_imports_the_promotion_machinery():
     assert offenders == []
 
 
-#: The real WizardOfOdds publishing surface: the bundle builder script, its
-#: entry point and the staging directory it writes. Banning these by name is
-#: precise, because these are the things that actually publish.
+#: The real WizardOfOdds publishing surface: the bundle builder script and its
+#: entry point. Banning these by name is precise, because these are the things
+#: that actually publish.
+#:
+#: ``docs/wizardofodds`` was on this list and has been removed, because it was
+#: wrong: that directory is documentation — the claim policy and the
+#: automation runbooks — and the bundle builder never reads or writes it. What
+#: the list is for is reaching the publisher. What stops the shadow *writing*
+#: production documentation is the declared-path check above, and
+#: :func:`test_no_shadow_source_writes_to_a_protected_production_path` below.
 WIZARDOFODDS_SURFACE_TOKENS: tuple[str, ...] = (
     "wizardofodds_bundle",
     "runtime_bundle",
     "build_runtime_bundle",
     "19_build_wizardofodds_runtime_bundle",
-    "docs/wizardofodds",
+)
+
+#: Calls that put bytes on disk.
+WRITE_ATTRIBUTES: frozenset[str] = frozenset(
+    {
+        "write_text",
+        "write_bytes",
+        "mkdir",
+        "to_parquet",
+        "to_csv",
+        "to_json",
+        "touch",
+        "unlink",
+        "rmdir",
+        "replace",
+    }
 )
 
 
@@ -274,6 +341,58 @@ def test_shadow_package_contains_no_wizardofodds_publishing_surface():
         if token in path.read_text(encoding="utf-8")
     ]
     assert offenders == []
+
+
+def test_no_shadow_source_writes_to_a_protected_production_path():
+    """No shadow source names a protected production path in a write.
+
+    The token ban above is about reaching the publisher. This is about reaching
+    production bytes by any route: a string literal under a protected prefix
+    appearing anywhere near a write call is reported, whether or not the
+    publisher is involved. The declared documentation path is the one thing
+    the integration is allowed to add, and it is added by a human edit in a
+    reviewed commit, never by shadow code at runtime.
+    """
+    offenders: list[str] = []
+    for path in python_sources():
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            target = node.func
+            is_write = (
+                isinstance(target, ast.Attribute) and target.attr in WRITE_ATTRIBUTES
+            ) or (isinstance(target, ast.Name) and target.id == "open")
+            if not is_write:
+                continue
+            literals = [
+                sub.value
+                for sub in ast.walk(node)
+                if isinstance(sub, ast.Constant) and isinstance(sub.value, str)
+            ]
+            for literal in literals:
+                if literal.startswith(PROTECTED_PREFIXES):
+                    offenders.append(f"{path.relative_to(PROJECT)}: writes {literal}")
+    assert offenders == [], f"shadow code writes production paths: {offenders}"
+
+
+def test_the_publishing_surface_cannot_reach_the_shadow_candidate():
+    """The bundle builder must not import the shadow package.
+
+    Checked from the other direction: even if the shadow never names the
+    publisher, the publisher importing the shadow would put candidate
+    probabilities one call away from a published bundle.
+    """
+    builder = PROJECT / "scripts" / "19_build_wizardofodds_runtime_bundle.py"
+    tree = ast.parse(builder.read_text(encoding="utf-8"))
+    imported: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.extend(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            imported.append(node.module or "")
+    offenders = [name for name in imported if "game_latent_state" in name]
+    assert offenders == [], f"the publishing surface imports the shadow: {offenders}"
 
 
 def test_the_shadow_publication_switch_is_a_declared_disabled_file():
