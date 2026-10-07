@@ -1,11 +1,20 @@
-"""The clean candidate ships the accepted repair and nothing the research rejected.
+"""The carried record of the bucket-repair resolution, and nothing rejected.
 
-This branch exists because three research rounds produced one accepted model
-and five rejected components, and the only safe way to get the first without
-the second was to rebuild from the production base rather than merge. These
-tests are what stops the rejected components from reappearing: as code that
-could be imported, as a dial that could be switched on, or as a parameter
-count that quietly says zero when it is not.
+This file was written for the resolution round, when the accepted bucket
+repair was the shipped model. It no longer is: the upstream remediation
+superseded it and ``research/final_model/final_model_spec.json`` is the
+authoritative specification. The resolution artifact is still carried, so
+what these tests now check is that the *record of that round* stays
+internally consistent and that it is recorded as superseded rather than as
+current. ``test_the_final_model_specification_supersedes_this_resolution``
+is the one that pins the ordering.
+
+The rest is unchanged and still load-bearing: three research rounds produced
+one accepted model and five rejected components, and the only safe way to get
+the first without the second was to rebuild from the production base rather
+than merge. These tests are what stops the rejected components from
+reappearing -- as code that could be imported, as a dial that could be
+switched on, or as a parameter count that quietly says zero when it is not.
 
 The equivalence proof is regression-tested rather than recomputed. Recomputing
 it needs the V2 search modules, which this branch deliberately does not carry;
@@ -57,12 +66,43 @@ def repair_spec() -> dict:
     return load(REPAIR_DIR / "factor_spec.json")
 
 
+FINAL_MODEL_SPEC = PROJECT / "research" / "final_model" / "final_model_spec.json"
+
+REMEDIATED_DIR = PROJECT / "research" / "final_upstream_remediation"
+
+
 # ---------------------------------------------------------------------
-# The shipped model is the accepted one
+# What the resolution round concluded, and what superseded it
 # ---------------------------------------------------------------------
 
 
-def test_the_shipped_spec_is_the_accepted_repair(resolution, repair_spec):
+def test_the_final_model_specification_supersedes_this_resolution():
+    """The resolution is a record, not the current model.
+
+    Without this, the file below reads as a claim that the bucket repair
+    ships. It does not: the upstream remediation superseded it, and the one
+    authoritative statement of what ships is the final model specification.
+    """
+    final = load(FINAL_MODEL_SPEC)
+    remediated = load(REMEDIATED_DIR / "factor_spec.json")
+    repair = load(REPAIR_DIR / "factor_spec.json")
+
+    assert final["factor_spec_hash"] == remediated["spec_hash"]
+    assert final["factor_spec_hash"] == final["authoritative_spec_hash"]
+    assert final["factor_spec_hash"] != repair["spec_hash"]
+
+    # The repair is carried as the declared control, which is what makes the
+    # final model's improvement measurable rather than asserted.
+    assert final["control_factor_spec_hash"] == repair["spec_hash"]
+    assert (
+        "research/game_latent_state_resolution/final_resolution.json"
+        in final["supersedes"]
+    )
+    assert final["status"] == "FROZEN"
+
+
+def test_the_resolution_round_named_the_accepted_repair(resolution, repair_spec):
+    """What that round concluded, held fixed so the record cannot drift."""
     final = resolution["winning_dependence_model"]
     assert final["model"] == "accepted bucket repair"
     assert final["k_game"] == 6
