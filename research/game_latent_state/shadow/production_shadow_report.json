@@ -1,0 +1,293 @@
+{
+  "by_season": {
+    "2024": {
+      "events_priced": 192,
+      "games_shadowed": 12,
+      "training_rows": 216258,
+      "training_seasons": [
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023
+      ]
+    },
+    "2025": {
+      "events_priced": 192,
+      "games_shadowed": 12,
+      "training_rows": 244412,
+      "training_seasons": [
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024
+      ]
+    }
+  },
+  "config": {
+    "events_per_family": 2,
+    "games_per_season": 12,
+    "min_expected_minutes": 12.0,
+    "seed": 73,
+    "simulations": 20000,
+    "stats": [
+      "pts",
+      "reb",
+      "ast",
+      "stl",
+      "blk",
+      "fg3m"
+    ]
+  },
+  "dependence_diagnostics": {
+    "games_with_diagnostics": 24,
+    "model_implied": {
+      "opponent_ast_ast": 0.008788916121756592,
+      "opponent_fg3m_reb": -0.004067275486788664,
+      "opponent_pts_pts": 0.015704548948426288,
+      "opponent_pts_reb": -0.004556826689746687,
+      "opponent_reb_reb": 0.01181733557588128,
+      "opponent_stl_pts": -0.0005701940576852056,
+      "passer_ast_teammate_pts": 0.04577278047847331,
+      "teammate_ast_ast": 0.0065929723966895795,
+      "teammate_fg3m_fg3m": -0.0010521449595103961,
+      "teammate_pts_pts": -0.001965839114181033,
+      "teammate_pts_reb": 0.014912872215787626,
+      "teammate_reb_reb": 0.005340858273074903
+    },
+    "simulated_mean_by_model": {
+      "candidate": {
+        "opponent_ast_ast": 0.007104823258115193,
+        "opponent_fg3m_reb": -0.003142155473619158,
+        "opponent_pts_pts": 0.01329224059465696,
+        "opponent_pts_reb": -0.004007642235922964,
+        "opponent_reb_reb": 0.01016546165376536,
+        "opponent_stl_pts": -0.0007204014293667246,
+        "passer_ast_teammate_pts": 0.03816984835934467,
+        "teammate_ast_ast": 0.005341382424236212,
+        "teammate_fg3m_fg3m": -0.0004045557289242264,
+        "teammate_pts_pts": -0.0016236257197509666,
+        "teammate_pts_reb": 0.012855088046889333,
+        "teammate_reb_reb": 0.004556186057642489
+      },
+      "incumbent": {
+        "opponent_ast_ast": -0.0003696296119851419,
+        "opponent_fg3m_reb": 0.00022373459009454965,
+        "opponent_pts_pts": 0.00019850798079247393,
+        "opponent_pts_reb": 0.00017760903883887798,
+        "opponent_reb_reb": -0.00019988179053057522,
+        "opponent_stl_pts": 9.054658926376019e-05,
+        "passer_ast_teammate_pts": -0.00010708186134527871,
+        "teammate_ast_ast": -0.0002714718139640675,
+        "teammate_fg3m_fg3m": 0.00016608369027361195,
+        "teammate_pts_pts": 0.00017495538897273062,
+        "teammate_pts_reb": -7.393649705980838e-05,
+        "teammate_reb_reb": -0.00013145635184881778
+      },
+      "independence": {
+        "opponent_ast_ast": 6.002882873760169e-05,
+        "opponent_fg3m_reb": -0.00011127569257746206,
+        "opponent_pts_pts": -0.00011540864067610805,
+        "opponent_pts_reb": -0.00012167049116041523,
+        "opponent_reb_reb": 0.0002299638511650107,
+        "opponent_stl_pts": -0.0003086800287154838,
+        "passer_ast_teammate_pts": 0.00010113523014979703,
+        "teammate_ast_ast": -0.00010564920378267099,
+        "teammate_fg3m_fg3m": 0.00029415108811947134,
+        "teammate_pts_pts": 4.8150691319913436e-05,
+        "teammate_pts_reb": 0.00010990655223263477,
+        "teammate_reb_reb": -3.443600122315583e-05
+      }
+    }
+  },
+  "factor_spec_sha256": "e643c6d52d5fd547b925e2bfedc3b128fbc5a4815d0a1200b13571f67b33509a",
+  "fallback_reasons": [],
+  "final_model_spec_sha256": "25502eb157a53a703dd8f762b2ae863afcc26a78bd3b6554df3927b465b86a4b",
+  "frozen_factor_spec_hash": "3229bbc83a4388c270a21008a75afacc3479cfd6f6390c8737f041412d2f2eb4",
+  "frozen_factor_spec_matches_the_final_model_specification": true,
+  "frozen_factor_spec_path": "research/final_upstream_remediation/factor_spec.json",
+  "games_shadowed": 24,
+  "games_that_fell_back": 0,
+  "grading": {
+    "by_legs": {
+      "2": {
+        "candidate": {
+          "base_rate": 0.19444444444444445,
+          "brier": 0.16589292831597222,
+          "events": 144,
+          "log_loss": 0.49962115777172994,
+          "mean_predicted": 0.23733020833333335
+        },
+        "incumbent": {
+          "base_rate": 0.19444444444444445,
+          "brier": 0.16585194633680558,
+          "events": 144,
+          "log_loss": 0.4993114382923404,
+          "mean_predicted": 0.2371607638888889
+        },
+        "independence": {
+          "base_rate": 0.19444444444444445,
+          "brier": 0.16586972043402778,
+          "events": 144,
+          "log_loss": 0.49947836623995046,
+          "mean_predicted": 0.2373725694444445
+        }
+      },
+      "3": {
+        "candidate": {
+          "base_rate": 0.09722222222222222,
+          "brier": 0.08684216423611112,
+          "events": 144,
+          "log_loss": 0.3077407670739965,
+          "mean_predicted": 0.10012777777777776
+        },
+        "incumbent": {
+          "base_rate": 0.09722222222222222,
+          "brier": 0.08702177855902778,
+          "events": 144,
+          "log_loss": 0.30918868900224017,
+          "mean_predicted": 0.10038993055555556
+        },
+        "independence": {
+          "base_rate": 0.09722222222222222,
+          "brier": 0.08687276848958332,
+          "events": 144,
+          "log_loss": 0.30783099212458964,
+          "mean_predicted": 0.10000520833333332
+        }
+      },
+      "4": {
+        "candidate": {
+          "base_rate": 0.052083333333333336,
+          "brier": 0.04672253544270833,
+          "events": 96,
+          "log_loss": 0.18594959098939712,
+          "mean_predicted": 0.0543640625
+        },
+        "incumbent": {
+          "base_rate": 0.052083333333333336,
+          "brier": 0.046955429765625,
+          "events": 96,
+          "log_loss": 0.18759317920734833,
+          "mean_predicted": 0.05427656250000001
+        },
+        "independence": {
+          "base_rate": 0.052083333333333336,
+          "brier": 0.046703369739583334,
+          "events": 96,
+          "log_loss": 0.18532294918779693,
+          "mean_predicted": 0.05430729166666667
+        }
+      }
+    },
+    "by_model": {
+      "candidate": {
+        "base_rate": 0.12239583333333333,
+        "brier": 0.10645629356770832,
+        "events": 384,
+        "log_loss": 0.3492481195644967,
+        "mean_predicted": 0.14013776041666667
+      },
+      "incumbent": {
+        "base_rate": 0.12239583333333333,
+        "brier": 0.10656650427734375,
+        "events": 384,
+        "log_loss": 0.3500858425373048,
+        "mean_predicted": 0.14015065104166666
+      },
+      "independence": {
+        "base_rate": 0.12239583333333333,
+        "brier": 0.10645427578125,
+        "events": 384,
+        "log_loss": 0.34907174668365176,
+        "mean_predicted": 0.14009348958333334
+      }
+    },
+    "candidate_fallback_rate": 0.0,
+    "events_graded": 384,
+    "events_logged": 384,
+    "events_where_the_candidate_fell_back": 0,
+    "events_without_a_realized_outcome": 0,
+    "log_loss_floor": 1e-06,
+    "note": "fallback rows are graded for the incumbent and the independence reference but not for the candidate, so the candidate is never credited with a score it did not produce",
+    "promotion_authority": "NONE__SHADOW_HAS_NO_AUTONOMOUS_PROMOTION_AUTHORITY",
+    "provenance_fingerprints": [
+      "1c0b6822188b8c2574d5e2becb56c0a9479c0e64ef0744d43601143e7d3f666e"
+    ],
+    "published": false,
+    "served_model": "incumbent"
+  },
+  "mode": "SHADOW_ONLY__INCUMBENT_REMAINS_THE_PUBLISHED_AUTHORITY",
+  "numerical_diagnostics": {
+    "games_where_shared_shrink_engaged": 21,
+    "games_with_diagnostics": 24,
+    "min_covariance_eigenvalue": 0.11937633019665192,
+    "psd_failures": 0,
+    "same_player_max_block_deviation": 2.220446049250313e-16
+  },
+  "promotion_authority": "NONE__SHADOW_HAS_NO_AUTONOMOUS_PROMOTION_AUTHORITY",
+  "provenance": {
+    "built_at": "2026-10-07T05:54:11+00:00",
+    "code_sha": "914395d5158b2749f8db79b8e60bb831563adfde",
+    "copula_source": "nba_prop_quant.copula.GaussianCopula refit on the same training seasons (the incumbent)",
+    "copula_source_sha256": null,
+    "dependence_model_version": "game-latent-state-shadow-v1",
+    "factor_spec_hash": "3229bbc83a4388c270a21008a75afacc3479cfd6f6390c8737f041412d2f2eb4",
+    "factor_spec_sha256": "e643c6d52d5fd547b925e2bfedc3b128fbc5a4815d0a1200b13571f67b33509a",
+    "final_model_spec_sha256": "25502eb157a53a703dd8f762b2ae863afcc26a78bd3b6554df3927b465b86a4b",
+    "marginal_source": "scripts/07_fit_marginals.py refit on seasons strictly before each shadowed season (the production marginal path)",
+    "marginal_source_sha256": null,
+    "promotion_authority": "NONE__SHADOW_HAS_NO_AUTONOMOUS_PROMOTION_AUTHORITY",
+    "published": false,
+    "role_scale": {
+      "bench": 1.2567044927931688,
+      "rotation": 0.8251141919545149,
+      "starter": 0.9112334054183127
+    },
+    "seed": 73,
+    "simulations": 20000,
+    "stats": [
+      "pts",
+      "reb",
+      "ast",
+      "stl",
+      "blk",
+      "fg3m"
+    ]
+  },
+  "provenance_fingerprint": "1c0b6822188b8c2574d5e2becb56c0a9479c0e64ef0744d43601143e7d3f666e",
+  "publishing": {
+    "publish_attempt": {
+      "message": "shadow probability publishing is disabled: switch file state is DISABLED; NBA_PROP_SHADOW_PUBLISH does not match the switch state; NBA_PROP_SHADOW_PUBLISH_APPROVAL does not match the approval token. 384 shadow row(s) were held back. The incumbent feed is unaffected.",
+      "raised": "ShadowPublishingDisabled"
+    },
+    "rows_published": 0,
+    "switch": {
+      "approval_environment_variable": "NBA_PROP_SHADOW_PUBLISH_APPROVAL",
+      "approval_supplied": false,
+      "blockers": [
+        "switch file state is DISABLED",
+        "NBA_PROP_SHADOW_PUBLISH does not match the switch state",
+        "NBA_PROP_SHADOW_PUBLISH_APPROVAL does not match the approval token"
+      ],
+      "enabled": false,
+      "environment_agrees": false,
+      "environment_variable": "NBA_PROP_SHADOW_PUBLISH",
+      "reason": "The final model is frozen and graded but has not yet run beside production for a single live slate. Shadow probabilities are logged and graded; the incumbent remains the published authority. Activation is a separate, reviewable decision taken after the shadow has accumulated live evidence.",
+      "source": "research/game_latent_state/shadow/shadow_publishing_switch.json",
+      "state": "DISABLED"
+    },
+    "switch_path": "research/game_latent_state/shadow/shadow_publishing_switch.json",
+    "switch_sha256": "79b61f193da61006707253606281e806ba96dd4b4f89e41269b0f0cef0563cde"
+  },
+  "replay_not_live": "there is no live feed in this environment, so this is a replay of the graded holdout seasons through the live runtime paths; it is runtime evidence, not new model-selection evidence",
+  "study": "controlled_production_shadow_v1"
+}

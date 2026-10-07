@@ -57,7 +57,6 @@ from nba_prop_quant.research.game_latent_state.factors import (
 from nba_prop_quant.research.game_latent_state.paths import (
     DEFAULT_ARTIFACT_ROOT,
     DEFAULT_RESEARCH_DATA_ROOT,
-    FACTOR_SPEC_NAME,
     RESIDUAL_DATASET_NAME,
     research_processed_dir,
 )
@@ -93,6 +92,14 @@ CHECKSUM_NAME = "SHA256SUMS.shadow.txt"
 
 FINAL_MODEL_SPEC_PATH = Path("research/final_model/final_model_spec.json")
 
+#: The frozen factor spec the final model is built from. Not the v1 spec that
+#: lives beside the residual dataset: the shadow has to shadow the model that
+#: was actually selected and graded, and the run refuses to start if this
+#: file's ``spec_hash`` is not the one the final model specification names.
+FROZEN_FACTOR_SPEC_PATH = Path(
+    "research/final_upstream_remediation/factor_spec.json"
+)
+
 #: The seasons the final model was graded on. Replaying them is a runtime
 #: exercise, not new selection evidence.
 DEFAULT_SHADOW_SEASONS = (2024, 2025)
@@ -102,6 +109,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-root", type=Path, default=DEFAULT_RESEARCH_DATA_ROOT)
     parser.add_argument("--artifact-root", type=Path, default=DEFAULT_ARTIFACT_ROOT)
+    parser.add_argument("--factor-spec", type=Path, default=FROZEN_FACTOR_SPEC_PATH)
     parser.add_argument("--output-root", type=Path, default=SHADOW_DIR)
     parser.add_argument(
         "--seasons", type=int, nargs="+", default=list(DEFAULT_SHADOW_SEASONS)
@@ -120,12 +128,25 @@ def main() -> None:
     output_dir = Path(args.output_root)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    spec_path = artifact_dir / FACTOR_SPEC_NAME
+    spec_path = Path(args.factor_spec)
     spec = json.loads(spec_path.read_text(encoding="utf-8"))
     loadings = SharedFactorLoadings.from_payload(spec["loadings"])
 
     final_spec_path = PROJECT_ROOT / FINAL_MODEL_SPEC_PATH
     switch_path = PROJECT_ROOT / PUBLISHING_SWITCH_PATH
+
+    final_spec = json.loads(final_spec_path.read_text(encoding="utf-8"))
+    if spec["spec_hash"] != final_spec["factor_spec_hash"]:
+        raise SystemExit(
+            f"{spec_path} hashes to {spec['spec_hash']}, but the final model "
+            f"specification names {final_spec['factor_spec_hash']}. The shadow "
+            "must shadow the model that was selected and graded, so this is a "
+            "refusal rather than a warning."
+        )
+    console.print(
+        f"frozen factor spec {spec_path} matches the final model "
+        f"specification at {spec['spec_hash']}"
+    )
 
     residuals = pd.read_parquet(artifact_dir / RESIDUAL_DATASET_NAME)
     residuals["season"] = residuals["season"].astype(int)
@@ -256,6 +277,11 @@ def main() -> None:
             "a publish attempt did not raise; the shadow must never publish"
         )
 
+    # Repo-relative, so the committed artifact does not record the absolute
+    # path of whichever machine produced it.
+    switch_payload = switch.payload()
+    switch_payload["source"] = str(PUBLISHING_SWITCH_PATH)
+
     report = {
         "study": "controlled_production_shadow_v1",
         "mode": "SHADOW_ONLY__INCUMBENT_REMAINS_THE_PUBLISHED_AUTHORITY",
@@ -266,6 +292,9 @@ def main() -> None:
         ),
         "provenance": provenance.payload(),
         "provenance_fingerprint": provenance.fingerprint,
+        "frozen_factor_spec_path": str(FROZEN_FACTOR_SPEC_PATH),
+        "frozen_factor_spec_hash": spec["spec_hash"],
+        "frozen_factor_spec_matches_the_final_model_specification": True,
         "factor_spec_sha256": sha256_file(spec_path),
         "final_model_spec_sha256": (
             sha256_file(final_spec_path) if final_spec_path.exists() else None
@@ -288,7 +317,7 @@ def main() -> None:
         "numerical_diagnostics": _summarize_numerical(results),
         "dependence_diagnostics": _summarize_dependence(results),
         "publishing": {
-            "switch": switch.payload(),
+            "switch": switch_payload,
             "switch_path": str(PUBLISHING_SWITCH_PATH),
             "switch_sha256": sha256_file(switch_path) if switch_path.exists() else None,
             "publish_attempt": publish_attempt,
