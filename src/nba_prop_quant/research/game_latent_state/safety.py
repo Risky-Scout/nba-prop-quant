@@ -72,16 +72,18 @@ PROTECTED_PRODUCTION_SOURCES: frozenset[str] = frozenset(
 #: permission to edit a protected path unreviewed. What the lineage owns in
 #: production once a change has landed is recorded in
 #: :data:`SHADOW_OWNED_PRODUCTION_PATHS`, which grants no permission at all.
-DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
-    {
-        "ops/evidence/production_shadow_closure.json": (
-            "the production-ops closure receipt: the reconciled test counts, "
-            "the production SHA both hashes were verified at, and why one "
-            "commit reported four different pass/skip splits. Evidence only: "
-            "nothing reads it and it decides no production behaviour"
-        ),
-    }
-)
+#: Empty, and that is the resting state. The last entry here declared
+#: ``ops/evidence/production_shadow_closure.json`` while the closure receipt
+#: was a pending change; the receipt landed in production and the declaration
+#: should have gone with it. It did not, which made the rule above fail for
+#: every later branch rather than for the one branch doing something wrong --
+#: a stale declaration is exactly what
+#: :func:`stale_integration_declarations` reports, and the branch that leaves
+#: it behind is always already merged by the time anything notices. So the
+#: entry is retired here. Nothing is lost: the receipt is a protected path the
+#: lineage now owns, which is what
+#: :data:`SHADOW_OWNED_PRODUCTION_PATHS` is for.
+DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType({})
 
 #: Protected paths this lineage introduced into production and now owns.
 #:
@@ -114,6 +116,13 @@ SHADOW_OWNED_PRODUCTION_PATHS: Mapping[str, str] = MappingProxyType(
             "one added non-blocking step that invokes the shadow entry point "
             "after the daily fit. Additive only: every pre-existing step is "
             "unchanged, and the step cannot fail the lifecycle"
+        ),
+        "ops/evidence/production_shadow_closure.json": (
+            "the production-ops closure receipt: the reconciled test counts, "
+            "the production SHA both hashes were verified at, and why one "
+            "commit reported four different pass/skip splits. Evidence only: "
+            "nothing reads it and it decides no production behaviour. Recorded "
+            "here rather than declared, because it has already landed"
         ),
     }
 )
