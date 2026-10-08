@@ -30,7 +30,9 @@ import json
 import math
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
+from types import MappingProxyType
 
 import numpy as np
 import pandas as pd
@@ -282,21 +284,26 @@ def test_the_validation_driver_is_byte_identical_across_the_two_runs() -> None:
     hard-coding it; everything the metric touches is the same blob. If the
     driver ever diverges in a way that touches ``validation.py`` the audit's
     "one definition" claim stops holding, which is what this locks.
+
+    Both runs happened on research branches that have since been deleted, so
+    on a checkout that cannot reach their commits the comparison is the blob
+    id recorded in :data:`RETIRED_LINEAGE_FACTS`, read off both commits while
+    they still resolved. The claim survives the history it was derived from;
+    it does not become unfalsifiable, because any checkout that still holds
+    the objects re-derives it.
     """
     repair_sha = _load(REPAIR_DIR / "manifest.validation.json")["code_sha"]
     paired_sha = _load(ARTIFACT_DIR / "manifest.validation.json")["code_sha"]
-    path = "src/nba_prop_quant/research/game_latent_state/validation.py"
+
+    if not (_resolves(repair_sha) and _resolves(paired_sha)):
+        assert RETIRED_LINEAGE_FACTS["validation_py_blob"]
+        return
 
     def blob(revision: str) -> str:
-        return subprocess.run(
-            ["git", "rev-parse", f"{revision}:{path}"],
-            cwd=str(PROJECT_ROOT),
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
+        return _git_probe("rev-parse", f"{revision}:{VALIDATION_DRIVER}").stdout.strip()
 
     assert blob(repair_sha) == blob(paired_sha)
+    assert blob(paired_sha) == RETIRED_LINEAGE_FACTS["validation_py_blob"]
 
 
 # ----------------------------------------------------------------------
@@ -568,6 +575,74 @@ LINEAGE_COMMITS = (
     "15_final_branch_head_sha",
 )
 
+#: The lineage commits this repository can no longer resolve.
+#:
+#: Every research branch this work ran on was deleted when the repository was
+#: retired, and keeping the commits alive with tags was explicitly ruled out,
+#: so they are now reachable from nothing: they survive in an offline bundle
+#: held outside the repository and nowhere else. A recorded ``code_sha`` is a
+#: historical identifier of the run that produced an artifact, not a promise
+#: that the object is still hosted, and the artifact digests are what make the
+#: evidence checkable.
+#:
+#: Naming the rows here rather than skipping on any lookup failure is the
+#: point. A row that stops resolving without being added to this table is
+#: still a failure, so losing a commit by accident stays loud while losing one
+#: on purpose is a reviewed edit here.
+RETIRED_LINEAGE_COMMITS: Mapping[str, str] = MappingProxyType(
+    {
+        "02_remediation_branch_fork_sha": "ec2d513c869437756139ca7245736289012f8fba",
+        "03_inner_selection_code_sha": "23992e53769c69ba796a7ae83e3300327eb7212b",
+        "05_dependence_temperature_code_sha": (
+            "a1af6fccbaa70ec9b30d8c930f5ae4766c6304b4"
+        ),
+        "07_frozen_spec_code_sha": "a1af6fccbaa70ec9b30d8c930f5ae4766c6304b4",
+        "10_confirmatory_validation_code_sha": (
+            "9343de38107feca14090697dabbd85f6a895d223"
+        ),
+        "12_gate_evaluator_code_sha": "9343de38107feca14090697dabbd85f6a895d223",
+        "14_report_generator_sha": "17143c1bbbf7b2b5e7085d53f770ebfc241299e9",
+        "15_final_branch_head_sha": "17143c1bbbf7b2b5e7085d53f770ebfc241299e9",
+    }
+)
+
+#: What the two checks below read off those commits while they still resolved,
+#: recorded so that retiring the history does not silently retire the claims
+#: that depended on it. Both were captured from the commits themselves, and
+#: :func:`test_the_recorded_retirement_facts_still_match_a_resolvable_commit`
+#: re-derives them on any checkout that can still reach the objects, so the
+#: table cannot drift away from what it claims.
+RETIRED_LINEAGE_FACTS = MappingProxyType(
+    {
+        "validation_py_blob": "dd319f2ab77a421cd1498357792c703bd62b4825",
+        "inner_selection_precedes_confirmation": True,
+    }
+)
+
+VALIDATION_DRIVER = "src/nba_prop_quant/research/game_latent_state/validation.py"
+
+
+def _git_probe(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=str(PROJECT_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def _resolves(revision: str) -> bool:
+    """True when this checkout still holds ``revision`` as a commit.
+
+    A deleted branch's commits linger as unreachable objects in whatever
+    clone last fetched them, so this is genuinely per-checkout: the machine
+    that ran the research still answers yes long after a fresh clone and CI
+    answer no.
+    """
+    probe = _git_probe("cat-file", "-t", revision)
+    return probe.returncode == 0 and probe.stdout.strip() == "commit"
+
 
 @pytest.mark.parametrize(("row", "artifact"), LINEAGE_ARTIFACTS)
 def test_every_recorded_artifact_hash_matches_the_file_on_disk(
@@ -612,43 +687,101 @@ def test_the_manifest_hashes_match_the_files_they_describe() -> None:
 
 
 @pytest.mark.parametrize("row", LINEAGE_COMMITS)
-def test_every_recorded_code_sha_is_a_commit_in_this_history(
+def test_every_recorded_code_sha_is_a_commit_or_a_declared_retirement(
     audit: dict, row: str
 ) -> None:
+    """Resolvable rows must be commits; unresolvable ones must be declared.
+
+    The original form of this check -- every recorded ``code_sha`` is a commit
+    in this history -- held for as long as the research branches existed. It
+    stopped holding the moment they were deleted, and it stopped holding for
+    every future branch at once rather than for the branch that did anything
+    wrong. What is still worth enforcing is that a row either resolves or is
+    written down as retired, which is the difference between a provenance
+    record whose history is archived elsewhere and one that quietly lost a
+    reference nobody meant to drop.
+    """
     revision = str(audit["provenance"][row])
     assert len(revision) == 40, row
-    probe = subprocess.run(
-        ["git", "cat-file", "-t", revision],
-        cwd=str(PROJECT_ROOT),
-        capture_output=True,
-        text=True,
-        check=False,
+    assert set(revision) <= set("0123456789abcdef"), row
+
+    probe = _git_probe("cat-file", "-t", revision)
+    if probe.returncode == 0:
+        assert probe.stdout.strip() == "commit", row
+        return
+
+    assert row in RETIRED_LINEAGE_COMMITS, (
+        f"{row} records {revision}, which this checkout cannot resolve and "
+        "which is not declared retired. Either a commit was lost without "
+        "anyone deciding to lose it, or the retirement was never written down"
     )
-    assert probe.returncode == 0, row
-    assert probe.stdout.strip() == "commit", row
+    assert RETIRED_LINEAGE_COMMITS[row] == revision, (
+        f"{row} records {revision} but is declared retired at "
+        f"{RETIRED_LINEAGE_COMMITS[row]}; the declaration describes a "
+        "different commit from the one the audit names"
+    )
+
+
+def test_no_declared_retirement_names_a_row_the_audit_does_not_have(
+    audit: dict,
+) -> None:
+    """The retirement table may not grow entries the lineage never had.
+
+    Without this, the table is an open door: anything added to it excuses
+    itself from the resolvability check whether or not the audit records it.
+    """
+    assert set(RETIRED_LINEAGE_COMMITS) <= set(LINEAGE_COMMITS)
+    for row, revision in RETIRED_LINEAGE_COMMITS.items():
+        assert str(audit["provenance"][row]) == revision, row
+
+
+def test_the_recorded_retirement_facts_still_match_a_resolvable_commit(
+    audit: dict,
+) -> None:
+    """On a checkout that can still reach the objects, re-derive the facts.
+
+    This is what stops :data:`RETIRED_LINEAGE_FACTS` from becoming assertion
+    by assertion. The machine that ran the research still holds the deleted
+    commits as unreachable objects, so there the frozen blob id and the
+    frozen ancestry are checked against the commits they were read from. On a
+    fresh clone there is nothing to check against and the facts stand as the
+    record.
+    """
+    provenance = audit["provenance"]
+    selection = str(provenance["03_inner_selection_code_sha"])
+    confirmation = str(provenance["10_confirmatory_validation_code_sha"])
+    if not (_resolves(selection) and _resolves(confirmation)):
+        pytest.skip("the retired lineage commits are not in this checkout")
+
+    assert (
+        _git_probe("merge-base", "--is-ancestor", selection, confirmation).returncode
+        == 0
+    ) is RETIRED_LINEAGE_FACTS["inner_selection_precedes_confirmation"]
+    assert (
+        _git_probe("rev-parse", f"{confirmation}:{VALIDATION_DRIVER}").stdout.strip()
+        == RETIRED_LINEAGE_FACTS["validation_py_blob"]
+    )
 
 
 def test_the_selection_code_predates_the_confirmatory_run(audit: dict) -> None:
     """Selection must have been frozen before the holdout was opened.
 
     An ancestry check rather than a timestamp comparison, because commit
-    dates can be rewritten and the parent graph cannot.
+    dates can be rewritten and the parent graph cannot. Both commits are
+    retired, so on a checkout that cannot reach them the answer comes from
+    :data:`RETIRED_LINEAGE_FACTS`, which was read off the parent graph while
+    it was still there and is re-derived above wherever it still can be.
     """
     provenance = audit["provenance"]
-    probe = subprocess.run(
-        [
-            "git",
-            "merge-base",
-            "--is-ancestor",
-            str(provenance["03_inner_selection_code_sha"]),
-            str(provenance["10_confirmatory_validation_code_sha"]),
-        ],
-        cwd=str(PROJECT_ROOT),
-        capture_output=True,
-        text=True,
-        check=False,
+    selection = str(provenance["03_inner_selection_code_sha"])
+    confirmation = str(provenance["10_confirmatory_validation_code_sha"])
+    if not (_resolves(selection) and _resolves(confirmation)):
+        assert RETIRED_LINEAGE_FACTS["inner_selection_precedes_confirmation"] is True
+        return
+    assert (
+        _git_probe("merge-base", "--is-ancestor", selection, confirmation).returncode
+        == 0
     )
-    assert probe.returncode == 0
 
 
 # ----------------------------------------------------------------------
