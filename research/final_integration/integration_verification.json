@@ -1,6 +1,6 @@
 {
   "carry_manifest_contents": {
-    "carried_paths_declared": 58,
+    "carried_paths_declared": 63,
     "carried_paths_not_tracked": [],
     "excluded_paths_on_disk_and_correctly_ignored": [
       "research/game_latent_state/oof_gaussian_residuals.parquet"
@@ -138,6 +138,17 @@
       },
       {
         "absent": [],
+        "checked": 4,
+        "entries": 5,
+        "mismatched": [],
+        "path": "research/game_latent_state_v2/SHA256SUMS.factors.txt",
+        "recorded_only_generated_artifacts": [
+          "factor_loadings.parquet"
+        ],
+        "verified": true
+      },
+      {
+        "absent": [],
         "checked": 15,
         "entries": 15,
         "mismatched": [],
@@ -191,8 +202,8 @@
         "verified": true
       }
     ],
-    "files_checked": 19,
-    "files_verified": 19,
+    "files_checked": 20,
+    "files_verified": 20,
     "generated_artifact_suffixes_treated_as_recorded_only": [
       ".parquet",
       ".pkl",
@@ -205,12 +216,12 @@
       ".pt",
       ".pth"
     ],
-    "lines_recording_a_regenerated_artifact": 4,
-    "lines_verified": 72,
+    "lines_recording_a_regenerated_artifact": 5,
+    "lines_verified": 76,
     "passed": true
   },
-  "head_sha": "5f39e817af748009681621fb9a4db248403e495a",
-  "manifest_sha256": "badaa1df8600e536f354626d552f92940e3753f8a4c1a0ba3715130df0ace45b",
+  "head_sha": "3f0dff580fe05e71085d05c347dd2a70c34a481c",
+  "manifest_sha256": "e2affd044eb3fbad24f362f064b3187b604078f4bba39f6996af310cc6878e01",
   "merge_path_blob_audit": {
     "base": "a30ed672001f8774b6cfec9ad7a3ccb382506c4b",
     "base_resolved": true,
@@ -222,7 +233,7 @@
       "path": "research/game_latent_state_v2/inner_screening.json",
       "sha": "d009be4183c6da3613bf7c71382cd4323e3c1bbe"
     },
-    "new_blob_count": 178,
+    "new_blob_count": 189,
     "notable": [],
     "over_ceiling": [],
     "passed": true,
