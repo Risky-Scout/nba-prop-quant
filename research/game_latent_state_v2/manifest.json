@@ -1,0 +1,80 @@
+{
+  "artifact_name": "game_latent_state_shadow_v2_factor_model",
+  "branch": "research/nba-game-latent-state-shadow-v2-structural",
+  "code_sha": "d51eae726cc99da04f4597e29f8ae83eee8beed6",
+  "created_at": "2026-10-05T23:17:49Z",
+  "dependence_model_version": "game-latent-state-shadow-v1",
+  "input_fingerprints": {
+    "axis_indifference_resolution.json": "9a56bd0d8ff71407349678555781ee5d135059647c4f94c1a535844ac8650e06",
+    "count_bridge.json": "bbad3e99dba6d9564719df5eda9948b09a5bad3a0a7f19ba200b08f43c37adb9",
+    "inner_screening.json": "7b36d1031fe0a6196531f06c080e3736cf062fa3085baf185541d6c8cbe67d63",
+    "oof_gaussian_residuals.parquet": "d0005f0e4996670266bfb5f9cf5cd25d8cbf9189c305fdc009f0f805ac921174",
+    "temporal_diagnostic.json": "64ec5c9ae545c623970494ca1f49e3f95463d13dca94a67ff1918cf0d76ef61f"
+  },
+  "notes": [
+    "Candidate selected on pre-2024 inner folds only.",
+    "Loadings estimated from cross-player pairs only; the incumbent same-player block is never re-estimated.",
+    "The symmetric subspace cancels from the cross-team block algebraically, so no same-team hyperparameter can reach it."
+  ],
+  "outputs": {
+    "covariance_diagnostics.json": "fbdaed36fa8a21d7f016e61f84c361f337c9b99a9896ecc595d6589cb274effe",
+    "factor_loadings.parquet": "7852605cf8d74278bb4715c4758e302ff9cc4318f5bb58ec476437f3c5ddaadc",
+    "factor_spec.json": "e803397546bc120c19d4992e6a592cfadd6ac0608742719871c71b9b24d1bcbd",
+    "shadow_v2_candidate.json": "6639e247126bdedd4324c79a1e07d88e3f2dfa1609bc05ad30c008f0cf0e848c"
+  },
+  "parameters": {
+    "bootstrap_draws": 400,
+    "parameter_counts": {
+      "pairwise": 0,
+      "player_indexed": 0,
+      "role_indexed": 3,
+      "scalar_hyperparameters": 4,
+      "stat_indexed_competition": 21,
+      "stat_indexed_contrast": 36,
+      "stat_indexed_game": 36,
+      "stat_indexed_role_deviation": 0,
+      "stat_indexed_symmetric": 0
+    },
+    "parent_bucket_repair_sha": "c965451de2662b953f45c791157f3826207f753f",
+    "parent_shadow_v1_sha": "1c5b8c93569ee25afd4eb4222158300702bd9471",
+    "spec_hash": "700fc17723d11ba96a0842e39ec2b5d69bddffd2c27920297de09f78e292aa22",
+    "v2_spec": {
+      "bridge_weight": 0.0,
+      "cross_eb_family": "block_diagonal",
+      "cross_shrinkage": "empirical_bayes",
+      "k_game": 6,
+      "name": "v2_iso",
+      "r_contrast": 6,
+      "r_symmetric": 0,
+      "role_column": "role_bucket",
+      "role_deviation": false,
+      "same_eb_family": "block_diagonal",
+      "same_shrinkage": "empirical_bayes",
+      "shrink_z": 1.96,
+      "symmetric_mode": "residual",
+      "temporal_treatment": "T0_pooled_empirical_bayes"
+    }
+  },
+  "promotion_eligibility": "SHADOW_RESEARCH_ONLY__NOT_ELIGIBLE_FOR_PROMOTION",
+  "schema_version": 1,
+  "seasons_used": [
+    2020,
+    2021,
+    2022,
+    2023
+  ],
+  "seed": 73,
+  "source_production_ref": "origin/production/wizardofodds-integration",
+  "source_production_sha": "a30ed672001f8774b6cfec9ad7a3ccb382506c4b",
+  "training_cutoff": "season<2024",
+  "training_seasons": [
+    2020,
+    2021,
+    2022,
+    2023
+  ],
+  "validation_seasons": [
+    2024,
+    2025
+  ]
+}

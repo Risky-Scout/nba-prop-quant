@@ -21,7 +21,7 @@
     "research/nba-final-upstream-remediation",
     "research/nba-count-space-forensic"
   ],
-  "superseded_handling": "marked superseded, histories not merged; their evidence is carried as files and their hashes are recorded here",
+  "superseded_handling": "marked superseded, histories not merged; their evidence is carried as files and their hashes are recorded here. The V2 structural line is retired rather than merely unmerged: research/nba-game-latent-state-shadow-v2-structural and its base research/nba-game-latent-state-shadow-v1-bucket-repair are closed and deleted, and the only remaining copy of their history is an offline git bundle held outside the repository. So nothing in the two directories they fed may rely on being retrievable from another branch, and the compact provenance set below was carried before they went.",
   "reachability_contract": "none of the branches named above may be an ancestor of this lineage. Counting merge commits is the wrong proxy for that: GitHub tests a pull request on a synthetic merge of the head into the base, and merging this branch into production is itself a merge commit. Both join this lineage to production, which is the branch's purpose. What must never become reachable is a third lineage.",
   "carry": {
     "runtime_source": {
@@ -89,6 +89,21 @@
       "paths": [
         "research/game_latent_state_v2/"
       ]
+    },
+    "retired_lineage_compact_provenance": {
+      "reason": "the V2 line's own dependency record, manifest.equivalence.json, fingerprints an input it called v2_factor_spec.json that resolved to nothing on this branch, so the equivalence proof was documented but not checkable here. These five files close that gap without making any rejected dial reachable. factor_spec.json is the fingerprinted input itself; manifest.json records the run that produced it -- seed, code_sha, parameter counts and the exact v2_spec the rejected dials were set to; covariance_diagnostics.json is the fitted covariance evidence that spec describes; SHA256SUMS.factors.txt makes the set self-verifying; and 07b_diagnose_sd_blocker.py is the one V2 driver that imports nothing rejected, so the predictive-SD rejection stays executable. They are named individually rather than left to the directory entry above because they were carried deliberately, one file at a time, from a branch that no longer exists.",
+      "paths": [
+        "research/game_latent_state_v2/factor_spec.json",
+        "research/game_latent_state_v2/manifest.json",
+        "research/game_latent_state_v2/covariance_diagnostics.json",
+        "research/game_latent_state_v2/SHA256SUMS.factors.txt",
+        "research/game_latent_state_v2/07b_diagnose_sd_blocker.py"
+      ],
+      "resolves": {
+        "recorded_in": "research/game_latent_state_v2/manifest.equivalence.json",
+        "fingerprint": "v2_factor_spec.json",
+        "sha256": "e803397546bc120c19d4992e6a592cfadd6ac0608742719871c71b9b24d1bcbd"
+      }
     },
     "closed_study_evidence_only": {
       "reason": "the count-space forensic study and the marginal-convention audit are both CLOSED with no parameter change adopted. Their reports are carried so the conclusions and hashes survive; their drivers are not, because nothing at runtime or in retraining calls them. Their .gitignore files are carried even though the drivers are not: both directories hold a ~56 MB untracked cache on a machine that has run the study, and dropping the ignore rules would leave that cache one 'git add -A' away from the merge path. An ignore rule that prevents a generated blob from being committed belongs on a production branch whether or not the thing that generates it does.",
@@ -176,6 +191,43 @@
         "research/count_space_forensic/count_space_forensic.json",
         "research/marginal_convention_audit/marginal_convention_audit.json"
       ]
+    },
+    "retired_v2_search_space": {
+      "reason": "the four modules the rejected dials live in, and every V2 driver that imports one of them. Seven of the ten drivers do, including 07_prove_equivalence_and_calibrate_sd.py, so full executable reproduction of the V2 search paths cannot be carried without making the symmetric cross-player subspace, the additive role-deviation layer, the count-transmission bridge and the interval-censored count space constructible again on a production branch. That is an accepted and documented loss: the compact provenance set is carried instead, and the full history is held offline. Also excluded: the two superseded screening passes, whose accepted final form is already here as inner_screening.json byte for byte, and the two artifacts of the declined count-bridge work, which no retained record references.",
+      "paths": [
+        "src/nba_prop_quant/research/game_latent_state/v2.py",
+        "src/nba_prop_quant/research/game_latent_state/temporal.py",
+        "src/nba_prop_quant/research/game_latent_state/bridge.py",
+        "src/nba_prop_quant/research/game_latent_state/countspace.py",
+        "research/game_latent_state_v2/00_freeze_control.py",
+        "research/game_latent_state_v2/01_temporal_diagnostic.py",
+        "research/game_latent_state_v2/02_count_bridge.py",
+        "research/game_latent_state_v2/03_inner_screening.py",
+        "research/game_latent_state_v2/03b_resolve_axis_indifference.py",
+        "research/game_latent_state_v2/04_freeze_candidate.py",
+        "research/game_latent_state_v2/05_validate_shadow_v2.py",
+        "research/game_latent_state_v2/06_evaluate_v2_gates.py",
+        "research/game_latent_state_v2/07_prove_equivalence_and_calibrate_sd.py",
+        "research/game_latent_state_v2/factor_loadings.parquet",
+        "research/game_latent_state_v2/inner_screening_pass1.json",
+        "research/game_latent_state_v2/inner_screening_pass2.json",
+        "research/game_latent_state_v2/inner_screening_pass3.json",
+        "research/game_latent_state_v2/count_bridge.json",
+        "research/game_latent_state_v2/repair_control_baseline.json"
+      ],
+      "evidence_preserved_as": [
+        "research/game_latent_state_v2/factor_spec.json",
+        "research/game_latent_state_v2/manifest.json",
+        "research/game_latent_state_v2/covariance_diagnostics.json",
+        "research/game_latent_state_v2/SHA256SUMS.factors.txt",
+        "research/game_latent_state_v2/07b_diagnose_sd_blocker.py",
+        "research/game_latent_state_v2/inner_screening.json",
+        "research/game_latent_state_v2/temporal_diagnostic.json",
+        "research/game_latent_state_v2/sd_calibration_blocker.json",
+        "research/game_latent_state_v2/equivalence_and_calibration.json",
+        "research/game_latent_state_resolution/"
+      ],
+      "enforced_by": "tests/test_game_latent_state_shadow_clean_candidate.py asserts ModuleNotFoundError for each of the four modules and scans every carried module for an import of one"
     },
     "historical_large_blobs": {
       "reason": "reachable from the research branch heads and carried by any merge commit; an allowlist cut from the production base cannot reach them",

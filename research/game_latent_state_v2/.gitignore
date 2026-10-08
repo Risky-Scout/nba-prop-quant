@@ -12,14 +12,21 @@ oof_gaussian_residuals.parquet
 
 # The V2 structural search was screened and not carried, so this directory
 # keeps only the evidence that settles the record: the equivalence proof, the
-# predictive-SD rejection, the frozen candidate it applies to, and the
-# screening and temporal artifacts that record why each dial is off. The
-# drivers that produced them, the search-space modules they import and the
-# duplicated screening passes are not on this branch; they remain on
-# research/nba-game-latent-state-shadow-v2-structural.
+# predictive-SD rejection, the frozen candidate it applies to, the screening
+# and temporal artifacts that record why each dial is off, and the compact
+# provenance set (factor_spec.json, manifest.json, covariance_diagnostics.json,
+# SHA256SUMS.factors.txt) that makes all of it verifiable here.
+#
+# The research branch that produced them is retired, not merely unmerged. The
+# drivers that import a rejected search-space module, those modules themselves
+# and the duplicated screening passes are gone from the repository and exist
+# only in an offline bundle. Nothing below is retrievable from another branch.
+#
+# count_bridge.json and repair_control_baseline.json belong to the declined
+# count-bridge work; no retained record references either. The earlier
+# screening passes are superseded: pass 3 is inner_screening.json byte for
+# byte, and pass 1 and 2 are listed in its earlier_pass_artifacts field.
 factor_loadings.parquet
-factor_spec.json
 count_bridge.json
-covariance_diagnostics.json
 inner_screening_pass*.json
 repair_control_baseline.json
