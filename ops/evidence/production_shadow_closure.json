@@ -42,7 +42,7 @@
   "final_model_spec_sha256": "154109658127920ebeac381bd21e8bb29390505384124419899236cce37fdc64",
   "live_shadow_promotion_policy": {
     "path": "research/final_model/live_shadow_promotion_policy.json",
-    "sha256": "9d9255ab73be48586a9d1d045d250c15fa3167e403b1f999d462b65efce9f530"
+    "sha256": "a0784aff602d9ee14ba1ef91b30fe972fb7eeb02ec80e0b8afbb7d9ff764aee8"
   },
   "no_modelling_rerun_was_performed": true,
   "production_sha": "4631887a9d3765b2c72482aa762429afe82d1e45",

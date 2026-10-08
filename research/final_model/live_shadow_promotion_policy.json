@@ -119,12 +119,14 @@
     },
     "O5_provenance_completeness": {
       "fraction_of_graded_candidate_rows_required": 1.0,
+      "how_it_is_carried": "the log writes dependence_model_version, factor_spec_hash and provenance_fingerprint as columns on every row. The remaining identities are recorded once per run in the provenance payload, and provenance_fingerprint is the sha256 of that whole payload, so a row resolves to exactly one set of identities and two rows produced by different models cannot share a fingerprint. The gate is that all four resolve for every graded candidate row, not that all four appear as literal columns.",
       "required_fields": [
         "final_model_spec_sha256",
         "factor_spec_hash",
         "artifact_hash_or_version",
         "production_code_sha"
-      ]
+      ],
+      "unresolvable_fingerprint_is_a_failure": "a graded candidate row whose fingerprint has no recorded preimage fails this gate, because its identities cannot be established after the fact"
     },
     "O6_incumbent_serving_unaffected": {
       "requirement": "no candidate failure may alter, delay or block an incumbent probability. The shadow fails open for the lifecycle and the served number is always the incumbent's.",
