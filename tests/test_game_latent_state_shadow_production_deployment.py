@@ -29,6 +29,7 @@ from nba_prop_quant.distributions import FittedMarginal, NegativeBinomialCalibra
 from nba_prop_quant.research.game_latent_state import shadow_runtime as runtime
 from nba_prop_quant.research.game_latent_state.safety import (
     DECLARED_INTEGRATION_PATHS,
+    SHADOW_OWNED_PRODUCTION_PATHS,
 )
 from nba_prop_quant.research.game_latent_state.simulator import SUPPORTED_STATS
 
@@ -168,10 +169,22 @@ def invoke(shadow_ops, deployment, *extra: str) -> dict:
 # ----------------------------------------------------------------------
 
 
-def test_the_entry_point_is_a_declared_production_path():
+def test_the_entry_point_is_an_owned_production_path():
+    """The entry point stays on the record after its declaration retires.
+
+    It was declared while the deployment was pending and the declaration was
+    retired when it merged, because a declaration that outlives its change is
+    standing permission. What does not expire is that this file is part of the
+    shadow's production surface, so that is recorded separately and asserted
+    here.
+    """
     assert ENTRY_POINT.exists()
-    assert ENTRY_POINT_RELATIVE in DECLARED_INTEGRATION_PATHS
-    assert DECLARED_INTEGRATION_PATHS[ENTRY_POINT_RELATIVE].strip()
+    assert ENTRY_POINT_RELATIVE in SHADOW_OWNED_PRODUCTION_PATHS
+    assert SHADOW_OWNED_PRODUCTION_PATHS[ENTRY_POINT_RELATIVE].strip()
+    assert ENTRY_POINT_RELATIVE not in DECLARED_INTEGRATION_PATHS, (
+        "the entry point has landed in production, so it carries no pending "
+        "permission to be changed"
+    )
 
 
 def test_the_deployment_is_pinned_to_the_frozen_final_model(shadow_ops):
