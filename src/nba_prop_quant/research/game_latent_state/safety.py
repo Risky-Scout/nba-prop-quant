@@ -69,10 +69,39 @@ PROTECTED_PRODUCTION_SOURCES: frozenset[str] = frozenset(
 #:
 #: A declaration is permission for a *pending* change, so it is removed once
 #: that change has landed in production; otherwise it sits here as standing
-#: permission to edit a protected path unreviewed. The shadow's production
-#: documentation was declared here while it was pending and has since merged,
-#: which is why only the deployment surface remains.
+#: permission to edit a protected path unreviewed. What the lineage owns in
+#: production once a change has landed is recorded in
+#: :data:`SHADOW_OWNED_PRODUCTION_PATHS`, which grants no permission at all.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
+    {
+        "ops/evidence/production_shadow_closure.json": (
+            "the production-ops closure receipt: the reconciled test counts, "
+            "the production SHA both hashes were verified at, and why one "
+            "commit reported four different pass/skip splits. Evidence only: "
+            "nothing reads it and it decides no production behaviour"
+        ),
+    }
+)
+
+#: Protected paths this lineage introduced into production and now owns.
+#:
+#: This is a registry, not permission. It exists because two different
+#: questions were previously answered by one mapping: "may this branch change
+#: this protected path" and "is this protected path part of the shadow's
+#: surface". Those coincided only on the branch that first deployed the
+#: shadow. Once that branch merged, every entry became permanently stale under
+#: the first question while remaining permanently true under the second, which
+#: made the production branch impossible to extend without either leaving loose
+#: permission behind or dropping the surface from the record.
+#:
+#: Separating them keeps both guarantees and is strictly tighter than the
+#: single mapping was: changing anything here still requires a fresh entry in
+#: :data:`DECLARED_INTEGRATION_PATHS` and the review that comes with it, so
+#: being owned buys nothing. The same restrictions apply — no model artifact,
+#: no config, no production script, no release or review path, no protected
+#: production source module — and the branch-safety tests pin that for this
+#: mapping exactly as they do for the declaration.
+SHADOW_OWNED_PRODUCTION_PATHS: Mapping[str, str] = MappingProxyType(
     {
         "ops/run_production_shadow.py": (
             "the shadow's production entry point. Reads the marginals and the "
@@ -89,11 +118,11 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     }
 )
 
-#: Workflows whose pre-existing steps must survive a declared change intact.
-#: Declaring a workflow buys the right to *add* a step, not to rewrite the
+#: Workflows whose pre-existing steps must survive a change intact. Owning or
+#: declaring a workflow buys the right to *add* a step, not to rewrite the
 #: lifecycle: the modelling, refresh and registration steps are the production
 #: path, and the branch-safety tests check them line by line against the
-#: production ref rather than trusting the declaration.
+#: production ref rather than trusting either mapping.
 ADDITIVE_ONLY_WORKFLOWS: tuple[str, ...] = (
     ".github/workflows/nba_production_lifecycle.yml",
 )

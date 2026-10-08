@@ -116,10 +116,17 @@
       ]
     },
     "production_deployment": {
-      "reason": "the shadow's production entry point and the one non-blocking lifecycle step that invokes it. Both are declared in safety.DECLARED_INTEGRATION_PATHS. The entry point reads the marginals and copula the daily fit just wrote -- the objects the live pricing path prices with -- records what the candidate would have said, and publishes nothing. The workflow change is additive: every pre-existing step is unchanged and the added step is continue-on-error, so a shadow failure cannot fail the production lifecycle.",
+      "reason": "the shadow's production entry point and the one non-blocking lifecycle step that invokes it. Both are recorded in safety.SHADOW_OWNED_PRODUCTION_PATHS; their declarations were retired when they merged, because a declaration is permission for a pending change and owning a path grants nothing. The entry point reads the marginals and copula the daily fit just wrote -- the objects the live pricing path prices with -- records what the candidate would have said, and publishes nothing. The workflow change is additive: every pre-existing step is unchanged and the added step is continue-on-error, so a shadow failure cannot fail the production lifecycle.",
       "paths": [
         "ops/run_production_shadow.py",
         ".github/workflows/nba_production_lifecycle.yml"
+      ]
+    },
+    "production_ops_closure": {
+      "reason": "the closure receipt and the live monitoring policy. The receipt reconciles the four pass/skip splits one commit has reported and records the production SHA both hashes were verified at; it is declared in safety.DECLARED_INTEGRATION_PATHS because it lives under ops/. The policy fixes the live promotion thresholds before any live result exists. Neither decides production behaviour and neither grants promotion authority.",
+      "paths": [
+        "ops/evidence/production_shadow_closure.json",
+        "research/final_model/live_shadow_promotion_policy.json"
       ]
     },
     "tests": {

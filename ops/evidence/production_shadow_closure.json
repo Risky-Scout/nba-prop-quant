@@ -1,0 +1,127 @@
+{
+  "ERRORS": 0,
+  "FAILED": 0,
+  "canonical_suite": {
+    "collected": 1005,
+    "command": "python -m pytest -q",
+    "environments": {
+      "ci_clean_checkout": {
+        "conclusion": "success",
+        "errors": 0,
+        "event": "push",
+        "failed": 0,
+        "head_sha": "4631887a9d3765b2c72482aa762429afe82d1e45",
+        "passed": 999,
+        "skipped": 6,
+        "what_it_is": "GitHub Actions ci.yml on the production head. A fresh checkout, so the git-ignored generated artifacts are absent and the production ref equals HEAD.",
+        "workflow_run_id": 37668927351,
+        "xfailed": 0
+      },
+      "clean_clone_reproduction": {
+        "errors": 0,
+        "failed": 0,
+        "passed": 999,
+        "skipped": 6,
+        "what_it_is": "a fresh clone of the production head with the production ref at the production head, run locally. Reproduces the CI split exactly, which is what identifies the six skips by name.",
+        "xfailed": 0
+      },
+      "workspace_with_generated_artifacts": {
+        "errors": 0,
+        "failed": 0,
+        "passed": 1004,
+        "skipped": 1,
+        "what_it_is": "the agent workspace at the production head with a clean tree. The git-ignored generated artifacts are present on disk, so the five artifact-gated tests run instead of skipping.",
+        "xfailed": 0
+      }
+    },
+    "intentional_skips_are_not_counted_as_passes": true,
+    "note": "passed + skipped = 1005 = collected in every environment. No test passed in one environment and failed in another; every difference is an intentional skip whose condition is an environment input.",
+    "reported_as_authoritative": "ci_clean_checkout"
+  },
+  "factor_spec_hash": "3229bbc83a4388c270a21008a75afacc3479cfd6f6390c8737f041412d2f2eb4",
+  "final_model_spec_sha256": "154109658127920ebeac381bd21e8bb29390505384124419899236cce37fdc64",
+  "live_shadow_promotion_policy": {
+    "path": "research/final_model/live_shadow_promotion_policy.json",
+    "sha256": "a0784aff602d9ee14ba1ef91b30fe972fb7eeb02ec80e0b8afbb7d9ff764aee8"
+  },
+  "no_modelling_rerun_was_performed": true,
+  "production_sha": "4631887a9d3765b2c72482aa762429afe82d1e45",
+  "recorded_at": "2026-10-08T00:39:57Z",
+  "scheduled_shadow_proof": {
+    "MODE_observed": "production",
+    "RUN_ADAPTIVE_observed": "false",
+    "SCHEDULED_SHADOW_PROOF_PENDING_NORMAL_LIFECYCLE": "YES",
+    "default_branch_propagation": {
+      "detail": "GitHub fires schedule events from the default branch and runs the default branch's copy of the workflow. main's nba_production_lifecycle.yml is identical to production's except that it lacks the added shadow step, so a scheduled production run will not execute the shadow step until the file is copied to main verbatim, which is the procedure docs/wizardofodds/PRODUCTION_AUTOMATION.md section 2 already documents.",
+      "shadow_step_present_on_main": false,
+      "shadow_step_present_on_production": true
+    },
+    "locked_opening_day": "2026-10-20",
+    "observed_in_workflow_run": 37445390061,
+    "refresh_outcome_observed": "PRESEASON_BLOCK",
+    "slate_observed": "2026-10-06",
+    "why_pending": "the lifecycle reaches MODE=production but the current-season refresh returns PRESEASON_BLOCK before the locked season-2026 opening day, so the adaptive daily fit is skipped and RUN_ADAPTIVE is false. The shadow step is gated on MODE=production and RUN_ADAPTIVE=true, so the normal lifecycle cannot satisfy it yet. The condition was not manufactured."
+  },
+  "served_authority": {
+    "published_authority": "incumbent",
+    "rows_published": 0,
+    "served_model": "INCUMBENT",
+    "shadow_publishing_switch": "DISABLED"
+  },
+  "shadow_deployment_contract": {
+    "checks_passed": 16,
+    "checks_total": 16,
+    "evidence": "closure_contract_verification.log",
+    "refusal_and_fallback_tests": {
+      "errors": 0,
+      "failed": 0,
+      "files": [
+        "tests/test_game_latent_state_shadow_production_deployment.py",
+        "tests/test_game_latent_state_shadow_runtime.py",
+        "tests/test_game_latent_state_shadow_safety.py"
+      ],
+      "passed": 102,
+      "skipped": 1
+    }
+  },
+  "skip_inventory": {
+    "declaration_staleness": {
+      "count": 1,
+      "locations": [
+        "tests/test_game_latent_state_shadow_safety.py:151"
+      ],
+      "present_in": [
+        "ci_clean_checkout",
+        "clean_clone_reproduction",
+        "workspace_with_generated_artifacts"
+      ],
+      "reason": "this head is production, so it changes nothing relative to itself",
+      "why_it_is_a_skip": "the test compares HEAD against the production ref. When HEAD is the production head the diff is empty, so there is no declaration to judge and the test correctly declines to assert rather than asserting vacuously."
+    },
+    "generated_artifacts_absent": {
+      "count": 5,
+      "locations": [
+        "tests/test_game_latent_state_shadow_final_audit.py:178",
+        "tests/test_game_latent_state_shadow_final_audit.py:189",
+        "tests/test_game_latent_state_shadow_final_audit.py:228",
+        "tests/test_game_latent_state_shadow_final_audit.py:689",
+        "tests/test_game_latent_state_shadow_final_audit.py:871"
+      ],
+      "present_in": [
+        "ci_clean_checkout",
+        "clean_clone_reproduction"
+      ],
+      "reason": "the residual parquet is a generated artifact and is absent / the grades parquet is a generated artifact and is absent",
+      "why_it_is_a_skip": "research/game_latent_state/oof_gaussian_residuals.parquet is 68,627,706 bytes and is deliberately git-ignored, as is the joint-event grades parquet. A fresh checkout cannot have them, so these five tests skip there and run wherever the artifacts have been regenerated."
+    }
+  },
+  "test_count_discrepancy_resolution": {
+    "1000_passed_5_skipped": "a fresh clone with the production ref still at the pre-merge tip 0a5aab9f56ee. HEAD differs from that ref, so the declaration test runs, and the five generated artifacts are absent, so those five skip.",
+    "1004_passed_1_skipped": "the agent workspace at the production head 4631887a9d37 with the production ref at that same commit. The generated artifacts are present on disk so the five artifact-gated tests run; only the declaration test skips.",
+    "1005_passed_0_skipped": "the figure quoted in the earlier shadow-deployment report. It was measured on the deployment branch before the merge, when the production ref pointed at the pre-merge tip 0a5aab9f56ee, so HEAD differed from the production ref and the declaration test ran rather than skipping, and the generated artifacts were present so the five artifact-gated tests also ran. Reproduced exactly by re-pointing the ref at 0a5aab9f56ee on this same commit.",
+    "999_passed_6_skipped": "a fresh checkout with the production ref at the production head. Both skip conditions apply at once: the five absent generated artifacts plus the declaration test. This is what CI measures.",
+    "mechanism_confirmed_independently": "CI run 37710361785 on the closure branch reports 1001 passed, 5 skipped of 1006 collected. The declaration skip is gone and only the five generated-artifact skips remain, because the branch differs from the production ref so the declaration test has a non-empty diff to judge. That is the predicted effect of moving exactly one of the two environment inputs, measured on a run that was not set up to test the explanation.",
+    "root_cause": "two of the suite's skip conditions take the environment as an input rather than the code. The first is the position of origin/production/wizardofodds-integration, which the containment tests read; once a branch IS production, the diff against production is empty and the declaration test skips. The second is the presence of two deliberately git-ignored generated parquet files, which five audit tests require. Neither condition depends on the commit under test, which is why one commit yields four different pass/skip splits.",
+    "summary": "every reported figure is the same 1005 collected tests with a different number of intentional skips. No figure contains a failure, an error or an xfail, and the four splits differ only by which environment-gated skips applied."
+  }
+}

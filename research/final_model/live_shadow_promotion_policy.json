@@ -1,0 +1,228 @@
+{
+  "AUTONOMOUS_PROMOTION_AUTHORITY": "NONE",
+  "POLICY_FROZEN_BEFORE_ANY_LIVE_RESULT_WAS_SEEN": "YES",
+  "UNCERTAINTY_CALIBRATION": "RAW_MONITOR_ONLY",
+  "decision_states": {
+    "CONTINUE_SHADOW": "the minimum live-evidence requirement is not yet met, or it is met and the gates are neither cleanly passed nor cleanly failed. Keep collecting. This is the default state and the only state a report may reach on its own.",
+    "PROMOTION_REVIEW_ELIGIBLE": "the minimum live-evidence requirement is met and every operational, proper-score and dependence gate passes at the frozen evaluation cut. This state means a human review may now be opened. It is not a promotion, it does not change the published authority, and no code path may act on it.",
+    "SHADOW_DISABLED_FOR_SAFETY": "an operational gate failed in a way that implicates the incumbent feed, or a shadow publishing violation was observed. The shadow step is disabled; the incumbent is unaffected because it never depended on the shadow.",
+    "SHADOW_MODEL_REJECTED": "the minimum live-evidence requirement is met and a proper-score or dependence gate fails with statistical support. The candidate does not become the published authority and this lineage closes.",
+    "exhaustive": true,
+    "no_automatic_transition_to_published_authority": "no code path may transition any state to published authority. PROMOTION_REVIEW_ELIGIBLE authorises human review only.",
+    "states": [
+      "CONTINUE_SHADOW",
+      "PROMOTION_REVIEW_ELIGIBLE",
+      "SHADOW_MODEL_REJECTED",
+      "SHADOW_DISABLED_FOR_SAFETY"
+    ]
+  },
+  "dependence_gates": {
+    "D1_global_latent_dependence_rmse": {
+      "requirement": "candidate live global latent dependence RMSE < incumbent live global latent dependence RMSE",
+      "strict": true
+    },
+    "D2_count_space_dependence_rmse": {
+      "requirement": "candidate live count-space dependence RMSE < incumbent live count-space dependence RMSE",
+      "strict": true
+    },
+    "D3_protected_buckets_may_not_worsen": {
+      "max_worsening_z": 1.0,
+      "protected_buckets": [
+        "opponent_ast_ast",
+        "opponent_pts_reb",
+        "opponent_fg3m_reb",
+        "passer_ast_teammate_pts",
+        "teammate_pts_reb"
+      ],
+      "requirement": "no protected bucket may worsen by more than 1.0 z versus the incumbent on live evidence"
+    },
+    "D4_explicitly_reported_not_gated": {
+      "buckets": [
+        "teammate_ast_ast",
+        "teammate_reb_reb"
+      ],
+      "requirement": "reported explicitly in every live report, with the same z convention as the protected buckets. Reported, not gated."
+    },
+    "retired_requirement": {
+      "disposition": "INCOMPATIBLE_WITH_OTHER_ORIGINAL_CONSTRAINTS_UNDER_CURRENT_ARCHITECTURE",
+      "name": "the arbitrary 20 per cent passer-AST count-space reduction",
+      "status": "RETIRED_FINAL_DO_NOT_RESURRECT",
+      "why": "the forensic study established that forcing the focal passer_ast_teammate_pts count-space correction far enough to clear 20 per cent requires a latent entry of 0.0508138 against a maximum feasible 0.0480072, and that teammate_reb_reb degrades by 8.27 per cent first. Its disposition is final and this policy does not reopen it."
+    }
+  },
+  "evaluation": {
+    "cut": "the evaluation cut is frozen by the minimum live-evidence requirement, not chosen after inspecting results",
+    "loss_delta_convention": "delta = candidate - incumbent. Lower is better, so a negative delta is a candidate improvement.",
+    "pairing_unit": "game",
+    "primary_comparison": "candidate versus incumbent",
+    "reference_comparison_only": "candidate versus cross-player independence. Reference only: reported for context, and it gates nothing.",
+    "resampling": "paired game-clustered bootstrap. Games are the resampling unit because joint-event rows within one game share the game's latent state and are not independent."
+  },
+  "failure_discipline": {
+    "authorised_triggers_for_new_modelling_investigation": {
+      "A_reproducible_correctness_bug": "a defect that reproduces deterministically from recorded inputs",
+      "B_persistent_operational_failure": "a repeated operational failure, including a repeated deterministic candidate fallback with one root cause even when the total fallback rate is within O4",
+      "C_statistically_supported_degradation": "a degradation supported by the proper-score gates after the minimum live-evidence requirement is met",
+      "D_localised_dependence_miss": "a clearly localised dependence miss supported by sufficient live sample in the affected bucket"
+    },
+    "default": "continue collecting shadow evidence",
+    "not_a_trigger": "one bad week, one noisy bucket, or one unfavourable intermediate report does not reopen research",
+    "research_status": "CLOSED"
+  },
+  "identity": {
+    "dependence_model_version": "game-latent-state-shadow-v1",
+    "factor_spec_hash": "3229bbc83a4388c270a21008a75afacc3479cfd6f6390c8737f041412d2f2eb4",
+    "final_model_spec_sha256": "154109658127920ebeac381bd21e8bb29390505384124419899236cce37fdc64",
+    "production_code_sha_at_freeze": "4631887a9d3765b2c72482aa762429afe82d1e45",
+    "promotion_eligibility": "SHADOW_RUNTIME_ONLY__PROMOTION_REQUIRES_A_SEPARATE_DECISION"
+  },
+  "immutability": {
+    "frozen_at": "2026-10-08T00:39:57Z",
+    "no_threshold_may_change_after_live_results_are_seen": true,
+    "rule": "this policy is immutable unless a correctness bug is discovered in it. Thresholds, the minimum sample, the seed and the gate list are fixed before any live result exists, which is what stops a threshold from being tuned to whatever the live sample happens to show.",
+    "what_counts_as_a_correctness_bug": "a threshold that cannot be evaluated as written, a metric that does not exist, an internally contradictory gate, or a reference to a field the shadow log does not carry. A disappointing live result is not a correctness bug."
+  },
+  "minimum_live_evidence": {
+    "A_games": {
+      "min_live_nba_games_graded": 500
+    },
+    "B_joint_events": {
+      "by_leg_count": {
+        "2": 2000,
+        "3": 2000,
+        "4": 1200
+      },
+      "min_live_graded_joint_events": 8000
+    },
+    "C_calendar": {
+      "min_regular_season_days": 30
+    },
+    "combination": "A and B and C must all hold before any gate verdict is rendered",
+    "no_early_promotion": "a favourable small sample does not shorten this requirement. Reports produced before the requirement is met are monitoring only and may not render a gate verdict."
+  },
+  "operational_gates": {
+    "O1_shadow_publishing_violations": {
+      "evidence": "rows_published and published on every shadow status and grading report",
+      "max": 0
+    },
+    "O2_psd_failures": {
+      "evidence": "psd_diagnostics minimum covariance eigenvalue per evaluated game",
+      "max": 0
+    },
+    "O3_same_player_block_deviation": {
+      "max": 1e-09,
+      "scope": "every evaluated game, not an average over games"
+    },
+    "O4_candidate_fallback_rate": {
+      "max": 0.005,
+      "repeated_root_cause_requires_review": "any repeated deterministic candidate failure sharing one root cause requires review even when the total rate is below the threshold"
+    },
+    "O5_provenance_completeness": {
+      "fraction_of_graded_candidate_rows_required": 1.0,
+      "how_it_is_carried": "the log writes dependence_model_version, factor_spec_hash and provenance_fingerprint as columns on every row. The remaining identities are recorded once per run in the provenance payload, and provenance_fingerprint is the sha256 of that whole payload, so a row resolves to exactly one set of identities and two rows produced by different models cannot share a fingerprint. The gate is that all four resolve for every graded candidate row, not that all four appear as literal columns.",
+      "required_fields": [
+        "final_model_spec_sha256",
+        "factor_spec_hash",
+        "artifact_hash_or_version",
+        "production_code_sha"
+      ],
+      "unresolvable_fingerprint_is_a_failure": "a graded candidate row whose fingerprint has no recorded preimage fails this gate, because its identities cannot be established after the fact"
+    },
+    "O6_incumbent_serving_unaffected": {
+      "requirement": "no candidate failure may alter, delay or block an incumbent probability. The shadow fails open for the lifecycle and the served number is always the incumbent's.",
+      "verified_by": "the deployed entry point catches its own failures and exits 0, the lifecycle step sets continue-on-error, and an incumbent failure propagates rather than being replaced by a candidate number"
+    }
+  },
+  "proper_score_gates": {
+    "aggregate": {
+      "brier": {
+        "point_estimate": "candidate <= incumbent",
+        "upper_95_ci_of_delta_max": 0.00025
+      },
+      "log_loss": {
+        "point_estimate": "candidate <= incumbent",
+        "upper_95_ci_of_delta_max": 0.00025
+      }
+    },
+    "bootstrap": {
+      "ci": "95 per cent, two-sided, percentile",
+      "cluster": "game",
+      "draws": 5000,
+      "paired": true,
+      "seed": 73,
+      "seed_provenance": "the repository's established game-clustered bootstrap seed, used by transmission.bootstrap_source_pair and the remediation bootstraps"
+    },
+    "by_leg_count": {
+      "leg_counts": [
+        2,
+        3,
+        4
+      ],
+      "requirement": "non-inferiority only",
+      "upper_95_ci_of_brier_delta_max": 0.0005,
+      "upper_95_ci_of_log_loss_delta_max": 0.0005
+    },
+    "standard": "aggregate improvement plus leg-level non-inferiority. Statistical superiority is NOT required on every leg count."
+  },
+  "scope": "SHADOW ONLY. The incumbent remains the served and published authority on every row. This policy decides what live evidence would make the candidate eligible for a human promotion review; it grants no promotion authority of its own and no code path may act on it.",
+  "served_authority": {
+    "published_authority": "incumbent",
+    "rows_published_required": 0,
+    "served_model": "INCUMBENT",
+    "shadow_publishing_switch": "DISABLED"
+  },
+  "tracked_metrics": {
+    "artifact_identity": [
+      "candidate artifact hash and dependence_model_version",
+      "incumbent artifact hash and model version"
+    ],
+    "dependence_buckets": [
+      "teammate_pts_pts",
+      "teammate_reb_reb",
+      "teammate_ast_ast",
+      "passer_ast_teammate_pts",
+      "teammate_pts_reb",
+      "teammate_fg3m_fg3m",
+      "opponent_pts_pts",
+      "opponent_reb_reb",
+      "opponent_pts_reb",
+      "opponent_fg3m_reb",
+      "opponent_ast_ast",
+      "opponent_stl_pts"
+    ],
+    "dependence_buckets_note": "the twelve cross-player buckets the validation layer reports are teammate_pts_pts, teammate_reb_reb, teammate_ast_ast, passer_ast_teammate_pts, teammate_pts_reb, teammate_fg3m_fg3m, opponent_pts_pts, opponent_reb_reb, opponent_pts_reb, opponent_fg3m_reb, opponent_ast_ast and opponent_stl_pts. All twelve are tracked every cut; the same-player blocks are tracked separately under O3 because they must be preserved exactly rather than improved.",
+    "operational": [
+      "candidate fallback rate",
+      "psd failure rate",
+      "same-player block deviation"
+    ],
+    "proper_scores": [
+      "aggregate brier",
+      "aggregate log loss",
+      "brier by leg count for 2, 3 and 4 legs",
+      "log loss by leg count for 2, 3 and 4 legs"
+    ]
+  },
+  "uncertainty": {
+    "cannot_trigger_automatic_recalibration": true,
+    "cannot_trigger_autonomous_retraining": true,
+    "does_not_change_fair_probabilities": true,
+    "does_not_control_publishing_or_promotion": true,
+    "selected": "U0_raw",
+    "status": "RAW_MONITOR_ONLY"
+  },
+  "wizardofodds_activation": {
+    "canary_required": "publishing starts as a canary and the production output is verified before any wider enablement",
+    "not_built_in_this_task": "no live publisher exists and none was built or enabled. publish_shadow_probabilities refuses regardless of switch state because there is no publisher behind it.",
+    "preconditions": [
+      "PROMOTION_REVIEW_ELIGIBLE reached under this policy",
+      "manual human approval recorded",
+      "a separate reviewed change implements the publisher",
+      "the publishing switch is enabled by that reviewed change",
+      "incumbent fallback is preserved",
+      "instant rollback is included",
+      "the activation SHA and activation time are recorded"
+    ],
+    "status": "FUTURE_ONLY"
+  }
+}

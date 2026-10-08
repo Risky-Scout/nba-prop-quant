@@ -34,6 +34,7 @@ from nba_prop_quant.research.game_latent_state.safety import (
     PRODUCTION_REF,
     PROTECTED_PRODUCTION_PREFIXES,
     PROTECTED_PRODUCTION_SOURCES,
+    SHADOW_OWNED_PRODUCTION_PATHS,
     modified_production_paths,
     production_merge_base,
     stale_integration_declarations,
@@ -132,15 +133,36 @@ def test_the_declared_integration_surface_cannot_reach_the_served_model():
     the shadow's own operational surface.
     """
     undeclarable_prefixes = ("models/", "configs/", "scripts/", "release/", "review/")
-    for path in DECLARED_INTEGRATION_PATHS:
-        assert not path.startswith(undeclarable_prefixes), (
-            f"{path} is a model, config, production script or release path and "
-            "may not be declared"
+    for mapping in (DECLARED_INTEGRATION_PATHS, SHADOW_OWNED_PRODUCTION_PATHS):
+        for path in mapping:
+            assert not path.startswith(undeclarable_prefixes), (
+                f"{path} is a model, config, production script or release path and "
+                "may not be declared or owned"
+            )
+            assert path not in PROTECTED_PRODUCTION_SOURCES, (
+                f"{path} is a protected production source module and may not be "
+                "declared or owned"
+            )
+            assert mapping[path].strip(), f"{path} is listed without a reason"
+
+
+def test_owning_a_production_path_is_not_permission_to_change_it():
+    """The owned registry records the surface; it grants nothing.
+
+    Splitting the two mappings is only safe if the containment check keeps
+    reading the declaration alone. Otherwise "owned" would become the standing
+    permission that retiring a declaration exists to remove, and the shadow's
+    own entry point and lifecycle step would be editable unreviewed forever.
+    """
+    for path in SHADOW_OWNED_PRODUCTION_PATHS:
+        assert path.startswith(PROTECTED_PREFIXES) or path in PROTECTED_SOURCE_FILES, (
+            f"{path} is not a protected production path, so owning it records nothing"
         )
-        assert path not in PROTECTED_PRODUCTION_SOURCES, (
-            f"{path} is a protected production source module and may not be declared"
-        )
-        assert DECLARED_INTEGRATION_PATHS[path].strip(), f"{path} is declared without a reason"
+        if path in changed_paths():
+            assert path in DECLARED_INTEGRATION_PATHS, (
+                f"{path} is owned and changed on this branch, which still "
+                "requires a declaration"
+            )
 
 
 def test_no_declaration_outlives_the_change_it_was_made_for():
@@ -206,8 +228,7 @@ def test_the_added_lifecycle_step_cannot_fail_the_production_job():
     import yaml
 
     relative = ".github/workflows/nba_production_lifecycle.yml"
-    if relative not in DECLARED_INTEGRATION_PATHS:
-        pytest.skip("the lifecycle workflow is not declared on this branch")
+    assert relative in SHADOW_OWNED_PRODUCTION_PATHS
     workflow = yaml.safe_load((PROJECT / relative).read_text(encoding="utf-8"))
     steps = [
         step
