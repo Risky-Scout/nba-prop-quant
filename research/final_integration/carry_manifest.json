@@ -138,7 +138,7 @@
       ]
     },
     "production_ops_closure": {
-      "reason": "the closure receipt and the live monitoring policy. The receipt reconciles the four pass/skip splits one commit has reported and records the production SHA both hashes were verified at; it is declared in safety.DECLARED_INTEGRATION_PATHS because it lives under ops/. The policy fixes the live promotion thresholds before any live result exists. Neither decides production behaviour and neither grants promotion authority.",
+      "reason": "the closure receipt and the live monitoring policy. The receipt reconciles the four pass/skip splits one commit has reported and records the production SHA both hashes were verified at; it needed a declaration while it was pending because it lives under ops/, and it is now recorded in safety.SHADOW_OWNED_PRODUCTION_PATHS instead, because the declaration was permission for a change that has landed. The policy fixes the live promotion thresholds before any live result exists. Neither decides production behaviour and neither grants promotion authority.",
       "paths": [
         "ops/evidence/production_shadow_closure.json",
         "research/final_model/live_shadow_promotion_policy.json"
