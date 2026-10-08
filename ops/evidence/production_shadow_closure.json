@@ -42,7 +42,7 @@
   "final_model_spec_sha256": "154109658127920ebeac381bd21e8bb29390505384124419899236cce37fdc64",
   "live_shadow_promotion_policy": {
     "path": "research/final_model/live_shadow_promotion_policy.json",
-    "sha256": "441ef9b7c6724999cfbaeba8efa867859ebd393d1b51ce6fad192ade37f74cfb"
+    "sha256": "9d9255ab73be48586a9d1d045d250c15fa3167e403b1f999d462b65efce9f530"
   },
   "no_modelling_rerun_was_performed": true,
   "production_sha": "4631887a9d3765b2c72482aa762429afe82d1e45",
@@ -120,6 +120,7 @@
     "1004_passed_1_skipped": "the agent workspace at the production head 4631887a9d37 with the production ref at that same commit. The generated artifacts are present on disk so the five artifact-gated tests run; only the declaration test skips.",
     "1005_passed_0_skipped": "the figure quoted in the earlier shadow-deployment report. It was measured on the deployment branch before the merge, when the production ref pointed at the pre-merge tip 0a5aab9f56ee, so HEAD differed from the production ref and the declaration test ran rather than skipping, and the generated artifacts were present so the five artifact-gated tests also ran. Reproduced exactly by re-pointing the ref at 0a5aab9f56ee on this same commit.",
     "999_passed_6_skipped": "a fresh checkout with the production ref at the production head. Both skip conditions apply at once: the five absent generated artifacts plus the declaration test. This is what CI measures.",
+    "mechanism_confirmed_independently": "CI run 37710361785 on the closure branch reports 1001 passed, 5 skipped of 1006 collected. The declaration skip is gone and only the five generated-artifact skips remain, because the branch differs from the production ref so the declaration test has a non-empty diff to judge. That is the predicted effect of moving exactly one of the two environment inputs, measured on a run that was not set up to test the explanation.",
     "root_cause": "two of the suite's skip conditions take the environment as an input rather than the code. The first is the position of origin/production/wizardofodds-integration, which the containment tests read; once a branch IS production, the diff against production is empty and the declaration test skips. The second is the presence of two deliberately git-ignored generated parquet files, which five audit tests require. Neither condition depends on the commit under test, which is why one commit yields four different pass/skip splits.",
     "summary": "every reported figure is the same 1005 collected tests with a different number of intentional skips. No figure contains a failure, an error or an xfail, and the four splits differ only by which environment-gated skips applied."
   }

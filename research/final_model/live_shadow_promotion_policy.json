@@ -55,7 +55,7 @@
     "loss_delta_convention": "delta = candidate - incumbent. Lower is better, so a negative delta is a candidate improvement.",
     "pairing_unit": "game",
     "primary_comparison": "candidate versus incumbent",
-    "reference_comparison_only": "candidate versus cross-player independence. Reported for context; it gates nothing.",
+    "reference_comparison_only": "candidate versus cross-player independence. Reference only: reported for context, and it gates nothing.",
     "resampling": "paired game-clustered bootstrap. Games are the resampling unit because joint-event rows within one game share the game's latent state and are not independent."
   },
   "failure_discipline": {
