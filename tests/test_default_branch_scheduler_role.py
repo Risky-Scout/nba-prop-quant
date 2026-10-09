@@ -259,6 +259,97 @@ def test_a_dropped_entry_point_fails_its_own_check(repository: Path):
     ]
 
 
+GRADING_FRAGMENT = (
+    "python -c 'import datetime,sys;"
+    "print(datetime.date.fromisoformat(sys.argv[1])"
+    "-datetime.timedelta(days=1))'"
+)
+
+
+@pytest.mark.parametrize(
+    "replacement, error",
+    [
+        # Indented past the YAML block, which is what happens when a fragment
+        # is written inside a shell `if` or `for` and lined up with it.
+        (
+            'python -c "\n'
+            "              import datetime, sys\n"
+            "              print(datetime.date.fromisoformat(sys.argv[1]))\n"
+            '              "',
+            "IndentationError",
+        ),
+        # An ordinary typo. Nothing else in this validator reads inside the
+        # quotes, so without this check it reaches the runner untested.
+        (
+            "python -c 'import datetime,sys;print(datetime.date.fromisoformat("
+            "sys.argv[1]'",
+            "SyntaxError",
+        ),
+    ],
+)
+def test_a_broken_inline_python_fragment_fails_its_own_check(
+    repository: Path, replacement: str, error: str
+):
+    """The gap this check closes.
+
+    A ``python -c`` fragment is a string until the shell runs it, so the
+    workflow parses, the step is present and the entry point is named however
+    broken the Python is. And the shell hides the failure: a command
+    substitution that errors yields an empty string and the step carries on
+    with a blank argument instead of stopping.
+    """
+    rewrite_both(
+        repository, lambda text: text.replace(GRADING_FRAGMENT, replacement)
+    )
+
+    checks = validate(repository)
+
+    assert failures(checks) == ["every_inline_python_fragment_parses"]
+    broken = named(checks, "every_inline_python_fragment_parses").values[
+        "broken_fragments"
+    ]
+    assert broken[0]["step"] == "Grade the incumbent's previous slate"
+    assert error in broken[0]["error"]
+
+
+def test_the_fragment_checked_is_what_the_shell_receives(repository: Path):
+    """Indentation that YAML strips is not a defect, and is not reported.
+
+    The fragment as written in the file is indented to match the block around
+    it. The shell never sees that indentation, so compiling the file's own
+    text would report a failure the runner would never have, which is why the
+    check reads the parsed ``run`` block instead.
+    """
+    rewrite_both(
+        repository,
+        lambda text: text.replace(
+            GRADING_FRAGMENT + ' "$slate")"',
+            'python -c "\n'
+            "          import datetime, sys\n"
+            "          print(datetime.date.fromisoformat(sys.argv[1]))\n"
+            '          " "$slate")"',
+        ),
+    )
+
+    checks = validate(repository)
+
+    assert failures(checks) == []
+    assert named(checks, "every_inline_python_fragment_parses").passed
+
+
+def test_every_inline_python_fragment_in_the_real_lifecycle_parses():
+    """The same check against the file that actually runs."""
+    workflow = yaml.safe_load(
+        (REPO / LIFECYCLE_RELATIVE).read_text(encoding="utf-8")
+    )
+    fragments = role.inline_python_fragments(workflow)
+
+    assert fragments, "the lifecycle runs no inline python, so nothing was checked"
+
+    for step, source in fragments:
+        compile(source, f"<{step}>", "exec")
+
+
 def test_a_redirected_checkout_fails_the_ref_check(repository: Path):
     rewrite_both(
         repository,

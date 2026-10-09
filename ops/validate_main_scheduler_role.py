@@ -48,6 +48,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -85,6 +86,7 @@ REQUIRED_STEPS: tuple[str, ...] = (
     "Refresh the current-season rolling state",
     "Run the adaptive daily protocol",
     "Serve the slate with the incumbent",
+    "Grade the incumbent's previous slate",
     "Shadow the slate beside production",
     "Assert the candidate shadow was healthy",
     "Report the run",
@@ -98,6 +100,7 @@ REQUIRED_ENTRY_POINTS: tuple[str, ...] = (
     "ops/classify_refresh_outcome.py",
     "ops/run_adaptive_daily_fit.py",
     "ops/run_incumbent_production_serving.py",
+    "ops/grade_incumbent_production_slate.py",
     "ops/run_production_shadow.py",
     "ops/evaluate_shadow_health.py",
     "ops/summarise_production_run.py",
@@ -117,6 +120,7 @@ RUN_ADAPTIVE_GATED_ENTRY_POINTS: tuple[str, ...] = (
 #: a future off-day fit policy silently stopped production serving.
 RUN_ADAPTIVE_UNGATED_ENTRY_POINTS: tuple[str, ...] = (
     "ops/run_incumbent_production_serving.py",
+    "ops/grade_incumbent_production_slate.py",
 )
 
 #: The shadow must stay non-blocking: a candidate failure may never stop the
@@ -129,6 +133,10 @@ NON_BLOCKING_ENTRY_POINTS: tuple[str, ...] = ("ops/run_production_shadow.py",)
 BLOCKING_ENTRY_POINTS: tuple[str, ...] = (
     "ops/evaluate_shadow_health.py",
     "ops/run_incumbent_production_serving.py",
+    # A grading refusal means the provenance does not describe the rows, or a
+    # slate was priced after its own games. Both are faults, and grading runs
+    # after serving so a red job here costs production nothing.
+    "ops/grade_incumbent_production_slate.py",
 )
 
 #: ``--strict`` makes the shadow entry point propagate its own failures. It is
@@ -438,6 +446,62 @@ def check_required_entry_points(workflow: dict[str, Any]) -> Check:
     )
 
 
+def check_inline_python_compiles(workflow: dict[str, Any]) -> Check:
+    """Every ``python -c`` fragment in the lifecycle must actually parse.
+
+    These fragments are the one part of the lifecycle nothing else validates.
+    The YAML parses, the step is present and the entry point is named even
+    when the Python inside a ``run:`` block is a syntax error, because it is
+    just a string until the shell runs it. And when it fails, the shell hides
+    it: a broken command substitution yields an empty string and the step
+    carries on with a blank argument rather than stopping.
+
+    Compiled against what the shell actually receives, after YAML has stripped
+    the block indentation, so the check agrees with the runner rather than
+    with how the file looks.
+    """
+    fragments = inline_python_fragments(workflow)
+
+    broken: list[dict[str, str]] = []
+
+    for step, source in fragments:
+        try:
+            compile(source, "<lifecycle>", "exec")
+        except SyntaxError as error:
+            broken.append({"step": step, "error": f"{type(error).__name__}: {error}"})
+
+    return Check(
+        name="every_inline_python_fragment_parses",
+        passed=not broken,
+        evidence=(
+            f"{len(fragments)} inline python fragment(s) parse"
+            if not broken
+            else "an inline python fragment in the lifecycle does not parse"
+        ),
+        values={"broken_fragments": broken, "fragments": len(fragments)},
+    )
+
+
+def inline_python_fragments(
+    workflow: dict[str, Any],
+) -> list[tuple[str, str]]:
+    """Every ``python -c <source>`` in the workflow, with its step name."""
+    pattern = re.compile(
+        r"""python\s+-c\s+(?P<quote>['"])(?P<source>.*?)(?<!\\)(?P=quote)""",
+        re.DOTALL,
+    )
+
+    found: list[tuple[str, str]] = []
+
+    for step in steps_of(workflow):
+        run = str(step.get("run", ""))
+
+        for match in pattern.finditer(run):
+            found.append((str(step.get("name", "")), match.group("source")))
+
+    return found
+
+
 def check_run_adaptive_gates(workflow: dict[str, Any]) -> Check:
     steps = steps_of(workflow)
 
@@ -592,6 +656,7 @@ def validate(
         check_production_ref_unchanged(text),
         check_required_steps(workflow),
         check_required_entry_points(workflow),
+        check_inline_python_compiles(workflow),
         check_run_adaptive_gates(workflow),
         check_continue_on_error_is_deliberate(workflow),
         check_shadow_is_not_strict(workflow),

@@ -171,6 +171,40 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
             "on a settled slate, a failure to take one is recorded and the "
             "game continues, and no existing field changes"
         ),
+        "ops/grade_incumbent_production_slate.py": (
+            "new. Grades the incumbent's served slate against settled box "
+            "scores, which nothing did: the incumbent's prices were recorded "
+            "durably and never read back, so the frozen policy's central "
+            "comparison had only one arm. Reads priced markets, the serving "
+            "receipt and the box-score tree; writes grade rows and its own "
+            "receipt into a tree no serving script names. Cannot predict, "
+            "price, promote or publish"
+        ),
+        "ops/validate_main_scheduler_role.py": (
+            "records the grading step and its entry point in the lists the "
+            "default-branch guard checks: ungated on RUN_ADAPTIVE, because "
+            "whether yesterday's results can be scored is unrelated to "
+            "whether a candidate was refitted, and blocking, because a "
+            "grading refusal is a provenance fault. Adds a twelfth check, "
+            "that every inline ``python -c`` fragment in the lifecycle "
+            "compiles as the shell receives it: those fragments are strings "
+            "until the runner executes them, so a syntax error inside one "
+            "passes every other check here and then fails silently, because "
+            "a broken command substitution yields an empty argument rather "
+            "than stopping. No existing check is removed or weakened"
+        ),
+        ".github/workflows/nba_production_lifecycle.yml": (
+            "one added step, grading the previous slate after serving. It "
+            "also copies the serving receipt out of the run's temporary "
+            "directory into a durable path keyed by slate date, because a "
+            "slate is graded on a later day than it was served and a receipt "
+            "that dies with the run leaves every grade row unable to name the "
+            "incumbent that produced it. Done in the added step rather than "
+            "by pointing the serving step's --receipt-path at the durable "
+            "location, because the serving step is the production path and a "
+            "declaration permits adding to this workflow, not rewriting a "
+            "line of it. No pre-existing line changes"
+        ),
     }
 )
 

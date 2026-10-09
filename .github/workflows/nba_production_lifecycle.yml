@@ -263,6 +263,52 @@ jobs:
             --receipt-path "$RUNNER_TEMP/run/incumbent_serving.json" \
             --summary-path "$GITHUB_STEP_SUMMARY"
 
+      # Grades the slate before this one against settled box scores. The cron
+      # runs at 09:37 UTC, after every North American box score has settled,
+      # so yesterday is the most recent slate whose outcomes exist; today's
+      # games have not been played.
+      #
+      # Ungated on RUN_ADAPTIVE for the same reason serving is: whether
+      # yesterday's results can be scored has nothing to do with whether a
+      # candidate was refitted this morning. It runs after serving so that a
+      # grading problem can never delay or block the artifact production
+      # actually serves, which is also why it reads only the durable serving
+      # receipt and the settled box scores and writes only grade rows.
+      #
+      # It also persists *today's* serving receipt, which the step above
+      # writes into RUNNER_TEMP and which dies with the run. A slate is graded
+      # on a later day than it was served, so without a durable copy every
+      # grade row would be unable to name the incumbent that produced it. The
+      # copy is made here rather than by editing the serving step, because the
+      # serving step is the production path and this lineage is only permitted
+      # to add to this workflow, never to rewrite a line of it.
+      #
+      # A game that had not finished produces PENDING_SETTLEMENT and exit 0;
+      # --catch-up-days revisits it on a later run. Only a genuine fault --
+      # provenance that does not describe the rows being graded, a slate
+      # priced after its own games, ambiguous settlement -- exits nonzero,
+      # and those deserve a red job.
+      - name: Grade the incumbent's previous slate
+        if: env.MODE == 'production'
+        env:
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+        run: |
+          set -euo pipefail
+          receipts="$NBA_PROP_DATA_DIR/processed/incumbent_serving"
+          mkdir -p "$receipts"
+          if [ -f "$RUNNER_TEMP/run/incumbent_serving.json" ]; then
+            cp "$RUNNER_TEMP/run/incumbent_serving.json" "$receipts/$slate.json"
+          fi
+          # Python rather than `date -d`, which is GNU-only, and this runner
+          # is a Mac. One expression, so one line.
+          graded="$(python -c 'import datetime,sys;print(datetime.date.fromisoformat(sys.argv[1])-datetime.timedelta(days=1))' "$slate")"
+          echo "Grading the slate before $slate: $graded"
+          python ops/grade_incumbent_production_slate.py \
+            --slate-date "$graded" \
+            --data-root "$NBA_PROP_DATA_DIR" \
+            --receipt-path "$RUNNER_TEMP/run/incumbent_grading.json" \
+            --catch-up-days 7
+
       # SHADOW ONLY, and deliberately non-blocking. The incumbent is the
       # served and published authority on every row; this step records what
       # the same-game dependence candidate would have said, beside it.
