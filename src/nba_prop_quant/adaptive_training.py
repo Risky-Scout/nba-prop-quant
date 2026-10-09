@@ -52,6 +52,7 @@ from .adaptive_fit_registry import (
     sha256_file,
     write_json_atomic,
 )
+from .adaptive_validation import compute_validation_report
 from .slate import resolve_slate_date
 
 
@@ -1374,6 +1375,47 @@ def deferred_validation_checks() -> tuple[str, ...]:
     )
 
 
+# The stages that actually fit something, which is what training_completed
+# asks about. validation and registration are the stages that observe and
+# record, so requiring them here would be circular.
+FIT_STAGES = tuple(
+    stage
+    for stage in DAG_STAGES
+    if stage not in ("validation", "registration")
+)
+
+
+# Provenance filename -> working-tree source. Every file a candidate carries in
+# its provenance directory must be declared here, so source_lineage_match can
+# verify it instead of skipping it.
+def lineage_sources() -> dict[str, Path]:
+    sources: dict[str, Path] = {
+        Path(relative).name: Path(relative)
+        for relative in (
+            UPDATE_PROTOCOL_RELATIVE_PATH,
+            CONTRACT_RELATIVE_PATH,
+            SERVING_SOURCE_CONTRACT_RELATIVE_PATH,
+            CONFIG_RELATIVE_PATH,
+        )
+    }
+
+    for name, source in FROZEN_POLICY_SOURCES.items():
+        sources[f"{name}.json"] = Path(source["path"])
+
+    return sources
+
+
+def snapshot_directory(data_root: Path) -> Path:
+    """Where the T-20 captures live, by the same rule Settings uses.
+
+    Settings derives snapshot_dir from the data directory. Deriving it the same
+    way here keeps the two checks that need a capture reading the directory
+    production writes, without the trainer needing an API key to construct a
+    Settings object.
+    """
+    return Path(data_root) / "snapshots"
+
+
 # --------------------------------------------------------------------------
 # the daily fit
 # --------------------------------------------------------------------------
@@ -1583,11 +1625,51 @@ def run_daily_fit(
                     + ", ".join(sorted(offenders)[:10])
                 )
 
-            checks = {
-                name: True for name in STEP3C_VALIDATION_CHECKS
-            }
+            report = compute_validation_report(
+                project_root=project_root,
+                candidate=workspace.candidate,
+                contract_object=contract,
+                manifest=context.training_manifest,
+                state=state,
+                parent_manifest=parent,
+                artifact_hashes=artifact_hashes,
+                finite=finite,
+                finite_offenders=offenders,
+                required_stages=FIT_STAGES,
+                observed_stages=tuple(benchmark.stages),
+                required_prefixes=REQUIRED_CANDIDATE_PREFIXES,
+                required_files=REQUIRED_CANDIDATE_FILES,
+                lineage_sources=lineage_sources(),
+                targets=tuple(sorted(FROZEN_MEAN_ROUTES)),
+                frozen_marginal_family=FROZEN_MARGINAL_FAMILY,
+                calibration_routes=dict(FROZEN_CALIBRATION_ROUTES),
+                calibration_hashes=dict(
+                    context.notes.get("calibration_hashes") or {}
+                ),
+                calibration_fallbacks=dict(context.calibration_fallbacks),
+                advanced_start_season=ADVANCED_START_SEASON,
+                role_state_hash=context.notes.get("role_state_hash"),
+                slate_date=resolved_slate.isoformat(),
+                snapshot_dir=snapshot_directory(data_root),
+            )
+
+            # Every check is computed, so a failure here is a measurement and
+            # the candidate must not be recorded as validated.
+            if not report.passed:
+                raise CandidateIncomplete(
+                    "candidate failed computed validation checks: "
+                    + "; ".join(
+                        f"{name}: "
+                        f"{report.by_name[name].error or 'no reason recorded'}"
+                        for name in report.failed()
+                    )
+                )
+
+            checks = report.recorded_checks()
 
             benchmark.record("candidate_artifact_count", len(artifact_hashes))
+
+            benchmark.record("validation_checks_computed", len(report.results))
 
         guard.verify("validation")
 
@@ -1598,7 +1680,8 @@ def run_daily_fit(
                 "fitting_information_digest"
             ],
             "validation_checks": checks,
-            "deferred_validation_checks": list(deferred_validation_checks()),
+            "validation_report": report.payload(),
+            "deferred_validation_checks": report.deferred(),
             "calibration_fallbacks": dict(context.calibration_fallbacks),
             "workspace": str(workspace.root),
         }
