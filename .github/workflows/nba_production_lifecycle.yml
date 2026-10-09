@@ -263,6 +263,52 @@ jobs:
             --receipt-path "$RUNNER_TEMP/run/incumbent_serving.json" \
             --summary-path "$GITHUB_STEP_SUMMARY"
 
+      # Grades the slate before this one against settled box scores. The cron
+      # runs at 09:37 UTC, after every North American box score has settled,
+      # so yesterday is the most recent slate whose outcomes exist; today's
+      # games have not been played.
+      #
+      # Ungated on RUN_ADAPTIVE for the same reason serving is: whether
+      # yesterday's results can be scored has nothing to do with whether a
+      # candidate was refitted this morning. It runs after serving so that a
+      # grading problem can never delay or block the artifact production
+      # actually serves, which is also why it reads only the durable serving
+      # receipt and the settled box scores and writes only grade rows.
+      #
+      # It also persists *today's* serving receipt, which the step above
+      # writes into RUNNER_TEMP and which dies with the run. A slate is graded
+      # on a later day than it was served, so without a durable copy every
+      # grade row would be unable to name the incumbent that produced it. The
+      # copy is made here rather than by editing the serving step, because the
+      # serving step is the production path and this lineage is only permitted
+      # to add to this workflow, never to rewrite a line of it.
+      #
+      # A game that had not finished produces PENDING_SETTLEMENT and exit 0;
+      # --catch-up-days revisits it on a later run. Only a genuine fault --
+      # provenance that does not describe the rows being graded, a slate
+      # priced after its own games, ambiguous settlement -- exits nonzero,
+      # and those deserve a red job.
+      - name: Grade the incumbent's previous slate
+        if: env.MODE == 'production'
+        env:
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+        run: |
+          set -euo pipefail
+          receipts="$NBA_PROP_DATA_DIR/processed/incumbent_serving"
+          mkdir -p "$receipts"
+          if [ -f "$RUNNER_TEMP/run/incumbent_serving.json" ]; then
+            cp "$RUNNER_TEMP/run/incumbent_serving.json" "$receipts/$slate.json"
+          fi
+          # Python rather than `date -d`, which is GNU-only, and this runner
+          # is a Mac. One expression, so one line.
+          graded="$(python -c 'import datetime,sys;print(datetime.date.fromisoformat(sys.argv[1])-datetime.timedelta(days=1))' "$slate")"
+          echo "Grading the slate before $slate: $graded"
+          python ops/grade_incumbent_production_slate.py \
+            --slate-date "$graded" \
+            --data-root "$NBA_PROP_DATA_DIR" \
+            --receipt-path "$RUNNER_TEMP/run/incumbent_grading.json" \
+            --catch-up-days 7
+
       # SHADOW ONLY, and deliberately non-blocking. The incumbent is the
       # served and published authority on every row; this step records what
       # the same-game dependence candidate would have said, beside it.
@@ -288,6 +334,63 @@ jobs:
             --grading-path "$RUNNER_TEMP/run/shadow_grading.json" \
             --status-path "$RUNNER_TEMP/run/shadow.json" \
             --summary-path "$GITHUB_STEP_SUMMARY"
+
+      # Accumulates the shadow's evidence durably and reads the frozen
+      # promotion policy over the running total.
+      #
+      # It has to accumulate because the shadow step above writes only into
+      # RUNNER_TEMP, which GitHub destroys with the job, while the policy's
+      # minimum evidence requirement is 500 graded games over 30
+      # regular-season days. Every number it gates on is a sum over runs that
+      # no longer exist, so this step copies the day's evidence into the
+      # durable state root first. The copy is made here rather than by
+      # pointing the shadow at a durable path for the same reason the serving
+      # receipt is copied in the grading step: those are pre-existing
+      # lifecycle and this lineage may add steps, never rewrite one.
+      #
+      # Ungated on RUN_ADAPTIVE, unlike the shadow itself. The shadow only has
+      # something to say on a day it refitted, but the accumulated window is
+      # the thing the policy judges, and it should be summarised every
+      # production day -- including a day with no retrain, where the
+      # incumbent's own grading did run and the answer is still
+      # CONTINUE_SHADOW rather than silence. Missing shadow files for today
+      # are a recorded absence, not a failure.
+      #
+      # Placed before the health assertion, not after. The assertion is
+      # blocking, so monitoring behind it would be skipped on exactly the
+      # days a shadow is unhealthy, which are the days the accumulated safety
+      # read matters most.
+      #
+      # No continue-on-error, on purpose, but it only fails the job on one
+      # decision: SHADOW_DISABLED_FOR_SAFETY, which the frozen policy reaches
+      # when a publishing violation is observed or an operational gate
+      # implicates the incumbent feed. An insufficient sample is not a
+      # failure -- CONTINUE_SHADOW is the normal state before the evidence
+      # minimum and exits 0. A red job here costs production nothing:
+      # serving and grading are already complete, this step writes no
+      # prediction and no serving authority, and the incumbent never
+      # depended on the shadow.
+      - name: Monitor the accumulated live shadow evidence
+        if: env.MODE == 'production'
+        env:
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+        run: |
+          set -euo pipefail
+          state="$NBA_PROP_DATA_DIR/processed/live_shadow_monitoring"
+          status="$state/live_shadow_monitoring.json"
+          mkdir -p "$state"
+          python ops/monitor_live_shadow_evidence.py \
+            --slate-date "$slate" \
+            --data-root "$NBA_PROP_DATA_DIR" \
+            --shadow-log "$RUNNER_TEMP/run/shadow_log.jsonl" \
+            --shadow-status "$RUNNER_TEMP/run/shadow.json" \
+            --shadow-grading "$RUNNER_TEMP/run/shadow_grading.json" \
+            --production-sha "${{ steps.checkout.outputs.sha }}" \
+            --status-path "$status" \
+            --summary-path "$GITHUB_STEP_SUMMARY"
+          # Into the diagnostics artifact as well as the durable state, so a
+          # run can be read from its GitHub artifact alone.
+          cp "$status" "$RUNNER_TEMP/run/live_shadow_monitoring.json"
 
       # The shadow step above is non-blocking on purpose and must stay that
       # way, which left GitHub going green whether the shadow worked or not.
