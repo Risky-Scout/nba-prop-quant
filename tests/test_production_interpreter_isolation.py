@@ -105,6 +105,43 @@ def test_the_guard_fails_on_a_machine_global_site_packages(monkeypatch):
     assert offending.values["offenders"]
 
 
+def test_a_global_package_directory_is_found_under_either_spelling(monkeypatch):
+    """``dist-packages`` is the same defect as ``site-packages``.
+
+    The production runner is a Mac and says ``site-packages``, so keying on
+    that one name passed every test written here while leaving a differently
+    packaged runner's global directory invisible to the check -- it would not
+    appear in the path list at all, and absence reads as cleanliness.
+    """
+    monkeypatch.setattr(
+        guard,
+        "site_package_paths",
+        lambda: ["/usr/lib/python3/dist-packages"],
+    )
+
+    report = guard.evaluate(Path(sys.prefix))
+
+    assert "no_machine_global_site_packages_are_importable" in report.failed
+
+
+def test_both_package_directory_spellings_are_collected(monkeypatch):
+    monkeypatch.setattr(
+        guard.sys,
+        "path",
+        [
+            "",
+            "/tmp/venv/lib/python3.12/site-packages",
+            "/usr/lib/python3/dist-packages",
+            "/workspace/src",
+        ],
+    )
+
+    assert guard.site_package_paths() == [
+        "/tmp/venv/lib/python3.12/site-packages",
+        "/usr/lib/python3/dist-packages",
+    ]
+
+
 def test_the_guard_fails_on_a_translated_interpreter(monkeypatch):
     """An x86_64 Python on an arm64 host is a different numerical stack."""
     monkeypatch.setattr(guard.platform, "machine", lambda: "x86_64")
