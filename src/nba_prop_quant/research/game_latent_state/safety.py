@@ -153,18 +153,18 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: the eight ops, docs and workflow files it introduced are recorded as owned
 #: below, and ``src/nba_prop_quant/adaptive_training.py`` is recorded nowhere,
 #: because the remediation changed one block of a production module it does
-#: not own and must declare again to touch again.
+#: not own and must declare again to touch again. The interpreter guard's
+#: spelling fix was retired in turn when it landed.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
-        "ops/verify_production_interpreter.py": (
-            "the isolation guard recognised only the name ``site-packages``, "
-            "which is what the production Mac calls its global package "
-            "directory, so a differently packaged runner's "
-            "``dist-packages`` never appeared in the path list it scans and "
-            "absence read as cleanliness. Both spellings are collected now "
-            "and ``/usr/lib`` joins the global prefixes. Confined to the two "
-            "constants and the collector: no check, threshold or dependency "
-            "contract changes"
+        "ops/run_production_shadow.py": (
+            "records the realized dependence reading alongside the simulated "
+            "arms. The simulated arms say what each model claims; without the "
+            "observed side there is nothing for the frozen policy's two "
+            "dependence RMSEs to be an error against, so the live gates could "
+            "never have been evaluated. Additive: the reading is taken only "
+            "on a settled slate, a failure to take one is recorded and the "
+            "game continues, and no existing field changes"
         ),
     }
 )

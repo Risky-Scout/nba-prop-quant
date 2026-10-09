@@ -554,6 +554,131 @@ def dependence_diagnostics(
     }
 
 
+#: Cross-player buckets only, for the live dependence reading below. The
+#: same-player blocks are tracked separately under the frozen policy's O3
+#: because they must be preserved exactly rather than improved.
+CROSS_PLAYER_BUCKET_NAMES: tuple[str, ...] = tuple(
+    name for name, kind, _ in DEPENDENCE_BUCKETS if kind != "same_player"
+)
+
+
+def observed_pair_moments(
+    observations: pd.DataFrame,
+    stats: Sequence[str],
+    reference: Mapping[tuple[int, str], object],
+    *,
+    seed: int,
+) -> dict[str, dict[str, float]]:
+    """What dependence the realized box scores actually showed, in both spaces.
+
+    The frozen live policy gates two dependence RMSEs, and an RMSE needs a
+    target. The simulated readings alone cannot supply one: they say what each
+    arm claims, not what happened. This is the observed side, read off the
+    realized counts with the transforms the research layer already uses, so a
+    live RMSE is the same quantity the held-out RMSE was.
+
+    Two spaces, because the policy gates two:
+
+    ``count``   the realized count standardized by the production marginal's
+                own mean and standard deviation, which is the space
+                :func:`simulated_pair_moments` reports in and therefore the
+                only space the simulated arms are comparable in.
+
+    ``latent``  the realized count pushed through the exact randomized PIT and
+                Gaussianized, which is the recorded-latent column the factor
+                model is fitted and stated in. The randomization is the keyed
+                deterministic draw, so this reading is reproducible from the
+                same game forever.
+    """
+    from .factors import pair_moments
+    from .pit import deterministic_pit_uniform, gaussianize, randomized_pit
+    from .validation import standardized_count_residuals
+
+    stats = tuple(stats)
+    frame = observations.copy()
+
+    count_frame = standardized_count_residuals(
+        frame, stats, reference, prefix="zs_"  # type: ignore[arg-type]
+    )
+
+    latent_frame = frame.copy()
+    for stat in stats:
+        lower = np.empty(len(latent_frame), dtype=float)
+        upper = np.empty(len(latent_frame), dtype=float)
+        for position, (_, row) in enumerate(latent_frame.iterrows()):
+            analytic = reference[(int(row["player_id"]), stat)]
+            cdf = np.asarray(analytic.cdf, dtype=float)  # type: ignore[attr-defined]
+            realized = int(round(float(row[f"y_{stat}"])))
+            # Clamp to the support the marginal actually carries. A realized
+            # count above the grid is F(y) = 1 and F(y-1) = the last cell,
+            # which is the honest reading rather than an index error.
+            index = min(max(realized, 0), len(cdf) - 1)
+            upper[position] = cdf[index] if realized <= index else 1.0
+            lower[position] = cdf[index - 1] if index >= 1 else 0.0
+        draw = deterministic_pit_uniform(
+            seed,
+            latent_frame["game_id"].to_numpy(),
+            latent_frame["player_id"].to_numpy(),
+            stat,
+        )
+        latent_frame[f"zs_{stat}"] = gaussianize(
+            randomized_pit(lower, upper, draw)
+        ).z
+
+    out: dict[str, dict[str, float]] = {}
+    for space, source in (("count", count_frame), ("latent", latent_frame)):
+        moments = pair_moments(source, stats, value_prefix="zs_")
+        out[space] = {
+            **bucket_values(stats, moments.same_team, moments.cross_team),
+            "_same_team_pairs": float(moments.same_team_pairs),
+            "_cross_team_pairs": float(moments.cross_team_pairs),
+        }
+    return out
+
+
+def live_dependence_spaces(
+    dependence: Mapping[str, object],
+    observed: Mapping[str, Mapping[str, float]],
+) -> dict[str, dict[str, Mapping[str, float]]]:
+    """Arrange one game's readings the way the live policy evaluator reads them.
+
+    Count space takes the simulated arms directly: they are already mean
+    correlations in that space with their pair counts attached.
+
+    Latent space takes the candidate's model-implied correlations, and records
+    the incumbent and the independence reference as exactly zero on every
+    cross-player bucket. That is not an assumption -- the production copula
+    couples a player's own stats and nothing across players, so its implied
+    cross-player latent correlation is zero by construction, and the
+    independence reference is built from independent loadings. Recording it as
+    zero rather than estimating it from draws keeps sampling noise out of the
+    arm the candidate is gated against, which is how the held-out comparison
+    was done too: the research layer's latent RMSE compares the candidate with
+    the independence baseline.
+    """
+    simulated = dict(dependence.get("simulated_by_model") or {})
+    implied = dict(dependence.get("model_implied") or {})
+
+    count: dict[str, Mapping[str, float]] = {"observed": dict(observed["count"])}
+    for arm, reading in simulated.items():
+        count[arm] = dict(reading)
+
+    latent_pairs = {
+        "_same_team_pairs": observed["latent"]["_same_team_pairs"],
+        "_cross_team_pairs": observed["latent"]["_cross_team_pairs"],
+    }
+    zeros = {bucket: 0.0 for bucket in CROSS_PLAYER_BUCKET_NAMES}
+    latent: dict[str, Mapping[str, float]] = {
+        "observed": dict(observed["latent"]),
+        CANDIDATE: {**implied, **latent_pairs},
+        INCUMBENT: {**zeros, **latent_pairs},
+    }
+    if INDEPENDENCE in simulated:
+        latent[INDEPENDENCE] = {**zeros, **latent_pairs}
+
+    return {"count": count, "latent": latent}
+
+
 # ======================================================================
 # the incumbent arm
 # ======================================================================
