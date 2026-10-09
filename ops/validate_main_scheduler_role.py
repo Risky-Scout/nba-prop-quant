@@ -88,6 +88,7 @@ REQUIRED_STEPS: tuple[str, ...] = (
     "Serve the slate with the incumbent",
     "Grade the incumbent's previous slate",
     "Shadow the slate beside production",
+    "Monitor the accumulated live shadow evidence",
     "Assert the candidate shadow was healthy",
     "Report the run",
 )
@@ -102,6 +103,7 @@ REQUIRED_ENTRY_POINTS: tuple[str, ...] = (
     "ops/run_incumbent_production_serving.py",
     "ops/grade_incumbent_production_slate.py",
     "ops/run_production_shadow.py",
+    "ops/monitor_live_shadow_evidence.py",
     "ops/evaluate_shadow_health.py",
     "ops/summarise_production_run.py",
     "ops/verify_production_interpreter.py",
@@ -121,6 +123,11 @@ RUN_ADAPTIVE_GATED_ENTRY_POINTS: tuple[str, ...] = (
 RUN_ADAPTIVE_UNGATED_ENTRY_POINTS: tuple[str, ...] = (
     "ops/run_incumbent_production_serving.py",
     "ops/grade_incumbent_production_slate.py",
+    # The shadow only has something to say on a day it refitted, but the
+    # accumulated window is what the frozen policy judges, and it must be
+    # summarised every production day -- including a day with no retrain,
+    # where the answer is still CONTINUE_SHADOW rather than silence.
+    "ops/monitor_live_shadow_evidence.py",
 )
 
 #: The shadow must stay non-blocking: a candidate failure may never stop the
@@ -137,6 +144,10 @@ BLOCKING_ENTRY_POINTS: tuple[str, ...] = (
     # slate was priced after its own games. Both are faults, and grading runs
     # after serving so a red job here costs production nothing.
     "ops/grade_incumbent_production_slate.py",
+    # Monitoring fails the job on one decision only, and that decision --
+    # SHADOW_DISABLED_FOR_SAFETY -- is the operator signal the frozen policy
+    # exists to raise. continue-on-error here would swallow it.
+    "ops/monitor_live_shadow_evidence.py",
 )
 
 #: ``--strict`` makes the shadow entry point propagate its own failures. It is

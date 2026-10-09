@@ -126,6 +126,18 @@ def _require(policy: Mapping[str, Any], *keys: str) -> Any:
     return node
 
 
+def require(policy: Mapping[str, Any], *keys: str) -> Any:
+    """:func:`_require` for callers outside this module.
+
+    Monitoring has to read the policy's own authority and publishing words to
+    report them, and it must read them with the same strictness this module
+    does: a missing field is a refusal, not a default. Exposed rather than
+    reimplemented, because a second strict reader would be a second answer to
+    what the policy says.
+    """
+    return _require(policy, *keys)
+
+
 def decision_vocabulary(policy: Mapping[str, Any]) -> tuple[str, ...]:
     """The only decisions a report may reach, in the policy's own words."""
     states = _require(policy, "decision_states", "states")
