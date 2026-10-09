@@ -227,6 +227,42 @@ jobs:
             --work-root "$NBA_PROP_WORK_DIR" \
             | tee "$RUNNER_TEMP/run/adaptive.json"
 
+      # The incumbent prices the slate. Nothing automated did this before:
+      # the lifecycle refreshed state, fitted a candidate and shadowed it,
+      # and the artifact production actually serves was produced by hand.
+      #
+      # Gated on MODE alone, not on RUN_ADAPTIVE. Whether the incumbent
+      # should price tonight's games is a different question from whether a
+      # candidate was refitted this morning, and binding them would mean a
+      # future off-day fit policy silently stopped production serving. The
+      # entry point reads the refresh classifier's own status file and
+      # decides readiness itself, so a preseason day is a recorded no-op
+      # rather than a skipped step.
+      #
+      # No continue-on-error, on purpose: failing to produce the incumbent's
+      # priced markets on a real slate is a production failure and the job
+      # must go red. It runs after the adaptive fit and before the shadow so
+      # that serving is complete before any candidate work is observed, and
+      # it resolves the incumbent from the registry's promotion state rather
+      # than from the candidate the step above just registered.
+      - name: Serve the slate with the incumbent
+        if: env.MODE == 'production'
+        env:
+          BDL_API_KEY: ${{ secrets.BDL_API_KEY }}
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+          NBA_PROP_FIT_REGISTRY_DIR: ${{ vars.NBA_PROP_FIT_REGISTRY_DIR }}
+        run: |
+          set -euo pipefail
+          python ops/run_incumbent_production_serving.py \
+            --slate-date "$slate" \
+            --data-root "$NBA_PROP_DATA_DIR" \
+            --registry-root "$NBA_PROP_FIT_REGISTRY_DIR" \
+            --refresh-status "$RUNNER_TEMP/run/refresh.json" \
+            --production-sha "${{ steps.checkout.outputs.sha }}" \
+            --receipt-path "$RUNNER_TEMP/run/incumbent_serving.json" \
+            --summary-path "$GITHUB_STEP_SUMMARY"
+
       # SHADOW ONLY, and deliberately non-blocking. The incumbent is the
       # served and published authority on every row; this step records what
       # the same-game dependence candidate would have said, beside it.

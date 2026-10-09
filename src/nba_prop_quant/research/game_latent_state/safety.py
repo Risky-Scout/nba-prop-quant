@@ -182,6 +182,14 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
             "preflight; writes only its own receipt and alters no dependency "
             "contract"
         ),
+        "ops/run_incumbent_production_serving.py": (
+            "new, additive. Runs the two serving scripts for the incumbent "
+            "resolved from the registry's promotion state, and refuses rather "
+            "than substituting when that authority cannot be established. "
+            "Reads the promotion state, the frozen bundle and the refresh "
+            "status; writes the two serving artifacts and its own receipt, "
+            "and cannot publish or promote"
+        ),
         "ops/evaluate_shadow_health.py": (
             "new, additive. Judges the persisted shadow status against the "
             "frozen live policy's own operational gates and may fail the job. "
