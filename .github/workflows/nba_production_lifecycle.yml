@@ -253,6 +253,26 @@ jobs:
             --status-path "$RUNNER_TEMP/run/shadow.json" \
             --summary-path "$GITHUB_STEP_SUMMARY"
 
+      # The shadow step above is non-blocking on purpose and must stay that
+      # way, which left GitHub going green whether the shadow worked or not.
+      # This reads the status file the shadow persisted rather than the step's
+      # conclusion — the signal that cannot be trusted here — and is allowed
+      # to fail the job. Incumbent serving is already done by this point and
+      # this step writes nothing, so a red job here costs production nothing
+      # and is the only way an unhealthy shadow becomes visible.
+      #
+      # always(), so a shadow that was expected to run and left no status
+      # behind is reported rather than skipped.
+      - name: Assert the candidate shadow was healthy
+        if: always() && env.MODE == 'production' && env.RUN_ADAPTIVE == 'true'
+        run: |
+          set -euo pipefail
+          python ops/evaluate_shadow_health.py \
+            --status-path "$RUNNER_TEMP/run/shadow.json" \
+            --shadow-was-expected \
+            --health-path "$RUNNER_TEMP/run/shadow_health.json" \
+            --summary-path "$GITHUB_STEP_SUMMARY"
+
       - name: Report the run
         if: always()
         run: |

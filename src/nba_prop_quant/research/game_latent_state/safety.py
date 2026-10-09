@@ -182,6 +182,12 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
             "preflight; writes only its own receipt and alters no dependency "
             "contract"
         ),
+        "ops/evaluate_shadow_health.py": (
+            "new, additive. Judges the persisted shadow status against the "
+            "frozen live policy's own operational gates and may fail the job. "
+            "Reads shadow.json and the policy; writes only its own report, "
+            "states no threshold of its own, and cannot publish or promote"
+        ),
     }
 )
 
