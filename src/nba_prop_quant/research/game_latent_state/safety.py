@@ -182,6 +182,31 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
             "preflight; writes only its own receipt and alters no dependency "
             "contract"
         ),
+        "ops/benchmark_production_fit.py": (
+            "new, additive. Wraps the existing --benchmark-only fit path and "
+            "fingerprints the serving tree, the registry and the three frozen "
+            "identifiers around it, failing the benchmark on any difference. "
+            "Passes no registry root to the fit, so there is nothing to "
+            "register to; writes only its own receipt"
+        ),
+        "ops/evidence/runner_reliability_audit.json": (
+            "new, additive. The measured seven-run window behind the runner "
+            "reliability classification: the waits, the two "
+            "lost-communication runs and the 5h47m02s outlier. Evidence only; "
+            "nothing reads it and it decides no production behaviour"
+        ),
+        "ops/audit_runner_reliability.py": (
+            "new, additive. Decides whether the self-hosted runner meets the "
+            "seven-consecutive-clean-runs criterion from GitHub's own API "
+            "answer. Reads a collected JSON window and writes only its own "
+            "report; it cannot administer or contact anything"
+        ),
+        "docs/wizardofodds/PRE_OPENING_DAY_OPERATOR_ACTIONS.md": (
+            "new, additive. The exact runner, branch-protection and benchmark "
+            "actions the three blockers outside this repository require, with "
+            "the measured evidence for each and the mechanical test that "
+            "decides closure. Documentation only"
+        ),
         ".github/workflows/default_branch_guard.yml": (
             "new, additive. The default branch's only reported check. GitHub "
             "schedules production from main, and main carried no workflow "
