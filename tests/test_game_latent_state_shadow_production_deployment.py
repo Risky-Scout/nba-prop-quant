@@ -30,7 +30,6 @@ from nba_prop_quant.research.game_latent_state import shadow_runtime as runtime
 from nba_prop_quant.research.game_latent_state.safety import (
     DECLARED_INTEGRATION_PATHS,
     SHADOW_OWNED_PRODUCTION_PATHS,
-    stale_integration_declarations,
 )
 from nba_prop_quant.research.game_latent_state.simulator import SUPPORTED_STATS
 
@@ -177,17 +176,21 @@ def test_the_entry_point_is_an_owned_production_path():
     are two mappings. Being on the owned registry is permanently true and buys
     nothing: a branch that changes this file still needs a fresh declaration
     and the review that comes with it. A declaration, when there is one, is
-    about one pending change and expires with it --
-    ``stale_integration_declarations`` is what enforces that, by requiring
-    every declared path to be a path the branch actually modifies.
+    about one pending change and expires with it, which
+    ``test_no_declaration_outlives_the_change_it_was_made_for`` enforces for
+    every declared path at once.
 
-    So this asserts ownership unconditionally, and says nothing about whether
-    a declaration happens to exist right now. It used to assert there was
-    none, which read correctly on the branch that first deployed the shadow
-    and then made the file permanently unextendable: adding the realized
+    So this asserts ownership unconditionally, and about a declaration only
+    that it carries a reason. It used to assert there was no declaration,
+    which read correctly on the branch that first deployed the shadow and
+    then made the file permanently unextendable: adding the realized
     dependence reading the frozen policy's gates need a target for would have
     had to choose between an undeclared change to a protected path and a
-    declaration this test forbade.
+    declaration this test forbade. Expiry is deliberately left where it
+    already lives rather than restated here, because the rule is not
+    "declared paths are modified" on its own -- a head that *is* production
+    modifies nothing relative to itself, so every declaration on it reads as
+    stale, and the test that owns the rule skips for exactly that reason.
     """
     assert ENTRY_POINT.exists()
     assert ENTRY_POINT_RELATIVE in SHADOW_OWNED_PRODUCTION_PATHS
@@ -196,10 +199,6 @@ def test_the_entry_point_is_an_owned_production_path():
     if ENTRY_POINT_RELATIVE in DECLARED_INTEGRATION_PATHS:
         assert DECLARED_INTEGRATION_PATHS[ENTRY_POINT_RELATIVE].strip(), (
             "an empty declaration is permission with no reason attached"
-        )
-        assert ENTRY_POINT_RELATIVE not in stale_integration_declarations(PROJECT), (
-            "the entry point is declared but this branch does not change it, "
-            "which is standing permission rather than a pending change"
         )
 
 

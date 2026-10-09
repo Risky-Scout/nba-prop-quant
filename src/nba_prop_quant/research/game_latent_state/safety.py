@@ -159,76 +159,10 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: below, and ``src/nba_prop_quant/adaptive_training.py`` is recorded nowhere,
 #: because the remediation changed one block of a production module it does
 #: not own and must declare again to touch again. The interpreter guard's
-#: spelling fix was retired in turn when it landed.
-DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
-    {
-        "ops/run_production_shadow.py": (
-            "records the realized dependence reading alongside the simulated "
-            "arms. The simulated arms say what each model claims; without the "
-            "observed side there is nothing for the frozen policy's two "
-            "dependence RMSEs to be an error against, so the live gates could "
-            "never have been evaluated. Additive: the reading is taken only "
-            "on a settled slate, a failure to take one is recorded and the "
-            "game continues, and no existing field changes"
-        ),
-        "ops/grade_incumbent_production_slate.py": (
-            "new. Grades the incumbent's served slate against settled box "
-            "scores, which nothing did: the incumbent's prices were recorded "
-            "durably and never read back, so the frozen policy's central "
-            "comparison had only one arm. Reads priced markets, the serving "
-            "receipt and the box-score tree; writes grade rows and its own "
-            "receipt into a tree no serving script names. Cannot predict, "
-            "price, promote or publish"
-        ),
-        "ops/monitor_live_shadow_evidence.py": (
-            "new. Accumulates the shadow's evidence durably and reads the "
-            "frozen policy over the running total, which nothing did: the "
-            "shadow writes into the run's temporary directory and GitHub "
-            "destroys it, while the policy's minimum requirement is 500 "
-            "graded games over 30 regular-season days, so every number it "
-            "gates on is a sum over runs that no longer existed. Reads the "
-            "day's shadow artifacts, the accumulated state and the "
-            "incumbent's own grades; writes only into a monitoring tree no "
-            "serving or pricing script names, plus its own status artifact. "
-            "States no threshold of its own and cannot predict, price, "
-            "promote or publish. Fails the job on one decision only, "
-            "SHADOW_DISABLED_FOR_SAFETY, which is the operator signal the "
-            "policy exists to raise"
-        ),
-        "ops/validate_main_scheduler_role.py": (
-            "records the grading and monitoring steps and their entry points "
-            "in the lists the default-branch guard checks. Both ungated on "
-            "RUN_ADAPTIVE -- whether yesterday's results can be scored is "
-            "unrelated to whether a candidate was refitted, and the "
-            "accumulated window must be summarised on a day with no retrain "
-            "too -- and both blocking, because a grading refusal is a "
-            "provenance fault and a swallowed safety decision is no signal "
-            "at all. Adds a twelfth check, "
-            "that every inline ``python -c`` fragment in the lifecycle "
-            "compiles as the shell receives it: those fragments are strings "
-            "until the runner executes them, so a syntax error inside one "
-            "passes every other check here and then fails silently, because "
-            "a broken command substitution yields an empty argument rather "
-            "than stopping. No existing check is removed or weakened"
-        ),
-        ".github/workflows/nba_production_lifecycle.yml": (
-            "two added steps. One grades the previous slate after serving. "
-            "One accumulates the shadow's evidence and reads the frozen "
-            "policy over the total, placed after the shadow and before the "
-            "health assertion so it is not skipped on exactly the days a "
-            "shadow is unhealthy. Both also copy an artifact out of the run's "
-            "temporary directory into durable state -- the serving receipt, "
-            "because a slate is graded on a later day than it was served, and "
-            "the day's shadow evidence, because the policy's minimum sample "
-            "is a sum over runs GitHub has already destroyed. Those copies "
-            "are made in the added steps rather than by pointing the serving "
-            "and shadow steps at durable paths, because both are the "
-            "pre-existing production path and a declaration permits adding to "
-            "this workflow, not rewriting a line of it. No pre-existing line "
-            "changes"
-        ),
-    }
-)
+#: spelling fix was retired in turn when it landed, and so were the pre-live
+#: closure's five entries: the two graders it introduced are recorded as owned
+#: below, and the three files it extended were already owned.
+DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType({})
 
 #: Protected paths this lineage introduced into production and now owns.
 #:
@@ -257,8 +191,25 @@ SHADOW_OWNED_PRODUCTION_PATHS: Mapping[str, str] = MappingProxyType(
             "existing production script calls it and it writes no production "
             "state"
         ),
+        "ops/grade_incumbent_production_slate.py": (
+            "grades the slate the incumbent actually served, against settled "
+            "box scores. It is the second arm of the frozen policy's central "
+            "comparison, which had only the candidate's side before. Reads "
+            "priced markets, the serving receipt and the box-score tree; "
+            "writes grade rows and its own receipt into a tree no serving "
+            "script names. Cannot predict, price, promote or publish"
+        ),
+        "ops/monitor_live_shadow_evidence.py": (
+            "accumulates the shadow's daily evidence durably and reads the "
+            "frozen policy over the running total, which nothing could do "
+            "while that evidence lived only in the run's temporary directory. "
+            "States no threshold of its own: every number comes out of "
+            "live_shadow_promotion_policy.json. Writes only into a monitoring "
+            "tree no serving or pricing script names, and cannot predict, "
+            "price, promote or publish"
+        ),
         ".github/workflows/nba_production_lifecycle.yml": (
-            "five added steps, every pre-existing step unchanged. One invokes "
+            "seven added steps, every pre-existing step unchanged. One invokes "
             "the shadow entry point after the daily fit and cannot fail the "
             "lifecycle. Two give the run its own Python environment under "
             "RUNNER_TEMP and refuse to continue outside it. One serves the "
