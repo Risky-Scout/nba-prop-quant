@@ -62,6 +62,8 @@ REQUIRED_PYTHON = (3, 12)
 GLOBAL_SITE_PACKAGE_PREFIXES = (
     "/Library/Frameworks/",
     "/System/Library/",
+    "/usr/lib/",
+    "/usr/lib64/",
     "/usr/local/lib/",
     "/opt/homebrew/",
     "/Users/Shared/",
@@ -117,12 +119,24 @@ class Report:
         }
 
 
+#: What an installed-package directory is called. macOS and the hosted tool
+#: cache say ``site-packages``; Debian and Ubuntu say ``dist-packages``. Only
+#: the first name would have been enough for the Mac this exists for, but a
+#: check that recognises one spelling is a check a differently packaged runner
+#: walks straight past, which is the opposite of what it is for.
+PACKAGE_DIRECTORY_NAMES = ("site-packages", "dist-packages")
+
+
 def site_package_paths() -> list[str]:
-    """Every site-packages directory the running interpreter imports from."""
+    """Every installed-package directory the running interpreter imports from."""
     return [
         entry
         for entry in sys.path
-        if entry and "site-packages" in entry.replace("\\", "/")
+        if entry
+        and any(
+            name in entry.replace("\\", "/")
+            for name in PACKAGE_DIRECTORY_NAMES
+        )
     ]
 
 

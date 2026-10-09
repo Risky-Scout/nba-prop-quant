@@ -142,100 +142,29 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: permission to edit a protected path unreviewed. What the lineage owns in
 #: production once a change has landed is recorded in
 #: :data:`SHADOW_OWNED_PRODUCTION_PATHS`, which grants no permission at all.
-#: Empty, and that is the resting state. The last entry here declared
-#: ``ops/evidence/production_shadow_closure.json`` while the closure receipt
-#: was a pending change; the receipt landed in production and the declaration
-#: should have gone with it. It did not, which made the rule above fail for
-#: every later branch rather than for the one branch doing something wrong --
-#: a stale declaration is exactly what
-#: :func:`stale_integration_declarations` reports, and the branch that leaves
-#: it behind is always already merged by the time anything notices. So the
-#: entry is retired here. Nothing is lost: the receipt is a protected path the
-#: lineage now owns, which is what
-#: :data:`SHADOW_OWNED_PRODUCTION_PATHS` is for.
+#: Empty is the resting state, and the only correct non-empty content is the
+#: pending change on the branch being read. A stale declaration is exactly
+#: what :func:`stale_integration_declarations` reports, and the branch that
+#: leaves one behind is always already merged by the time anything notices, so
+#: it breaks the rule for every later branch rather than for the one branch
+#: doing something wrong. That happened once with
+#: ``ops/evidence/production_shadow_closure.json``, and the
+#: pre-opening-day remediation's eleven entries were retired the same way:
+#: the eight ops, docs and workflow files it introduced are recorded as owned
+#: below, and ``src/nba_prop_quant/adaptive_training.py`` is recorded nowhere,
+#: because the remediation changed one block of a production module it does
+#: not own and must declare again to touch again.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
-        "src/nba_prop_quant/adaptive_training.py": (
-            "the daily fit recorded its fourteen validation checks as constant "
-            "True labels, so the registry's validation contract was satisfied "
-            "by assertion rather than measurement. run_daily_fit now computes "
-            "them from the candidate's own artifacts and fails closed on a "
-            "false answer. Confined to the validation block: no stage, seed, "
-            "route, family, threshold or registration rule changes, and the "
-            "module is not reachable from either serving entry point, which is "
-            "why it is declarable at all"
-        ),
-        ".github/workflows/nba_production_lifecycle.yml": (
-            "three added steps, no existing line touched. One creates a "
-            "per-run virtual environment under RUNNER_TEMP and puts it on "
-            "PATH, because setup-python was a no-op on the self-hosted Mac "
-            "and every run installed into machine-global site-packages. One "
-            "refuses to continue when the interpreter resolves outside it. "
-            "One reads the status file the shadow persisted and may fail the "
-            "job, because the shadow step is non-blocking by design and "
-            "GitHub went green whether the shadow worked or not"
-        ),
         "ops/verify_production_interpreter.py": (
-            "new, additive. Refuses the production run when the interpreter "
-            "resolves outside the per-run virtual environment. Reads the "
-            "running interpreter and the frozen scikit-learn pin from the "
-            "preflight; writes only its own receipt and alters no dependency "
-            "contract"
-        ),
-        "ops/benchmark_production_fit.py": (
-            "new, additive. Wraps the existing --benchmark-only fit path and "
-            "fingerprints the serving tree, the registry and the three frozen "
-            "identifiers around it, failing the benchmark on any difference. "
-            "Passes no registry root to the fit, so there is nothing to "
-            "register to; writes only its own receipt"
-        ),
-        "ops/evidence/runner_reliability_audit.json": (
-            "new, additive. The measured seven-run window behind the runner "
-            "reliability classification: the waits, the two "
-            "lost-communication runs and the 5h47m02s outlier. Evidence only; "
-            "nothing reads it and it decides no production behaviour"
-        ),
-        "ops/audit_runner_reliability.py": (
-            "new, additive. Decides whether the self-hosted runner meets the "
-            "seven-consecutive-clean-runs criterion from GitHub's own API "
-            "answer. Reads a collected JSON window and writes only its own "
-            "report; it cannot administer or contact anything"
-        ),
-        "docs/wizardofodds/PRE_OPENING_DAY_OPERATOR_ACTIONS.md": (
-            "new, additive. The exact runner, branch-protection and benchmark "
-            "actions the three blockers outside this repository require, with "
-            "the measured evidence for each and the mechanical test that "
-            "decides closure. Documentation only"
-        ),
-        ".github/workflows/default_branch_guard.yml": (
-            "new, additive. The default branch's only reported check. GitHub "
-            "schedules production from main, and main carried no workflow "
-            "triggered by a push to main or a pull request into main, so a "
-            "change to the scheduler copy landed unchecked. Runs on "
-            "GitHub-hosted runners, reads branch contents and asks for "
-            "contents:read"
-        ),
-        "ops/validate_main_scheduler_role.py": (
-            "new, additive. Validates the default branch's actual production "
-            "role: that its lifecycle copy parses, passes the production "
-            "branch's own static rules, is byte-identical to the production "
-            "copy, and has not lost a step, a gate, the non-blocking shadow "
-            "boundary or its production checkout ref. Reads two workflow "
-            "copies and writes only its own report"
-        ),
-        "ops/run_incumbent_production_serving.py": (
-            "new, additive. Runs the two serving scripts for the incumbent "
-            "resolved from the registry's promotion state, and refuses rather "
-            "than substituting when that authority cannot be established. "
-            "Reads the promotion state, the frozen bundle and the refresh "
-            "status; writes the two serving artifacts and its own receipt, "
-            "and cannot publish or promote"
-        ),
-        "ops/evaluate_shadow_health.py": (
-            "new, additive. Judges the persisted shadow status against the "
-            "frozen live policy's own operational gates and may fail the job. "
-            "Reads shadow.json and the policy; writes only its own report, "
-            "states no threshold of its own, and cannot publish or promote"
+            "the isolation guard recognised only the name ``site-packages``, "
+            "which is what the production Mac calls its global package "
+            "directory, so a differently packaged runner's "
+            "``dist-packages`` never appeared in the path list it scans and "
+            "absence read as cleanliness. Both spellings are collected now "
+            "and ``/usr/lib`` joins the global prefixes. Confined to the two "
+            "constants and the collector: no check, threshold or dependency "
+            "contract changes"
         ),
     }
 )
@@ -268,9 +197,74 @@ SHADOW_OWNED_PRODUCTION_PATHS: Mapping[str, str] = MappingProxyType(
             "state"
         ),
         ".github/workflows/nba_production_lifecycle.yml": (
-            "one added non-blocking step that invokes the shadow entry point "
-            "after the daily fit. Additive only: every pre-existing step is "
-            "unchanged, and the step cannot fail the lifecycle"
+            "five added steps, every pre-existing step unchanged. One invokes "
+            "the shadow entry point after the daily fit and cannot fail the "
+            "lifecycle. Two give the run its own Python environment under "
+            "RUNNER_TEMP and refuse to continue outside it. One serves the "
+            "slate with the incumbent. One reads the status the shadow "
+            "persisted and may fail the job, because the shadow step is "
+            "non-blocking by design and GitHub went green whether the shadow "
+            "worked or not"
+        ),
+        ".github/workflows/default_branch_guard.yml": (
+            "the default branch's only reported check. GitHub schedules "
+            "production from main, and main carried no workflow triggered by "
+            "a push to main or a pull request into main, so a change to the "
+            "scheduler copy landed unchecked. Runs on GitHub-hosted runners, "
+            "reads branch contents and asks for contents:read"
+        ),
+        "ops/validate_main_scheduler_role.py": (
+            "the eleven checks that guard runs: that the lifecycle copy "
+            "parses, passes the production branch's own static rules, is "
+            "byte-identical to the production copy, and has not lost a step, "
+            "a gate, the non-blocking shadow boundary or its production "
+            "checkout ref. Reads two workflow copies and writes only its own "
+            "report"
+        ),
+        "ops/run_incumbent_production_serving.py": (
+            "runs the two serving scripts for the incumbent resolved from the "
+            "registry's promotion state, and refuses rather than substituting "
+            "when that authority cannot be established. Reads the promotion "
+            "state, the frozen bundle and the refresh status; writes the two "
+            "serving artifacts and its own receipt, and cannot publish or "
+            "promote"
+        ),
+        "ops/evaluate_shadow_health.py": (
+            "judges the persisted shadow status against the frozen live "
+            "policy's own operational gates and may fail the job. Reads "
+            "shadow.json and the policy; writes only its own report, states "
+            "no threshold of its own, and cannot publish or promote"
+        ),
+        "ops/verify_production_interpreter.py": (
+            "refuses the production run when the interpreter resolves outside "
+            "the per-run virtual environment. Reads the running interpreter "
+            "and the frozen scikit-learn pin from the preflight; writes only "
+            "its own receipt and alters no dependency contract"
+        ),
+        "ops/benchmark_production_fit.py": (
+            "wraps the existing --benchmark-only fit path and fingerprints "
+            "the serving tree, the registry and the three frozen identifiers "
+            "around it, failing the benchmark on any difference. Passes no "
+            "registry root to the fit, so there is nothing to register to; "
+            "writes only its own receipt"
+        ),
+        "ops/audit_runner_reliability.py": (
+            "decides whether the self-hosted runner meets the "
+            "seven-consecutive-clean-runs criterion from GitHub's own API "
+            "answer. Reads a collected JSON window and writes only its own "
+            "report; it cannot administer or contact anything"
+        ),
+        "ops/evidence/runner_reliability_audit.json": (
+            "the measured seven-run window behind the runner reliability "
+            "classification: the waits, the two lost-communication runs and "
+            "the 5h47m02s outlier. Evidence only; nothing reads it and it "
+            "decides no production behaviour"
+        ),
+        "docs/wizardofodds/PRE_OPENING_DAY_OPERATOR_ACTIONS.md": (
+            "the exact runner, branch-protection and benchmark actions the "
+            "three blockers outside this repository require, with the "
+            "measured evidence for each and the mechanical test that decides "
+            "closure. Documentation only"
         ),
         "ops/evidence/production_shadow_closure.json": (
             "the production-ops closure receipt: the reconciled test counts, "
