@@ -33,6 +33,7 @@ from nba_prop_quant.research.game_latent_state.safety import (
     DECLARED_INTEGRATION_PATHS,
     PRODUCTION_REF,
     PROTECTED_PRODUCTION_PREFIXES,
+    PATH_DECLARATION_MODULE as DECLARATION_MODULE,
     PROTECTED_PRODUCTION_SOURCES,
     SHADOW_OWNED_PRODUCTION_PATHS,
     UNDECLARABLE_PRODUCTION_SOURCES,
@@ -62,7 +63,9 @@ PROTECTED_SOURCE_FILES = PROTECTED_PRODUCTION_SOURCES
 #: ``safety.py`` is the module that *declares* the protected production paths,
 #: so it necessarily contains those path literals. They are a read-only guard
 #: list, not write targets, which is why the literal scan below skips it.
-PATH_DECLARATION_MODULE = "safety.py"
+#: Imported rather than restated, because the containment scoping skips it for
+#: the same reason and the two must not disagree about which module this is.
+PATH_DECLARATION_MODULE = DECLARATION_MODULE
 
 
 def git(*args: str) -> str:
@@ -288,6 +291,28 @@ def test_containment_still_binds_a_branch_that_does_shadow_work(monkeypatch):
     ]
 
 
+def test_declaring_a_path_does_not_make_a_branch_a_shadow_branch(monkeypatch):
+    """safety.py declares containment; it is not part of what is contained.
+
+    Every branch that touches a protected path has to edit this module to
+    declare it. Counting that edit as shadow work would make the act of
+    declaring turn an unrelated branch into a shadow branch, which is the one
+    change such a branch cannot avoid making.
+    """
+    from nba_prop_quant.research.game_latent_state import safety
+
+    monkeypatch.setattr(
+        safety,
+        "changed_paths",
+        lambda _: [
+            f"src/nba_prop_quant/research/game_latent_state/{DECLARATION_MODULE}",
+            "ops/some_new_production_script.py",
+        ],
+    )
+
+    assert safety.shadow_lineage_offenders(PROJECT) == []
+
+
 def test_the_undeclarable_core_is_what_the_serving_path_can_reach():
     """The served model is undeclarable by computation, not by memory.
 
@@ -307,7 +332,14 @@ def test_the_undeclarable_core_is_what_the_serving_path_can_reach():
     ):
         assert relative in UNDECLARABLE_PRODUCTION_SOURCES
 
-    assert UNDECLARABLE_PRODUCTION_SOURCES <= PROTECTED_PRODUCTION_SOURCES
+    assert serving_reachable_sources(PROJECT) <= PROTECTED_PRODUCTION_SOURCES
+
+    # The protected set is the serving closure plus the fit orchestration, and
+    # the difference is exactly what a declaration may name.
+    assert PROTECTED_PRODUCTION_SOURCES - UNDECLARABLE_PRODUCTION_SOURCES == {
+        "src/nba_prop_quant/adaptive_fit_registry.py",
+        "src/nba_prop_quant/adaptive_training.py",
+    }
 
 
 # ----------------------------------------------------------------------

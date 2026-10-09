@@ -113,11 +113,48 @@ jobs:
         with:
           python-version: '3.12'
 
+      # The production runner is a long-lived Mac, and setup-python was
+      # effectively a no-op on it: it reported a tool-cache interpreter while
+      # the install below resolved to
+      # /Library/Frameworks/Python.framework/.../site-packages. Every run
+      # therefore installed into machine-global site-packages and ran under
+      # whatever that machine had accumulated.
+      #
+      # So the run gets its own environment, created from the interpreter
+      # setup-python just selected and discarded with RUNNER_TEMP. Putting it
+      # on GITHUB_PATH is what makes every later `python` and `pip` in this
+      # job resolve to it without any of those steps having to know it exists.
+      - name: Create the per-run Python environment
+        id: venv
+        run: |
+          set -euo pipefail
+          VENV="$RUNNER_TEMP/production-venv"
+          BOOTSTRAP="$(python -c 'import sys; print(sys.executable)')"
+          echo "Bootstrap interpreter: $BOOTSTRAP"
+          "$BOOTSTRAP" -m venv --clear "$VENV"
+          echo "venv=$VENV" >> "$GITHUB_OUTPUT"
+          echo "architecture=$(uname -m)" >> "$GITHUB_OUTPUT"
+          echo "$VENV/bin" >> "$GITHUB_PATH"
+
       - name: Install the production package
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
           python -m pip install -e '.[dev]'
+
+      # Fails the job when the interpreter resolves outside the environment
+      # above. It runs after the install because the question is where the
+      # dependencies actually landed, not where they were meant to.
+      - name: Verify the production interpreter is isolated
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/run"
+          python ops/verify_production_interpreter.py \
+            --expected-venv "${{ steps.venv.outputs.venv }}" \
+            --expected-architecture "${{ steps.venv.outputs.architecture }}" \
+            --production-sha "${{ steps.checkout.outputs.sha }}" \
+            --status-path "$RUNNER_TEMP/run/interpreter.json" \
+            --summary-path "$GITHUB_STEP_SUMMARY"
 
       - name: Preflight
         id: preflight

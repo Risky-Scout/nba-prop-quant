@@ -36,25 +36,6 @@ PROTECTED_PRODUCTION_PREFIXES: tuple[str, ...] = (
     "review/",
 )
 
-#: Production modules the shadow layer imports and reads but must never edit.
-#: The dependence and marginal modules are the load-bearing ones: the whole
-#: no-double-count argument rests on ``copula.py`` being untouched.
-PROTECTED_PRODUCTION_SOURCES: frozenset[str] = frozenset(
-    {
-        "src/nba_prop_quant/adaptive_fit_registry.py",
-        "src/nba_prop_quant/adaptive_training.py",
-        "src/nba_prop_quant/copula.py",
-        "src/nba_prop_quant/distributions.py",
-        "src/nba_prop_quant/features.py",
-        "src/nba_prop_quant/gate3_v2.py",
-        "src/nba_prop_quant/model.py",
-        "src/nba_prop_quant/pipeline.py",
-        "src/nba_prop_quant/pricing.py",
-        "src/nba_prop_quant/production.py",
-        "src/nba_prop_quant/slate.py",
-    }
-)
-
 #: The scripts that serve a slate. What they can reach is the served model.
 SERVING_ENTRY_POINTS: tuple[str, ...] = (
     "scripts/10_predict_slate.py",
@@ -64,13 +45,13 @@ SERVING_ENTRY_POINTS: tuple[str, ...] = (
 #: Protected sources no declaration may ever name, because the live pricing
 #: path reads them.
 #:
-#: The undeclarable set used to be all of :data:`PROTECTED_PRODUCTION_SOURCES`,
-#: which read the same for two different kinds of module: the ones that decide
-#: what a price is, and the ones that orchestrate a fit. Only the first kind is
-#: what "may not edit the served model" is about, and conflating them made the
-#: fit orchestration permanently unfixable -- a correctness fix to the daily
-#: fit's own validation had nowhere to go, since a protected source could not
-#: be declared and the declaration mechanism is the only reviewed way in.
+#: Undeclarability used to be a property of being protected at all, which read
+#: the same for two different kinds of module: the ones that decide what a
+#: price is, and the ones that orchestrate a fit. Only the first kind is what
+#: "may not edit the served model" is about, and conflating them made the fit
+#: orchestration permanently unfixable -- a correctness fix to the daily fit's
+#: own validation had nowhere to go, since a protected source could not be
+#: declared and the declaration mechanism is the only reviewed way in.
 #:
 #: So the line is drawn where the repository already draws it: a protected
 #: source is undeclarable exactly when a serving entry point can reach it by
@@ -78,20 +59,47 @@ SERVING_ENTRY_POINTS: tuple[str, ...] = (
 #: branch-safety tests pin this set against it, so the partition cannot drift
 #: and an import added to a serving script moves a module into this set rather
 #: than leaving it declarable. ``copula.py`` is here because ``model.py``
-#: imports it, not because it is listed.
+#: imports it, not because somebody listed it.
 UNDECLARABLE_PRODUCTION_SOURCES: frozenset[str] = frozenset(
     {
+        "src/nba_prop_quant/api.py",
+        "src/nba_prop_quant/availability.py",
         "src/nba_prop_quant/copula.py",
+        "src/nba_prop_quant/decay.py",
         "src/nba_prop_quant/distributions.py",
+        "src/nba_prop_quant/experience.py",
         "src/nba_prop_quant/features.py",
+        "src/nba_prop_quant/game_context.py",
         "src/nba_prop_quant/gate3_v2.py",
+        "src/nba_prop_quant/kalman.py",
         "src/nba_prop_quant/model.py",
+        "src/nba_prop_quant/normalize.py",
         "src/nba_prop_quant/pipeline.py",
         "src/nba_prop_quant/pricing.py",
         "src/nba_prop_quant/production.py",
+        "src/nba_prop_quant/prospective_snapshot.py",
+        "src/nba_prop_quant/settings.py",
         "src/nba_prop_quant/slate.py",
+        "src/nba_prop_quant/storage.py",
     }
 )
+
+#: Production modules that must not change without a declaration. The shadow
+#: layer imports and reads them; the whole no-double-count argument rests on
+#: ``copula.py`` being untouched.
+#:
+#: Everything the serving path can reach, plus the two fit-orchestration
+#: modules. This used to be eleven hand-written names, which left ten modules
+#: the serving scripts import -- ``api.py``, ``normalize.py``, ``settings.py``
+#: and ``storage.py`` among them -- outside it. They were covered only
+#: incidentally, by a containment check that also refused every unrelated
+#: branch, so scoping that check to the shadow lineage had to come with
+#: closing this gap properly. A branch-safety test pins that the serving
+#: closure stays inside this set, so a new serving import cannot reopen it.
+PROTECTED_PRODUCTION_SOURCES: frozenset[str] = UNDECLARABLE_PRODUCTION_SOURCES | {
+    "src/nba_prop_quant/adaptive_fit_registry.py",
+    "src/nba_prop_quant/adaptive_training.py",
+}
 
 #: Namespaces the shadow lineage's own work lives in.
 SHADOW_NAMESPACES: tuple[str, ...] = (
@@ -99,6 +107,22 @@ SHADOW_NAMESPACES: tuple[str, ...] = (
     "src/nba_prop_quant/research/",
     "tests/test_game_latent_state_shadow",
 )
+
+#: The containment guard's own source. It declares and checks containment
+#: rather than being contained by it, so changing it is not shadow work --
+#: every branch that touches a protected path has to edit the declaration, and
+#: counting that edit would make the act of declaring turn an unrelated branch
+#: into a shadow branch. The literal scan in the branch-safety tests already
+#: skips the declaration module for the same reason.
+CONTAINMENT_GUARD_PATHS: tuple[str, ...] = (
+    "src/nba_prop_quant/research/game_latent_state/safety.py",
+    "tests/test_game_latent_state_shadow_safety.py",
+    "tests/test_game_latent_state_shadow_bucket_repair.py",
+)
+
+#: Kept as a separate name because the literal scan asks a narrower question:
+#: which file is allowed to contain protected-path literals.
+PATH_DECLARATION_MODULE = "safety.py"
 
 
 #: Protected paths this integration is declared to change, each with its
@@ -140,6 +164,23 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
             "route, family, threshold or registration rule changes, and the "
             "module is not reachable from either serving entry point, which is "
             "why it is declarable at all"
+        ),
+        ".github/workflows/nba_production_lifecycle.yml": (
+            "three added steps, no existing line touched. One creates a "
+            "per-run virtual environment under RUNNER_TEMP and puts it on "
+            "PATH, because setup-python was a no-op on the self-hosted Mac "
+            "and every run installed into machine-global site-packages. One "
+            "refuses to continue when the interpreter resolves outside it. "
+            "One reads the status file the shadow persisted and may fail the "
+            "job, because the shadow step is non-blocking by design and "
+            "GitHub went green whether the shadow worked or not"
+        ),
+        "ops/verify_production_interpreter.py": (
+            "new, additive. Refuses the production run when the interpreter "
+            "resolves outside the per-run virtual environment. Reads the "
+            "running interpreter and the frozen scikit-learn pin from the "
+            "preflight; writes only its own receipt and alters no dependency "
+            "contract"
         ),
     }
 )
@@ -271,7 +312,7 @@ def _module_imports(path: Path) -> set[str]:
 
 
 def serving_reachable_sources(project_root: Path) -> frozenset[str]:
-    """Protected sources a serving entry point can reach by import.
+    """Package modules a serving entry point can reach by import.
 
     Walks the import graph from :data:`SERVING_ENTRY_POINTS` through the
     package. This is what makes :data:`UNDECLARABLE_PRODUCTION_SOURCES` a
@@ -279,6 +320,11 @@ def serving_reachable_sources(project_root: Path) -> frozenset[str]:
     serving script gains an import of a fit-orchestration module, that module
     becomes serving code and stops being declarable, and the branch-safety
     test that compares the two fails until the declaration is withdrawn.
+
+    Deliberately *not* filtered through :data:`PROTECTED_PRODUCTION_SOURCES`.
+    Filtering it there would make the comparison circular -- the protected set
+    is derived from this one -- and a module the serving path newly imports
+    would stay invisible precisely because it was not protected yet.
     """
     package = Path(project_root) / "src" / "nba_prop_quant"
 
@@ -306,9 +352,9 @@ def serving_reachable_sources(project_root: Path) -> frozenset[str]:
             pending.extend(_module_imports(module))
 
     return frozenset(
-        path
-        for path in PROTECTED_PRODUCTION_SOURCES
-        if Path(path).stem in seen
+        f"src/nba_prop_quant/{name}.py"
+        for name in seen
+        if (package / f"{name}.py").is_file()
     )
 
 
@@ -326,10 +372,20 @@ def shadow_lineage_offenders(project_root: Path) -> list[str]:
     decides production behaviour is a protected path, and
     :func:`undeclared_production_paths` holds every branch to it regardless of
     lineage.
+
+    :data:`CONTAINMENT_GUARD_PATHS` does not count towards doing shadow work:
+    it is the guard, not the surface the guard covers.
     """
     changed = changed_paths(project_root)
 
-    if not any(path.startswith(SHADOW_NAMESPACES) for path in changed):
+    doing_shadow_work = [
+        path
+        for path in changed
+        if path.startswith(SHADOW_NAMESPACES)
+        and path not in CONTAINMENT_GUARD_PATHS
+    ]
+
+    if not doing_shadow_work:
         return []
 
     return sorted(
