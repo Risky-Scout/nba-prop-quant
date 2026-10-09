@@ -182,6 +182,22 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
             "preflight; writes only its own receipt and alters no dependency "
             "contract"
         ),
+        ".github/workflows/default_branch_guard.yml": (
+            "new, additive. The default branch's only reported check. GitHub "
+            "schedules production from main, and main carried no workflow "
+            "triggered by a push to main or a pull request into main, so a "
+            "change to the scheduler copy landed unchecked. Runs on "
+            "GitHub-hosted runners, reads branch contents and asks for "
+            "contents:read"
+        ),
+        "ops/validate_main_scheduler_role.py": (
+            "new, additive. Validates the default branch's actual production "
+            "role: that its lifecycle copy parses, passes the production "
+            "branch's own static rules, is byte-identical to the production "
+            "copy, and has not lost a step, a gate, the non-blocking shadow "
+            "boundary or its production checkout ref. Reads two workflow "
+            "copies and writes only its own report"
+        ),
         "ops/run_incumbent_production_serving.py": (
             "new, additive. Runs the two serving scripts for the incumbent "
             "resolved from the registry's promotion state, and refuses rather "
