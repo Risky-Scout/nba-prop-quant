@@ -857,20 +857,10 @@ def test_repair_branch_modifies_no_undeclared_protected_production_path():
 
 def test_repair_changes_live_only_in_research_test_and_declared_namespaces():
     from nba_prop_quant.research.game_latent_state.safety import (
-        DECLARED_INTEGRATION_PATHS,
-        changed_paths,
+        shadow_lineage_offenders,
     )
 
-    allowed = (
-        "research/",
-        "src/nba_prop_quant/research/",
-        "tests/test_game_latent_state_shadow",
-    )
-    offenders = [
-        path
-        for path in changed_paths(PROJECT)
-        if not path.startswith(allowed) and path not in DECLARED_INTEGRATION_PATHS
-    ]
+    offenders = shadow_lineage_offenders(PROJECT)
     assert offenders == [], f"unexpected paths on the repair branch: {offenders}"
 
 

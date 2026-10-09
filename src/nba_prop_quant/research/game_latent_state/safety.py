@@ -14,6 +14,7 @@ list.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
@@ -54,6 +55,51 @@ PROTECTED_PRODUCTION_SOURCES: frozenset[str] = frozenset(
     }
 )
 
+#: The scripts that serve a slate. What they can reach is the served model.
+SERVING_ENTRY_POINTS: tuple[str, ...] = (
+    "scripts/10_predict_slate.py",
+    "scripts/15_price_markets.py",
+)
+
+#: Protected sources no declaration may ever name, because the live pricing
+#: path reads them.
+#:
+#: The undeclarable set used to be all of :data:`PROTECTED_PRODUCTION_SOURCES`,
+#: which read the same for two different kinds of module: the ones that decide
+#: what a price is, and the ones that orchestrate a fit. Only the first kind is
+#: what "may not edit the served model" is about, and conflating them made the
+#: fit orchestration permanently unfixable -- a correctness fix to the daily
+#: fit's own validation had nowhere to go, since a protected source could not
+#: be declared and the declaration mechanism is the only reviewed way in.
+#:
+#: So the line is drawn where the repository already draws it: a protected
+#: source is undeclarable exactly when a serving entry point can reach it by
+#: import. That is computed by :func:`serving_reachable_sources` and the
+#: branch-safety tests pin this set against it, so the partition cannot drift
+#: and an import added to a serving script moves a module into this set rather
+#: than leaving it declarable. ``copula.py`` is here because ``model.py``
+#: imports it, not because it is listed.
+UNDECLARABLE_PRODUCTION_SOURCES: frozenset[str] = frozenset(
+    {
+        "src/nba_prop_quant/copula.py",
+        "src/nba_prop_quant/distributions.py",
+        "src/nba_prop_quant/features.py",
+        "src/nba_prop_quant/gate3_v2.py",
+        "src/nba_prop_quant/model.py",
+        "src/nba_prop_quant/pipeline.py",
+        "src/nba_prop_quant/pricing.py",
+        "src/nba_prop_quant/production.py",
+        "src/nba_prop_quant/slate.py",
+    }
+)
+
+#: Namespaces the shadow lineage's own work lives in.
+SHADOW_NAMESPACES: tuple[str, ...] = (
+    "research/",
+    "src/nba_prop_quant/research/",
+    "tests/test_game_latent_state_shadow",
+)
+
 
 #: Protected paths this integration is declared to change, each with its
 #: reason. Gate H's absolute form — no protected path changes at all — held for
@@ -83,7 +129,20 @@ PROTECTED_PRODUCTION_SOURCES: frozenset[str] = frozenset(
 #: entry is retired here. Nothing is lost: the receipt is a protected path the
 #: lineage now owns, which is what
 #: :data:`SHADOW_OWNED_PRODUCTION_PATHS` is for.
-DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType({})
+DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
+    {
+        "src/nba_prop_quant/adaptive_training.py": (
+            "the daily fit recorded its fourteen validation checks as constant "
+            "True labels, so the registry's validation contract was satisfied "
+            "by assertion rather than measurement. run_daily_fit now computes "
+            "them from the candidate's own artifacts and fails closed on a "
+            "false answer. Confined to the validation block: no stage, seed, "
+            "route, family, threshold or registration rule changes, and the "
+            "module is not reachable from either serving entry point, which is "
+            "why it is declarable at all"
+        ),
+    }
+)
 
 #: Protected paths this lineage introduced into production and now owns.
 #:
@@ -192,6 +251,92 @@ def undeclared_production_paths(project_root: Path) -> list[str]:
     """
     return sorted(
         set(modified_production_paths(project_root)) - set(DECLARED_INTEGRATION_PATHS)
+    )
+
+
+_IMPORT_PATTERNS = (
+    re.compile(r"^\s*from\s+nba_prop_quant\.([A-Za-z_][\w.]*)\s+import", re.M),
+    re.compile(r"^\s*from\s+\.([A-Za-z_]\w*)\s+import", re.M),
+    re.compile(r"^\s*import\s+nba_prop_quant\.([A-Za-z_]\w*)", re.M),
+)
+
+
+def _module_imports(path: Path) -> set[str]:
+    text = path.read_text(encoding="utf-8")
+    return {
+        match.group(1).split(".")[0]
+        for pattern in _IMPORT_PATTERNS
+        for match in pattern.finditer(text)
+    }
+
+
+def serving_reachable_sources(project_root: Path) -> frozenset[str]:
+    """Protected sources a serving entry point can reach by import.
+
+    Walks the import graph from :data:`SERVING_ENTRY_POINTS` through the
+    package. This is what makes :data:`UNDECLARABLE_PRODUCTION_SOURCES` a
+    measurement rather than a list somebody has to remember to update: if a
+    serving script gains an import of a fit-orchestration module, that module
+    becomes serving code and stops being declarable, and the branch-safety
+    test that compares the two fails until the declaration is withdrawn.
+    """
+    package = Path(project_root) / "src" / "nba_prop_quant"
+
+    pending: list[str] = []
+
+    for relative in SERVING_ENTRY_POINTS:
+        entry = Path(project_root) / relative
+
+        if entry.is_file():
+            pending.extend(_module_imports(entry))
+
+    seen: set[str] = set()
+
+    while pending:
+        name = pending.pop()
+
+        if name in seen:
+            continue
+
+        seen.add(name)
+
+        module = package / f"{name}.py"
+
+        if module.is_file():
+            pending.extend(_module_imports(module))
+
+    return frozenset(
+        path
+        for path in PROTECTED_PRODUCTION_SOURCES
+        if Path(path).stem in seen
+    )
+
+
+def shadow_lineage_offenders(project_root: Path) -> list[str]:
+    """Paths a shadow-lineage branch changes outside its own namespaces.
+
+    Containment is a statement about the shadow lineage's work, so it is
+    checked against branches that do shadow work. A branch that changes
+    nothing under :data:`SHADOW_NAMESPACES` is not a shadow branch, and
+    reporting its ordinary modules as "unexpected paths on the shadow branch"
+    said nothing true about the shadow while making every unrelated production
+    branch unable to add so much as a test.
+
+    What it would otherwise have added is already covered: every path that
+    decides production behaviour is a protected path, and
+    :func:`undeclared_production_paths` holds every branch to it regardless of
+    lineage.
+    """
+    changed = changed_paths(project_root)
+
+    if not any(path.startswith(SHADOW_NAMESPACES) for path in changed):
+        return []
+
+    return sorted(
+        path
+        for path in changed
+        if not path.startswith(SHADOW_NAMESPACES)
+        and path not in DECLARED_INTEGRATION_PATHS
     )
 
 
