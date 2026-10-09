@@ -108,6 +108,11 @@ SHADOW_NAMESPACES: tuple[str, ...] = (
     "tests/test_game_latent_state_shadow",
 )
 
+#: Where tests live. Production cannot reach a test, and ``tests/`` is not a
+#: protected prefix, so a test is not part of the surface containment is about.
+#: Named here because :func:`shadow_lineage_offenders` reads it.
+TEST_SURFACE_PREFIX = "tests/"
+
 #: The containment guard's own source. It declares and checks containment
 #: rather than being contained by it, so changing it is not shadow work --
 #: every branch that touches a protected path has to edit the declaration, and
@@ -424,6 +429,19 @@ def shadow_lineage_offenders(project_root: Path) -> list[str]:
 
     :data:`CONTAINMENT_GUARD_PATHS` does not count towards doing shadow work:
     it is the guard, not the surface the guard covers.
+
+    Neither does :data:`TEST_SURFACE_PREFIX` count towards being an offender.
+    The exemption for ``tests/test_game_latent_state_shadow`` was always about
+    tests rather than about that prefix: it is simply how the lineage's own
+    tests happen to be named. A branch that extends the shadow and also adds
+    the test for a production entry point it wires the shadow into had the
+    choice of leaving that entry point untested or declaring its test file as
+    though a test file decided production behaviour, and neither of those is
+    the containment this guard exists to enforce. No test is reachable from
+    production: ``tests/`` is not a protected prefix, so nothing here relaxes
+    what :func:`undeclared_production_paths` requires. What remains reported
+    is the part that was never redundant -- source outside the lineage's
+    namespaces.
     """
     changed = changed_paths(project_root)
 
@@ -441,6 +459,7 @@ def shadow_lineage_offenders(project_root: Path) -> list[str]:
         path
         for path in changed
         if not path.startswith(SHADOW_NAMESPACES)
+        and not path.startswith(TEST_SURFACE_PREFIX)
         and path not in DECLARED_INTEGRATION_PATHS
     )
 
