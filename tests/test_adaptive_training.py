@@ -1261,6 +1261,75 @@ def test_step3c_records_only_checks_it_can_establish(
     assert recorded.isdisjoint(deferred)
 
 
+def test_step3c_carries_the_computed_evidence_not_just_booleans(
+    data_root, work_root, registry
+):
+    result = fit(
+        data_root, work_root, registry=registry, mode=MODE_REGISTER_CANDIDATE
+    )
+
+    report = result["validation_report"]
+
+    assert report["passed"] is True
+    assert report["failed"] == []
+
+    answered = {check["name"]: check for check in report["checks"]}
+
+    assert set(answered) == set(REQUIRED_VALIDATION_CHECKS)
+
+    # Every answer has to say what it measured and what it measured against,
+    # which is the property a constant label could never have.
+    for check in answered.values():
+        assert check["contract"]
+        assert check["evidence"]
+
+    assert answered["prediction_smoke_test"]["values"]["priced_triples"] > 0
+
+
+class UnloadableMarginalsEngine(StubFitEngine):
+    """Writes serving marginals nothing can deserialise."""
+
+    def assemble_candidate(self, context) -> None:
+        super().assemble_candidate(context)
+
+        (
+            context.workspace.candidate / "models" / "marginals.joblib"
+        ).write_bytes(b"zinb-fitted-parameters")
+
+
+class DroppedCalibrationEngine(StubFitEngine):
+    """Loses the calibration digest for one PROP-routed prop."""
+
+    def fit_calibration(self, context) -> None:
+        super().fit_calibration(context)
+
+        context.notes["calibration_hashes"].pop("assists")
+
+
+@pytest.mark.parametrize(
+    "engine_class, expected",
+    [
+        (UnloadableMarginalsEngine, "prediction_smoke_test"),
+        (DroppedCalibrationEngine, "calibration_valid"),
+    ],
+)
+def test_a_broken_candidate_fails_the_fit_closed(
+    data_root, work_root, registry, engine_class, expected
+):
+    """A false check refuses the candidate; it does not register it anyway."""
+    with pytest.raises(CandidateIncomplete, match=expected):
+        fit(
+            data_root,
+            work_root,
+            registry=registry,
+            mode=MODE_REGISTER_CANDIDATE,
+            engine=engine_class(PROJECT),
+        )
+
+    assert registry.list_fits() == []
+    assert registry.current()["current_good_fit_id"] is None
+
+
 def test_deferred_checks_are_the_live_ones():
     """Step 3C must not fabricate a live snapshot or a T-20 capture."""
     assert set(deferred_validation_checks()) == {

@@ -1215,32 +1215,42 @@ def check_gate3_role_readiness(
     project_root: Path,
     candidate: Path,
     role_state_hash: Any,
+    slate_date: Any,
     snapshot_dir: Path | None,
 ) -> CheckResult:
     """Prove the candidate satisfies the Gate 3 role/readiness contract.
 
     The contract is recovered from the repository, not invented here.
     ``docs/wizardofodds/ADAPTIVE_DAILY_TRAINING.md`` records that this check
-    "needs a live captured lineup snapshot", and ``gate3_v2.load_gate3_runtime``
-    is what defines a usable Gate 3 runtime: checksum-verified deployment
-    artifacts whose ``gate3_policy`` equals the frozen per-prop policy. So this
-    check verifies the Gate 3 runtime the candidate was fit against, verifies
-    that the candidate recorded a role state derived from it, and then requires
-    a real lineup snapshot before it will answer at all.
+    "needs a live captured lineup snapshot". ``prospective_snapshot`` defines
+    what one is: the ``lineups`` component of a verified capture bundle. And
+    ``gate3_v2.load_gate3_runtime`` defines a usable Gate 3 runtime --
+    checksum-verified deployment artifacts whose ``gate3_policy`` equals the
+    frozen per-prop policy.
 
-    With no snapshot directory holding a capture, the answer is NOT_EVALUABLE.
-    Returning True without a capture would be asserting something about a
-    capture that never happened, which is exactly what the frozen design
-    forbids.
+    So readiness means three things together: a real lineup capture exists for
+    the slate, the Gate 3 runtime the candidate was fit against still verifies,
+    and the candidate recorded a role state derived from it.
+
+    With no capture for the slate, the answer is NOT_EVALUABLE. Returning True
+    without a capture would be asserting something about a capture that never
+    happened, which is exactly what the frozen design forbids.
     """
     description = (
-        "the frozen Gate 3 deployment artifacts verify, the candidate records a "
-        "sha256 role-state hash derived from them, and a live captured lineup "
-        "snapshot exists for the slate"
+        "a verified capture bundle for the slate carries lineup records, the "
+        "frozen Gate 3 deployment artifacts verify, and the candidate records "
+        "a sha256 role-state hash"
     )
 
     def compute() -> CheckResult:
         from .gate3_v2 import load_gate3_runtime, resolve_gate3_snapshot_dir
+        # See check_t20_protocol_compatible on why _capture_runs is used by
+        # its private name: prospective_snapshot is hash-locked.
+        from .prospective_snapshot import (
+            PRIMARY_OFFSET_MINUTES,
+            _capture_runs,
+            select_capture_bundle,
+        )
 
         resolved = (
             resolve_gate3_snapshot_dir(Path(snapshot_dir))
@@ -1248,23 +1258,70 @@ def check_gate3_role_readiness(
             else None
         )
 
-        captures = (
-            sorted(path.name for path in resolved.glob("*") if path.is_dir())
-            if resolved is not None and resolved.is_dir()
-            else []
-        )
+        target = str(slate_date)
+
+        offset = int(PRIMARY_OFFSET_MINUTES)
+
+        suffix = f":T-{offset}m"
+
+        advertised: list[str] = []
+
+        if resolved is not None and resolved.is_dir():
+            try:
+                runs = _capture_runs(resolved, target)
+            except Exception:  # noqa: BLE001
+                runs = []
+
+            advertised = sorted(
+                {
+                    str(window)
+                    for envelope in runs
+                    if (envelope.get("payload") or {}).get("capture_reason")
+                    == "scheduled"
+                    for window in ((envelope.get("payload") or {}).get(
+                        "window_ids"
+                    ) or [])
+                    if str(window).endswith(suffix)
+                }
+            )
 
         # The capture gate comes first on purpose. With no capture there is
         # nothing to be ready for, so the honest answer is "not measured" --
         # neither a pass nor a failure of the candidate.
-        if not captures:
+        if not advertised:
             return _not_evaluable(
                 "gate3_role_readiness",
                 description,
-                "no live captured lineup snapshot is available, so Gate 3 role "
-                "readiness cannot be measured; the frozen design defers rather "
-                "than asserts",
+                "no live captured lineup snapshot is available for "
+                f"{target}, so Gate 3 role readiness cannot be measured; the "
+                "frozen design defers rather than asserts",
             )
+
+        lineup_records = 0
+
+        refused: list[str] = []
+        without_lineups: list[str] = []
+
+        for window in advertised:
+            game_id = int(window.split(":", 1)[0])
+
+            try:
+                bundle = select_capture_bundle(
+                    resolved,
+                    date=target,
+                    game_id=game_id,
+                    offset_minutes=offset,
+                )
+            except Exception as error:  # noqa: BLE001
+                refused.append(f"{window}: {type(error).__name__}: {error}")
+                continue
+
+            lineups = bundle.records.get("lineups") or []
+
+            if not lineups:
+                without_lineups.append(window)
+
+            lineup_records += len(lineups)
 
         runtime = load_gate3_runtime(
             Path(project_root) / "research" / "v2_gate3_deployment_artifacts"
@@ -1276,43 +1333,49 @@ def check_gate3_role_readiness(
             if path.is_file() and "role" in path.name
         )
 
-        if not _is_sha256(role_state_hash):
-            return CheckResult(
-                name="gate3_role_readiness",
-                passed=False,
-                evidence=(
-                    "the Gate 3 runtime verified but the candidate recorded no "
-                    "sha256 role-state hash"
-                ),
-                values={
-                    "candidate_id": runtime["candidate_id"],
-                    "captured_dates": captures[:20],
-                    "installed_role_artifacts": installed,
-                    "role_state_hash": role_state_hash,
-                },
-                contract=description,
-                error="role_state_hash is absent or malformed",
+        hash_ok = _is_sha256(role_state_hash)
+
+        reasons = []
+
+        if refused:
+            reasons.append(
+                "captures that would not verify: " + "; ".join(refused[:5])
             )
+
+        if without_lineups:
+            reasons.append(
+                "captures carrying no lineup records: "
+                + ", ".join(without_lineups[:10])
+            )
+
+        if not hash_ok:
+            reasons.append("role_state_hash is absent or malformed")
 
         return CheckResult(
             name="gate3_role_readiness",
-            passed=True,
+            passed=not reasons,
             evidence=(
                 f"Gate 3 runtime {runtime['candidate_id']} verified against "
-                f"{len(captures)} captured snapshot date(s)"
+                f"{len(advertised)} captured T-{offset}m window(s) for "
+                f"{target} carrying {lineup_records} lineup record(s)"
             ),
             values={
+                "advertised_windows": advertised[:20],
                 "candidate_id": runtime["candidate_id"],
-                "captured_dates": captures[:20],
+                "captures_without_lineups": without_lineups[:10],
                 "deployment_manifest_sha256": runtime[
                     "deployment_manifest_sha256"
                 ],
                 "gate3_lock_commit": runtime["gate3_lock_commit"],
                 "installed_role_artifacts": installed,
+                "lineup_record_count": lineup_records,
+                "refused_captures": refused[:10],
                 "role_state_hash": str(role_state_hash),
                 "role_state_seed_sha256": runtime["role_state_seed_sha256"],
+                "slate_date": target,
             },
             contract=description,
+            error="; ".join(reasons) or None,
         )
 
     return _guarded("gate3_role_readiness", description, compute)
@@ -1323,25 +1386,36 @@ def check_t20_protocol_compatible(
     slate_date: Any,
     snapshot_dir: Path | None,
 ) -> CheckResult:
-    """Prove the candidate's output contract matches the live T-20 protocol.
+    """Prove the slate's captures satisfy the live T-20 protocol.
 
     The contract is recovered from ``prospective_snapshot``, which owns the
-    protocol: ``PRIMARY_OFFSET_MINUTES`` is the frozen offset and
-    ``select_capture_bundle`` is what decides whether a capture satisfies it.
-    So this check asks that module to select a real bundle for the slate.
+    protocol. ``ProspectiveSnapshotClient`` -- the object the live prediction
+    path reads its slate from -- derives the scheduled T-20 windows for a date
+    and calls ``select_capture_bundle`` once per game in them. This check does
+    the same two steps, so what it proves is what the live path needs:
+    ``select_capture_bundle`` refuses a bundle whose capture carried errors,
+    whose component hashes are incomplete, or whose component records do not
+    re-hash to what the capture claimed.
 
-    With no capture, the answer is NOT_EVALUABLE, for the same reason as
-    ``gate3_role_readiness``: the documented contract is "needs a real T-20
-    capture", and there is no honest way to answer it without one.
+    With no capture for the slate, the answer is NOT_EVALUABLE, for the same
+    reason as ``gate3_role_readiness``: the documented contract is "needs a
+    real T-20 capture", and there is no honest way to answer it without one.
     """
     description = (
-        "prospective_snapshot.select_capture_bundle returns a bundle for the "
-        "slate at the frozen PRIMARY_OFFSET_MINUTES offset"
+        "every scheduled T-20 window the slate advertises resolves to a "
+        "verified capture bundle at the frozen PRIMARY_OFFSET_MINUTES offset"
     )
 
     def compute() -> CheckResult:
+        # _capture_runs is the reader ProspectiveSnapshotClient itself uses to
+        # find the windows a slate advertises. It is reached for by its private
+        # name deliberately: prospective_snapshot is a hash-locked serving
+        # source under the frozen serving-source contract, so it cannot acquire
+        # a public alias, and duplicating its on-disk layout here would be a
+        # second definition of the protocol that could drift from the first.
         from .prospective_snapshot import (
             PRIMARY_OFFSET_MINUTES,
+            _capture_runs,
             select_capture_bundle,
         )
         from .gate3_v2 import resolve_gate3_snapshot_dir
@@ -1362,52 +1436,102 @@ def check_t20_protocol_compatible(
 
         target = str(slate_date)
 
+        offset = int(PRIMARY_OFFSET_MINUTES)
+
+        suffix = f":T-{offset}m"
+
+        # Deciding evaluability before construction keeps the two outcomes
+        # distinct: a slate that advertises no scheduled T-20 window has not
+        # been captured, while a slate that advertises one and cannot produce a
+        # verified bundle for it has failed the protocol.
         try:
-            bundle = select_capture_bundle(
-                snapshot_dir=resolved,
-                target_date=target,
-                offset_minutes=PRIMARY_OFFSET_MINUTES,
-            )
+            runs = _capture_runs(resolved, target)
         except Exception as error:  # noqa: BLE001
-            # A snapshot tree that holds no capture for this slate is the
-            # deferred case, not a failure: the capture simply has not
-            # happened. A tree that holds a capture it cannot read is.
             return _not_evaluable(
                 "t20_protocol_compatible",
                 description,
-                "no readable T-20 capture is available for "
-                f"{target}: {type(error).__name__}: {error}",
+                f"no readable capture run exists for {target}: "
+                f"{type(error).__name__}: {error}",
             )
 
-        if bundle is None:
+        advertised = sorted(
+            {
+                str(window)
+                for envelope in runs
+                if (envelope.get("payload") or {}).get("capture_reason")
+                == "scheduled"
+                for window in ((envelope.get("payload") or {}).get(
+                    "window_ids"
+                ) or [])
+                if str(window).endswith(suffix)
+            }
+        )
+
+        if not advertised:
             return _not_evaluable(
                 "t20_protocol_compatible",
                 description,
-                f"no T-20 capture exists for {target}",
+                f"no scheduled T-{offset}m capture window exists for {target}",
             )
 
-        offset = int(getattr(bundle, "offset_minutes", -1))
+        verified = 0
 
-        agrees = offset == int(PRIMARY_OFFSET_MINUTES)
+        refused: list[str] = []
+        wrong_offset: list[str] = []
+
+        for window in advertised:
+            game_id = int(window.split(":", 1)[0])
+
+            try:
+                bundle = select_capture_bundle(
+                    resolved,
+                    date=target,
+                    game_id=game_id,
+                    offset_minutes=offset,
+                )
+            except Exception as error:  # noqa: BLE001
+                refused.append(f"{window}: {type(error).__name__}: {error}")
+                continue
+
+            verified += 1
+
+            if int(bundle.offset_minutes) != offset:
+                wrong_offset.append(
+                    f"{window}: T-{int(bundle.offset_minutes)}m"
+                )
+
+        passed = not refused and not wrong_offset
+
+        reasons = []
+
+        if refused:
+            reasons.append(
+                "advertised windows without a verified bundle: "
+                + "; ".join(refused[:5])
+            )
+
+        if wrong_offset:
+            reasons.append(
+                "bundles outside the frozen offset: " + ", ".join(wrong_offset)
+            )
 
         return CheckResult(
             name="t20_protocol_compatible",
-            passed=agrees,
+            passed=passed,
             evidence=(
-                f"selected a capture bundle for {target} at T-{offset}m "
-                f"(protocol offset T-{int(PRIMARY_OFFSET_MINUTES)}m)"
+                f"verified {verified} of {len(advertised)} advertised "
+                f"T-{offset}m capture window(s) for {target}"
             ),
             values={
-                "bundle_offset_minutes": offset,
-                "protocol_offset_minutes": int(PRIMARY_OFFSET_MINUTES),
+                "advertised_windows": advertised[:20],
+                "protocol_offset_minutes": offset,
+                "refused_windows": refused[:10],
                 "slate_date": target,
+                "verified_bundles": verified,
+                "wrong_offset": wrong_offset,
             },
             contract=description,
-            error=(
-                None
-                if agrees
-                else "the available capture is not at the frozen T-20 offset"
-            ),
+            error="; ".join(reasons) or None,
         )
 
     return _guarded("t20_protocol_compatible", description, compute)
@@ -1502,6 +1626,7 @@ def compute_validation_report(
             project_root=project_root,
             candidate=candidate,
             role_state_hash=role_state_hash,
+            slate_date=slate_date,
             snapshot_dir=snapshot_dir,
         ),
         check_t20_protocol_compatible(
