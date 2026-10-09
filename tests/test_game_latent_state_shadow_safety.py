@@ -291,6 +291,61 @@ def test_containment_still_binds_a_branch_that_does_shadow_work(monkeypatch):
     ]
 
 
+def test_a_test_file_is_not_a_containment_offender(monkeypatch):
+    """Adding a test is not a production change, whatever the test is called.
+
+    The exemption has to stay exactly that narrow, so the same branch shape is
+    checked with a source module in place of the test: that one is still
+    reported, because source outside the lineage's namespaces is the part of
+    this check that was never redundant with the protected-path declaration.
+    """
+    from nba_prop_quant.research.game_latent_state import safety
+
+    shadow_work = "src/nba_prop_quant/research/game_latent_state/estimator.py"
+
+    monkeypatch.setattr(
+        safety,
+        "changed_paths",
+        lambda _: [shadow_work, "tests/test_incumbent_production_serving.py"],
+    )
+    assert safety.shadow_lineage_offenders(PROJECT) == []
+
+    monkeypatch.setattr(
+        safety,
+        "changed_paths",
+        lambda _: [shadow_work, "src/nba_prop_quant/settlement.py"],
+    )
+    assert safety.shadow_lineage_offenders(PROJECT) == [
+        "src/nba_prop_quant/settlement.py"
+    ]
+
+
+def test_the_test_exemption_cannot_reach_a_protected_path(monkeypatch):
+    """``tests/`` is exempt here because it is not a production surface.
+
+    If ``tests/`` were ever to become a protected prefix, the exemption would
+    be hiding production changes, so the two statements are checked against
+    each other rather than both being asserted from memory.
+    """
+    from nba_prop_quant.research.game_latent_state import safety
+
+    assert not safety.TEST_SURFACE_PREFIX.startswith(PROTECTED_PREFIXES)
+    assert safety.TEST_SURFACE_PREFIX not in PROTECTED_PREFIXES
+
+    monkeypatch.setattr(
+        safety,
+        "changed_paths",
+        lambda _: [
+            "src/nba_prop_quant/research/game_latent_state/estimator.py",
+            "ops/run_production_shadow.py",
+        ],
+    )
+    monkeypatch.setattr(safety, "DECLARED_INTEGRATION_PATHS", {})
+    assert safety.shadow_lineage_offenders(PROJECT) == [
+        "ops/run_production_shadow.py"
+    ]
+
+
 def test_declaring_a_path_does_not_make_a_branch_a_shadow_branch(monkeypatch):
     """safety.py declares containment; it is not part of what is contained.
 

@@ -30,6 +30,7 @@ from nba_prop_quant.research.game_latent_state import shadow_runtime as runtime
 from nba_prop_quant.research.game_latent_state.safety import (
     DECLARED_INTEGRATION_PATHS,
     SHADOW_OWNED_PRODUCTION_PATHS,
+    stale_integration_declarations,
 )
 from nba_prop_quant.research.game_latent_state.simulator import SUPPORTED_STATS
 
@@ -170,21 +171,36 @@ def invoke(shadow_ops, deployment, *extra: str) -> dict:
 
 
 def test_the_entry_point_is_an_owned_production_path():
-    """The entry point stays on the record after its declaration retires.
+    """The entry point stays on the record whether or not it is being changed.
 
-    It was declared while the deployment was pending and the declaration was
-    retired when it merged, because a declaration that outlives its change is
-    standing permission. What does not expire is that this file is part of the
-    shadow's production surface, so that is recorded separately and asserted
-    here.
+    Ownership and permission are two different questions, which is why they
+    are two mappings. Being on the owned registry is permanently true and buys
+    nothing: a branch that changes this file still needs a fresh declaration
+    and the review that comes with it. A declaration, when there is one, is
+    about one pending change and expires with it --
+    ``stale_integration_declarations`` is what enforces that, by requiring
+    every declared path to be a path the branch actually modifies.
+
+    So this asserts ownership unconditionally, and says nothing about whether
+    a declaration happens to exist right now. It used to assert there was
+    none, which read correctly on the branch that first deployed the shadow
+    and then made the file permanently unextendable: adding the realized
+    dependence reading the frozen policy's gates need a target for would have
+    had to choose between an undeclared change to a protected path and a
+    declaration this test forbade.
     """
     assert ENTRY_POINT.exists()
     assert ENTRY_POINT_RELATIVE in SHADOW_OWNED_PRODUCTION_PATHS
     assert SHADOW_OWNED_PRODUCTION_PATHS[ENTRY_POINT_RELATIVE].strip()
-    assert ENTRY_POINT_RELATIVE not in DECLARED_INTEGRATION_PATHS, (
-        "the entry point has landed in production, so it carries no pending "
-        "permission to be changed"
-    )
+
+    if ENTRY_POINT_RELATIVE in DECLARED_INTEGRATION_PATHS:
+        assert DECLARED_INTEGRATION_PATHS[ENTRY_POINT_RELATIVE].strip(), (
+            "an empty declaration is permission with no reason attached"
+        )
+        assert ENTRY_POINT_RELATIVE not in stale_integration_declarations(PROJECT), (
+            "the entry point is declared but this branch does not change it, "
+            "which is standing permission rather than a pending change"
+        )
 
 
 def test_the_deployment_is_pinned_to_the_frozen_final_model(shadow_ops):

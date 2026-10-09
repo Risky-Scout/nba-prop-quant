@@ -400,6 +400,8 @@ def run_shadow(
         build_provenance,
         evaluate_shadow_game,
         grade_shadow_log,
+        live_dependence_spaces,
+        observed_pair_moments,
         shadow_log_frame,
     )
     from nba_prop_quant.research.game_latent_state.simulator import SUPPORTED_STATS
@@ -502,6 +504,30 @@ def run_shadow(
             config=config,
             within_player=within,
         )
+        # The observed side of the dependence comparison. The simulated arms
+        # say what each model claims; without the realized reading there is no
+        # target for the frozen policy's two dependence RMSEs to be an error
+        # against. Recorded per game so the monitoring state can pool it by
+        # pair count, the way the held-out accumulator did.
+        if result.dependence and settled:
+            try:
+                observed = observed_pair_moments(
+                    observations,
+                    SUPPORTED_STATS,
+                    reference,
+                    seed=int(args.seed),
+                )
+                result.dependence.update(
+                    live_dependence_spaces(result.dependence, observed)
+                )
+            except Exception as error:  # noqa: BLE001
+                # A dependence reading is a diagnostic. Failing to take one
+                # must not cost the run its shadow rows, so it is recorded and
+                # the game continues.
+                result.dependence["observed_reading_error"] = (
+                    f"{type(error).__name__}: {error}"
+                )
+
         results.append(result)
         if result.fell_back:
             fallbacks.append(
