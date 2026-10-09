@@ -22,6 +22,8 @@ import sys
 from datetime import date
 from pathlib import Path
 
+import joblib
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -79,6 +81,8 @@ from nba_prop_quant.adaptive_training import (
     structured_values_are_finite,
     training_lock,
 )
+from nba_prop_quant.copula import GaussianCopula
+from nba_prop_quant.distributions import FittedMarginal, NegativeBinomialCalibrator
 
 
 PROJECT = Path(__file__).resolve().parents[1]
@@ -241,11 +245,46 @@ def registry(tmp_path) -> FitRegistry:
 # ----------------------------------------------------------------------
 
 
+def stub_marginals() -> dict[str, FittedMarginal]:
+    """One real fitted marginal per frozen target.
+
+    Real rather than a placeholder blob because the prediction smoke test
+    deserialises these and prices with them. A stub that wrote bytes nothing
+    could load would make the smoke test unexercised by the suite, which is the
+    defect this engine used to hide.
+    """
+    marginals: dict[str, FittedMarginal] = {}
+
+    for index, target in enumerate(sorted(FROZEN_MEAN_ROUTES)):
+        model = NegativeBinomialCalibrator()
+        model.size = 6.0 + index
+        marginals[target] = FittedMarginal(kind="nb", model=model)
+
+    return marginals
+
+
+def stub_copula() -> GaussianCopula:
+    """A real fitted copula with a PSD unit-diagonal correlation matrix."""
+    targets = sorted(FROZEN_MEAN_ROUTES)
+
+    size = len(targets)
+
+    correlation = np.full((size, size), 0.2, dtype=float)
+    np.fill_diagonal(correlation, 1.0)
+
+    copula = GaussianCopula(targets=list(targets))
+    copula.global_corr = correlation
+
+    return copula
+
+
 class StubFitEngine:
     """Writes tiny deterministic artifacts instead of fitting.
 
     Production and benchmark runs both use ProductionFitEngine; this exists
-    only so the orchestration can be tested without an hours-long fit.
+    only so the orchestration can be tested without an hours-long fit. The
+    serving objects it writes are genuinely loadable, because the computed
+    validation checks read them.
     """
 
     def __init__(self, project_root: Path, finite: bool = True) -> None:
@@ -285,12 +324,22 @@ class StubFitEngine:
     def fit_calibration(self, context) -> None:
         self._record("fit_calibration")
 
-        context.notes["calibration_hashes"] = {"points": "c" * 64}
+        # One digest per PROP-routed prop, which is what the real engine
+        # records: it hashes every entry it wrote into the calibration policy,
+        # and it writes an entry for every prop route. RAW routes acquire no
+        # fitted parameters and so acquire no digest.
+        context.notes["calibration_hashes"] = {
+            prop_type: hashlib.sha256(prop_type.encode("utf-8")).hexdigest()
+            for prop_type, route in sorted(FROZEN_CALIBRATION_ROUTES.items())
+            if route == "prop"
+        }
 
     def fit_gate3(self, context) -> None:
         self._record("fit_gate3")
 
-        context.notes["role_state_hash"] = "r" * 64
+        context.notes["role_state_hash"] = hashlib.sha256(
+            b"stub-role-state"
+        ).hexdigest()
 
     def assemble_candidate(self, context) -> None:
         self._record("assemble_candidate")
@@ -300,9 +349,8 @@ class StubFitEngine:
         (candidate / "models").mkdir(parents=True, exist_ok=True)
         (candidate / "provenance").mkdir(parents=True, exist_ok=True)
 
-        (candidate / "models" / "marginals.joblib").write_bytes(
-            b"zinb-fitted-parameters"
-        )
+        joblib.dump(stub_marginals(), candidate / "models" / "marginals.joblib")
+        joblib.dump(stub_copula(), candidate / "models" / "copula.joblib")
 
         payload = {
             "dependence_lambda": dict(FROZEN_DEPENDENCE_LAMBDA),
@@ -1211,6 +1259,75 @@ def test_step3c_records_only_checks_it_can_establish(
 
     assert deferred == {"gate3_role_readiness", "t20_protocol_compatible"}
     assert recorded.isdisjoint(deferred)
+
+
+def test_step3c_carries_the_computed_evidence_not_just_booleans(
+    data_root, work_root, registry
+):
+    result = fit(
+        data_root, work_root, registry=registry, mode=MODE_REGISTER_CANDIDATE
+    )
+
+    report = result["validation_report"]
+
+    assert report["passed"] is True
+    assert report["failed"] == []
+
+    answered = {check["name"]: check for check in report["checks"]}
+
+    assert set(answered) == set(REQUIRED_VALIDATION_CHECKS)
+
+    # Every answer has to say what it measured and what it measured against,
+    # which is the property a constant label could never have.
+    for check in answered.values():
+        assert check["contract"]
+        assert check["evidence"]
+
+    assert answered["prediction_smoke_test"]["values"]["priced_triples"] > 0
+
+
+class UnloadableMarginalsEngine(StubFitEngine):
+    """Writes serving marginals nothing can deserialise."""
+
+    def assemble_candidate(self, context) -> None:
+        super().assemble_candidate(context)
+
+        (
+            context.workspace.candidate / "models" / "marginals.joblib"
+        ).write_bytes(b"zinb-fitted-parameters")
+
+
+class DroppedCalibrationEngine(StubFitEngine):
+    """Loses the calibration digest for one PROP-routed prop."""
+
+    def fit_calibration(self, context) -> None:
+        super().fit_calibration(context)
+
+        context.notes["calibration_hashes"].pop("assists")
+
+
+@pytest.mark.parametrize(
+    "engine_class, expected",
+    [
+        (UnloadableMarginalsEngine, "prediction_smoke_test"),
+        (DroppedCalibrationEngine, "calibration_valid"),
+    ],
+)
+def test_a_broken_candidate_fails_the_fit_closed(
+    data_root, work_root, registry, engine_class, expected
+):
+    """A false check refuses the candidate; it does not register it anyway."""
+    with pytest.raises(CandidateIncomplete, match=expected):
+        fit(
+            data_root,
+            work_root,
+            registry=registry,
+            mode=MODE_REGISTER_CANDIDATE,
+            engine=engine_class(PROJECT),
+        )
+
+    assert registry.list_fits() == []
+    assert registry.current()["current_good_fit_id"] is None
 
 
 def test_deferred_checks_are_the_live_ones():

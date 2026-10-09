@@ -1,0 +1,95 @@
+name: Default branch guard
+
+# The reported check for the default branch.
+#
+# GitHub fires scheduled events only from the default branch, so `main` holds
+# the copy of nba_production_lifecycle.yml that starts every production run.
+# Nothing ever checked it: main carried no workflow triggered by a push to
+# main or by a pull request into main, so a retimed cron, a dropped step, a
+# redirected checkout ref or an enabled publishing switch would have landed
+# on the branch GitHub schedules from with no check reporting at all.
+#
+# This runs ops/validate_main_scheduler_role.py, which validates main's actual
+# role rather than pretending main can run the production suite. Main does not
+# contain the production tree, and a suite that cannot run is not a check;
+# copying the production application lineage onto the default branch to make
+# one possible would invert the arrangement the repository is built around.
+#
+# It lives on both branches and runs identically from either, which is what
+# makes the byte-identity half of the check symmetric. It trains nothing,
+# serves nothing, promotes nothing and publishes nothing.
+
+on:
+  push:
+    branches:
+      - main
+      - production/wizardofodds-integration
+  pull_request:
+    branches:
+      - main
+      - production/wizardofodds-integration
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: default-branch-guard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scheduler-role:
+    name: Validate the default-branch scheduler role
+    # GitHub-hosted on purpose. This job reads branch contents and may run
+    # pull-request code, so it must never land on the self-hosted runner that
+    # holds production state.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out the branch under test
+        uses: actions/checkout@v4
+        with:
+          # Full history: the validator reads the authoritative lifecycle copy
+          # out of the production ref with `git show`, which a shallow clone
+          # cannot resolve.
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install the validator's only dependency
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install 'pyyaml>=6'
+
+      - name: Fetch the authoritative production ref
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin production/wizardofodds-integration
+
+      - name: Validate the scheduler role
+        run: |
+          set -euo pipefail
+          # The branch whose contents are under test. For a pull request that
+          # is the base branch, because the merge result is what would become
+          # that branch.
+          BRANCH="${{ github.base_ref || github.ref_name }}"
+          echo "Branch under test: $BRANCH"
+          python ops/validate_main_scheduler_role.py \
+            --branch "$BRANCH" \
+            --production-ref origin/production/wizardofodds-integration \
+            --report-path "$RUNNER_TEMP/scheduler_role.json" \
+            --summary-path "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: default-branch-guard-${{ github.run_id }}
+          path: ${{ runner.temp }}/scheduler_role.json
+          retention-days: 14
+          if-no-files-found: warn

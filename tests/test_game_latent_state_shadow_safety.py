@@ -33,10 +33,14 @@ from nba_prop_quant.research.game_latent_state.safety import (
     DECLARED_INTEGRATION_PATHS,
     PRODUCTION_REF,
     PROTECTED_PRODUCTION_PREFIXES,
+    PATH_DECLARATION_MODULE as DECLARATION_MODULE,
     PROTECTED_PRODUCTION_SOURCES,
     SHADOW_OWNED_PRODUCTION_PATHS,
+    UNDECLARABLE_PRODUCTION_SOURCES,
     modified_production_paths,
     production_merge_base,
+    serving_reachable_sources,
+    shadow_lineage_offenders,
     stale_integration_declarations,
     undeclared_production_paths,
 )
@@ -59,7 +63,9 @@ PROTECTED_SOURCE_FILES = PROTECTED_PRODUCTION_SOURCES
 #: ``safety.py`` is the module that *declares* the protected production paths,
 #: so it necessarily contains those path literals. They are a read-only guard
 #: list, not write targets, which is why the literal scan below skips it.
-PATH_DECLARATION_MODULE = "safety.py"
+#: Imported rather than restated, because the containment scoping skips it for
+#: the same reason and the two must not disagree about which module this is.
+PATH_DECLARATION_MODULE = DECLARATION_MODULE
 
 
 def git(*args: str) -> str:
@@ -139,9 +145,9 @@ def test_the_declared_integration_surface_cannot_reach_the_served_model():
                 f"{path} is a model, config, production script or release path and "
                 "may not be declared or owned"
             )
-            assert path not in PROTECTED_PRODUCTION_SOURCES, (
-                f"{path} is a protected production source module and may not be "
-                "declared or owned"
+            assert path not in UNDECLARABLE_PRODUCTION_SOURCES, (
+                f"{path} is a production source the serving path reads and may "
+                "not be declared or owned"
             )
             assert mapping[path].strip(), f"{path} is listed without a reason"
 
@@ -258,17 +264,82 @@ def test_promotion_state_files_are_not_introduced_or_changed():
 
 
 def test_shadow_changes_live_only_in_research_test_and_declared_namespaces():
-    allowed = (
-        "research/",
-        "src/nba_prop_quant/research/",
-        "tests/test_game_latent_state_shadow",
+    assert shadow_lineage_offenders(PROJECT) == []
+
+
+def test_containment_still_binds_a_branch_that_does_shadow_work(monkeypatch):
+    """The skip for non-shadow branches cannot become a general escape.
+
+    Containment is scoped to branches that touch the shadow lineage, so the
+    thing worth pinning is that it still bites when one does: a change inside
+    the shadow namespace plus a change outside it is the exact shape the guard
+    exists to catch.
+    """
+    from nba_prop_quant.research.game_latent_state import safety
+
+    monkeypatch.setattr(
+        safety,
+        "changed_paths",
+        lambda _: [
+            "src/nba_prop_quant/research/game_latent_state/estimator.py",
+            "src/nba_prop_quant/copula.py",
+        ],
     )
-    offenders = [
-        path
-        for path in changed_paths()
-        if not path.startswith(allowed) and path not in DECLARED_INTEGRATION_PATHS
+
+    assert safety.shadow_lineage_offenders(PROJECT) == [
+        "src/nba_prop_quant/copula.py"
     ]
-    assert offenders == [], f"unexpected paths on the shadow branch: {offenders}"
+
+
+def test_declaring_a_path_does_not_make_a_branch_a_shadow_branch(monkeypatch):
+    """safety.py declares containment; it is not part of what is contained.
+
+    Every branch that touches a protected path has to edit this module to
+    declare it. Counting that edit as shadow work would make the act of
+    declaring turn an unrelated branch into a shadow branch, which is the one
+    change such a branch cannot avoid making.
+    """
+    from nba_prop_quant.research.game_latent_state import safety
+
+    monkeypatch.setattr(
+        safety,
+        "changed_paths",
+        lambda _: [
+            f"src/nba_prop_quant/research/game_latent_state/{DECLARATION_MODULE}",
+            "ops/some_new_production_script.py",
+        ],
+    )
+
+    assert safety.shadow_lineage_offenders(PROJECT) == []
+
+
+def test_the_undeclarable_core_is_what_the_serving_path_can_reach():
+    """The served model is undeclarable by computation, not by memory.
+
+    ``UNDECLARABLE_PRODUCTION_SOURCES`` is narrower than the full protected
+    set, so the only thing standing between a declaration and the served model
+    is this equality. Deriving the right-hand side from the serving scripts'
+    own import graph means a new serving import removes a module's
+    declarability rather than silently leaving it declarable.
+    """
+    assert UNDECLARABLE_PRODUCTION_SOURCES == serving_reachable_sources(PROJECT)
+
+    for relative in (
+        "src/nba_prop_quant/copula.py",
+        "src/nba_prop_quant/distributions.py",
+        "src/nba_prop_quant/model.py",
+        "src/nba_prop_quant/pricing.py",
+    ):
+        assert relative in UNDECLARABLE_PRODUCTION_SOURCES
+
+    assert serving_reachable_sources(PROJECT) <= PROTECTED_PRODUCTION_SOURCES
+
+    # The protected set is the serving closure plus the fit orchestration, and
+    # the difference is exactly what a declaration may name.
+    assert PROTECTED_PRODUCTION_SOURCES - UNDECLARABLE_PRODUCTION_SOURCES == {
+        "src/nba_prop_quant/adaptive_fit_registry.py",
+        "src/nba_prop_quant/adaptive_training.py",
+    }
 
 
 # ----------------------------------------------------------------------
