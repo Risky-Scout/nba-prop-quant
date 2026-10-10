@@ -142,37 +142,77 @@ def _payloads() -> dict[str, bytes]:
     return payloads
 
 
-def _manifest_bytes(payloads: dict[str, bytes]) -> bytes:
-    """A frozen manifest over those artifacts, plus the freeze's provenance.
+#: The non-model groups the frozen manifest also records, and the frozen
+#: package also carries: the 2025 audit outputs, the four source files whose
+#: approved drifts the freeze pinned, the two serving scripts and the config.
+#:
+#: Carried here with real hashes because the real package carries them with
+#: real hashes, and because the serving scripts verify every group. A fixture
+#: whose package held only the model tree described a package that does not
+#: exist, and it is what made the production failure invisible: the belief
+#: under test was "serving does not resolve these", and serving resolves all
+#: sixty-two.
+FROZEN_PROJECT_EXTRAS: tuple[str, ...] = (
+    *AUDIT_ONLY_DATA_FILES,
+    "src/nba_prop_quant/production.py",
+    "src/nba_prop_quant/slate.py",
+    "scripts/10_predict_slate.py",
+    "scripts/15_price_markets.py",
+    "configs/production.yaml",
+)
 
-    The ``source_files`` and ``data_audit_files`` groups carry hashes nothing
-    in the runtime root can satisfy, deliberately: they are what the real
-    manifest also carries, and the serving verification must not treat them as
-    runtime prerequisites.
+#: Which manifest group each extra is recorded under.
+_EXTRA_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("data_audit_files", AUDIT_ONLY_DATA_FILES),
+    (
+        "source_files",
+        ("src/nba_prop_quant/production.py", "src/nba_prop_quant/slate.py"),
+    ),
+    ("scripts", ("scripts/10_predict_slate.py", "scripts/15_price_markets.py")),
+    ("configs", ("configs/production.yaml",)),
+)
+
+
+def _project_payloads() -> dict[str, bytes]:
+    """The whole frozen project tree a package carries, bundle-relative."""
+    tree = {
+        f"{installer.MODEL_PREFIX}/{name}": payload
+        for name, payload in _payloads().items()
+    }
+
+    tree.update(
+        {relative: f"frozen-{relative}".encode("utf-8") for relative in FROZEN_PROJECT_EXTRAS}
+    )
+
+    return tree
+
+
+def _manifest_bytes(tree: dict[str, bytes]) -> bytes:
+    """A frozen manifest over the whole frozen project tree.
+
+    Every group carries the hash of a file the package really holds, so the
+    manifest verifies against an installed bundle and does not verify against
+    a checkout -- which is the real manifest's behaviour and the distinction
+    the serving root exists to make.
     """
+    groups: dict[str, list[dict[str, str]]] = {
+        "model_artifacts": [
+            {"path": relative, "sha256": sha256_bytes(payload)}
+            for relative, payload in sorted(tree.items())
+            if relative.startswith(f"{installer.MODEL_PREFIX}/")
+        ]
+    }
+
+    for group, members in _EXTRA_GROUPS:
+        groups[group] = [
+            {"path": relative, "sha256": sha256_bytes(tree[relative])}
+            for relative in members
+            if relative in tree
+        ]
+
     manifest = {
         "created_utc": "2026-10-09T00:00:00+00:00",
-        "files": {
-            "data_audit_files": [
-                {"path": relative, "sha256": "a" * 64}
-                for relative in AUDIT_ONLY_DATA_FILES
-            ],
-            "model_artifacts": [
-                {
-                    "path": f"{installer.MODEL_PREFIX}/{name}",
-                    "sha256": sha256_bytes(payload),
-                }
-                for name, payload in sorted(payloads.items())
-            ],
-            "source_files": [
-                {"path": "src/nba_prop_quant/production.py", "sha256": "b" * 64},
-                {"path": "src/nba_prop_quant/slate.py", "sha256": "c" * 64},
-            ],
-            "scripts": [
-                {"path": "scripts/10_predict_slate.py", "sha256": "d" * 64},
-                {"path": "scripts/15_price_markets.py", "sha256": "e" * 64},
-            ],
-        },
+        "files": groups,
         "freeze_id": FREEZE_ID,
         "freeze_stage": installer.REQUIRED_FREEZE_STAGE,
     }
@@ -190,11 +230,12 @@ def frozen_release(tmp_path: Path):
         *,
         omit: str | None = None,
         corrupt: str | None = None,
+        drop: str | None = None,
         label: str = "release",
     ) -> dict[str, Path]:
-        payloads = _payloads()
+        tree = _project_payloads()
 
-        manifest_bytes = _manifest_bytes(payloads)
+        manifest_bytes = _manifest_bytes(tree)
 
         root = tmp_path / label
 
@@ -215,24 +256,25 @@ def frozen_release(tmp_path: Path):
         checkout_manifest.write_bytes(manifest_bytes)
 
         if omit is not None:
-            payloads.pop(omit)
+            tree.pop(f"{installer.MODEL_PREFIX}/{omit}")
 
         if corrupt is not None:
-            payloads[corrupt] = b"tampered"
+            tree[f"{installer.MODEL_PREFIX}/{corrupt}"] = b"tampered"
+
+        if drop is not None:
+            tree.pop(drop)
 
         package = root / f"{PACKAGE_NAME}.zip"
 
-        prefix = (
-            f"{PACKAGE_NAME}/{installer.PACKAGE_PROJECT_PREFIX}/"
-            f"{installer.MODEL_PREFIX}"
-        )
+        prefix = f"{PACKAGE_NAME}/{installer.PACKAGE_PROJECT_PREFIX}"
 
         with zipfile.ZipFile(package, "w", zipfile.ZIP_DEFLATED) as archive:
-            for name, payload in sorted(payloads.items()):
-                archive.writestr(f"{prefix}/{name}", payload)
+            for relative, payload in sorted(tree.items()):
+                archive.writestr(f"{prefix}/{relative}", payload)
 
             archive.writestr(
-                f"{prefix}/{installer.MANIFEST_RELATIVE.as_posix()}",
+                f"{prefix}/{installer.MODEL_PREFIX}/"
+                f"{installer.MANIFEST_RELATIVE.as_posix()}",
                 manifest_bytes,
             )
 
@@ -755,22 +797,34 @@ def _preseason_refresh(tmp_path: Path) -> Path:
 def test_incumbent_serving_receives_the_explicit_verified_model_dir(
     tmp_path: Path, project: Path, frozen_release
 ):
-    """No implicit default, and the receipt names the bundle it verified."""
-    with pytest.raises(SystemExit):
-        serving.parse_args(
-            [
-                "--slate-date",
-                "2026-11-15",
-                "--data-root",
-                str(tmp_path / "data"),
-            ]
-        )
+    """No implicit default, and the receipt names the bundle it verified.
 
+    Both roots are required, and neither defaults to the checkout. A default
+    for either one is the defect this pair of arguments exists to remove.
+    """
     release = frozen_release()
 
     receipt = install(release)
 
     model_dir = Path(receipt["model_dir"])
+
+    bundle_root = Path(receipt["bundle_root"])
+
+    for incomplete in (
+        [],
+        ["--model-dir", str(model_dir)],
+        ["--frozen-bundle-root", str(bundle_root)],
+    ):
+        with pytest.raises(SystemExit):
+            serving.parse_args(
+                [
+                    "--slate-date",
+                    "2026-11-15",
+                    "--data-root",
+                    str(tmp_path / "data"),
+                    *incomplete,
+                ]
+            )
 
     served = serving.run(
         serving.parse_args(
@@ -781,6 +835,8 @@ def test_incumbent_serving_receives_the_explicit_verified_model_dir(
                 str(tmp_path / "data"),
                 "--model-dir",
                 str(model_dir),
+                "--frozen-bundle-root",
+                str(bundle_root),
                 "--project-root",
                 str(project),
                 "--registry-root",
@@ -792,9 +848,11 @@ def test_incumbent_serving_receives_the_explicit_verified_model_dir(
     )
 
     assert served["serving_model_dir"] == str(model_dir)
+    assert served["serving_bundle_root"] == str(bundle_root)
     assert served["incumbent_version"] == FREEZE_ID
     assert served["model_authority"] == serving.MODEL_AUTHORITY
     assert project not in model_dir.parents
+    assert project not in bundle_root.parents
 
     step = _lifecycle_step(SERVING_STEP_NAME)
 
@@ -823,7 +881,11 @@ def test_an_unpromoted_candidate_is_still_never_the_incumbent(
     """The authority property the new model directory must not loosen."""
     release = frozen_release()
 
-    model_dir = Path(install(release)["model_dir"])
+    receipt = install(release)
+
+    model_dir = Path(receipt["model_dir"])
+
+    bundle_root = Path(receipt["bundle_root"])
 
     registry = FitRegistry(root=tmp_path / "registry", project_root=project)
 
@@ -865,7 +927,7 @@ def test_an_unpromoted_candidate_is_still_never_the_incumbent(
     )
 
     incumbent = serving.resolve_incumbent(
-        registry=registry, model_dir=model_dir
+        registry=registry, model_dir=model_dir, bundle_root=bundle_root
     )
 
     assert incumbent["authority"] == serving.AUTHORITY_FROZEN_BUNDLE
@@ -880,11 +942,19 @@ def test_an_unpromoted_candidate_is_still_never_the_incumbent(
 
 
 def test_the_audit_only_data_files_do_not_block_serving(frozen_release):
-    """They are provenance for the freeze, not inputs to tonight's slate.
+    """Nothing serving reads them, and the bundle still has to carry them.
 
-    Their hashes stay in the frozen manifest and are not removed; the serving
-    verification simply does not resolve them, because no serving entry point
-    or module in its import closure reads them.
+    Both halves matter, and conflating them is what broke production. No
+    serving entry point or module in its import closure reads these six files,
+    so they are provenance rather than inputs -- but the frozen manifest
+    records them, and the verifier the serving scripts run resolves every
+    group it records. "Serving does not read it" was taken to mean "serving
+    does not need it", and the first non-empty slate would have failed on the
+    difference.
+
+    So the bundle carries them, their hashes stay in the manifest unchanged,
+    and the checkout still cannot satisfy them. That last fact is the whole
+    reason the resolution root has to be the bundle.
     """
     recorded = {
         record["path"]
@@ -909,17 +979,25 @@ def test_the_audit_only_data_files_do_not_block_serving(frozen_release):
 
     for relative in AUDIT_ONLY_DATA_FILES:
         assert Path(relative).name not in sources, relative
+        assert not (REPO / relative).exists(), (
+            f"{relative} is a generated audit output absent from the "
+            "checkout; a checkout carrying it is not the case under test"
+        )
 
     release = frozen_release()
 
     receipt = install(release)
 
+    bundle_root = Path(receipt["bundle_root"])
+
     for relative in AUDIT_ONLY_DATA_FILES:
-        assert not (release["runtime_root"] / relative).exists()
+        assert (bundle_root / relative).exists(), relative
 
     metadata = installer.verify_runtime_model_artifacts(receipt["model_dir"])
 
     assert metadata["verified_artifacts"] == len(_payloads())
+
+    assert receipt["verified_manifest_entries"] == len(_project_payloads())
 
 
 # ----------------------------------------------------------------------
