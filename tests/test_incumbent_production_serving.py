@@ -319,7 +319,7 @@ def test_the_frozen_bundle_is_the_incumbent_before_any_promotion(
     model_dir = serving_tree(project, artifacts={"marginals.joblib": b"frozen"})
 
     incumbent = serving.resolve_incumbent(
-        registry=registry, model_dir=model_dir, project_root=project
+        registry=registry, model_dir=model_dir
     )
 
     assert incumbent["authority"] == serving.AUTHORITY_FROZEN_BUNDLE
@@ -344,7 +344,7 @@ def test_a_registered_but_unpromoted_candidate_is_never_the_incumbent(
     assert registry.current()["current_good_fit_id"] is None
 
     incumbent = serving.resolve_incumbent(
-        registry=registry, model_dir=model_dir, project_root=project
+        registry=registry, model_dir=model_dir
     )
 
     assert incumbent["fit_id"] is None
@@ -377,7 +377,7 @@ def test_the_newest_fit_is_not_the_incumbent(
     )
 
     incumbent = serving.resolve_incumbent(
-        registry=registry, model_dir=model_dir, project_root=project
+        registry=registry, model_dir=model_dir
     )
 
     assert incumbent["authority"] == serving.AUTHORITY_PROMOTED_FIT
@@ -405,7 +405,7 @@ def test_a_promoted_fit_must_actually_be_what_the_bundle_holds(
 
     with pytest.raises(serving.ServingRefused) as caught:
         serving.resolve_incumbent(
-            registry=registry, model_dir=model_dir, project_root=project
+            registry=registry, model_dir=model_dir
         )
 
     assert "has not been sealed" in str(caught.value)
@@ -436,7 +436,7 @@ def test_a_corrupt_promoted_fit_refuses_rather_than_substituting(
 
     with pytest.raises(serving.ServingRefused) as caught:
         serving.resolve_incumbent(
-            registry=registry, model_dir=model_dir, project_root=project
+            registry=registry, model_dir=model_dir
         )
 
     assert "did not verify" in str(caught.value)
@@ -451,7 +451,6 @@ def test_a_missing_incumbent_fails_closed(
         serving.resolve_incumbent(
             registry=registry,
             model_dir=project / "models",
-            project_root=project,
         )
 
 
@@ -465,7 +464,7 @@ def test_a_corrupt_serving_bundle_fails_closed(
 
     with pytest.raises(RuntimeError, match="manifest verification failed"):
         serving.resolve_incumbent(
-            registry=registry, model_dir=model_dir, project_root=project
+            registry=registry, model_dir=model_dir
         )
 
 
@@ -583,7 +582,7 @@ def test_an_incomplete_receipt_is_a_failure_not_a_thinner_record(
         slate_date="2026-11-15",
         production_sha=None,
         incumbent=serving.resolve_incumbent(
-            registry=registry, model_dir=model_dir, project_root=project
+            registry=registry, model_dir=model_dir
         ),
         readiness={"ready": True, "reason": "", "refresh_outcome": "REFRESHED"},
         fingerprint=None,
@@ -785,7 +784,7 @@ def test_an_unspecified_registry_root_is_a_refusal(
     """Serving without the promotion state would be serving without authority."""
     monkeypatch.delenv("NBA_PROP_FIT_REGISTRY_DIR", raising=False)
 
-    serving_tree(project, artifacts={"marginals.joblib": b"frozen"})
+    model_dir = serving_tree(project, artifacts={"marginals.joblib": b"frozen"})
 
     code = serving.main(
         [
@@ -793,6 +792,8 @@ def test_an_unspecified_registry_root_is_a_refusal(
             "2026-11-15",
             "--data-root",
             str(tmp_path / "data"),
+            "--model-dir",
+            str(model_dir),
             "--project-root",
             str(project),
             "--refresh-status",
