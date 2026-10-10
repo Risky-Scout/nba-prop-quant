@@ -125,6 +125,59 @@ def production_base() -> str | None:
     return None
 
 
+SLATE_MODULE = "src/nba_prop_quant/slate.py"
+
+#: The function whose presence in the production base means the fix has landed.
+FIX_MARKER_FUNCTION = "canonical_season_progress"
+
+#: The production head this fix branched from, and the one it landed in. Named
+#: so the guard below can be checked against both states rather than trusted.
+PRE_FIX_PRODUCTION_COMMIT = "536615e58bb7f2f2b61afdac4baffeb817f28644"
+POST_FIX_PRODUCTION_COMMIT = "b0e8b490886d0ebb08751fd53bb9dc5e5eb88ee8"
+
+
+def pre_fix_slate_source() -> str:
+    """The slate module as it was before this fix, or skip.
+
+    Everything differential in this file is measured against the production
+    merge base, which exists only while the fix has not landed. Once it has,
+    the base carries the fix too and "the pre-fix builder" is the post-fix
+    builder under another name: a test asserting the two differ is then
+    asserting something false about a correct tree rather than catching
+    anything.
+
+    The condition is whether the base already defines the fix, not whether
+    the file changed. Those differ on the branch that matters -- the next one
+    to touch this module for an unrelated reason -- where the file differs
+    from a base that already has the fix, and comparing them would measure
+    that branch's change against this fix's expectations and fail for a
+    reason that is nothing to do with either.
+
+    The absolute tests here, live against training, do not come through this
+    and keep running forever. They are the ones worth keeping.
+    """
+    base = production_base()
+
+    if base is None:
+        pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
+
+    before = blob_text(base, SLATE_MODULE)
+
+    landed = {
+        node.name
+        for node in ast.parse(before).body
+        if isinstance(node, ast.FunctionDef)
+    }
+
+    if FIX_MARKER_FUNCTION in landed:
+        pytest.skip(
+            "production already carries this fix, so there is no pre-fix "
+            "state left to compare against"
+        )
+
+    return before
+
+
 @pytest.fixture(scope="module")
 def pre_fix_builder():
     """``build_upcoming_slate_features`` as production has it today.
@@ -135,12 +188,7 @@ def pre_fix_builder():
     resolve against the real ``nba_prop_quant``: it is the same slate module,
     reading the same features, classifier and priors.
     """
-    base = production_base()
-
-    if base is None:
-        pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
-
-    source = git("show", f"{base}:src/nba_prop_quant/slate.py")
+    source = pre_fix_slate_source()
 
     path = Path(tempfile.mkdtemp()) / "production_slate.py"
     path.write_text(source, encoding="utf-8")
@@ -152,6 +200,30 @@ def pre_fix_builder():
     spec.loader.exec_module(module)
 
     return module.build_upcoming_slate_features
+
+
+def test_the_guard_tells_the_pre_fix_state_from_the_post_fix_one():
+    """The skip condition is checked against both states, not assumed.
+
+    A guard that silently always skipped would make every differential test
+    in this file vacuous, which is the failure mode worth one test of its own.
+    The two commits are the production head this fix branched from and the one
+    it landed in.
+    """
+    def defines_the_fix(ref: str) -> bool:
+        try:
+            source = blob_text(ref, SLATE_MODULE)
+        except subprocess.CalledProcessError:
+            pytest.skip(f"{ref} is not available in this checkout")
+
+        return FIX_MARKER_FUNCTION in {
+            node.name
+            for node in ast.parse(source).body
+            if isinstance(node, ast.FunctionDef)
+        }
+
+    assert not defines_the_fix(PRE_FIX_PRODUCTION_COMMIT)
+    assert defines_the_fix(POST_FIX_PRODUCTION_COMMIT)
 
 
 @pytest.fixture(scope="module")
@@ -1115,22 +1187,17 @@ def test_the_slate_module_only_gained_the_season_progress_path():
     the builder may differ, and the two functions this change adds are new
     rather than edits.
     """
-    base = production_base()
+    source = pre_fix_slate_source()
 
-    if base is None:
-        pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
-
-    relative = "src/nba_prop_quant/slate.py"
-
-    def functions(source: str) -> dict[str, ast.FunctionDef]:
+    def functions(text: str) -> dict[str, ast.FunctionDef]:
         return {
             node.name: node
-            for node in ast.parse(source).body
+            for node in ast.parse(text).body
             if isinstance(node, ast.FunctionDef)
         }
 
-    before = functions(git("show", f"{base}:{relative}"))
-    after = functions((PROJECT / relative).read_text(encoding="utf-8"))
+    before = functions(source)
+    after = functions((PROJECT / SLATE_MODULE).read_text(encoding="utf-8"))
 
     assert set(before) <= set(after)
 

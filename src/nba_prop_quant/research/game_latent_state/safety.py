@@ -298,43 +298,15 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: than introduced. The live-slate game-flag fix's four entries went the same
 #: way when they landed -- the slate module, the prediction entry point and
 #: both registries, all pre-existing and so all recorded nowhere -- which is
-#: why this branch declares the slate module and both registries again, and
-#: declares nothing for the prediction entry point, which it does not change.
-DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
-    {
-        "src/nba_prop_quant/slate.py": (
-            "the live builder set season_progress to a team's distinct "
-            "box-score games over a hard-coded 82. Training takes it from "
-            "classify_games' home_season_progress / visitor_season_progress, "
-            "which build_base_frame picks between by is_home, so the fitted "
-            "models were served a different number from the one they were fit "
-            "on for any team that has played a Cup Championship, a Play-In "
-            "game or a playoff game. It now reads those two columns off the "
-            "same classifier the flags already come from. Declared under the "
-            "additive-only rule for a serving source: every line production "
-            "has is still present -- including the expression that becomes "
-            "training's own fallback -- build_upcoming_slate_features is the "
-            "one existing function whose body differs, every other function "
-            "is syntax-tree-identical to production, the two functions added "
-            "are new, and game_context.py and features.py are both untouched, "
-            "so the definition being reproduced is production's own"
-        ),
-        "models/frozen_manifests/"
-        "nba_prop_quant_v2_adaptive_serving_source_contract.json": (
-            "relocks slate.py's current_sha256 after the additive change "
-            "above and enumerates the divergence, which is what this contract "
-            "exists to require. No locked file dropped, no "
-            "historical_reference_sha256 rewritten, no fitted artifact and no "
-            "freeze manifest touched"
-        ),
-        "models/frozen_manifests/"
-        "nba_prop_quant_v2_adaptive_update_protocol.json": (
-            "carries the serving source contract's whole-file hash, so "
-            "relocking the contract moves this one line with it. Nothing else "
-            "in the protocol changes"
-        ),
-    }
-)
+#: why the season-progress parity fix declared the slate module and both
+#: registries again, and declared nothing for the prediction entry point,
+#: which it did not change. Those three entries were retired in turn when
+#: they landed, and are recorded nowhere for the same reason: all three are
+#: pre-existing production files this lineage changed rather than introduced,
+#: so touching any of them again requires declaring it again. This branch
+#: changes only ``tests/``, which is not a protected prefix, so the resting
+#: state is the correct content.
+DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType({})
 
 #: Protected paths this lineage introduced into production and now owns.
 #:
