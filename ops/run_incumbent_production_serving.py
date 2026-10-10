@@ -47,6 +47,19 @@ and names the verified runtime bundle
 ``ops/install_frozen_model_artifacts.py`` installed, which is what makes the
 frozen artifacts both present and checkable.
 
+So is the root the frozen manifest is resolved against. The two serving
+scripts verify all 62 of its records before loading a model, and they used to
+resolve them against the working directory -- so a verified model directory
+got them past nothing: the six 2025 audit outputs are generated artifacts
+absent from Git for the same reason the binaries are, and four of the source
+records are already-approved production drifts. Handing the scripts a verified
+model directory and leaving them to verify it against a checkout meant the
+first non-empty slate failed inside ``10_predict_slate.py`` even though the
+bundle had installed perfectly. ``--frozen-bundle-root`` is therefore required
+too, and it names the installed bundle, where all 62 records resolve to
+exactly the bytes the freeze recorded. It is a verification root only: the
+code that runs is the production checkout's.
+
 FAILING CLOSED
 --------------
 
@@ -108,6 +121,7 @@ from nba_prop_quant.adaptive_fit_registry import (  # noqa: E402
 )
 
 from install_frozen_model_artifacts import (  # noqa: E402
+    verify_frozen_bundle,
     verify_runtime_model_artifacts,
 )
 
@@ -187,27 +201,42 @@ def _load_json(path: Path) -> Any:
 # ----------------------------------------------------------------------
 
 
-def _bundle_identity(model_dir: Path) -> dict[str, str]:
+def _bundle_identity(model_dir: Path, bundle_root: Path) -> dict[str, str]:
     """The frozen bundle's own verified identity.
 
-    ``verify_runtime_model_artifacts`` re-hashes every runtime model artifact
-    the manifest names, resolved inside the serving model directory, so this
-    is a verification and not a read. A corrupt or incomplete serving tree
-    raises here, which is the fail-closed behaviour: production must not price
-    from artifacts that do not match their manifest.
+    Two verifications, because the serving path depends on two different
+    things being true. ``verify_runtime_model_artifacts`` re-hashes every
+    runtime model artifact the manifest names, resolved inside the serving
+    model directory: that is what the scripts will actually load.
+    ``verify_frozen_bundle`` runs the repository's own whole-manifest verifier
+    against the bundle root, which is the exact check the two serving scripts
+    perform before they load anything -- so a bundle they would reject fails
+    here, in the caller, rather than a third of the way through a slate.
 
-    Resolved inside the model directory rather than against the checkout,
-    because the model binaries are distributed as a release asset and ignored
-    in Git by design, so a checkout has never held them and never will. The
-    bundle they are installed into is what carries them, and it is handed to
+    Both are resolved inside the installed bundle rather than against the
+    checkout. The model binaries and the 2025 audit outputs are distributed as
+    a release asset and ignored in Git by design, so a checkout has never held
+    them and never will. The bundle is what carries them, and it is handed to
     this step explicitly.
     """
     metadata = verify_runtime_model_artifacts(model_dir)
 
+    whole = verify_frozen_bundle(bundle_root)
+
+    if str(whole["freeze_id"]) != str(metadata["freeze_id"]):
+        raise ServingRefused(
+            f"the model directory {model_dir} belongs to freeze "
+            f"{metadata['freeze_id']} but the manifest resolution root "
+            f"{bundle_root} belongs to {whole['freeze_id']}, so they are not "
+            "the same frozen bundle and neither may serve"
+        )
+
     return {
+        "bundle_root": str(bundle_root),
         "freeze_id": str(metadata["freeze_id"]),
         "freeze_stage": str(metadata["freeze_stage"]),
         "manifest_sha256": str(metadata["manifest_sha256"]),
+        "verified_manifest_entries": int(whole["verified_manifest_entries"]),
     }
 
 
@@ -247,6 +276,7 @@ def resolve_incumbent(
     *,
     registry: FitRegistry,
     model_dir: Path,
+    bundle_root: Path,
 ) -> dict[str, Any]:
     """Resolve the authority this run is allowed to serve from.
 
@@ -265,11 +295,12 @@ def resolve_incumbent(
 
     fit_id = state.get("current_good_fit_id")
 
-    bundle = _bundle_identity(model_dir)
+    bundle = _bundle_identity(model_dir, bundle_root)
 
     if fit_id is None:
         return {
             "authority": AUTHORITY_FROZEN_BUNDLE,
+            "bundle_root": str(bundle_root),
             "fit_id": None,
             "frozen_bundle": bundle,
             "model_dir": str(model_dir),
@@ -310,6 +341,7 @@ def resolve_incumbent(
 
     return {
         "authority": AUTHORITY_PROMOTED_FIT,
+        "bundle_root": str(bundle_root),
         "fit_id": fit_id,
         "frozen_bundle": bundle,
         "model_dir": str(model_dir),
@@ -451,7 +483,15 @@ def serve(
     """
     model_dir = Path(incumbent["model_dir"])
 
+    bundle_root = Path(incumbent["bundle_root"])
+
     environment = _serving_environment(model_dir, data_root)
+
+    # Both scripts verify the frozen manifest before they load anything, and
+    # both resolve its 62 records against this root. Passed explicitly so the
+    # root is the bundle the incumbent was resolved from rather than whatever
+    # directory the process happens to have been started in.
+    frozen_root = ["--frozen-bundle-root", str(bundle_root)]
 
     projection_path = (
         Path(data_root) / PROJECTIONS_RELATIVE / f"{slate_date}.parquet"
@@ -463,7 +503,12 @@ def serve(
 
     prediction = _run(
         PREDICT_SCRIPT,
-        ["--date", slate_date, *(predict_arguments or [])],
+        [
+            "--date",
+            slate_date,
+            *frozen_root,
+            *(predict_arguments or []),
+        ],
         project_root=project_root,
         environment=environment,
     )
@@ -487,7 +532,12 @@ def serve(
 
     pricing = _run(
         PRICE_SCRIPT,
-        ["--date", slate_date, *(price_arguments or [])],
+        [
+            "--date",
+            slate_date,
+            *frozen_root,
+            *(price_arguments or []),
+        ],
         project_root=project_root,
         environment=environment,
     )
@@ -543,6 +593,7 @@ def build_receipt(
         "production_code_sha": production_sha,
         "promoted_at": incumbent["promoted_at"],
         "reason": served["reason"],
+        "serving_bundle_root": incumbent["bundle_root"],
         "serving_model_dir": incumbent["model_dir"],
         "slate_date": slate_date,
         "slate_readiness": readiness,
@@ -640,6 +691,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "the directory this is given.",
     )
     parser.add_argument(
+        "--frozen-bundle-root",
+        type=Path,
+        required=True,
+        help="the verified frozen runtime bundle's root, which the frozen "
+        "manifest's 62 records are resolved against. Required, and "
+        "deliberately not defaulted to the checkout: the frozen model "
+        "binaries and the 2025 audit outputs are ignored in Git by design, so "
+        "a checkout can satisfy neither group and the two serving scripts "
+        "verify all five groups before loading anything. "
+        "ops/install_frozen_model_artifacts.py establishes the root this is "
+        "given, and it is the parent of --model-dir.",
+    )
+    parser.add_argument(
         "--refresh-status",
         type=Path,
         default=None,
@@ -671,6 +735,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
     model_dir = Path(args.model_dir).resolve()
 
+    bundle_root = Path(args.frozen_bundle_root).resolve()
+
     readiness = slate_readiness(args.refresh_status)
 
     registry = FitRegistry(
@@ -683,6 +749,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     incumbent = resolve_incumbent(
         registry=registry,
         model_dir=model_dir,
+        bundle_root=bundle_root,
     )
 
     if not readiness["ready"]:

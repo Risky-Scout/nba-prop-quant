@@ -281,6 +281,7 @@ def refresh_status(tmp_path: Path, outcome: str) -> Path:
 def arguments(**overrides):
     defaults = {
         "data_root": None,
+        "frozen_bundle_root": None,
         "model_dir": None,
         "production_sha": "c" * 40,
         "project_root": None,
@@ -319,7 +320,7 @@ def test_the_frozen_bundle_is_the_incumbent_before_any_promotion(
     model_dir = serving_tree(project, artifacts={"marginals.joblib": b"frozen"})
 
     incumbent = serving.resolve_incumbent(
-        registry=registry, model_dir=model_dir
+        registry=registry, model_dir=model_dir, bundle_root=model_dir.parent
     )
 
     assert incumbent["authority"] == serving.AUTHORITY_FROZEN_BUNDLE
@@ -344,7 +345,7 @@ def test_a_registered_but_unpromoted_candidate_is_never_the_incumbent(
     assert registry.current()["current_good_fit_id"] is None
 
     incumbent = serving.resolve_incumbent(
-        registry=registry, model_dir=model_dir
+        registry=registry, model_dir=model_dir, bundle_root=model_dir.parent
     )
 
     assert incumbent["fit_id"] is None
@@ -377,7 +378,7 @@ def test_the_newest_fit_is_not_the_incumbent(
     )
 
     incumbent = serving.resolve_incumbent(
-        registry=registry, model_dir=model_dir
+        registry=registry, model_dir=model_dir, bundle_root=model_dir.parent
     )
 
     assert incumbent["authority"] == serving.AUTHORITY_PROMOTED_FIT
@@ -405,7 +406,9 @@ def test_a_promoted_fit_must_actually_be_what_the_bundle_holds(
 
     with pytest.raises(serving.ServingRefused) as caught:
         serving.resolve_incumbent(
-            registry=registry, model_dir=model_dir
+            registry=registry,
+            model_dir=model_dir,
+            bundle_root=model_dir.parent,
         )
 
     assert "has not been sealed" in str(caught.value)
@@ -436,7 +439,9 @@ def test_a_corrupt_promoted_fit_refuses_rather_than_substituting(
 
     with pytest.raises(serving.ServingRefused) as caught:
         serving.resolve_incumbent(
-            registry=registry, model_dir=model_dir
+            registry=registry,
+            model_dir=model_dir,
+            bundle_root=model_dir.parent,
         )
 
     assert "did not verify" in str(caught.value)
@@ -451,6 +456,7 @@ def test_a_missing_incumbent_fails_closed(
         serving.resolve_incumbent(
             registry=registry,
             model_dir=project / "models",
+            bundle_root=project,
         )
 
 
@@ -464,7 +470,9 @@ def test_a_corrupt_serving_bundle_fails_closed(
 
     with pytest.raises(RuntimeError, match="manifest verification failed"):
         serving.resolve_incumbent(
-            registry=registry, model_dir=model_dir
+            registry=registry,
+            model_dir=model_dir,
+            bundle_root=model_dir.parent,
         )
 
 
@@ -522,6 +530,7 @@ def test_a_candidate_failure_cannot_change_what_the_incumbent_serves(
         arguments(
             data_root=refreshed_data_root(tmp_path),
             model_dir=model_dir,
+            frozen_bundle_root=model_dir.parent,
             project_root=project,
             refresh_status=refresh_status(tmp_path, "REFRESHED"),
             registry_root=registry.root,
@@ -556,6 +565,7 @@ def test_a_served_run_carries_complete_provenance(
         arguments(
             data_root=data_root,
             model_dir=model_dir,
+            frozen_bundle_root=model_dir.parent,
             project_root=project,
             refresh_status=refresh_status(tmp_path, "REFRESHED"),
             registry_root=registry.root,
@@ -582,7 +592,9 @@ def test_an_incomplete_receipt_is_a_failure_not_a_thinner_record(
         slate_date="2026-11-15",
         production_sha=None,
         incumbent=serving.resolve_incumbent(
-            registry=registry, model_dir=model_dir
+            registry=registry,
+            model_dir=model_dir,
+            bundle_root=model_dir.parent,
         ),
         readiness={"ready": True, "reason": "", "refresh_outcome": "REFRESHED"},
         fingerprint=None,
@@ -619,6 +631,7 @@ def test_a_no_slate_day_is_not_asked_for_artifact_provenance(
         arguments(
             data_root=tmp_path / "data",
             model_dir=model_dir,
+            frozen_bundle_root=model_dir.parent,
             project_root=project,
             refresh_status=refresh_status(tmp_path, "PRESEASON_BLOCK"),
             registry_root=registry.root,
@@ -666,6 +679,7 @@ def test_an_empty_regular_season_slate_is_not_a_failure(
         arguments(
             data_root=tmp_path / "data",
             model_dir=model_dir,
+            frozen_bundle_root=model_dir.parent,
             project_root=project,
             refresh_status=refresh_status(tmp_path, "REFRESHED"),
             registry_root=registry.root,
@@ -690,6 +704,7 @@ def test_a_failed_serving_script_fails_the_lifecycle(
             arguments(
                 data_root=tmp_path / "data",
                 model_dir=model_dir,
+                frozen_bundle_root=model_dir.parent,
                 project_root=project,
                 refresh_status=refresh_status(tmp_path, "REFRESHED"),
                 registry_root=registry.root,
@@ -715,6 +730,8 @@ def test_the_entry_point_exits_nonzero_and_records_why(
             str(tmp_path / "data"),
             "--model-dir",
             str(model_dir),
+            "--frozen-bundle-root",
+            str(model_dir.parent),
             "--project-root",
             str(project),
             "--refresh-status",
@@ -751,6 +768,8 @@ def test_a_served_run_exits_zero_and_writes_its_receipt(
             str(refreshed_data_root(tmp_path)),
             "--model-dir",
             str(model_dir),
+            "--frozen-bundle-root",
+            str(model_dir.parent),
             "--project-root",
             str(project),
             "--production-sha",
@@ -794,6 +813,8 @@ def test_an_unspecified_registry_root_is_a_refusal(
             str(tmp_path / "data"),
             "--model-dir",
             str(model_dir),
+            "--frozen-bundle-root",
+            str(model_dir.parent),
             "--project-root",
             str(project),
             "--refresh-status",

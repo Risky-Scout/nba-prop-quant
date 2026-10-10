@@ -298,6 +298,7 @@ jobs:
             --production-sha "${{ steps.checkout.outputs.sha }}" \
             --receipt-path "$RUNNER_TEMP/run/incumbent_serving.json" \
             --model-dir "$FROZEN_RUNTIME_MODEL_DIR" \
+            --frozen-bundle-root "$FROZEN_RUNTIME_BUNDLE_ROOT" \
             --summary-path "$GITHUB_STEP_SUMMARY"
 
       # Grades the slate before this one against settled box scores. The cron

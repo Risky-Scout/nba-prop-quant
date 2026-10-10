@@ -42,6 +42,64 @@ SERVING_ENTRY_POINTS: tuple[str, ...] = (
     "scripts/15_price_markets.py",
 )
 
+#: Serving entry points a declaration may name, and only additively.
+#:
+#: ``scripts/`` was undeclarable as a flat prefix, which is the same mistake
+#: the source partition above already corrected once: it read the same for two
+#: different kinds of change, the numbers these scripts compute and the paths
+#: they resolve. Only the first is what "may not edit the served model" is
+#: about, and conflating them made the serving deployment plumbing permanently
+#: unfixable. That was not hypothetical. Both scripts verified the frozen
+#: manifest against the working directory, so the frozen runtime bundle the
+#: lifecycle installs got them past nothing and the first non-empty slate
+#: would have failed inside ``10_predict_slate.py`` -- and the only reviewed
+#: way in was a declaration these paths could not receive.
+#:
+#: So they are declarable, under the rule the lifecycle workflow is already
+#: held to: every line the production ref has must still be there, so no
+#: existing computation, threshold, flag or call can be changed, reordered out
+#: of existence or dropped. :data:`NUMERICAL_SURFACE_EXEMPT_FUNCTIONS` names
+#: the only functions whose bodies may differ at all, and the branch-safety
+#: tests compare every other function's syntax tree against production. The
+#: rest of ``scripts/``, every model artifact, every frozen config, the
+#: release surface and every production source module the serving path imports
+#: all remain undeclarable.
+ADDITIVE_ONLY_SERVING_ENTRY_POINTS: tuple[str, ...] = SERVING_ENTRY_POINTS
+
+#: The only functions in a declared serving entry point whose bodies may
+#: differ from production. ``parse_args`` is where an argument is declared and
+#: ``main`` is where it is used; everything that computes a projection or a
+#: price is outside both and is pinned syntax-tree-identical.
+NUMERICAL_SURFACE_EXEMPT_FUNCTIONS: tuple[str, ...] = (
+    "parse_args",
+    "main",
+)
+
+#: The two registries under ``models/`` that record what serving runs, rather
+#: than being what serving runs.
+#:
+#: ``models/`` is undeclarable because it holds the fitted artifacts and the
+#: frozen freeze manifests, and those must not move. These two files are a
+#: different kind of thing living in the same directory: the adaptive serving
+#: source contract exists to be updated when an approved serving change lands
+#: -- its own ``purpose`` requires "every difference from the historical
+#: reference to be enumerated and justified here", and two reviewed commits
+#: have done exactly that. A lock that cannot be updated when the thing it
+#: locks is legitimately corrected is not a lock, it is a dead end, and the
+#: branch that corrects serving has to be able to say so.
+#:
+#: What stays immutable is the evidence, not the record: every
+#: ``historical_reference_sha256``, the architecture reference commit and the
+#: historical Gate 3 runtime contract are pinned against Git by tests that
+#: already exist, and a branch-safety test below pins that no locked file is
+#: dropped and no historical hash is rewritten. Every other path under
+#: ``models/`` remains undeclarable.
+DECLARABLE_SERVING_SOURCE_REGISTRIES: tuple[str, ...] = (
+    "models/frozen_manifests/"
+    "nba_prop_quant_v2_adaptive_serving_source_contract.json",
+    "models/frozen_manifests/nba_prop_quant_v2_adaptive_update_protocol.json",
+)
+
 #: Protected sources no declaration may ever name, because the live pricing
 #: path reads them.
 #:
@@ -168,17 +226,62 @@ PATH_DECLARATION_MODULE = "safety.py"
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
         "ops/install_frozen_model_artifacts.py": (
-            "asserts that the frozen package's transfer completed before "
-            "installing from it. The published release is immutable, so bytes "
-            "that are not the published bytes are always a failed transfer, "
-            "and a dropped connection reads as EOF rather than as an error. "
-            "Compares the byte count against the response and the release, "
-            "retries a bounded number of times, and establishes the expected "
-            "digest from the release's own checksum before accepting anything "
-            "including the cache. Still reads only the published package and "
-            "the repository's frozen manifest, still writes only into the "
-            "durable production work root, and still cannot fit, refit, "
-            "recalibrate, predict, price, promote or publish"
+            "installs the whole frozen project tree rather than only its "
+            "model directory, so the bundle root is a tree the frozen "
+            "manifest's 62 records all resolve against, and verifies them "
+            "with the repository's own whole-manifest verifier rather than a "
+            "second implementation of it. Publishes that root beside the "
+            "model directory. Reads only the published package and the "
+            "repository's frozen manifest, writes only into the durable "
+            "production work root, and cannot fit, refit, recalibrate, "
+            "predict, price, promote or publish"
+        ),
+        "ops/run_incumbent_production_serving.py": (
+            "requires the verified frozen bundle root as well as the verified "
+            "model directory, verifies the whole frozen manifest against that "
+            "root before invoking anything, refuses when the two name "
+            "different freezes, and passes the root to both serving scripts "
+            "explicitly. No prediction, pricing, threshold or authority "
+            "change: the incumbent is still resolved from the promotion state "
+            "alone and still refuses rather than substituting"
+        ),
+        "scripts/10_predict_slate.py": (
+            "one added argument, --frozen-bundle-root, and three added lines "
+            "that resolve the frozen manifest against it when it is supplied. "
+            "Declared under the additive-only rule: every line production has "
+            "is still present, and every function except parse_args and main "
+            "is syntax-tree-identical to production, so no projection, "
+            "quantile, experience curve or feature computation changes. "
+            "Without it the frozen manifest is resolved against the working "
+            "directory, which cannot hold the ignored model binaries or the "
+            "2025 audit outputs, and the first non-empty slate fails here"
+        ),
+        "scripts/15_price_markets.py": (
+            "one added argument, --frozen-bundle-root, and three added lines "
+            "that resolve the frozen manifest against it when it is supplied. "
+            "Declared under the additive-only rule on the same terms as the "
+            "prediction script: no pricing, probability, hold, edge, combo or "
+            "seed computation changes, and the syntax-tree comparison against "
+            "production pins that rather than asserting it"
+        ),
+        ".github/workflows/nba_production_lifecycle.yml": (
+            "one added line, which hands the serving step the verified frozen "
+            "bundle root the install step published. Every pre-existing line "
+            "is unchanged"
+        ),
+        "models/frozen_manifests/"
+        "nba_prop_quant_v2_adaptive_serving_source_contract.json": (
+            "relocks the two serving entry points' current_sha256 after the "
+            "additive change above and enumerates the divergence, which is "
+            "what this contract exists to require. No locked file dropped, no "
+            "historical_reference_sha256 rewritten, no fitted artifact and no "
+            "freeze manifest touched"
+        ),
+        "models/frozen_manifests/"
+        "nba_prop_quant_v2_adaptive_update_protocol.json": (
+            "carries the serving source contract's whole-file hash, so "
+            "relocking the contract moves this one line with it. Nothing else "
+            "in the protocol changes"
         ),
     }
 )

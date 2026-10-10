@@ -95,7 +95,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from nba_prop_quant.production import load_json, sha256_file  # noqa: E402
+from nba_prop_quant.production import (  # noqa: E402
+    load_json,
+    load_verified_manifest_metadata,
+    sha256_file,
+)
 
 #: Where a serving artifact tree carries the manifest that describes it.
 MANIFEST_RELATIVE = Path("frozen_manifests") / "LATEST.json"
@@ -173,6 +177,12 @@ RETRY_BACKOFF_SECONDS: tuple[float, ...] = (4.0, 8.0, 16.0)
 #: The environment variable the install location is published under, for the
 #: serving step that is handed it.
 MODEL_DIR_VARIABLE = "FROZEN_RUNTIME_MODEL_DIR"
+
+#: The manifest resolution root the serving scripts verify against. Published
+#: alongside the model directory because the two are a pair: the model
+#: directory says which artifacts to load and the bundle root says which tree
+#: the frozen manifest describes, and serving needs both to be explicit.
+BUNDLE_ROOT_VARIABLE = "FROZEN_RUNTIME_BUNDLE_ROOT"
 
 OUTCOME_INSTALLED = "INSTALLED"
 OUTCOME_REUSED = "REUSED"
@@ -324,6 +334,36 @@ def verify_runtime_model_artifacts(model_dir: Path) -> dict[str, Any]:
         "manifest_path": str(manifest_path),
         "manifest_sha256": sha256_file(manifest_path),
         "verified_artifacts": len(records),
+    }
+
+
+def verify_frozen_bundle(bundle_root: Path) -> dict[str, Any]:
+    """Verify the whole frozen manifest against an installed bundle root.
+
+    This is the repository's own verifier, called with the bundle root as the
+    resolution root: the exact check ``scripts/10_predict_slate.py`` and
+    ``scripts/15_price_markets.py`` perform before they load a model. It is
+    called here, at install time, so that a bundle the serving scripts would
+    reject is never handed to them in the first place.
+
+    Imported rather than reimplemented. A second implementation of "does this
+    tree match the freeze" could disagree with the first, and the one that
+    decides whether production prices tonight is the scripts'.
+    """
+    root = Path(bundle_root)
+
+    metadata = load_verified_manifest_metadata(
+        model_dir=root / MODEL_PREFIX,
+        project_root=root,
+    )
+
+    manifest = load_json(root / MODEL_PREFIX / MANIFEST_RELATIVE)
+
+    return {
+        **metadata,
+        "verified_manifest_entries": sum(
+            len(records) for records in (manifest.get("files") or {}).values()
+        ),
     }
 
 
@@ -731,8 +771,20 @@ def resolve_package(
 # ----------------------------------------------------------------------
 
 
-def extract_model_tree(package: Path, destination: Path) -> int:
-    """Copy the frozen package's own model tree into ``destination``."""
+def extract_frozen_project(package: Path, destination: Path) -> int:
+    """Copy the frozen package's whole frozen project tree into ``destination``.
+
+    The whole tree rather than only ``models/``, because the frozen manifest
+    names 62 files across five groups and the serving scripts verify all of
+    them. Resolved against a root that holds only the model artifacts, 43 of
+    those records are unsatisfiable; resolved against this tree, every one of
+    them is exactly the file the freeze recorded.
+
+    The tree is a *verification* root, not an execution root. The code that
+    runs is the production checkout's, whose integrity comes from the
+    authoritative production SHA and the CI that reported on it. Nothing here
+    is ever imported or executed.
+    """
     with zipfile.ZipFile(package) as archive:
         names = [name for name in archive.namelist() if not name.endswith("/")]
 
@@ -741,10 +793,10 @@ def extract_model_tree(package: Path, destination: Path) -> int:
         if len(roots) != 1:
             raise BundleRefused(
                 f"the frozen package {package.name} has {len(roots)} top "
-                "level entries, so its model tree cannot be located"
+                "level entries, so its frozen project tree cannot be located"
             )
 
-        prefix = f"{roots[0]}/{PACKAGE_PROJECT_PREFIX}/{MODEL_PREFIX}/"
+        prefix = f"{roots[0]}/{PACKAGE_PROJECT_PREFIX}/"
 
         members = [name for name in names if name.startswith(prefix)]
 
@@ -762,7 +814,7 @@ def extract_model_tree(package: Path, destination: Path) -> int:
             if relative.is_absolute() or ".." in relative.parts:
                 raise BundleRefused(
                     f"the frozen package {package.name} names {name!r}, "
-                    "which escapes the model tree"
+                    "which escapes the frozen project tree"
                 )
 
             target = destination / relative
@@ -812,7 +864,7 @@ def installed_bundle_is_valid(bundle: Path, expected: dict[str, str]) -> bool:
         return False
 
     try:
-        verify_runtime_model_artifacts(Path(bundle) / MODEL_PREFIX)
+        verify_frozen_bundle(Path(bundle))
 
     except (FileNotFoundError, RuntimeError, BundleRefused):
         return False
@@ -884,7 +936,10 @@ def install(
             identity=identity,
             resolved=resolved,
             key=key,
-            metadata=verify_runtime_model_artifacts(model_dir),
+            metadata={
+                **verify_runtime_model_artifacts(model_dir),
+                **verify_frozen_bundle(bundle),
+            },
             reason=(
                 "a verified frozen runtime bundle for this freeze and package "
                 "was already installed, so it was re-verified and reused"
@@ -903,7 +958,7 @@ def install(
     try:
         staged_models = work / MODEL_PREFIX
 
-        extract_model_tree(resolved["path"], staged_models)
+        extract_frozen_project(resolved["path"], work)
 
         staged_manifest = staged_models / MANIFEST_RELATIVE
 
@@ -924,6 +979,8 @@ def install(
             )
 
         verify_runtime_model_artifacts(staged_models)
+
+        verify_frozen_bundle(work)
 
         (work / READY_RELATIVE).write_text(
             json.dumps(
@@ -955,10 +1012,13 @@ def install(
         identity=identity,
         resolved=resolved,
         key=key,
-        metadata=verify_runtime_model_artifacts(model_dir),
+        metadata={
+            **verify_runtime_model_artifacts(model_dir),
+            **verify_frozen_bundle(bundle),
+        },
         reason=(
-            "the frozen model artifacts were installed from the published "
-            "package and every one of them matched the frozen manifest"
+            "the frozen project tree was installed from the published package "
+            "and the whole frozen manifest verified against it"
         ),
     )
 
@@ -992,6 +1052,7 @@ def _receipt(
         "reason": reason,
         "required_model_binaries": len(REQUIRED_MODEL_BINARIES),
         "verified_artifacts": metadata["verified_artifacts"],
+        "verified_manifest_entries": metadata["verified_manifest_entries"],
     }
 
 
@@ -1010,7 +1071,9 @@ def render(receipt: dict[str, Any]) -> str:
         ("package source", receipt["frozen_package"]["source"]),
         ("manifest sha256", receipt["manifest_sha256"][:16]),
         ("verified artifacts", receipt["verified_artifacts"]),
+        ("verified manifest entries", receipt["verified_manifest_entries"]),
         ("model dir", receipt["model_dir"]),
+        ("bundle root", receipt["bundle_root"]),
     ]
 
     lines = [
@@ -1092,8 +1155,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--github-env",
         type=Path,
         default=None,
-        help=f"append {MODEL_DIR_VARIABLE} to this file, so the serving step "
-        "is handed the verified model directory explicitly.",
+        help=f"append {MODEL_DIR_VARIABLE} and {BUNDLE_ROOT_VARIABLE} to this "
+        "file, so the serving step is handed the verified model directory and "
+        "the verified manifest resolution root explicitly.",
     )
 
     return parser.parse_args(argv)
@@ -1163,7 +1227,8 @@ def main(argv: list[str] | None = None) -> int:
 
     _write(
         args.github_env,
-        f"{MODEL_DIR_VARIABLE}={receipt['model_dir']}\n",
+        f"{MODEL_DIR_VARIABLE}={receipt['model_dir']}\n"
+        f"{BUNDLE_ROOT_VARIABLE}={receipt['bundle_root']}\n",
         append=True,
     )
 
