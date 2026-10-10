@@ -43,6 +43,15 @@ GAME_CONTEXT_INPUT_COLUMNS: tuple[str, ...] = (
     "ist_stage",
 )
 
+# The two season-progress columns classify_games derives from the same
+# chronological walk that produces the flags above. build_base_frame picks one
+# of them per row by is_home, and that choice is the training definition of
+# season_progress, so a live slate reads these rather than counting its own.
+GAME_CONTEXT_PROGRESS: tuple[str, ...] = (
+    "home_season_progress",
+    "visitor_season_progress",
+)
+
 
 class SlateDateError(ValueError):
     """A value could not be resolved to an unambiguous NBA slate date."""
@@ -530,6 +539,127 @@ def classify_upcoming_games(
     )
 
 
+def upcoming_season_progress(
+    upcoming_games: pd.DataFrame,
+    history_games: pd.DataFrame,
+) -> pd.DataFrame:
+    """Return the canonical season progress for each upcoming game.
+
+    ``classify_games`` derives ``home_season_progress`` and
+    ``visitor_season_progress`` from the same chronological walk that produces
+    the competition-regime flags: a team's standings-counting games before the
+    game, over the season's *inferred* schedule length. ``build_base_frame``
+    picks one of the two per row by ``is_home``, and that is the training
+    definition of ``season_progress``.
+
+    The live builder counted a team's distinct box-score games against a fixed
+    82 instead. Those two agree only while every game a team has played counts
+    in the standings, and diverge from the first Cup Championship, Play-In or
+    playoff game onwards, because the classifier excludes exactly those from
+    the numerator. ``season_progress`` is a feature the fitted models name, so
+    the two paths disagreed on a served number.
+
+    So the value is read from the classifier rather than recomputed, for the
+    same reason the flags are: a second statement of a rule is a second thing
+    that has to stay in step with what the models were fitted on.
+
+    The input requirements are the slate's seasons' whole games tables, for
+    the reason :func:`classify_upcoming_games` documents at length -- the
+    schedule length is inferred from the season rather than assumed, so the
+    denominator here needs the season's other games just as the Play-In
+    numerator does.
+
+    The marshalling below is that function's, repeated rather than shared. The
+    adaptive serving source contract pins every function in this module except
+    the slate builder syntax-tree-identical to production, so the flag path
+    that already landed cannot be refactored to share it. A targeted test pins
+    that both paths classify the same slate identically.
+    """
+    upcoming = _game_context_input(upcoming_games, "upcoming games")
+
+    if upcoming.empty:
+        return pd.DataFrame(columns=["game_id", *GAME_CONTEXT_PROGRESS])
+
+    seasons = sorted(set(upcoming["season"].tolist()))
+
+    if history_games is None or len(history_games) == 0:
+        raise SlateGameContextError(
+            "the slate's season progress needs the season's games table and "
+            f"none was supplied; seasons {seasons} have no inferable schedule "
+            "length and no standings-counting game count"
+        )
+
+    schedule = _game_context_input(history_games, "historical games")
+
+    schedule = schedule[schedule["season"].isin(seasons)]
+
+    absent = sorted(set(seasons) - set(schedule["season"].tolist()))
+
+    if absent:
+        raise SlateGameContextError(
+            f"the games table holds no season {absent} schedule, so the "
+            "slate's season progress cannot be established; it is a team's "
+            "standings-counting games over the season's inferred schedule "
+            "length and both need the season's other games"
+        )
+
+    combined = (
+        pd.concat([schedule, upcoming], ignore_index=True)
+        .groupby("id", as_index=False, sort=False)
+        .last()
+    )
+
+    classified = classify_games(combined)
+
+    wanted = set(upcoming["id"].tolist())
+
+    context = classified[classified["id"].isin(wanted)]
+
+    unclassified = sorted(wanted - set(context["id"].tolist()))
+
+    if unclassified:
+        raise SlateGameContextError(
+            f"the classifier returned no season progress for game(s) "
+            f"{unclassified}"
+        )
+
+    return (
+        context[["id", *GAME_CONTEXT_PROGRESS]]
+        .rename(columns={"id": "game_id"})
+        .astype({name: "float64" for name in GAME_CONTEXT_PROGRESS})
+        .reset_index(drop=True)
+    )
+
+
+def canonical_season_progress(
+    progress: dict[str, Any],
+    is_home: int,
+    fallback: float,
+) -> float:
+    """Reproduce ``build_base_frame``'s ``season_progress`` for one slate row.
+
+    Training takes the home or visitor column by ``is_home``, falls back to
+    ``(team_game_number - 1) / 82`` where the classifier has no answer, and
+    clips the result into ``[0, 1]``. All three steps are reproduced, the
+    fallback included: the classifier returns no progress when a season's
+    inferred schedule length is zero or missing, and dropping the fallback
+    would make the live value differ from training in precisely the case
+    training wrote it for.
+    """
+    column = (
+        "home_season_progress"
+        if int(is_home) == 1
+        else "visitor_season_progress"
+    )
+
+    value = pd.to_numeric(progress.get(column), errors="coerce")
+
+    if pd.isna(value):
+        value = fallback
+
+    return float(np.clip(float(value), 0.0, 1.0))
+
+
 def build_upcoming_slate_features(
     history_stats: pd.DataFrame,
     upcoming_games: pd.DataFrame,
@@ -703,5 +833,24 @@ def build_upcoming_slate_features(
 
     for row in rows:
         row.update(flags[row["game_id"]])
+
+    # The expression the row loop left in season_progress is training's
+    # *fallback* -- current_season_games is team_game_number - 1, so it is
+    # (team_game_number - 1) / 82 clipped the same way. The defect was using
+    # it as the answer instead of consulting the classifier, so it is passed
+    # through as the fallback it is and the classifier decides.
+    progress = upcoming_season_progress(upcoming, history_games)
+
+    season_progress = {
+        int(record["game_id"]): record
+        for record in progress.to_dict("records")
+    }
+
+    for row in rows:
+        row["season_progress"] = canonical_season_progress(
+            season_progress[row["game_id"]],
+            is_home=row["is_home"],
+            fallback=row["season_progress"],
+        )
 
     return pd.DataFrame(rows)
