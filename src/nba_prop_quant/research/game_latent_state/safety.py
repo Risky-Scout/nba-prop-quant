@@ -104,6 +104,18 @@ NUMERICAL_SURFACE_EXEMPT_FUNCTIONS: tuple[str, ...] = (
 #: answer, and ``game_context.py`` stays undeclarable, so the only way to
 #: change that answer is still a declared change to the classifier itself.
 #:
+#: The carve-out's second use was the same shape of defect one feature along.
+#: ``season_progress`` is also in the fitted models' feature lists, it also
+#: had a single canonical definition in ``classify_games`` that
+#: ``build_base_frame`` read, and the live builder also stated its own --
+#: distinct box-score games over a hard-coded 82, which diverges from the
+#: canonical value for any team that has played a Cup Championship, a Play-In
+#: game or a playoff game. That one does not fail a contract; it silently
+#: serves the models a number they were not fit on, which is worse. The fix
+#: reads the classifier's own two progress columns, so the additional term
+#: above did the work it exists for: the rule stayed where production states
+#: it and only the call into it was added.
+#:
 #: Every other module the serving path imports -- the model, the copula, the
 #: marginals, the pricing, the production contract -- remains undeclarable.
 ADDITIVE_ONLY_SERVING_SOURCES: tuple[str, ...] = (
@@ -129,6 +141,7 @@ DECLARED_SERVING_PLUMBING_NAMES: tuple[str, ...] = (
     "history_games",
     "context",
     "flags",
+    "season_progress",
 )
 
 #: The two registries under ``models/`` that record what serving runs, rather
@@ -282,40 +295,37 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: and the lifecycle workflow among them were already owned, and the two
 #: serving scripts and the two serving-source registries are recorded nowhere,
 #: because they are pre-existing production files this lineage changed rather
-#: than introduced -- so changing one again, as this branch changes the
-#: prediction entry point and both registries, requires declaring it again.
+#: than introduced. The live-slate game-flag fix's four entries went the same
+#: way when they landed -- the slate module, the prediction entry point and
+#: both registries, all pre-existing and so all recorded nowhere -- which is
+#: why this branch declares the slate module and both registries again, and
+#: declares nothing for the prediction entry point, which it does not change.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
         "src/nba_prop_quant/slate.py": (
-            "the live slate builder emitted none of the five "
-            "competition-regime flags the fitted models name in their feature "
-            "lists, so assert_model_feature_contract refused every non-empty "
-            "real slate. It now classifies the slate with classify_games, "
-            "which is the training path's own classifier and the single "
-            "definition of those flags, rather than with a second copy of the "
-            "rules. Declared under the additive-only rule for a serving "
-            "source: every line production has is still present, "
-            "build_upcoming_slate_features is the one function whose body "
-            "differs and every other function is syntax-tree-identical to "
-            "production, and game_context.py is untouched, so what the live "
-            "slate says about a regime is still only what the classifier says"
-        ),
-        "scripts/10_predict_slate.py": (
-            "one added import and one added keyword, which hand the slate "
-            "builder the season games table the training path already loads "
-            "through the same loader. Declared under the additive-only rule: "
-            "every line production has is still present, and every function "
-            "except parse_args and main is syntax-tree-identical to "
-            "production, so no projection, quantile, experience curve or "
-            "feature computation changes"
+            "the live builder set season_progress to a team's distinct "
+            "box-score games over a hard-coded 82. Training takes it from "
+            "classify_games' home_season_progress / visitor_season_progress, "
+            "which build_base_frame picks between by is_home, so the fitted "
+            "models were served a different number from the one they were fit "
+            "on for any team that has played a Cup Championship, a Play-In "
+            "game or a playoff game. It now reads those two columns off the "
+            "same classifier the flags already come from. Declared under the "
+            "additive-only rule for a serving source: every line production "
+            "has is still present -- including the expression that becomes "
+            "training's own fallback -- build_upcoming_slate_features is the "
+            "one existing function whose body differs, every other function "
+            "is syntax-tree-identical to production, the two functions added "
+            "are new, and game_context.py and features.py are both untouched, "
+            "so the definition being reproduced is production's own"
         ),
         "models/frozen_manifests/"
         "nba_prop_quant_v2_adaptive_serving_source_contract.json": (
-            "relocks slate.py's and the prediction entry point's "
-            "current_sha256 after the additive change above and enumerates "
-            "the divergence, which is what this contract exists to require. "
-            "No locked file dropped, no historical_reference_sha256 "
-            "rewritten, no fitted artifact and no freeze manifest touched"
+            "relocks slate.py's current_sha256 after the additive change "
+            "above and enumerates the divergence, which is what this contract "
+            "exists to require. No locked file dropped, no "
+            "historical_reference_sha256 rewritten, no fitted artifact and no "
+            "freeze manifest touched"
         ),
         "models/frozen_manifests/"
         "nba_prop_quant_v2_adaptive_update_protocol.json": (
