@@ -38,6 +38,7 @@ from nba_prop_quant.slate import build_upcoming_slate_features
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from season_games_fixture import pad_season_schedule  # noqa: E402
 from test_features import synthetic_stats  # noqa: E402
 
 
@@ -167,18 +168,39 @@ def active_players() -> pd.DataFrame:
     )
 
 
+def season_games(history: pd.DataFrame, slate: pd.DataFrame) -> pd.DataFrame:
+    """The season schedule the production games table supplies."""
+    played = (
+        history[["game_id", "date", "season", "home_team_id", "visitor_team_id"]]
+        .drop_duplicates("game_id")
+        .rename(columns={"game_id": "id"})
+        .assign(postseason=False)
+    )
+
+    return pad_season_schedule(
+        pd.concat(
+            [played, slate[list(played.columns)]],
+            ignore_index=True,
+        )
+    )
+
+
 def live_slate(
     dynamic_params: dict,
     features: list[str],
     slate_date: str = SLATE_DATE,
     games: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
+    slate = upcoming_games(slate_date) if games is None else games
+    history = history_frame()
+
     return build_upcoming_slate_features(
-        history_stats=history_frame(),
-        upcoming_games=upcoming_games(slate_date) if games is None else games,
+        history_stats=history,
+        upcoming_games=slate,
         active_players=active_players(),
         advanced=advanced_frame(features),
         dynamic_params=dynamic_params,
+        history_games=season_games(history, slate),
     )
 
 
