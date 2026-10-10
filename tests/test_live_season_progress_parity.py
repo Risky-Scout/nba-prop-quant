@@ -683,6 +683,87 @@ def test_season_progress_is_the_only_feature_whose_value_changed(
         assert moved in ([], ["season_progress"]), moved
 
 
+def disagreeing_exact_features(
+    live: pd.DataFrame, trained: pd.DataFrame
+) -> dict[str, tuple[float, float]]:
+    """Exact features whose value differs between the two frames."""
+    out: dict[str, tuple[float, float]] = {}
+
+    shared = sorted(set(live["player_id"]) & set(trained["player_id"]))
+
+    for name in FEATURE_EXACT:
+        for player_id in shared:
+            a = live[live["player_id"].eq(player_id)][name]
+            b = trained[trained["player_id"].eq(player_id)][name]
+
+            if a.empty or b.empty:
+                continue
+
+            first, second = float(a.iloc[0]), float(b.iloc[0])
+
+            if pd.isna(first) and pd.isna(second):
+                continue
+
+            if pd.isna(first) != pd.isna(second) or abs(first - second) > 1e-9:
+                out[name] = (first, second)
+                break
+
+    return out
+
+
+def test_no_exact_feature_disagrees_between_live_and_training(
+    ordinary_case,
+    cup_championship_case,
+    play_in_case,
+    playoff_case,
+    multiple_season_case,
+    dynamic_params,
+):
+    """Every name in ``FEATURE_EXACT``, not just the one that was reported.
+
+    ``season_progress`` was found because somebody measured it. The claim this
+    fix closes the live/training feature gap is only worth making if the whole
+    exact feature list has been checked the same way, so it is: every name,
+    every player, every state above, live against training.
+    """
+    for name, case in (
+        ("ordinary", ordinary_case),
+        ("cup_championship", cup_championship_case),
+        ("play_in", play_in_case),
+        ("playoff", playoff_case),
+        ("multiple_season", multiple_season_case),
+    ):
+        live = build_live(case, dynamic_params)
+        trained = build_training(case)
+
+        assert set(FEATURE_EXACT) <= set(live.columns), name
+        assert set(FEATURE_EXACT) <= set(trained.columns), name
+
+        assert disagreeing_exact_features(live, trained) == {}, name
+
+
+def test_the_reported_feature_was_the_only_one_that_disagreed(
+    cup_championship_case, dynamic_params, pre_fix_builder
+):
+    """Before the fix, exactly one exact feature disagreed. Now none does.
+
+    The complement of the test above: it establishes that the sweep is capable
+    of finding a divergence, by finding the one this change removes.
+    """
+    trained = build_training(cup_championship_case)
+
+    before = disagreeing_exact_features(
+        build_live(cup_championship_case, dynamic_params, pre_fix_builder), trained
+    )
+
+    after = disagreeing_exact_features(
+        build_live(cup_championship_case, dynamic_params), trained
+    )
+
+    assert sorted(before) == ["season_progress"]
+    assert after == {}
+
+
 def test_the_slate_frame_still_carries_every_column_production_produced(
     cup_championship_case, dynamic_params, pre_fix_builder
 ):
