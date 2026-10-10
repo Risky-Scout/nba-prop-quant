@@ -30,6 +30,9 @@ import yaml
 from nba_prop_quant.features import FEATURE_EXACT, build_base_frame
 from nba_prop_quant.game_context import classify_games
 from nba_prop_quant.production import assert_model_feature_contract
+from nba_prop_quant.research.game_latent_state.safety import (
+    DECLARED_SERVING_PLUMBING_NAMES,
+)
 from nba_prop_quant.slate import (
     GAME_CONTEXT_FLAGS,
     SlateGameContextError,
@@ -872,9 +875,15 @@ def test_the_slate_module_only_gained_the_classification_path():
         if ast.dump(node) not in statements
     ]
 
+    # Read off the containment declaration rather than restated here, so the
+    # names an exempt function may add stay a single reviewed list. Pinning
+    # "context" and "flags" literally made this test the second place that
+    # had to be edited to widen the exemption, which is one place too many.
     for node in added:
         rendered = ast.unparse(node)
-        assert "context" in rendered or "flags" in rendered, (
-            "the builder gained a statement that is not the game-context "
+        assert any(
+            declared in rendered for declared in DECLARED_SERVING_PLUMBING_NAMES
+        ), (
+            "the builder gained a statement that is not declared serving "
             f"plumbing: {rendered[:160]}"
         )
