@@ -40,6 +40,7 @@ sys.path.insert(0, str(PROJECT / "tests"))
 
 import frozen_bundle_slate_fixture as fixture  # noqa: E402
 from nba_prop_quant import slate as slate_module  # noqa: E402
+from nba_prop_quant.game_context import classify_games  # noqa: E402
 
 PREDICT_SCRIPT = "scripts/10_predict_slate.py"
 PRICE_SCRIPT = "scripts/15_price_markets.py"
@@ -562,9 +563,11 @@ def frozen_bundle() -> Path:
     return bundle
 
 
-def serve_the_fixture(bundle: Path, root: Path) -> dict:
+def serve_the_fixture(
+    bundle: Path, root: Path, cup_championship_game_id: int | None = None
+) -> dict:
     """The fixture slate, through the real caller and the real scripts."""
-    fixture.build(root)
+    fixture.build(root, cup_championship_game_id)
 
     (root / "registry").mkdir(exist_ok=True)
 
@@ -719,3 +722,111 @@ def test_the_slate_the_scripts_ran_carries_the_game_context_flags(
     assert (projections["is_nba_cup_championship"] == 0).all()
     assert (projections["is_play_in"] == 0).all()
     assert (projections["is_playoffs"] == 0).all()
+
+
+def canonical_slate_progress(root: Path) -> dict[int, float]:
+    """What ``classify_games`` says the slate game's progress is, by side.
+
+    Read from the games table the scripts themselves were given, so the
+    expected value comes from the classifier rather than from arithmetic
+    repeated here.
+    """
+    games = pd.read_parquet(
+        root / "data" / "raw" / "seasons" / str(fixture.SEASON) / "games.parquet"
+    )
+
+    classified = classify_games(games)
+
+    row = classified[classified["id"].eq(fixture.GAME_ID)].iloc[0]
+
+    return {
+        fixture.HOME_TEAM_ID: float(row["home_season_progress"]),
+        fixture.AWAY_TEAM_ID: float(row["visitor_season_progress"]),
+    }
+
+
+def served_progress(root: Path) -> dict[int, float]:
+    """What the projection the real script wrote carries, by team."""
+    projections = pd.read_parquet(
+        root / "data" / "processed" / "projections"
+        / f"{fixture.SLATE_DATE}.parquet"
+    )
+
+    out: dict[int, float] = {}
+
+    for team_id in (fixture.HOME_TEAM_ID, fixture.AWAY_TEAM_ID):
+        values = {
+            round(float(value), 12)
+            for value in projections[projections["team_id"].eq(team_id)][
+                "season_progress"
+            ]
+        }
+
+        assert len(values) == 1, (team_id, sorted(values))
+
+        out[team_id] = values.pop()
+
+    return out
+
+
+def test_the_slate_the_scripts_ran_carries_the_canonical_season_progress(
+    frozen_bundle: Path, tmp_path: Path
+):
+    """``season_progress`` in the served projection is the classifier's own."""
+    root = tmp_path / "run"
+
+    serve_the_fixture(frozen_bundle, root)
+
+    expected = canonical_slate_progress(root)
+
+    for team_id, value in served_progress(root).items():
+        assert value == pytest.approx(expected[team_id]), team_id
+
+
+def test_a_standings_exempt_game_in_the_history_is_served_canonically(
+    frozen_bundle: Path, tmp_path: Path
+):
+    """The divergence, end to end, through the real scripts and models.
+
+    The fixture's ordinary slate is a state both definitions already agreed
+    on, so serving it proves the path works and nothing about the fix. This
+    labels one already-played game the NBA Cup final, which the standings do
+    not count: the classifier's numerator drops by one while a box-score count
+    does not, so the two definitions now disagree about this slate.
+
+    The served value has to be the classifier's, and it has to differ from
+    what counting box scores against the fixture's games would have produced.
+    Both are asserted, because either alone would pass for the wrong reason.
+    """
+    root = tmp_path / "run"
+
+    served = serve_the_fixture(
+        frozen_bundle, root, cup_championship_game_id=fixture.FIRST_HISTORY_GAME_ID
+    )
+
+    assert served["outcome"] == serving.OUTCOME_SERVED
+
+    expected = canonical_slate_progress(root)
+    actual = served_progress(root)
+
+    for team_id, value in actual.items():
+        assert value == pytest.approx(expected[team_id]), team_id
+
+    # What the old definition produced: every game in the box scores over a
+    # hard-coded 82, with no exemption for the game the standings ignore.
+    pre_fix = fixture.HISTORY_GAMES / 82.0
+
+    for team_id, value in actual.items():
+        assert value != pytest.approx(pre_fix), (
+            f"team {team_id} was served the pre-fix value {pre_fix}, so the "
+            "standings-exempt game was still being counted"
+        )
+
+    # The Cup final is history, not the slate, so the slate is still ordinary.
+    projections = pd.read_parquet(
+        root / "data" / "processed" / "projections"
+        / f"{fixture.SLATE_DATE}.parquet"
+    )
+
+    assert (projections["is_regular_season"] == 1).all()
+    assert (projections["is_nba_cup"] == 0).all()

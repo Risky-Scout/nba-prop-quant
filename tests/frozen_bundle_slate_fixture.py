@@ -89,6 +89,10 @@ QUOTED_PROPS: tuple[tuple[int, str, str], ...] = (
 #: them is enough for every window the slate builder asks for.
 HISTORY_GAMES = 14
 
+#: The id of the earliest played game. Named so a test can point at one
+#: already-played game without restating how the ids are generated.
+FIRST_HISTORY_GAME_ID = 9000
+
 
 def _history_rows() -> list[dict[str, Any]]:
     """Box scores for every roster player, all strictly before the slate.
@@ -105,7 +109,7 @@ def _history_rows() -> list[dict[str, Any]]:
     )
 
     for index, moment in enumerate(dates):
-        game_id = 9000 + index
+        game_id = FIRST_HISTORY_GAME_ID + index
 
         home_team_id = HOME_TEAM_ID if index % 2 == 0 else AWAY_TEAM_ID
         visitor_team_id = AWAY_TEAM_ID if index % 2 == 0 else HOME_TEAM_ID
@@ -201,7 +205,9 @@ def _advanced_rows(history: pd.DataFrame) -> list[dict[str, Any]]:
     return rows
 
 
-def _season_games(history: pd.DataFrame) -> pd.DataFrame:
+def _season_games(
+    history: pd.DataFrame, cup_championship_game_id: int | None = None
+) -> pd.DataFrame:
     """The season's whole schedule, which is what games.parquet holds.
 
     The played games the box scores cover, the slate game itself, and the rest
@@ -210,6 +216,12 @@ def _season_games(history: pd.DataFrame) -> pd.DataFrame:
     fourteen played games would declare a fourteen-game season and classify
     the slate game as a Play-In game. Production's table is the API's whole
     season, so the fixture's is too.
+
+    ``cup_championship_game_id`` labels one already-played game as the NBA Cup
+    final. The standings do not count that game, so the two definitions of
+    ``season_progress`` disagree about the slate that follows it, which is
+    what makes the divergence visible end to end instead of only in a unit
+    test. Default ``None`` leaves the schedule exactly as it was.
     """
     played = (
         history[["game_id", "date", "season", "home_team_id", "visitor_team_id"]]
@@ -217,6 +229,14 @@ def _season_games(history: pd.DataFrame) -> pd.DataFrame:
         .rename(columns={"game_id": "id"})
         .assign(postseason=False)
     )
+
+    if cup_championship_game_id is not None and cup_championship_game_id not in set(
+        played["id"]
+    ):
+        raise ValueError(
+            f"game {cup_championship_game_id} is not one of the played games, "
+            "so it cannot be labelled the Cup final"
+        )
 
     slate = pd.DataFrame(
         [
@@ -231,19 +251,31 @@ def _season_games(history: pd.DataFrame) -> pd.DataFrame:
         ]
     )
 
-    return pad_season_schedule(
+    schedule = pad_season_schedule(
         pd.concat([played, slate[list(played.columns)]], ignore_index=True)
     )
 
+    if cup_championship_game_id is not None:
+        schedule["ist_stage"] = [
+            "Championship" if identifier == cup_championship_game_id else None
+            for identifier in schedule["id"]
+        ]
 
-def write_history(data_root: Path) -> int:
+    return schedule
+
+
+def write_history(
+    data_root: Path, cup_championship_game_id: int | None = None
+) -> int:
     """The prior-season box scores and advanced rows the slate is built from."""
     history = pd.DataFrame(_history_rows())
 
     seasons = Path(data_root) / "raw" / "seasons" / str(SEASON)
     seasons.mkdir(parents=True, exist_ok=True)
     history.to_parquet(seasons / "stats.parquet", index=False)
-    _season_games(history).to_parquet(seasons / "games.parquet", index=False)
+    _season_games(history, cup_championship_game_id).to_parquet(
+        seasons / "games.parquet", index=False
+    )
 
     advanced = Path(data_root) / "raw" / "advanced" / str(SEASON)
     advanced.mkdir(parents=True, exist_ok=True)
@@ -456,20 +488,23 @@ def write_refresh_status(path: Path, outcome: str = "REFRESHED") -> Path:
     return target
 
 
-def build(root: Path) -> dict[str, Any]:
+def build(
+    root: Path, cup_championship_game_id: int | None = None
+) -> dict[str, Any]:
     """Assemble the whole fixture under ``root`` and report what it holds."""
     base = Path(root)
 
     data_root = base / "data"
     snapshot_root = data_root / "snapshots"
 
-    history_rows = write_history(data_root)
+    history_rows = write_history(data_root, cup_championship_game_id)
     capture_id = write_capture(snapshot_root)
     prior_lineups = write_prior_lineups(snapshot_root)
     refresh_status = write_refresh_status(base / "run" / "refresh.json")
 
     return {
         "capture_id": capture_id,
+        "cup_championship_game_id": cup_championship_game_id,
         "data_root": data_root,
         "history_rows": history_rows,
         "prior_lineup_rows": prior_lineups,
