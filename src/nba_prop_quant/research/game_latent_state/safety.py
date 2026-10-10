@@ -162,7 +162,42 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: spelling fix was retired in turn when it landed, and so were the pre-live
 #: closure's five entries: the two graders it introduced are recorded as owned
 #: below, and the three files it extended were already owned.
-DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType({})
+DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
+    {
+        "ops/install_frozen_model_artifacts.py": (
+            "installs the already-frozen production model binaries into a "
+            "verified runtime directory outside the checkout, because "
+            "models/**/*.joblib is ignored in Git by design and the frozen "
+            "package is distributed as a release asset. Reads the published "
+            "immutable package and the repository's own frozen manifest, "
+            "re-hashes every artifact against it, and writes only into the "
+            "durable production work root. Builds, regenerates, retrains and "
+            "re-freezes nothing, and cannot predict, price, promote or "
+            "publish"
+        ),
+        "ops/run_incumbent_production_serving.py": (
+            "requires the verified frozen runtime bundle's model directory "
+            "instead of defaulting to the checkout's models/, which could "
+            "never hold the frozen binaries, and scopes its own frozen-bundle "
+            "verification to the runtime model artifacts the manifest records. "
+            "No prediction, pricing, threshold or authority change: the "
+            "incumbent is still resolved from the promotion state alone and "
+            "still refuses rather than substituting"
+        ),
+        ".github/workflows/nba_production_lifecycle.yml": (
+            "one added step, which installs the verified frozen runtime "
+            "bundle before serving and publishes its location, plus the "
+            "serving step being handed that location explicitly. Every "
+            "pre-existing line is unchanged"
+        ),
+        "ops/validate_main_scheduler_role.py": (
+            "records the added install step and its entry point as required, "
+            "ungated on RUN_ADAPTIVE and blocking, so the guard notices if "
+            "the scheduler copy loses the step the incumbent's artifacts come "
+            "from. Reads two workflow copies and writes only its own report"
+        ),
+    }
+)
 
 #: Protected paths this lineage introduced into production and now owns.
 #:
@@ -208,15 +243,25 @@ SHADOW_OWNED_PRODUCTION_PATHS: Mapping[str, str] = MappingProxyType(
             "tree no serving or pricing script names, and cannot predict, "
             "price, promote or publish"
         ),
+        "ops/install_frozen_model_artifacts.py": (
+            "installs the frozen model binaries the incumbent serves from. "
+            "They are distributed as a release asset and ignored in Git, so "
+            "no checkout has ever held them and the serving step's own "
+            "frozen-bundle verification had nothing satisfiable to check. "
+            "Reads the published immutable package and the frozen manifest; "
+            "writes only into the durable production work root. Cannot fit, "
+            "refit, recalibrate, predict, price, promote or publish"
+        ),
         ".github/workflows/nba_production_lifecycle.yml": (
-            "seven added steps, every pre-existing step unchanged. One invokes "
+            "eight added steps, every pre-existing step unchanged. One invokes "
             "the shadow entry point after the daily fit and cannot fail the "
             "lifecycle. Two give the run its own Python environment under "
             "RUNNER_TEMP and refuse to continue outside it. One serves the "
             "slate with the incumbent. One reads the status the shadow "
             "persisted and may fail the job, because the shadow step is "
             "non-blocking by design and GitHub went green whether the shadow "
-            "worked or not"
+            "worked or not. One installs the verified frozen runtime bundle "
+            "the incumbent serves from"
         ),
         ".github/workflows/default_branch_guard.yml": (
             "the default branch's only reported check. GitHub schedules "

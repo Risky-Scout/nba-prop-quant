@@ -227,6 +227,42 @@ jobs:
             --work-root "$NBA_PROP_WORK_DIR" \
             | tee "$RUNNER_TEMP/run/adaptive.json"
 
+      # The frozen model binaries the incumbent prices with are not in Git and
+      # never were. `.gitignore` excludes `models/**/*.joblib` because the
+      # frozen package is distributed as a release asset — GitHub refuses
+      # normal objects over 100 MiB — and `actions/checkout` cleans ignored
+      # files out of the workspace anyway. So the serving step below was
+      # verifying the frozen bundle against a checkout that structurally
+      # cannot hold twelve of the artifacts the manifest requires, and
+      # correctly reported them missing.
+      #
+      # This installs them instead: it reads the already-published immutable
+      # package, extracts the model tree the package already contains into the
+      # durable production work root, and re-hashes every artifact against the
+      # frozen manifest before anything is allowed to serve from it. It builds
+      # nothing, regenerates nothing, retrains nothing and re-freezes nothing;
+      # a verified copy already present is re-verified and reused. The install
+      # location is published as FROZEN_RUNTIME_MODEL_DIR so the serving step
+      # is handed it explicitly rather than guessing.
+      #
+      # Blocking, and before serving: an unverifiable frozen bundle means the
+      # incumbent has no artifacts anybody approved, and serving from an
+      # unverified tree is the failure this exists to prevent.
+      - name: Install the verified frozen runtime bundle
+        if: env.MODE == 'production'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NBA_PROP_WORK_DIR: ${{ vars.NBA_PROP_WORK_DIR }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/run"
+          python ops/install_frozen_model_artifacts.py \
+            --runtime-root "$NBA_PROP_WORK_DIR" \
+            --repository "$GITHUB_REPOSITORY" \
+            --receipt-path "$RUNNER_TEMP/run/frozen_runtime_bundle.json" \
+            --summary-path "$GITHUB_STEP_SUMMARY" \
+            --github-env "$GITHUB_ENV"
+
       # The incumbent prices the slate. Nothing automated did this before:
       # the lifecycle refreshed state, fitted a candidate and shadowed it,
       # and the artifact production actually serves was produced by hand.
@@ -261,6 +297,7 @@ jobs:
             --refresh-status "$RUNNER_TEMP/run/refresh.json" \
             --production-sha "${{ steps.checkout.outputs.sha }}" \
             --receipt-path "$RUNNER_TEMP/run/incumbent_serving.json" \
+            --model-dir "$FROZEN_RUNTIME_MODEL_DIR" \
             --summary-path "$GITHUB_STEP_SUMMARY"
 
       # Grades the slate before this one against settled box scores. The cron

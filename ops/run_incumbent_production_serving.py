@@ -38,6 +38,15 @@ replacement for one". So:
         so serving the old bundle would report an authority that is not the
         one in force. The refusal names the step a human has to perform.
 
+The serving model directory is supplied rather than assumed. It used to
+default to the checkout's ``models/``, which could never hold the frozen model
+binaries: ``.gitignore`` excludes ``models/**/*.joblib`` because the frozen
+package is distributed as a release asset, and ``actions/checkout`` cleans
+ignored files out of the workspace in any case. So ``--model-dir`` is required
+and names the verified runtime bundle
+``ops/install_frozen_model_artifacts.py`` installed, which is what makes the
+frozen artifacts both present and checkable.
+
 FAILING CLOSED
 --------------
 
@@ -88,14 +97,18 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
+if str(PROJECT_ROOT / "ops") not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT / "ops"))
+
 from nba_prop_quant.adaptive_fit_registry import (  # noqa: E402
     FitRegistry,
     RegistryError,
     resolve_registry_root,
     sha256_file,
 )
-from nba_prop_quant.production import (  # noqa: E402
-    load_verified_manifest_metadata,
+
+from install_frozen_model_artifacts import (  # noqa: E402
+    verify_runtime_model_artifacts,
 )
 
 #: The two scripts that serve a slate. Invoked rather than reimplemented: a
@@ -174,18 +187,22 @@ def _load_json(path: Path) -> Any:
 # ----------------------------------------------------------------------
 
 
-def _bundle_identity(model_dir: Path, project_root: Path) -> dict[str, str]:
+def _bundle_identity(model_dir: Path) -> dict[str, str]:
     """The frozen bundle's own verified identity.
 
-    ``load_verified_manifest_metadata`` re-hashes every file the manifest
-    names, so this is a verification and not a read. A corrupt or incomplete
-    serving tree raises here, which is the fail-closed behaviour: production
-    must not price from artifacts that do not match their manifest.
+    ``verify_runtime_model_artifacts`` re-hashes every runtime model artifact
+    the manifest names, resolved inside the serving model directory, so this
+    is a verification and not a read. A corrupt or incomplete serving tree
+    raises here, which is the fail-closed behaviour: production must not price
+    from artifacts that do not match their manifest.
+
+    Resolved inside the model directory rather than against the checkout,
+    because the model binaries are distributed as a release asset and ignored
+    in Git by design, so a checkout has never held them and never will. The
+    bundle they are installed into is what carries them, and it is handed to
+    this step explicitly.
     """
-    metadata = load_verified_manifest_metadata(
-        model_dir=model_dir,
-        project_root=project_root,
-    )
+    metadata = verify_runtime_model_artifacts(model_dir)
 
     return {
         "freeze_id": str(metadata["freeze_id"]),
@@ -230,7 +247,6 @@ def resolve_incumbent(
     *,
     registry: FitRegistry,
     model_dir: Path,
-    project_root: Path,
 ) -> dict[str, Any]:
     """Resolve the authority this run is allowed to serve from.
 
@@ -249,7 +265,7 @@ def resolve_incumbent(
 
     fit_id = state.get("current_good_fit_id")
 
-    bundle = _bundle_identity(model_dir, project_root)
+    bundle = _bundle_identity(model_dir)
 
     if fit_id is None:
         return {
@@ -614,9 +630,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--model-dir",
         type=Path,
-        default=None,
-        help="the serving artifact tree holding frozen_manifests/LATEST.json. "
-        "Defaults to the checkout's models/ directory.",
+        required=True,
+        help="the verified frozen runtime bundle's model directory, holding "
+        "frozen_manifests/LATEST.json and the model artifacts it records. "
+        "Required, and deliberately not defaulted to the checkout's models/ "
+        "directory: the model binaries are distributed as a release asset and "
+        "ignored in Git, so that default could only ever resolve to an "
+        "incomplete tree. ops/install_frozen_model_artifacts.py establishes "
+        "the directory this is given.",
     )
     parser.add_argument(
         "--refresh-status",
@@ -648,11 +669,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
     data_root = Path(args.data_root).resolve()
 
-    model_dir = (
-        Path(args.model_dir).resolve()
-        if args.model_dir is not None
-        else project_root / "models"
-    )
+    model_dir = Path(args.model_dir).resolve()
 
     readiness = slate_readiness(args.refresh_status)
 
@@ -666,7 +683,6 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     incumbent = resolve_incumbent(
         registry=registry,
         model_dir=model_dir,
-        project_root=project_root,
     )
 
     if not readiness["ready"]:
