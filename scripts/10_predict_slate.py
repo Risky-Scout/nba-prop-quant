@@ -36,6 +36,7 @@ from nba_prop_quant.pipeline import (
     dynamic_params_path,
     load_advanced,
     load_history_box_stats,
+    load_history_games,
     load_json,
 )
 from nba_prop_quant.production import (
@@ -287,6 +288,9 @@ def main() -> None:
         active_players=active,
         advanced=advanced,
         dynamic_params=dynamic_params,
+        history_games=load_history_games(
+            settings
+        ),
     )
 
     if slate.empty:

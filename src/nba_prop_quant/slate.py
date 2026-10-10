@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from .features import ADVANCED_FEATURES, TARGETS, add_dynamic_priors
+from .game_context import classify_games
 
 
 # The NBA schedules and reports its slates in Eastern time. A 10:30pm PT tip is
@@ -18,6 +19,30 @@ NBA_SLATE_TIMEZONE = "America/New_York"
 
 NBA_SLATE_ZONE = ZoneInfo(NBA_SLATE_TIMEZONE)
 
+# The competition-regime flags the fitted models name in their feature lists.
+# classify_games derives all five from one game_type and build_base_frame
+# merges them onto the training frame by game id, so a live slate has to carry
+# the same five under the same definitions or the model refuses to score it.
+GAME_CONTEXT_FLAGS: tuple[str, ...] = (
+    "is_regular_season",
+    "is_nba_cup",
+    "is_nba_cup_championship",
+    "is_play_in",
+    "is_playoffs",
+)
+
+# What classify_games needs to classify a game at all, plus the NBA Cup stage
+# label, which is the only source of a Cup regime from season 2025 onwards.
+GAME_CONTEXT_INPUT_COLUMNS: tuple[str, ...] = (
+    "id",
+    "date",
+    "season",
+    "home_team_id",
+    "visitor_team_id",
+    "postseason",
+    "ist_stage",
+)
+
 
 class SlateDateError(ValueError):
     """A value could not be resolved to an unambiguous NBA slate date."""
@@ -25,6 +50,10 @@ class SlateDateError(ValueError):
 
 class HistoryLeakageError(ValueError):
     """Historical inputs are not strictly older than the slate being predicted."""
+
+
+class SlateGameContextError(ValueError):
+    """An upcoming slate's competition regime could not be classified."""
 
 
 def slate_date_from_schedule_date(value: Any) -> date:
@@ -388,12 +417,126 @@ def _dynamic_next_for_player(
     }
 
 
+def _game_context_input(frame: pd.DataFrame, label: str) -> pd.DataFrame:
+    """Reduce a games table to exactly what the classifier reads."""
+    columns = list(getattr(frame, "columns", []))
+
+    required = [
+        name for name in GAME_CONTEXT_INPUT_COLUMNS if name != "ist_stage"
+    ]
+
+    missing = [name for name in required if name not in columns]
+
+    if missing:
+        raise SlateGameContextError(
+            f"{label} cannot be classified: missing column(s) {missing}"
+        )
+
+    reduced = frame[[name for name in GAME_CONTEXT_INPUT_COLUMNS if name in columns]].copy()
+
+    if "ist_stage" not in reduced.columns:
+        reduced["ist_stage"] = pd.NA
+
+    reduced["id"] = pd.to_numeric(reduced["id"], errors="raise").astype("int64")
+    reduced["season"] = pd.to_numeric(reduced["season"], errors="raise").astype("int64")
+    reduced["date"] = pd.to_datetime(reduced["date"], errors="raise").dt.normalize()
+
+    return reduced[list(GAME_CONTEXT_INPUT_COLUMNS)]
+
+
+def classify_upcoming_games(
+    upcoming_games: pd.DataFrame,
+    history_games: pd.DataFrame,
+) -> pd.DataFrame:
+    """Return the five canonical game-context flags for each upcoming game.
+
+    ``classify_games`` is the single definition of those flags and
+    ``build_base_frame`` was the only thing that had ever called it, so the
+    live slate carried none of them and the fitted models refused every real
+    slate on a column-presence contract. It is reused here rather than
+    reimplemented: a second copy of the rules is a second thing that has to
+    stay in step with the feature definitions the models were fitted on.
+
+    It is handed the season's whole games table rather than the slate alone,
+    because Play-In detection is structural rather than labelled. A Play-In
+    game carries no ``postseason`` flag and no ``ist_stage``; the classifier
+    recognises it by a team having already completed the season's inferred
+    schedule length, and both the inference and the count need the season's
+    other games. Given the slate by itself the inferred schedule length is the
+    size of the slate, and every answer that follows from it is meaningless.
+
+    Narrowing the input to the seasons the slate belongs to is exact rather
+    than an approximation. ``classify_games`` infers a schedule length per
+    season and walks each season's games against that season's own counter, so
+    a season is classified identically whether or not the others are present.
+    """
+    upcoming = _game_context_input(upcoming_games, "upcoming games")
+
+    if upcoming.empty:
+        return pd.DataFrame(columns=["game_id", *GAME_CONTEXT_FLAGS])
+
+    seasons = sorted(set(upcoming["season"].tolist()))
+
+    if history_games is None or len(history_games) == 0:
+        raise SlateGameContextError(
+            "the slate's competition regime needs the season's games table "
+            f"and none was supplied; seasons {seasons} are unclassifiable "
+            "because Play-In detection counts a team's completed games"
+        )
+
+    schedule = _game_context_input(history_games, "historical games")
+
+    schedule = schedule[schedule["season"].isin(seasons)]
+
+    absent = sorted(set(seasons) - set(schedule["season"].tolist()))
+
+    if absent:
+        raise SlateGameContextError(
+            f"the games table holds no season {absent} schedule, so the "
+            "slate's competition regime cannot be established; Play-In "
+            "detection counts a team's completed games against the season's "
+            "inferred schedule length"
+        )
+
+    # The upcoming rows are the live authority on the games they describe, so
+    # they are taken last. last() keeps the last *non-null* value per column,
+    # which is also how a capture that omits ist_stage inherits the stage the
+    # stored season schedule recorded for the same game.
+    combined = (
+        pd.concat([schedule, upcoming], ignore_index=True)
+        .groupby("id", as_index=False, sort=False)
+        .last()
+    )
+
+    classified = classify_games(combined)
+
+    wanted = set(upcoming["id"].tolist())
+
+    context = classified[classified["id"].isin(wanted)]
+
+    unclassified = sorted(wanted - set(context["id"].tolist()))
+
+    if unclassified:
+        raise SlateGameContextError(
+            f"the classifier returned no competition regime for game(s) "
+            f"{unclassified}"
+        )
+
+    return (
+        context[["id", *GAME_CONTEXT_FLAGS]]
+        .rename(columns={"id": "game_id"})
+        .astype({name: "int64" for name in GAME_CONTEXT_FLAGS})
+        .reset_index(drop=True)
+    )
+
+
 def build_upcoming_slate_features(
     history_stats: pd.DataFrame,
     upcoming_games: pd.DataFrame,
     active_players: pd.DataFrame,
     advanced: pd.DataFrame,
     dynamic_params: dict[str, Any],
+    history_games: pd.DataFrame,
 ) -> pd.DataFrame:
     stats = history_stats.copy()
     stats["date"] = pd.to_datetime(stats["date"]).dt.normalize()
@@ -548,5 +691,17 @@ def build_upcoming_slate_features(
                         ).get("global_prior", league_rate_prior[target])
 
                 rows.append(row)
+
+    context = classify_upcoming_games(upcoming, history_games)
+
+    flags = {
+        int(record["game_id"]): {
+            name: int(record[name]) for name in GAME_CONTEXT_FLAGS
+        }
+        for record in context.to_dict("records")
+    }
+
+    for row in rows:
+        row.update(flags[row["game_id"]])
 
     return pd.DataFrame(rows)

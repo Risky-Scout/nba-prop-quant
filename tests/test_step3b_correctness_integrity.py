@@ -38,6 +38,10 @@ from nba_prop_quant.slate import (
 )
 from nba_prop_quant.storage import sort_by_keys, upsert_parquet
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from season_games_fixture import pad_season_schedule  # noqa: E402
+
 
 PROJECT = Path(__file__).resolve().parents[1]
 
@@ -139,8 +143,25 @@ def synthetic_games(slate_date: str, game_id: int = 99) -> pd.DataFrame:
                 "season": 2025,
                 "home_team_id": 10,
                 "visitor_team_id": 20,
+                "postseason": False,
             }
         ]
+    )
+
+
+def synthetic_season_games(
+    history: pd.DataFrame, slate: pd.DataFrame
+) -> pd.DataFrame:
+    """The season schedule the production games table supplies."""
+    played = (
+        history[["game_id", "date", "season", "home_team_id", "visitor_team_id"]]
+        .drop_duplicates("game_id")
+        .rename(columns={"game_id": "id"})
+        .assign(postseason=False)
+    )
+
+    return pad_season_schedule(
+        pd.concat([played, slate[list(played.columns)]], ignore_index=True)
     )
 
 
@@ -188,12 +209,18 @@ def dynamic_params() -> dict:
 
 
 def build_slate(slate_date: str, dynamic_params: dict, **overrides):
+    history = overrides.get("history", synthetic_history())
+    slate = overrides.get("games", synthetic_games(slate_date))
+
     return build_upcoming_slate_features(
-        history_stats=overrides.get("history", synthetic_history()),
-        upcoming_games=overrides.get("games", synthetic_games(slate_date)),
+        history_stats=history,
+        upcoming_games=slate,
         active_players=overrides.get("active", synthetic_active()),
         advanced=overrides.get("advanced", synthetic_advanced([])),
         dynamic_params=dynamic_params,
+        history_games=overrides.get(
+            "history_games", synthetic_season_games(history, slate)
+        ),
     )
 
 

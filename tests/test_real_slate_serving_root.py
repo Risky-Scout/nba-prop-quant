@@ -39,6 +39,7 @@ PROJECT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT / "tests"))
 
 import frozen_bundle_slate_fixture as fixture  # noqa: E402
+from nba_prop_quant import slate as slate_module  # noqa: E402
 
 PREDICT_SCRIPT = "scripts/10_predict_slate.py"
 PRICE_SCRIPT = "scripts/15_price_markets.py"
@@ -588,18 +589,14 @@ def serve_the_fixture(bundle: Path, root: Path) -> dict:
     )
 
     try:
+        # No diagnostic override. The slate builder now emits the five
+        # game-context flags the frozen models were trained on, so the feature
+        # contract is satisfied by the slate rather than waived.
         return serving.serve(
             incumbent=incumbent,
             slate_date=fixture.SLATE_DATE,
             data_root=root / "data",
             project_root=PROJECT,
-            # The one concession, and it is to a different defect: the slate
-            # builder emits none of the five game-context flags the frozen
-            # models were trained on, so the feature contract refuses any
-            # non-empty slate. That is reported, not fixed here, and
-            # test_the_slate_builder_still_omits_the_game_context_flags pins
-            # it so the day it is fixed this override can come out.
-            predict_arguments=["--allow-missing-model-features"],
         )
     finally:
         os.environ.clear()
@@ -691,48 +688,34 @@ def test_the_same_frozen_artifacts_produce_the_same_numbers(
     )
 
 
-def test_the_slate_builder_still_omits_the_game_context_flags(
+def test_the_slate_the_scripts_ran_carries_the_game_context_flags(
     frozen_bundle: Path, tmp_path: Path
 ):
-    """A second defect, recorded rather than fixed.
+    """The strict path's own output carries all five flags.
 
-    ``build_upcoming_slate_features`` emits none of the five game-context
-    flags the frozen models were trained on, and nothing between it and the
-    feature contract supplies them, so a strict non-empty slate is refused
-    after the manifest verifies. It is a separate defect in a different file
-    and fixing it is not this change.
-
-    Pinned here because it is the next thing a real slate hits, and because
-    the override the tests above pass should be removed the day it is fixed --
-    a test that fails when a defect is repaired is how that gets noticed.
+    This replaces the pin that recorded the missing flags as a second defect.
+    The projection written by the real script is read back, because that is
+    what proves the contract was satisfied by the slate rather than waived:
+    the run above passes no diagnostic override, so a slate still missing
+    them could not have produced this file at all.
     """
     root = tmp_path / "run"
 
-    fixture.build(root)
+    serve_the_fixture(frozen_bundle, root)
 
-    completed = run_script(
-        PREDICT_SCRIPT,
-        bundle_root=frozen_bundle,
-        model_dir=frozen_bundle / "models",
-        data_root=root / "data",
+    projections = pd.read_parquet(
+        root / "data" / "processed" / "projections"
+        / f"{fixture.SLATE_DATE}.parquet"
     )
 
-    assert completed.returncode != 0
+    for flag in slate_module.GAME_CONTEXT_FLAGS:
+        assert flag in projections.columns, flag
+        assert projections[flag].notna().all()
+        assert set(projections[flag].unique()) <= {0, 1}
 
-    output = completed.stdout + completed.stderr
-
-    assert VERIFICATION_FAILED not in output, (
-        "the manifest must verify against the bundle; this test is about what "
-        "happens after it does"
-    )
-
-    assert "missing 5 trained feature(s)" in output
-
-    for flag in (
-        "is_nba_cup",
-        "is_nba_cup_championship",
-        "is_play_in",
-        "is_playoffs",
-        "is_regular_season",
-    ):
-        assert flag in output, flag
+    # One ordinary regular-season game, which is what the fixture schedules.
+    assert (projections["is_regular_season"] == 1).all()
+    assert (projections["is_nba_cup"] == 0).all()
+    assert (projections["is_nba_cup_championship"] == 0).all()
+    assert (projections["is_play_in"] == 0).all()
+    assert (projections["is_playoffs"] == 0).all()

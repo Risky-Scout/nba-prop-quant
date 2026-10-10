@@ -31,11 +31,14 @@ from nba_prop_quant.research.game_latent_state.gates import (
 )
 from nba_prop_quant.research.game_latent_state.safety import (
     ADDITIVE_ONLY_SERVING_ENTRY_POINTS,
+    ADDITIVE_ONLY_SERVING_SOURCES,
     ADDITIVE_ONLY_WORKFLOWS,
     DECLARABLE_SERVING_SOURCE_REGISTRIES,
     DECLARED_INTEGRATION_PATHS,
+    DECLARED_SERVING_PLUMBING_NAMES,
     NUMERICAL_SURFACE_EXEMPT_FUNCTIONS,
     PRODUCTION_REF,
+    SERVING_SOURCE_EXEMPT_FUNCTIONS,
     PROTECTED_PRODUCTION_PREFIXES,
     PATH_DECLARATION_MODULE as DECLARATION_MODULE,
     PROTECTED_PRODUCTION_SOURCES,
@@ -85,6 +88,43 @@ def git(*args: str) -> str:
 
 def production_base() -> str | None:
     return production_merge_base(PROJECT)
+
+
+def module_functions(source: str) -> dict[str, ast.FunctionDef]:
+    """Top-level functions by name, which is the unit the pins compare."""
+    return {
+        node.name: node
+        for node in ast.parse(source).body
+        if isinstance(node, ast.FunctionDef)
+    }
+
+
+def assert_only_declared_plumbing_was_added(
+    relative: str,
+    name: str,
+    before: ast.FunctionDef,
+    after: ast.FunctionDef,
+) -> None:
+    """Every statement an exempt function gained names declared plumbing.
+
+    Shared by the entry-point and serving-source pins so the two cannot drift
+    into different ideas of what an exemption permits. An exempt function is
+    permission for named plumbing, not an editable function: a statement that
+    mentions none of :data:`DECLARED_SERVING_PLUMBING_NAMES` fails here, so
+    widening what it may do means adding a name and having that reviewed.
+    """
+    statements = {ast.dump(node) for node in before.body}
+
+    added = [node for node in after.body if ast.dump(node) not in statements]
+
+    for node in added:
+        rendered = ast.dump(node)
+        assert any(
+            declared in rendered for declared in DECLARED_SERVING_PLUMBING_NAMES
+        ), (
+            f"{relative}:{name} added a statement that is not declared "
+            f"serving plumbing: {ast.unparse(node)[:160]}"
+        )
 
 
 def changed_paths() -> list[str]:
@@ -153,6 +193,7 @@ def test_the_declared_integration_surface_cannot_reach_the_served_model():
     undeclarable_prefixes = ("models/", "configs/", "scripts/", "release/", "review/")
     exceptions = (
         *ADDITIVE_ONLY_SERVING_ENTRY_POINTS,
+        *ADDITIVE_ONLY_SERVING_SOURCES,
         *DECLARABLE_SERVING_SOURCE_REGISTRIES,
     )
     for mapping in (DECLARED_INTEGRATION_PATHS, SHADOW_OWNED_PRODUCTION_PATHS):
@@ -162,10 +203,10 @@ def test_the_declared_integration_surface_cannot_reach_the_served_model():
                     f"{path} is a model, config, production script or release path "
                     "and may not be declared or owned"
                 )
-            assert path not in UNDECLARABLE_PRODUCTION_SOURCES, (
-                f"{path} is a production source the serving path reads and may "
-                "not be declared or owned"
-            )
+                assert path not in UNDECLARABLE_PRODUCTION_SOURCES, (
+                    f"{path} is a production source the serving path reads and "
+                    "may not be declared or owned"
+                )
             assert mapping[path].strip(), f"{path} is listed without a reason"
 
 
@@ -180,6 +221,117 @@ def test_only_the_serving_entry_points_are_declarable_under_scripts():
     for relative in ADDITIVE_ONLY_SERVING_ENTRY_POINTS:
         assert relative.startswith("scripts/")
         assert (PROJECT / relative).exists()
+
+
+def test_only_the_slate_builder_is_declarable_among_serving_sources():
+    """The serving-source carve-out is one named module, not the closure.
+
+    Everything the serving scripts import is undeclarable, and this is the one
+    exception. The test spells out what stays shut rather than only what
+    opened, because the failure mode is the carve-out quietly growing to cover
+    the model, the copula or the pricing path.
+    """
+    assert len(ADDITIVE_ONLY_SERVING_SOURCES) == 1
+
+    for relative in ADDITIVE_ONLY_SERVING_SOURCES:
+        assert relative.startswith("src/nba_prop_quant/")
+        assert (PROJECT / relative).exists()
+        # Still measured as serving-reachable: the carve-out is an exception
+        # layered on the measurement, not a hole in it.
+        assert relative in UNDECLARABLE_PRODUCTION_SOURCES
+
+    still_shut = UNDECLARABLE_PRODUCTION_SOURCES - set(ADDITIVE_ONLY_SERVING_SOURCES)
+
+    for relative in (
+        "src/nba_prop_quant/copula.py",
+        "src/nba_prop_quant/distributions.py",
+        "src/nba_prop_quant/features.py",
+        "src/nba_prop_quant/game_context.py",
+        "src/nba_prop_quant/model.py",
+        "src/nba_prop_quant/pricing.py",
+        "src/nba_prop_quant/production.py",
+    ):
+        assert relative in still_shut
+
+    for relative in still_shut:
+        assert relative not in DECLARED_INTEGRATION_PATHS, (
+            f"{relative} is a serving source the carve-out does not cover"
+        )
+
+
+def test_the_classifier_the_live_slate_delegates_to_stays_undeclarable():
+    """The regime rules may only be changed where they are stated.
+
+    ``slate.py`` is declarable because it has to *call* the classifier. The
+    permission would be worth nothing if the same branch could also edit what
+    the classifier answers, so ``game_context.py`` is pinned byte-identical to
+    production rather than merely left undeclared.
+    """
+    base = production_base()
+    if base is None:
+        pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
+
+    relative = "src/nba_prop_quant/game_context.py"
+
+    assert relative in UNDECLARABLE_PRODUCTION_SOURCES
+    assert relative not in DECLARED_INTEGRATION_PATHS
+    assert relative not in ADDITIVE_ONLY_SERVING_SOURCES
+
+    assert git("show", f"{base}:{relative}") == git("show", f"HEAD:{relative}"), (
+        "the game-regime classifier is not the one production has"
+    )
+
+
+def test_a_declared_serving_source_change_only_ever_adds_lines():
+    """Declaring a serving source buys an added path, not a rewrite.
+
+    The same line-set comparison the entry points are held to. Every line
+    production has must still be there, so no existing feature definition,
+    prior, rolling window or leakage guard can be changed or dropped.
+    """
+    base = production_base()
+    if base is None:
+        pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
+    for relative in ADDITIVE_ONLY_SERVING_SOURCES:
+        before = git("show", f"{base}:{relative}").splitlines()
+        after = git("show", f"HEAD:{relative}").splitlines()
+        removed = [line for line in before if line not in after]
+        assert removed == [], f"{relative} removed or edited existing lines: {removed}"
+
+
+def test_a_declared_serving_source_cannot_change_what_it_computes():
+    """Every other function in a declared serving source is pinned.
+
+    ``SERVING_SOURCE_EXEMPT_FUNCTIONS`` names the one function whose body may
+    differ, and its added statements must name declared plumbing, so the
+    exemption cannot widen into "the slate builder is editable".
+    """
+    base = production_base()
+    if base is None:
+        pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
+
+    for relative in ADDITIVE_ONLY_SERVING_SOURCES:
+        before = module_functions(git("show", f"{base}:{relative}"))
+        after = module_functions(git("show", f"HEAD:{relative}"))
+
+        assert set(before) <= set(after), (
+            f"{relative} dropped functions: {sorted(set(before) - set(after))}"
+        )
+
+        for name, node in before.items():
+            if name in SERVING_SOURCE_EXEMPT_FUNCTIONS:
+                continue
+            assert ast.dump(node) == ast.dump(after[name]), (
+                f"{relative}:{name} is not the function production has, and "
+                f"only {list(SERVING_SOURCE_EXEMPT_FUNCTIONS)} may differ"
+            )
+
+        for name in SERVING_SOURCE_EXEMPT_FUNCTIONS:
+            if name not in before:
+                continue
+            assert_only_declared_plumbing_was_added(
+                relative, name, before[name], after[name]
+            )
 
 
 def test_only_two_named_registries_are_declarable_under_models():
@@ -277,23 +429,16 @@ def test_a_declared_serving_script_cannot_change_what_it_computes():
     Every function in both serving scripts is compared against production by
     syntax tree. Only ``parse_args``, where an argument is declared, and
     ``main``, where it is used, may differ at all -- and ``main``'s added
-    statements must name the declared argument, so the permission cannot
-    quietly widen into "main is editable".
+    statements must name declared plumbing, so the permission cannot quietly
+    widen into "main is editable".
     """
     base = production_base()
     if base is None:
         pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
 
-    def functions(source: str) -> dict[str, ast.FunctionDef]:
-        return {
-            node.name: node
-            for node in ast.parse(source).body
-            if isinstance(node, ast.FunctionDef)
-        }
-
     for relative in ADDITIVE_ONLY_SERVING_ENTRY_POINTS:
-        before = functions(git("show", f"{base}:{relative}"))
-        after = functions(git("show", f"HEAD:{relative}"))
+        before = module_functions(git("show", f"{base}:{relative}"))
+        after = module_functions(git("show", f"HEAD:{relative}"))
 
         assert set(before) <= set(after), (
             f"{relative} dropped functions: {sorted(set(before) - set(after))}"
@@ -310,15 +455,9 @@ def test_a_declared_serving_script_cannot_change_what_it_computes():
         if "main" not in before:
             continue
 
-        statements = {ast.dump(node) for node in before["main"].body}
-        added = [
-            node for node in after["main"].body if ast.dump(node) not in statements
-        ]
-        for node in added:
-            assert "frozen_bundle_root" in ast.dump(node), (
-                f"{relative}:main added a statement that is not the declared "
-                f"bundle-root plumbing: {ast.unparse(node)[:120]}"
-            )
+        assert_only_declared_plumbing_was_added(
+            relative, "main", before["main"], after["main"]
+        )
 
 
 def test_owning_a_production_path_is_not_permission_to_change_it():

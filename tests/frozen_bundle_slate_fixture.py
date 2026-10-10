@@ -21,10 +21,15 @@ and the verified bundle supplies every parameter.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from season_games_fixture import pad_season_schedule  # noqa: E402
 
 from nba_prop_quant.prospective_snapshot import (
     build_capture_id,
@@ -196,6 +201,41 @@ def _advanced_rows(history: pd.DataFrame) -> list[dict[str, Any]]:
     return rows
 
 
+def _season_games(history: pd.DataFrame) -> pd.DataFrame:
+    """The season's whole schedule, which is what games.parquet holds.
+
+    The played games the box scores cover, the slate game itself, and the rest
+    of the published schedule. ``classify_games`` infers the season's schedule
+    length from the modal team appearance count, so a table holding only the
+    fourteen played games would declare a fourteen-game season and classify
+    the slate game as a Play-In game. Production's table is the API's whole
+    season, so the fixture's is too.
+    """
+    played = (
+        history[["game_id", "date", "season", "home_team_id", "visitor_team_id"]]
+        .drop_duplicates("game_id")
+        .rename(columns={"game_id": "id"})
+        .assign(postseason=False)
+    )
+
+    slate = pd.DataFrame(
+        [
+            {
+                "id": GAME_ID,
+                "date": pd.Timestamp(SLATE_DATE),
+                "season": SEASON,
+                "home_team_id": HOME_TEAM_ID,
+                "visitor_team_id": AWAY_TEAM_ID,
+                "postseason": False,
+            }
+        ]
+    )
+
+    return pad_season_schedule(
+        pd.concat([played, slate[list(played.columns)]], ignore_index=True)
+    )
+
+
 def write_history(data_root: Path) -> int:
     """The prior-season box scores and advanced rows the slate is built from."""
     history = pd.DataFrame(_history_rows())
@@ -203,6 +243,7 @@ def write_history(data_root: Path) -> int:
     seasons = Path(data_root) / "raw" / "seasons" / str(SEASON)
     seasons.mkdir(parents=True, exist_ok=True)
     history.to_parquet(seasons / "stats.parquet", index=False)
+    _season_games(history).to_parquet(seasons / "games.parquet", index=False)
 
     advanced = Path(data_root) / "raw" / "advanced" / str(SEASON)
     advanced.mkdir(parents=True, exist_ok=True)
@@ -227,6 +268,10 @@ def write_capture(snapshot_root: Path) -> str:
         "season": SEASON,
         "datetime": TIP_OFF,
         "status": "Scheduled",
+        # The API carries this on every game and the classifier reads it to
+        # tell a playoff game from a regular-season one, so the fixture's
+        # payload carries it too rather than relying on a default.
+        "postseason": False,
         "home_team": {"id": HOME_TEAM_ID, "abbreviation": "HOM"},
         "visitor_team": {"id": AWAY_TEAM_ID, "abbreviation": "AWY"},
     }
