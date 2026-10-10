@@ -104,6 +104,24 @@ def parse_args() -> argparse.Namespace:
         default=20,
     )
 
+    parser.add_argument(
+        "--frozen-bundle-root",
+        type=Path,
+        default=None,
+        help=(
+            "Root the frozen manifest's 62 recorded "
+            "files are resolved against. Production "
+            "passes the verified frozen runtime "
+            "bundle, because the frozen model "
+            "binaries and the 2025 audit outputs are "
+            "ignored in Git by design and a checkout "
+            "has never held them. Omitted, the "
+            "working directory is used, which is the "
+            "developer case where the artifacts are "
+            "local."
+        ),
+    )
+
     return parser.parse_args()
 
 
@@ -337,6 +355,9 @@ def main() -> None:
     settings = get_settings()
 
     project_root = Path.cwd()
+
+    if args.frozen_bundle_root is not None:
+        project_root = args.frozen_bundle_root
 
     manifest = load_verified_manifest_metadata(
         model_dir=settings.nba_prop_model_dir,

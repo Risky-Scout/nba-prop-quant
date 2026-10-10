@@ -29,12 +29,15 @@ from nba_prop_quant.research.game_latent_state.gates import (
     shadow_verdict,
 )
 from nba_prop_quant.research.game_latent_state.safety import (
+    ADDITIVE_ONLY_SERVING_ENTRY_POINTS,
     ADDITIVE_ONLY_WORKFLOWS,
     DECLARED_INTEGRATION_PATHS,
+    NUMERICAL_SURFACE_EXEMPT_FUNCTIONS,
     PRODUCTION_REF,
     PROTECTED_PRODUCTION_PREFIXES,
     PATH_DECLARATION_MODULE as DECLARATION_MODULE,
     PROTECTED_PRODUCTION_SOURCES,
+    SERVING_ENTRY_POINTS,
     SHADOW_OWNED_PRODUCTION_PATHS,
     UNDECLARABLE_PRODUCTION_SOURCES,
     modified_production_paths,
@@ -137,19 +140,108 @@ def test_the_declared_integration_surface_cannot_reach_the_served_model():
     the release surface and every protected production source module remain
     undeclarable, so the only thing a declaration can buy is documentation and
     the shadow's own operational surface.
+
+    The two serving entry points are the single exception, and they are not an
+    exemption: they are declarable only under the additive-only rule, and the
+    two tests below pin that every line production has survives and that every
+    function which computes a projection or a price is syntax-tree-identical to
+    production. That is strictly more than the blanket ban asserted, which was
+    nothing about content.
     """
     undeclarable_prefixes = ("models/", "configs/", "scripts/", "release/", "review/")
     for mapping in (DECLARED_INTEGRATION_PATHS, SHADOW_OWNED_PRODUCTION_PATHS):
         for path in mapping:
-            assert not path.startswith(undeclarable_prefixes), (
-                f"{path} is a model, config, production script or release path and "
-                "may not be declared or owned"
-            )
+            if path not in ADDITIVE_ONLY_SERVING_ENTRY_POINTS:
+                assert not path.startswith(undeclarable_prefixes), (
+                    f"{path} is a model, config, production script or release path "
+                    "and may not be declared or owned"
+                )
             assert path not in UNDECLARABLE_PRODUCTION_SOURCES, (
                 f"{path} is a production source the serving path reads and may "
                 "not be declared or owned"
             )
             assert mapping[path].strip(), f"{path} is listed without a reason"
+
+
+def test_only_the_serving_entry_points_are_declarable_under_scripts():
+    """The additive-only carve-out is two named files, not a prefix.
+
+    Otherwise "declarable under scripts/" would drift into "scripts/ is
+    declarable", which is the blanket exemption the test above exists to
+    prevent.
+    """
+    assert ADDITIVE_ONLY_SERVING_ENTRY_POINTS == SERVING_ENTRY_POINTS
+    for relative in ADDITIVE_ONLY_SERVING_ENTRY_POINTS:
+        assert relative.startswith("scripts/")
+        assert (PROJECT / relative).exists()
+
+
+def test_a_declared_serving_script_change_only_ever_adds_lines():
+    """Declaring a serving script buys an added argument, not a rewrite.
+
+    Comparing line sets rather than file hashes is what distinguishes "an
+    argument was added" from "a computation was edited": every line the
+    production ref has must still be there, so no existing call can be
+    changed, have a flag added or be reordered out of existence.
+    """
+    base = production_base()
+    if base is None:
+        pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
+    for relative in ADDITIVE_ONLY_SERVING_ENTRY_POINTS:
+        before = git("show", f"{base}:{relative}").splitlines()
+        after = git("show", f"HEAD:{relative}").splitlines()
+        removed = [line for line in before if line not in after]
+        assert removed == [], f"{relative} removed or edited existing lines: {removed}"
+
+
+def test_a_declared_serving_script_cannot_change_what_it_computes():
+    """The numerical surface is pinned, not merely asserted to be unchanged.
+
+    Every function in both serving scripts is compared against production by
+    syntax tree. Only ``parse_args``, where an argument is declared, and
+    ``main``, where it is used, may differ at all -- and ``main``'s added
+    statements must name the declared argument, so the permission cannot
+    quietly widen into "main is editable".
+    """
+    base = production_base()
+    if base is None:
+        pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
+
+    def functions(source: str) -> dict[str, ast.FunctionDef]:
+        return {
+            node.name: node
+            for node in ast.parse(source).body
+            if isinstance(node, ast.FunctionDef)
+        }
+
+    for relative in ADDITIVE_ONLY_SERVING_ENTRY_POINTS:
+        before = functions(git("show", f"{base}:{relative}"))
+        after = functions(git("show", f"HEAD:{relative}"))
+
+        assert set(before) <= set(after), (
+            f"{relative} dropped functions: {sorted(set(before) - set(after))}"
+        )
+
+        for name, node in before.items():
+            if name in NUMERICAL_SURFACE_EXEMPT_FUNCTIONS:
+                continue
+            assert ast.dump(node) == ast.dump(after[name]), (
+                f"{relative}:{name} is not the function production has, and "
+                "only parse_args and main may differ"
+            )
+
+        if "main" not in before:
+            continue
+
+        statements = {ast.dump(node) for node in before["main"].body}
+        added = [
+            node for node in after["main"].body if ast.dump(node) not in statements
+        ]
+        for node in added:
+            assert "frozen_bundle_root" in ast.dump(node), (
+                f"{relative}:main added a statement that is not the declared "
+                f"bundle-root plumbing: {ast.unparse(node)[:120]}"
+            )
 
 
 def test_owning_a_production_path_is_not_permission_to_change_it():
