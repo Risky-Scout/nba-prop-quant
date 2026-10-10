@@ -85,6 +85,7 @@ REQUIRED_STEPS: tuple[str, ...] = (
     "Preflight",
     "Refresh the current-season rolling state",
     "Run the adaptive daily protocol",
+    "Install the verified frozen runtime bundle",
     "Serve the slate with the incumbent",
     "Grade the incumbent's previous slate",
     "Shadow the slate beside production",
@@ -100,6 +101,7 @@ REQUIRED_ENTRY_POINTS: tuple[str, ...] = (
     "ops/refresh_current_season_state.py",
     "ops/classify_refresh_outcome.py",
     "ops/run_adaptive_daily_fit.py",
+    "ops/install_frozen_model_artifacts.py",
     "ops/run_incumbent_production_serving.py",
     "ops/grade_incumbent_production_slate.py",
     "ops/run_production_shadow.py",
@@ -121,6 +123,10 @@ RUN_ADAPTIVE_GATED_ENTRY_POINTS: tuple[str, ...] = (
 #: different question from refitting a candidate, and binding them would mean
 #: a future off-day fit policy silently stopped production serving.
 RUN_ADAPTIVE_UNGATED_ENTRY_POINTS: tuple[str, ...] = (
+    # The frozen bundle the incumbent serves from has nothing to do with
+    # whether a candidate was refitted this morning, and gating its install
+    # would leave serving without the artifacts it was handed.
+    "ops/install_frozen_model_artifacts.py",
     "ops/run_incumbent_production_serving.py",
     "ops/grade_incumbent_production_slate.py",
     # The shadow only has something to say on a day it refitted, but the
@@ -139,6 +145,10 @@ NON_BLOCKING_ENTRY_POINTS: tuple[str, ...] = ("ops/run_production_shadow.py",)
 #: failure.
 BLOCKING_ENTRY_POINTS: tuple[str, ...] = (
     "ops/evaluate_shadow_health.py",
+    # An unverifiable frozen bundle means the incumbent has no artifacts
+    # anybody approved. Continuing past that would serve from an unverified
+    # tree, which is the failure the install exists to prevent.
+    "ops/install_frozen_model_artifacts.py",
     "ops/run_incumbent_production_serving.py",
     # A grading refusal means the provenance does not describe the rows, or a
     # slate was priced after its own games. Both are faults, and grading runs
