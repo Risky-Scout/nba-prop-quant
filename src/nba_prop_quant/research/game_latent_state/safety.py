@@ -75,6 +75,31 @@ NUMERICAL_SURFACE_EXEMPT_FUNCTIONS: tuple[str, ...] = (
     "main",
 )
 
+#: The two registries under ``models/`` that record what serving runs, rather
+#: than being what serving runs.
+#:
+#: ``models/`` is undeclarable because it holds the fitted artifacts and the
+#: frozen freeze manifests, and those must not move. These two files are a
+#: different kind of thing living in the same directory: the adaptive serving
+#: source contract exists to be updated when an approved serving change lands
+#: -- its own ``purpose`` requires "every difference from the historical
+#: reference to be enumerated and justified here", and two reviewed commits
+#: have done exactly that. A lock that cannot be updated when the thing it
+#: locks is legitimately corrected is not a lock, it is a dead end, and the
+#: branch that corrects serving has to be able to say so.
+#:
+#: What stays immutable is the evidence, not the record: every
+#: ``historical_reference_sha256``, the architecture reference commit and the
+#: historical Gate 3 runtime contract are pinned against Git by tests that
+#: already exist, and a branch-safety test below pins that no locked file is
+#: dropped and no historical hash is rewritten. Every other path under
+#: ``models/`` remains undeclarable.
+DECLARABLE_SERVING_SOURCE_REGISTRIES: tuple[str, ...] = (
+    "models/frozen_manifests/"
+    "nba_prop_quant_v2_adaptive_serving_source_contract.json",
+    "models/frozen_manifests/nba_prop_quant_v2_adaptive_update_protocol.json",
+)
+
 #: Protected sources no declaration may ever name, because the live pricing
 #: path reads them.
 #:
@@ -243,6 +268,20 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
             "one added line, which hands the serving step the verified frozen "
             "bundle root the install step published. Every pre-existing line "
             "is unchanged"
+        ),
+        "models/frozen_manifests/"
+        "nba_prop_quant_v2_adaptive_serving_source_contract.json": (
+            "relocks the two serving entry points' current_sha256 after the "
+            "additive change above and enumerates the divergence, which is "
+            "what this contract exists to require. No locked file dropped, no "
+            "historical_reference_sha256 rewritten, no fitted artifact and no "
+            "freeze manifest touched"
+        ),
+        "models/frozen_manifests/"
+        "nba_prop_quant_v2_adaptive_update_protocol.json": (
+            "carries the serving source contract's whole-file hash, so "
+            "relocking the contract moves this one line with it. Nothing else "
+            "in the protocol changes"
         ),
     }
 )

@@ -1,6 +1,6 @@
 {
   "adaptive_serving_source_contract_path": "models/frozen_manifests/nba_prop_quant_v2_adaptive_serving_source_contract.json",
-  "adaptive_serving_source_contract_sha256": "b4498aa3a803d2d9da2e82dbea714cbb99658574ae33b10f6d34359f62bc01e9",
+  "adaptive_serving_source_contract_sha256": "dddc507513ea487dc7466aa733a5bc7dcb76be735a8bf4c75de64ff57f6a39f4",
   "architecture_contract_path": "models/frozen_manifests/nba_prop_quant_v2_adaptive_architecture_contract.json",
   "architecture_contract_sha256": "059d2a66cd7f976c7a2ae854f69986e361a41b9d253e57f26bc52fd02963ff58",
   "architecture_reference_sha": "4def8ad33ccc56016fb19a97fceca6e027c9612a",

@@ -9,6 +9,7 @@ offer a promotion path even to a candidate that passes every acceptance gate.
 from __future__ import annotations
 
 import ast
+import json
 import subprocess
 from pathlib import Path
 
@@ -31,6 +32,7 @@ from nba_prop_quant.research.game_latent_state.gates import (
 from nba_prop_quant.research.game_latent_state.safety import (
     ADDITIVE_ONLY_SERVING_ENTRY_POINTS,
     ADDITIVE_ONLY_WORKFLOWS,
+    DECLARABLE_SERVING_SOURCE_REGISTRIES,
     DECLARED_INTEGRATION_PATHS,
     NUMERICAL_SURFACE_EXEMPT_FUNCTIONS,
     PRODUCTION_REF,
@@ -149,9 +151,13 @@ def test_the_declared_integration_surface_cannot_reach_the_served_model():
     nothing about content.
     """
     undeclarable_prefixes = ("models/", "configs/", "scripts/", "release/", "review/")
+    exceptions = (
+        *ADDITIVE_ONLY_SERVING_ENTRY_POINTS,
+        *DECLARABLE_SERVING_SOURCE_REGISTRIES,
+    )
     for mapping in (DECLARED_INTEGRATION_PATHS, SHADOW_OWNED_PRODUCTION_PATHS):
         for path in mapping:
-            if path not in ADDITIVE_ONLY_SERVING_ENTRY_POINTS:
+            if path not in exceptions:
                 assert not path.startswith(undeclarable_prefixes), (
                     f"{path} is a model, config, production script or release path "
                     "and may not be declared or owned"
@@ -174,6 +180,77 @@ def test_only_the_serving_entry_points_are_declarable_under_scripts():
     for relative in ADDITIVE_ONLY_SERVING_ENTRY_POINTS:
         assert relative.startswith("scripts/")
         assert (PROJECT / relative).exists()
+
+
+def test_only_two_named_registries_are_declarable_under_models():
+    """The carve-out is two files that record, not the directory they sit in.
+
+    Everything else under ``models/`` is a fitted artifact or a freeze
+    manifest, and those are the things "may not edit the served model" is
+    about.
+    """
+    for relative in DECLARABLE_SERVING_SOURCE_REGISTRIES:
+        assert relative.startswith("models/frozen_manifests/")
+        assert relative.endswith(".json")
+        assert (PROJECT / relative).exists()
+
+    frozen = {
+        path.relative_to(PROJECT).as_posix()
+        for path in (PROJECT / "models" / "frozen_manifests").glob("*.json")
+    }
+    still_undeclarable = frozen - set(DECLARABLE_SERVING_SOURCE_REGISTRIES)
+    assert still_undeclarable, "the carve-out must not cover every manifest"
+    for relative in still_undeclarable:
+        assert relative not in DECLARED_INTEGRATION_PATHS, (
+            f"{relative} is a freeze manifest and may not be declared"
+        )
+
+
+def test_relocking_a_serving_source_cannot_rewrite_the_evidence():
+    """A relock may move the record forward; it may not edit the past.
+
+    ``current_sha256`` is what serving runs today and moves when an approved
+    change lands. ``historical_reference_sha256`` is the certified anchor's
+    bytes, and the set of locked files is the surface the contract covers. If
+    a relock could rewrite either, "enumerate and justify every divergence"
+    would be satisfiable by deleting the divergence.
+    """
+    base = production_base()
+    if base is None:
+        pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
+
+    relative = DECLARABLE_SERVING_SOURCE_REGISTRIES[0]
+
+    before = json.loads(git("show", f"{base}:{relative}"))
+    after = json.loads(git("show", f"HEAD:{relative}"))
+
+    locked_before = before["locked_serving_source_files"]
+    locked_after = after["locked_serving_source_files"]
+
+    assert set(locked_before) <= set(locked_after), (
+        "a relock dropped locked serving sources: "
+        f"{sorted(set(locked_before) - set(locked_after))}"
+    )
+
+    for name, entry in locked_before.items():
+        assert (
+            locked_after[name]["historical_reference_sha256"]
+            == entry["historical_reference_sha256"]
+        ), f"{name}'s historical reference hash was rewritten"
+
+    assert (
+        after["historical_architecture_reference"]
+        == before["historical_architecture_reference"]
+    )
+    assert after["historical_contract_sha256"] == before["historical_contract_sha256"]
+
+    # Every file whose current hash moved has to be enumerated as a
+    # divergence, which is the contract's own stated requirement.
+    for name, entry in locked_after.items():
+        if entry["current_sha256"] == entry["historical_reference_sha256"]:
+            continue
+        assert name in after["diverged_from_historical_reference"], name
+        assert entry.get("divergence_reason", "").strip(), name
 
 
 def test_a_declared_serving_script_change_only_ever_adds_lines():
