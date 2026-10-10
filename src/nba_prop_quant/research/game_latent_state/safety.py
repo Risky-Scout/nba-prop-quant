@@ -75,6 +75,62 @@ NUMERICAL_SURFACE_EXEMPT_FUNCTIONS: tuple[str, ...] = (
     "main",
 )
 
+#: Serving *sources* a declaration may name, and only additively.
+#:
+#: The carve-out above fixed where a serving script resolves the frozen
+#: manifest. It could not fix what a serving script is given, because that
+#: lives in the modules the scripts import and every one of those is
+#: undeclarable by :data:`UNDECLARABLE_PRODUCTION_SOURCES`. The same shape of
+#: deadlock, one layer in, and the same consequence: a serving-correctness fix
+#: with nowhere to go.
+#:
+#: That was not hypothetical either. ``build_upcoming_slate_features``
+#: assembled its rows from scratch and emitted none of the five
+#: competition-regime flags the fitted models name in their feature lists,
+#: ``assert_model_feature_contract`` is a column-presence check with no
+#: allowance, and so every non-empty real slate was refused -- after the
+#: frozen manifest had verified, which is to say after the fix above had done
+#: its job. Production could install a verified bundle, resolve the incumbent
+#: and predict nothing.
+#:
+#: So ``slate.py`` is declarable, on the entry points' terms and one more.
+#: Every line production has must still be there, so no existing feature
+#: definition, prior, window or guard can be changed or dropped.
+#: :data:`SERVING_SOURCE_EXEMPT_FUNCTIONS` names the only function whose body
+#: may differ, and the branch-safety tests compare every other function's
+#: syntax tree against production. The additional term is that the module may
+#: not grow its own copy of a rule production already states: what the live
+#: slate says about a game's competition regime is ``classify_games``'
+#: answer, and ``game_context.py`` stays undeclarable, so the only way to
+#: change that answer is still a declared change to the classifier itself.
+#:
+#: Every other module the serving path imports -- the model, the copula, the
+#: marginals, the pricing, the production contract -- remains undeclarable.
+ADDITIVE_ONLY_SERVING_SOURCES: tuple[str, ...] = (
+    "src/nba_prop_quant/slate.py",
+)
+
+#: The only functions in a declared serving source whose bodies may differ
+#: from production. The live slate builder is where a feature the models
+#: require is produced; every prior, window, leakage guard and slate-date rule
+#: in the same module is outside it and is pinned syntax-tree-identical.
+SERVING_SOURCE_EXEMPT_FUNCTIONS: tuple[str, ...] = (
+    "build_upcoming_slate_features",
+)
+
+#: What a statement added to an exempt function is allowed to be about.
+#:
+#: The permission is for named plumbing, not for an editable function. Each
+#: added statement has to name one of these, so widening what an exempt
+#: function may do means adding a name here and having that reviewed, rather
+#: than it following silently from the function already being exempt.
+DECLARED_SERVING_PLUMBING_NAMES: tuple[str, ...] = (
+    "frozen_bundle_root",
+    "history_games",
+    "context",
+    "flags",
+)
+
 #: The two registries under ``models/`` that record what serving runs, rather
 #: than being what serving runs.
 #:
@@ -221,61 +277,45 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: closure's five entries: the two graders it introduced are recorded as owned
 #: below, and the three files it extended were already owned. The frozen
 #: runtime bundle install's four entries were retired the same way when they
-#: landed; all four are recorded as owned below, and the one of them this
-#: branch changes again is declared again here.
+#: landed; all four are recorded as owned below. The real-slate serving
+#: correction's seven entries were retired in turn: the two ops entry points
+#: and the lifecycle workflow among them were already owned, and the two
+#: serving scripts and the two serving-source registries are recorded nowhere,
+#: because they are pre-existing production files this lineage changed rather
+#: than introduced -- so changing one again, as this branch changes the
+#: prediction entry point and both registries, requires declaring it again.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
-        "ops/install_frozen_model_artifacts.py": (
-            "installs the whole frozen project tree rather than only its "
-            "model directory, so the bundle root is a tree the frozen "
-            "manifest's 62 records all resolve against, and verifies them "
-            "with the repository's own whole-manifest verifier rather than a "
-            "second implementation of it. Publishes that root beside the "
-            "model directory. Reads only the published package and the "
-            "repository's frozen manifest, writes only into the durable "
-            "production work root, and cannot fit, refit, recalibrate, "
-            "predict, price, promote or publish"
-        ),
-        "ops/run_incumbent_production_serving.py": (
-            "requires the verified frozen bundle root as well as the verified "
-            "model directory, verifies the whole frozen manifest against that "
-            "root before invoking anything, refuses when the two name "
-            "different freezes, and passes the root to both serving scripts "
-            "explicitly. No prediction, pricing, threshold or authority "
-            "change: the incumbent is still resolved from the promotion state "
-            "alone and still refuses rather than substituting"
+        "src/nba_prop_quant/slate.py": (
+            "the live slate builder emitted none of the five "
+            "competition-regime flags the fitted models name in their feature "
+            "lists, so assert_model_feature_contract refused every non-empty "
+            "real slate. It now classifies the slate with classify_games, "
+            "which is the training path's own classifier and the single "
+            "definition of those flags, rather than with a second copy of the "
+            "rules. Declared under the additive-only rule for a serving "
+            "source: every line production has is still present, "
+            "build_upcoming_slate_features is the one function whose body "
+            "differs and every other function is syntax-tree-identical to "
+            "production, and game_context.py is untouched, so what the live "
+            "slate says about a regime is still only what the classifier says"
         ),
         "scripts/10_predict_slate.py": (
-            "one added argument, --frozen-bundle-root, and three added lines "
-            "that resolve the frozen manifest against it when it is supplied. "
-            "Declared under the additive-only rule: every line production has "
-            "is still present, and every function except parse_args and main "
-            "is syntax-tree-identical to production, so no projection, "
-            "quantile, experience curve or feature computation changes. "
-            "Without it the frozen manifest is resolved against the working "
-            "directory, which cannot hold the ignored model binaries or the "
-            "2025 audit outputs, and the first non-empty slate fails here"
-        ),
-        "scripts/15_price_markets.py": (
-            "one added argument, --frozen-bundle-root, and three added lines "
-            "that resolve the frozen manifest against it when it is supplied. "
-            "Declared under the additive-only rule on the same terms as the "
-            "prediction script: no pricing, probability, hold, edge, combo or "
-            "seed computation changes, and the syntax-tree comparison against "
-            "production pins that rather than asserting it"
-        ),
-        ".github/workflows/nba_production_lifecycle.yml": (
-            "one added line, which hands the serving step the verified frozen "
-            "bundle root the install step published. Every pre-existing line "
-            "is unchanged"
+            "one added import and one added keyword, which hand the slate "
+            "builder the season games table the training path already loads "
+            "through the same loader. Declared under the additive-only rule: "
+            "every line production has is still present, and every function "
+            "except parse_args and main is syntax-tree-identical to "
+            "production, so no projection, quantile, experience curve or "
+            "feature computation changes"
         ),
         "models/frozen_manifests/"
         "nba_prop_quant_v2_adaptive_serving_source_contract.json": (
-            "relocks the two serving entry points' current_sha256 after the "
-            "additive change above and enumerates the divergence, which is "
-            "what this contract exists to require. No locked file dropped, no "
-            "historical_reference_sha256 rewritten, no fitted artifact and no "
-            "freeze manifest touched"
+            "relocks slate.py's and the prediction entry point's "
+            "current_sha256 after the additive change above and enumerates "
+            "the divergence, which is what this contract exists to require. "
+            "No locked file dropped, no historical_reference_sha256 "
+            "rewritten, no fitted artifact and no freeze manifest touched"
         ),
         "models/frozen_manifests/"
         "nba_prop_quant_v2_adaptive_update_protocol.json": (
