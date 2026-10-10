@@ -161,40 +161,24 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: not own and must declare again to touch again. The interpreter guard's
 #: spelling fix was retired in turn when it landed, and so were the pre-live
 #: closure's five entries: the two graders it introduced are recorded as owned
-#: below, and the three files it extended were already owned.
+#: below, and the three files it extended were already owned. The frozen
+#: runtime bundle install's four entries were retired the same way when they
+#: landed; all four are recorded as owned below, and the one of them this
+#: branch changes again is declared again here.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
         "ops/install_frozen_model_artifacts.py": (
-            "installs the already-frozen production model binaries into a "
-            "verified runtime directory outside the checkout, because "
-            "models/**/*.joblib is ignored in Git by design and the frozen "
-            "package is distributed as a release asset. Reads the published "
-            "immutable package and the repository's own frozen manifest, "
-            "re-hashes every artifact against it, and writes only into the "
-            "durable production work root. Builds, regenerates, retrains and "
-            "re-freezes nothing, and cannot predict, price, promote or "
-            "publish"
-        ),
-        "ops/run_incumbent_production_serving.py": (
-            "requires the verified frozen runtime bundle's model directory "
-            "instead of defaulting to the checkout's models/, which could "
-            "never hold the frozen binaries, and scopes its own frozen-bundle "
-            "verification to the runtime model artifacts the manifest records. "
-            "No prediction, pricing, threshold or authority change: the "
-            "incumbent is still resolved from the promotion state alone and "
-            "still refuses rather than substituting"
-        ),
-        ".github/workflows/nba_production_lifecycle.yml": (
-            "one added step, which installs the verified frozen runtime "
-            "bundle before serving and publishes its location, plus the "
-            "serving step being handed that location explicitly. Every "
-            "pre-existing line is unchanged"
-        ),
-        "ops/validate_main_scheduler_role.py": (
-            "records the added install step and its entry point as required, "
-            "ungated on RUN_ADAPTIVE and blocking, so the guard notices if "
-            "the scheduler copy loses the step the incumbent's artifacts come "
-            "from. Reads two workflow copies and writes only its own report"
+            "asserts that the frozen package's transfer completed before "
+            "installing from it. The published release is immutable, so bytes "
+            "that are not the published bytes are always a failed transfer, "
+            "and a dropped connection reads as EOF rather than as an error. "
+            "Compares the byte count against the response and the release, "
+            "retries a bounded number of times, and establishes the expected "
+            "digest from the release's own checksum before accepting anything "
+            "including the cache. Still reads only the published package and "
+            "the repository's frozen manifest, still writes only into the "
+            "durable production work root, and still cannot fit, refit, "
+            "recalibrate, predict, price, promote or publish"
         ),
     }
 )

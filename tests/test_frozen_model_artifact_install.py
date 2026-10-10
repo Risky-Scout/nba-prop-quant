@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import io
 import json
 import shutil
 import sys
@@ -433,6 +434,286 @@ def test_an_already_verified_bundle_is_reused_rather_than_rebuilt(
     assert FREEZE_ID in first["bundle_key"]
     assert first["manifest_sha256"][:16] in first["bundle_key"]
     assert first["frozen_package"]["sha256"][:16] in first["bundle_key"]
+
+
+# ----------------------------------------------------------------------
+# 6b. obtaining the package over a link that drops
+# ----------------------------------------------------------------------
+#
+# The published release is immutable, so a package whose bytes are not the
+# published bytes is a statement about the transfer and never about the
+# release. These establish that a truncated body is recognised as one, that a
+# dropped transfer is retried rather than ending production for the day, and
+# that the package cache is reused because it verified rather than because it
+# is there.
+
+
+class _TruncatedResponse:
+    """A well-formed response whose body stops early, as a dropped one does."""
+
+    def __init__(self, body: bytes, declared: int) -> None:
+        self._body = io.BytesIO(body)
+
+        self.headers = {"Content-Length": str(declared)}
+
+    def read(self, size: int = -1) -> bytes:
+        return self._body.read(size)
+
+    def __enter__(self) -> _TruncatedResponse:
+        return self
+
+    def __exit__(self, *_: object) -> bool:
+        return False
+
+
+def test_a_truncated_transfer_is_refused_as_a_transfer_failure(
+    monkeypatch, tmp_path: Path
+):
+    """Reading a dropped body to EOF raises nothing, so the count is checked.
+
+    This is the failure that took the production lifecycle red: the asset
+    arrived short, hashed to something that was not the published digest, and
+    the only thing said about it was that the hash differed -- which reads as
+    though the immutable release had changed.
+    """
+    body = b"x" * 512
+
+    monkeypatch.setattr(
+        installer,
+        "_request",
+        lambda url, *, accept, token: _TruncatedResponse(body, 4096),
+    )
+
+    destination = tmp_path / "packages" / "package.zip"
+
+    with pytest.raises(installer.BundleRefused) as refusal:
+        installer.download_asset(
+            url="https://example.invalid/package.zip",
+            destination=destination,
+            token=None,
+            expected_bytes=4096,
+        )
+
+    assert "truncated in flight" in str(refusal.value)
+    assert "512" in str(refusal.value) and "4096" in str(refusal.value)
+
+    assert not destination.exists(), "a truncated body was left in place"
+
+    assert list(destination.parent.iterdir()) == [], "staging debris remained"
+
+
+def test_a_complete_transfer_reports_the_bytes_it_wrote(
+    monkeypatch, tmp_path: Path
+):
+    body = b"y" * 4096
+
+    monkeypatch.setattr(
+        installer,
+        "_request",
+        lambda url, *, accept, token: _TruncatedResponse(body, len(body)),
+    )
+
+    destination = tmp_path / "packages" / "package.zip"
+
+    written = installer.download_asset(
+        url="https://example.invalid/package.zip",
+        destination=destination,
+        token=None,
+        expected_bytes=len(body),
+    )
+
+    assert written == len(body)
+    assert destination.read_bytes() == body
+
+
+@pytest.fixture
+def published_release(monkeypatch, frozen_release):
+    """A release that serves the fixture package over a scriptable transfer."""
+
+    def build(*, bodies: list[bytes | None], publish_sums: bool = True):
+        release = frozen_release()
+
+        payload = release["package"].read_bytes()
+
+        asset = installer.ASSET_TEMPLATE.format(freeze_id=FREEZE_ID)
+
+        digest = sha256_bytes(payload)
+
+        sums = f"{digest}  {asset}\n".encode("utf-8")
+
+        assets: dict[str, dict] = {
+            asset: {"url": "https://example.invalid/package", "size": len(payload)}
+        }
+
+        if publish_sums:
+            assets[installer.CHECKSUM_ASSET] = {
+                "url": "https://example.invalid/sums",
+                "size": len(sums),
+            }
+
+        monkeypatch.setattr(
+            installer, "release_assets", lambda **_: dict(assets)
+        )
+
+        monkeypatch.setattr(installer.time, "sleep", lambda _: None)
+
+        transfers: list[int] = []
+
+        queue = list(bodies)
+
+        def download(*, url, destination, token, expected_bytes=None):
+            destination.parent.mkdir(parents=True, exist_ok=True)
+
+            if url.endswith("/sums"):
+                destination.write_bytes(sums)
+
+                return len(sums)
+
+            # ``None`` means a complete transfer; bytes mean whatever the link
+            # actually delivered that time.
+            body = queue.pop(0) if queue else None
+
+            body = payload if body is None else body
+
+            transfers.append(len(body))
+
+            if expected_bytes is not None and len(body) != expected_bytes:
+                raise installer.BundleRefused(
+                    f"the transfer of {destination.name} ended after "
+                    f"{len(body)} bytes but the release's published size is "
+                    f"{expected_bytes}, so the body was truncated in flight"
+                )
+
+            destination.write_bytes(body)
+
+            return len(body)
+
+        monkeypatch.setattr(installer, "download_asset", download)
+
+        return {
+            "asset": asset,
+            "digest": digest,
+            "manifest": release["manifest"],
+            "payload": payload,
+            "runtime_root": release["runtime_root"],
+            "transfers": transfers,
+        }
+
+    return build
+
+
+def _install_from_release(published: dict) -> dict:
+    return installer.install(
+        runtime_root=published["runtime_root"],
+        manifest_path=published["manifest"],
+        repository="risky-scout/nba-prop-quant",
+        allow_download=True,
+    )
+
+
+def test_a_dropped_transfer_is_retried_rather_than_failing_the_day(
+    published_release,
+):
+    """One flaky transfer is not evidence that the frozen release is wrong."""
+    published = published_release(bodies=[b"short", None])
+
+    receipt = _install_from_release(published)
+
+    assert receipt["outcome"] == installer.OUTCOME_INSTALLED
+    assert receipt["frozen_package"]["source"] == "release"
+    assert receipt["frozen_package"]["sha256"] == published["digest"]
+    assert (
+        receipt["frozen_package"]["expected_digest_source"]
+        == installer.CHECKSUM_ASSET
+    )
+
+    assert published["transfers"] == [
+        len(b"short"),
+        len(published["payload"]),
+    ], "the package was not re-fetched after the dropped transfer"
+
+
+def test_a_link_that_never_delivers_the_package_refuses_rather_than_serving(
+    published_release,
+):
+    """Bounded: a permanently broken transfer fails closed, naming attempts."""
+    published = published_release(
+        bodies=[b"short"] * installer.DOWNLOAD_ATTEMPTS
+    )
+
+    with pytest.raises(installer.BundleRefused) as refusal:
+        _install_from_release(published)
+
+    message = str(refusal.value)
+
+    assert f"{installer.DOWNLOAD_ATTEMPTS} attempts" in message
+    assert "truncated in flight" in message
+
+    assert len(published["transfers"]) == installer.DOWNLOAD_ATTEMPTS
+
+    bundles = published["runtime_root"] / installer.BUNDLES_RELATIVE
+
+    assert not list(bundles.glob(f"{FREEZE_ID}*")), "a bundle was installed"
+
+
+def test_a_cached_package_is_reused_only_because_it_verified(
+    published_release,
+):
+    """The second run neither re-downloads nor trusts the cache blindly."""
+    published = published_release(bodies=[None])
+
+    first = _install_from_release(published)
+
+    assert first["frozen_package"]["source"] == "release"
+
+    second = _install_from_release(published)
+
+    assert second["outcome"] == installer.OUTCOME_REUSED
+    assert second["frozen_package"]["source"] == "cache"
+    assert second["frozen_package"]["sha256"] == published["digest"]
+
+    assert published["transfers"] == [
+        len(published["payload"])
+    ], "the verified cache was downloaded again"
+
+
+def test_a_corrupt_cached_package_is_discarded_rather_than_installed(
+    published_release,
+):
+    """Debris from an interrupted transfer is never the frozen package."""
+    published = published_release(bodies=[None])
+
+    cached = (
+        published["runtime_root"]
+        / installer.PACKAGES_RELATIVE
+        / published["asset"]
+    )
+
+    cached.parent.mkdir(parents=True, exist_ok=True)
+
+    cached.write_bytes(published["payload"][: len(published["payload"]) // 2])
+
+    receipt = _install_from_release(published)
+
+    assert receipt["outcome"] == installer.OUTCOME_INSTALLED
+    assert receipt["frozen_package"]["source"] == "release"
+    assert receipt["frozen_package"]["sha256"] == published["digest"]
+
+    assert cached.read_bytes() == published["payload"]
+
+
+def test_a_release_without_a_published_digest_cannot_be_verified(
+    published_release,
+):
+    """Verification is not skippable: no published digest is a refusal."""
+    published = published_release(bodies=[None], publish_sums=False)
+
+    with pytest.raises(installer.BundleRefused) as refusal:
+        _install_from_release(published)
+
+    assert installer.CHECKSUM_ASSET in str(refusal.value)
+
+    assert published["transfers"] == [], "bytes were accepted unverified"
 
 
 # ----------------------------------------------------------------------

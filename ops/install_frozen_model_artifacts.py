@@ -46,6 +46,26 @@ marker is written there, and only then is the whole directory moved into place
 by a single rename. An existing directory without a matching readiness marker,
 or one that fails re-verification, is discarded and rebuilt.
 
+OBTAINING THE PACKAGE
+---------------------
+
+The release is immutable, so a package whose bytes are not the published bytes
+is always a statement about the transfer. Getting that distinction right is
+what the download path is for. A 386 MiB body over a residential link ends
+early often enough to be ordinary, and an early end is invisible by default:
+``shutil.copyfileobj`` reads to EOF, a dropped connection *is* an EOF, and the
+copy returns normally having written a prefix. So the byte count is compared
+against what the response and the release both declare, a short body is named
+as a truncated transfer, and the transfer is retried a bounded number of times
+before the install refuses. Each attempt is verified whole and a rejected one
+leaves nothing behind, so retrying can only retry the transfer.
+
+The expected digest comes from the release's own ``SHA256SUMS.txt`` and is
+established before any bytes are accepted, including the cache's. A cached
+package is therefore reused because it verified rather than because it is
+there, and a release that publishes no digest for its own asset is a refusal
+rather than a reason to skip verification.
+
 WHAT IT CANNOT DO
 -----------------
 
@@ -62,6 +82,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 import zipfile
@@ -137,6 +158,17 @@ CHECKSUM_ASSET = "SHA256SUMS.txt"
 API_ROOT = "https://api.github.com"
 
 TOKEN_VARIABLES: tuple[str, ...] = ("GITHUB_TOKEN", "GH_TOKEN")
+
+#: How many times the published package is fetched before the install refuses.
+#: A 386 MiB transfer over a residential link is long enough that a dropped
+#: connection is an ordinary event rather than an exceptional one, and a
+#: truncated body is not evidence that the immutable release is wrong. Each
+#: attempt is verified in full and a failed one leaves nothing behind, so
+#: retrying can only ever retry the transfer.
+DOWNLOAD_ATTEMPTS = 4
+
+#: Seconds before each retry, so a transient outage is not hammered.
+RETRY_BACKOFF_SECONDS: tuple[float, ...] = (4.0, 8.0, 16.0)
 
 #: The environment variable the install location is published under, for the
 #: serving step that is handed it.
@@ -329,8 +361,15 @@ def _request(url: str, *, accept: str, token: str | None) -> Any:
     return urllib.request.urlopen(request, timeout=300)
 
 
-def release_assets(*, repository: str, tag: str, token: str | None) -> dict[str, str]:
-    """Asset name to download URL for one published release."""
+def release_assets(
+    *, repository: str, tag: str, token: str | None
+) -> dict[str, dict[str, Any]]:
+    """Asset name to download URL and published byte count for one release.
+
+    The size is carried because it is the only thing that distinguishes a
+    truncated transfer from a complete one before hashing: a short body is a
+    well-formed HTTP response and reading it to EOF raises nothing.
+    """
     url = f"{API_ROOT}/repos/{repository}/releases/tags/{tag}"
 
     try:
@@ -352,14 +391,36 @@ def release_assets(*, repository: str, tag: str, token: str | None) -> dict[str,
             f"{error}"
         ) from error
 
-    return {
-        str(asset["name"]): str(asset["url"])
-        for asset in (payload.get("assets") or [])
-    }
+    assets: dict[str, dict[str, Any]] = {}
+
+    for asset in payload.get("assets") or []:
+        size = asset.get("size")
+
+        assets[str(asset["name"])] = {
+            "url": str(asset["url"]),
+            "size": int(size) if isinstance(size, int) else None,
+        }
+
+    return assets
 
 
-def download_asset(*, url: str, destination: Path, token: str | None) -> None:
-    """Stream one release asset into place, completed or not at all."""
+def download_asset(
+    *,
+    url: str,
+    destination: Path,
+    token: str | None,
+    expected_bytes: int | None = None,
+) -> int:
+    """Stream one release asset into place, completed or not at all.
+
+    Completeness is asserted rather than assumed. ``shutil.copyfileobj`` reads
+    to EOF, and a connection that drops mid-body produces an EOF: the copy
+    returns normally having written a prefix of the asset. So the byte count is
+    compared against what the response and the release both say it should be,
+    and a short body is refused here, where it is recognisable as a failed
+    transfer, rather than surfacing later as an unexplained digest mismatch
+    against an immutable published artifact.
+    """
     destination.parent.mkdir(parents=True, exist_ok=True)
 
     handle, staged = tempfile.mkstemp(
@@ -374,10 +435,30 @@ def download_asset(*, url: str, destination: Path, token: str | None) -> None:
         with _request(
             url, accept="application/octet-stream", token=token
         ) as response:
+            declared = response.headers.get("Content-Length")
+
             with staged_path.open("wb") as sink:
                 shutil.copyfileobj(response, sink, length=1024 * 1024)
 
+        written = staged_path.stat().st_size
+
+        for label, count in (
+            ("the response's Content-Length", declared),
+            ("the release's published size", expected_bytes),
+        ):
+            if count is None:
+                continue
+
+            if written != int(count):
+                raise BundleRefused(
+                    f"the transfer of {destination.name} ended after "
+                    f"{written} bytes but {label} is {int(count)}, so the "
+                    "body was truncated in flight"
+                )
+
         os.replace(staged_path, destination)
+
+        return written
 
     except BaseException:
         staged_path.unlink(missing_ok=True)
@@ -393,6 +474,127 @@ def recorded_package_digest(text: str, asset: str) -> str | None:
             return fields[0]
 
     return None
+
+
+def _fetch_until_verified(
+    *,
+    url: str,
+    destination: Path,
+    token: str | None,
+    expected_digest: str,
+    expected_bytes: int | None,
+) -> str:
+    """Download one asset repeatedly until its bytes are the published bytes.
+
+    Verification is per attempt and a rejected attempt leaves nothing behind,
+    so this cannot accumulate state or accept a partially good transfer. It
+    exists because the alternative -- refusing production for the day on the
+    first dropped connection -- treats a flaky link as though the immutable
+    release had changed.
+    """
+    failures: list[str] = []
+
+    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+        try:
+            download_asset(
+                url=url,
+                destination=destination,
+                token=token,
+                expected_bytes=expected_bytes,
+            )
+
+            digest = sha256_file(destination)
+
+            if digest == expected_digest:
+                return digest
+
+            destination.unlink(missing_ok=True)
+
+            failures.append(
+                f"attempt {attempt} hashed to {digest}, not the published "
+                f"{expected_digest}"
+            )
+
+        except (BundleRefused, urllib.error.URLError, OSError) as error:
+            destination.unlink(missing_ok=True)
+
+            failures.append(f"attempt {attempt} failed: {error}")
+
+        if attempt < DOWNLOAD_ATTEMPTS:
+            time.sleep(
+                RETRY_BACKOFF_SECONDS[
+                    min(attempt - 1, len(RETRY_BACKOFF_SECONDS) - 1)
+                ]
+            )
+
+    raise BundleRefused(
+        f"{destination.name} could not be obtained intact in "
+        f"{DOWNLOAD_ATTEMPTS} attempts: " + "; ".join(failures)
+    )
+
+
+def published_package_digest(
+    *,
+    runtime_root: Path,
+    assets: dict[str, dict[str, Any]],
+    asset: str,
+    tag: str,
+    token: str | None,
+) -> str:
+    """The digest the release itself publishes for one asset.
+
+    Established before any package bytes are trusted, because it is what makes
+    "verified" mean anything: without it the only available check is that some
+    bytes arrived. A release that publishes no digest for its own asset is a
+    refusal rather than a reason to skip verification.
+    """
+    if CHECKSUM_ASSET not in assets:
+        raise BundleRefused(
+            f"the release {tag!r} publishes no {CHECKSUM_ASSET}, so the "
+            f"expected digest of {asset} could not be established and the "
+            "package cannot be verified"
+        )
+
+    sums = Path(runtime_root) / PACKAGES_RELATIVE / f"{tag}.{CHECKSUM_ASSET}"
+
+    failures: list[str] = []
+
+    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+        try:
+            download_asset(
+                url=assets[CHECKSUM_ASSET]["url"],
+                destination=sums,
+                token=token,
+                expected_bytes=assets[CHECKSUM_ASSET]["size"],
+            )
+
+            recorded = recorded_package_digest(
+                sums.read_text(encoding="utf-8"), asset
+            )
+
+            if recorded:
+                return recorded.lower()
+
+            raise BundleRefused(
+                f"{CHECKSUM_ASSET} records no digest for {asset}"
+            )
+
+        except (BundleRefused, urllib.error.URLError, OSError) as error:
+            sums.unlink(missing_ok=True)
+
+            failures.append(f"attempt {attempt} failed: {error}")
+
+        if attempt < DOWNLOAD_ATTEMPTS:
+            time.sleep(
+                RETRY_BACKOFF_SECONDS[
+                    min(attempt - 1, len(RETRY_BACKOFF_SECONDS) - 1)
+                ]
+            )
+
+    raise BundleRefused(
+        f"the published digest of {asset} could not be read from "
+        f"{CHECKSUM_ASSET}: " + "; ".join(failures)
+    )
 
 
 def resolve_package(
@@ -411,6 +613,11 @@ def resolve_package(
     Resolution order is the documented distribution mechanism: an explicitly
     supplied package, then the runtime root's cache, then the published release
     asset. Nothing is ever built.
+
+    The expected digest is established before any cached or downloaded bytes
+    are accepted, so the cache is reused because it was verified rather than
+    because it exists. A cached file that does not match is debris from an
+    interrupted transfer and is discarded.
     """
     expected = package_sha256.lower() if package_sha256 else None
 
@@ -440,25 +647,60 @@ def resolve_package(
 
     cached = Path(runtime_root) / PACKAGES_RELATIVE / name
 
+    digest_source = "argument" if expected else "none"
+
+    tag = release_tag or freeze_id
+
+    token = _token()
+
+    assets: dict[str, dict[str, Any]] = {}
+
+    if allow_download and repository:
+        assets = release_assets(repository=repository, tag=tag, token=token)
+
+        if name not in assets:
+            raise BundleRefused(
+                f"the release {tag!r} in {repository} publishes no asset "
+                f"named {name!r}; it publishes {sorted(assets) or 'nothing'}"
+            )
+
+        if expected is None:
+            expected = published_package_digest(
+                runtime_root=runtime_root,
+                assets=assets,
+                asset=name,
+                tag=tag,
+                token=token,
+            )
+
+            digest_source = CHECKSUM_ASSET
+
+    if expected is None:
+        raise BundleRefused(
+            f"the expected digest of {name} could not be established -- no "
+            "--package-sha256 was given and the published checksum could not "
+            "be read -- so no package may be accepted as the frozen one"
+        )
+
     if cached.exists():
         digest = sha256_file(cached)
 
-        if expected is None or digest == expected:
+        if digest == expected:
             return {
                 "asset": name,
                 "package_sha256": digest,
                 "path": cached,
                 "source": "cache",
-                "expected_digest_source": "argument" if expected else "none",
+                "expected_digest_source": digest_source,
             }
 
         cached.unlink()
 
     if not allow_download:
         raise BundleRefused(
-            f"the frozen package {name} is not present at {cached} and "
-            "downloading was refused, so the published release asset could "
-            "not be obtained"
+            f"the frozen package {name} is not present and verified at "
+            f"{cached} and downloading was refused, so the published release "
+            "asset could not be obtained"
         )
 
     if not repository:
@@ -467,46 +709,13 @@ def resolve_package(
             "release holding the frozen package could not be identified"
         )
 
-    tag = release_tag or freeze_id
-
-    token = _token()
-
-    assets = release_assets(repository=repository, tag=tag, token=token)
-
-    if name not in assets:
-        raise BundleRefused(
-            f"the release {tag!r} in {repository} publishes no asset named "
-            f"{name!r}; it publishes {sorted(assets) or 'nothing'}"
-        )
-
-    digest_source = "argument" if expected else "none"
-
-    if expected is None and CHECKSUM_ASSET in assets:
-        sums = Path(runtime_root) / PACKAGES_RELATIVE / f"{tag}.{CHECKSUM_ASSET}"
-
-        download_asset(
-            url=assets[CHECKSUM_ASSET], destination=sums, token=token
-        )
-
-        expected = recorded_package_digest(
-            sums.read_text(encoding="utf-8"), name
-        )
-
-        if expected:
-            expected = expected.lower()
-            digest_source = CHECKSUM_ASSET
-
-    download_asset(url=assets[name], destination=cached, token=token)
-
-    digest = sha256_file(cached)
-
-    if expected and digest != expected:
-        cached.unlink(missing_ok=True)
-
-        raise BundleRefused(
-            f"the downloaded {name} hashes to {digest}, not the published "
-            f"{expected}"
-        )
+    digest = _fetch_until_verified(
+        url=assets[name]["url"],
+        destination=cached,
+        token=token,
+        expected_digest=expected,
+        expected_bytes=assets[name]["size"],
+    )
 
     return {
         "asset": name,
