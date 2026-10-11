@@ -148,6 +148,8 @@ A release is written whole, verified, and only then promoted.
     releases/<release_id>/manifest.json   provenance, row count, digests
     current.json                          which release the destination serves
     previous.json                         the rollback target
+    canary_attestation.json               canary only: what this canary proved
+    audit_log.jsonl                       every action that changed this tree
 ```
 
 1. **Write** both files. The transport stages beside the target and renames,
@@ -168,6 +170,45 @@ it. A rerun of the release already current is a no-op on both pointers — it
 has to be, because rotating `current` into `previous` when the two are the
 same release would destroy the rollback target.
 
+Every completed action appends one line to `audit_log.jsonl` at the
+destination, including a rerun that promoted nothing. It is written at the
+destination rather than only to the operator's terminal, because a receipt
+that exists on whichever machine happened to run the publisher is not a record
+anybody looking at the destination can find. Refusals append nothing: a
+refused run writes no bytes at all, and the operator's own receipt
+(`--receipt-path`) carries the reason.
+
+### Activating — what `--mode live` is gated on
+
+Activation is `--mode live`, and seven independent facts have to hold, all
+checked **before a byte is written**:
+
+1. the mode is named explicitly — the default is `canary`;
+2. the committed switch enables `live`;
+3. the serving receipt's authority is the incumbent;
+4. `NBA_PROP_WOO_PUBLISH` and `NBA_PROP_WOO_PUBLISH_APPROVAL` match the
+   switch's state and its approval token;
+5. a successful canary of **this same source artifact** is attested, via
+   `--canary-attestation` naming the `canary_attestation.json` that canary
+   wrote;
+6. the release verifies at the destination after being written back;
+7. a rollback target is already at the destination.
+
+The canary gate matches on two digests: the source artifact's, which says the
+canary ran on the same priced file, and the published rows', which says that
+file still renders to the same rows. Either alone would let an activation
+inherit a canary that proved a different thing. Only a canary writes an
+attestation — an activation does not — so a live release can never authorise
+the next one.
+
+The rollback gate means no activation is the step that leaves a destination
+with nowhere to go back to. That includes the first one: **before a destination
+is activated against for the first time, its rollback target has to be seeded
+from whatever that destination is already serving.** This is an operator
+precondition, not something this repository can supply, and it is deliberate —
+the alternative is special-casing the first activation, which is exactly the
+activation most likely to need rolling back.
+
 ### Rolling back
 
 ```
@@ -182,7 +223,9 @@ destination, so the pointer moves back and the destination serves what it
 served before. Nothing is refitted, recalibrated or promoted, and no candidate
 shadow state is read or written. It refuses rather than guessing when the
 previous release is absent or its bytes are gone, because a rollback that
-silently landed somewhere else would be worse than staying put.
+silently landed somewhere else would be worse than staying put. The restored
+release, the one it superseded and the digest it was verified against are
+appended to the destination's audit log.
 
 ## What this is not
 
@@ -207,7 +250,9 @@ In addition to the three switch conditions:
 2. a transport implementing that protocol, written against the real contract
    rather than a guessed one;
 3. a canary against the real staging destination, with the readback verified
-   there;
-4. the activation SHA and activation time recorded, as
+   there, whose `canary_attestation.json` is then handed to the activation;
+4. a rollback target seeded at the live destination from whatever it is
+   already serving;
+5. the activation SHA and activation time recorded, as
    `research/final_model/live_shadow_promotion_policy.json` requires of any
    WizardOfOdds activation.

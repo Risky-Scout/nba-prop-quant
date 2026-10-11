@@ -372,6 +372,10 @@ def test_a_rerun_changes_nothing(tmp_path: Path):
     the release already current would overwrite the real rollback target with
     a copy of the live one, so the destination would still look healthy and
     have nowhere to go back to.
+
+    The audit log is excluded from the comparison and asserted separately: it
+    is a record of what was attempted, not part of what is served, and a rerun
+    that left no trace of itself would be the wrong kind of idempotent.
     """
     built = fixture.build(tmp_path)
 
@@ -379,17 +383,26 @@ def test_a_rerun_changes_nothing(tmp_path: Path):
 
     transport = publisher.LocalDirectoryTransport(built["destination_root"])
 
-    listing = transport.listing()
-
-    current = transport.read_bytes(publisher.CURRENT_POINTER)
+    served = {
+        name: transport.read_bytes(name)
+        for name in transport.listing()
+        if name != publisher.AUDIT_LOG_NAME
+    }
 
     second = publish(built)
 
     assert second["release"]["release_id"] == first["release"]["release_id"]
     assert second["promotion"]["promoted"] is False
-    assert transport.listing() == listing, "a rerun added files"
-    assert transport.read_bytes(publisher.CURRENT_POINTER) == current
+    assert {
+        name: transport.read_bytes(name)
+        for name in transport.listing()
+        if name != publisher.AUDIT_LOG_NAME
+    } == served, "a rerun changed what the destination serves"
     assert not transport.exists(publisher.PREVIOUS_POINTER)
+
+    actions = [entry["action"] for entry in publisher.read_audit_log(transport)]
+
+    assert actions == [publisher.ACTION_PUBLISHED, publisher.ACTION_REPUBLISHED]
 
 
 def test_no_partial_file_is_left_at_the_destination(tmp_path: Path):
@@ -556,6 +569,8 @@ def test_the_canary_writes_only_its_own_destination(tmp_path: Path):
     release = receipt["release"]["release_id"]
 
     assert publisher.LocalDirectoryTransport(built["destination_root"]).listing() == [
+        publisher.AUDIT_LOG_NAME,
+        publisher.ATTESTATION_NAME,
         publisher.CURRENT_POINTER,
         f"{publisher.RELEASES_DIRECTORY}/{release}/{publisher.MANIFEST_NAME}",
         f"{publisher.RELEASES_DIRECTORY}/{release}/{publisher.ROWS_NAME}",
@@ -885,6 +900,357 @@ def test_rollback_touches_no_model_or_registry_path(tmp_path: Path):
     assert [
         name for name in offenders if any(word in name.lower() for word in forbidden)
     ] == []
+
+
+def test_rollback_writes_an_audit_receipt(tmp_path: Path):
+    """What the destination is serving, and how it got there, both readable.
+
+    At the destination rather than only in the operator's terminal: a receipt
+    that exists on whichever machine happened to run the rollback is not a
+    record anybody looking at the destination can find.
+    """
+    built = fixture.build(tmp_path)
+
+    first = publish(built)
+
+    frame = fixture.priced_frame()
+
+    frame.loc[0, "calibrated_q_over_nonpush"] = 0.4615
+
+    second = publish(
+        fixture.build(tmp_path / "second", frame=frame),
+        destination_root=built["destination_root"],
+    )
+
+    transport = publisher.LocalDirectoryTransport(built["destination_root"])
+
+    restored = publisher.rollback(transport)
+
+    assert restored["audit_relative"] == publisher.AUDIT_LOG_NAME
+
+    entries = publisher.read_audit_log(transport)
+
+    assert [entry["action"] for entry in entries] == [
+        publisher.ACTION_PUBLISHED,
+        publisher.ACTION_PUBLISHED,
+        publisher.ACTION_ROLLED_BACK,
+    ]
+
+    assert entries[-1]["release_id"] == first["release"]["release_id"]
+    assert entries[-1]["superseded_release_id"] == second["release"]["release_id"]
+    assert entries[-1]["model_authority"] == publisher.MODEL_AUTHORITY
+
+
+# ======================================================================
+# the activation contract
+#
+# Seven conditions have to hold before anything goes live. Four of them --
+# the mode, the switch, the authority and the token -- are refused in the
+# first section above, against the committed switch, which is the state that
+# matters. The two that only become observable once those are satisfied get
+# their own section here, because a test that cannot tell which of five
+# refusals it triggered is not testing the gate it names.
+# ======================================================================
+
+
+def approved_live(tmp_path: Path, *, live_root: Path) -> dict:
+    """A live run with every earlier gate satisfied.
+
+    The switch enabled, the environment agreeing, a matching token and a
+    configured destination -- none of which exist in the committed state, and
+    all of which have to be forged here for the two remaining gates to be the
+    thing a refusal is about.
+    """
+    document = json.loads(
+        (PROJECT / publisher.SWITCH_RELATIVE).read_text(encoding="utf-8")
+    )
+
+    document["modes"][publisher.MODE_LIVE] = {
+        "state": publisher.STATE_ENABLED,
+        "approval_token": "the-real-token",
+        "reason": "enabled for this test only",
+    }
+
+    switch = tmp_path / "live_switch.json"
+
+    switch.write_text(json.dumps(document), encoding="utf-8")
+
+    destinations = json.loads(
+        (PROJECT / publisher.DESTINATIONS_RELATIVE).read_text(encoding="utf-8")
+    )
+
+    destinations["destinations"][publisher.MODE_LIVE] = {
+        "transport": publisher.TRANSPORT_LOCAL_DIRECTORY,
+        "root": str(live_root),
+        "release_prefix": "nba_prop_quant",
+    }
+
+    destinations_path = tmp_path / "live_destinations.json"
+
+    destinations_path.write_text(json.dumps(destinations), encoding="utf-8")
+
+    return {
+        "mode": publisher.MODE_LIVE,
+        "switch_path": switch,
+        "destinations_path": destinations_path,
+        "destination_root": live_root,
+        "environment": {
+            publisher.PUBLISH_ENV_VAR: publisher.STATE_ENABLED,
+            publisher.PUBLISH_APPROVAL_ENV_VAR: "the-real-token",
+        },
+    }
+
+
+def seed_rollback_target(live_root: Path) -> dict:
+    """Give the live destination a release it is already serving.
+
+    Written directly rather than published, because that is the real shape of
+    it: the thing a first activation would be rolling back to was put there by
+    something other than this publisher, and the gate has to be satisfiable by
+    a destination state this publisher did not create.
+    """
+    transport = publisher.LocalDirectoryTransport(live_root)
+
+    release_id = "nba_prop_quant__2026-10-19__alreadyserving"
+
+    rows_relative = (
+        f"{publisher.RELEASES_DIRECTORY}/{release_id}/{publisher.ROWS_NAME}"
+    )
+
+    rows = publisher.serialise(
+        {
+            "contract_version": publisher.PUBLICATION_CONTRACT_VERSION,
+            "rows": [],
+            "slate_date": "2026-10-19",
+        }
+    )
+
+    transport.write_bytes(rows_relative, rows)
+
+    transport.write_bytes(
+        publisher.CURRENT_POINTER,
+        publisher.serialise(
+            {
+                "mode": publisher.MODE_LIVE,
+                "promoted_at": "2026-10-19T00:00:00Z",
+                "release_id": release_id,
+                "rows_relative": rows_relative,
+                "rows_sha256": publisher.digest(rows),
+            }
+        ),
+    )
+
+    return {"release_id": release_id, "rows_relative": rows_relative}
+
+
+def test_activation_refuses_without_a_canary_attestation(tmp_path: Path):
+    """Nothing goes live that was not canaried first, and nothing is written."""
+    built = fixture.build(tmp_path)
+
+    live_root = tmp_path / "live"
+
+    seed_rollback_target(live_root)
+
+    live = publisher.LocalDirectoryTransport(live_root)
+
+    before = {name: live.read_bytes(name) for name in live.listing()}
+
+    with pytest.raises(
+        publisher.PublishingRefused, match="requires --canary-attestation"
+    ):
+        publish(built, **approved_live(tmp_path, live_root=live_root))
+
+    assert {
+        name: live.read_bytes(name) for name in live.listing()
+    } == before, "a refused activation wrote to the live destination"
+
+
+def test_activation_refuses_a_canary_of_a_different_artifact(tmp_path: Path):
+    """8. The canary has to have proved these bytes, not some bytes.
+
+    The attestation is real and records a genuine successful canary. It is
+    simply a canary of a different priced file, which is exactly the mistake
+    a "was this canaried?" checkbox cannot catch.
+    """
+    built = fixture.build(tmp_path)
+
+    live_root = tmp_path / "live"
+
+    seed_rollback_target(live_root)
+
+    other = fixture.priced_frame()
+
+    other.loc[1, "calibrated_q_under_nonpush"] = 0.4123
+
+    elsewhere = fixture.build(tmp_path / "elsewhere", frame=other)
+
+    publish(elsewhere)
+
+    attestation = elsewhere["destination_root"] / publisher.ATTESTATION_NAME
+
+    with pytest.raises(publisher.PublishingRefused, match="different bytes"):
+        publish(
+            built,
+            canary_attestation=attestation,
+            **approved_live(tmp_path, live_root=live_root),
+        )
+
+
+def test_activation_refuses_an_unverified_canary(tmp_path: Path):
+    """A canary that did not read its own release back authorises nothing."""
+    built = fixture.build(tmp_path)
+
+    live_root = tmp_path / "live"
+
+    seed_rollback_target(live_root)
+
+    publish(built)
+
+    attestation = built["destination_root"] / publisher.ATTESTATION_NAME
+
+    document = json.loads(attestation.read_text(encoding="utf-8"))
+
+    document["verified"] = False
+
+    forged = tmp_path / "forged_attestation.json"
+
+    forged.write_text(json.dumps(document), encoding="utf-8")
+
+    with pytest.raises(publisher.PublishingRefused, match="verified readback"):
+        publish(
+            built,
+            canary_attestation=forged,
+            **approved_live(tmp_path, live_root=live_root),
+        )
+
+
+def test_activation_refuses_when_there_is_no_rollback_target(tmp_path: Path):
+    """An activation is never the step that leaves live with nowhere to go.
+
+    The canary here is genuine and matches, so the rollback gate is the only
+    thing left to refuse on. The live destination is empty, which is also the
+    position a real first activation starts from: its rollback target has to
+    be seeded before it is allowed to proceed.
+    """
+    built = fixture.build(tmp_path)
+
+    publish(built)
+
+    attestation = built["destination_root"] / publisher.ATTESTATION_NAME
+
+    live_root = tmp_path / "live"
+
+    live_root.mkdir()
+
+    with pytest.raises(publisher.PublishingRefused, match="no rollback target"):
+        publish(
+            built,
+            canary_attestation=attestation,
+            **approved_live(tmp_path, live_root=live_root),
+        )
+
+    assert publisher.LocalDirectoryTransport(live_root).listing() == []
+
+
+def test_activation_refuses_a_rollback_target_whose_bytes_are_gone(tmp_path: Path):
+    """A pointer naming absent bytes is not somewhere to go back to."""
+    built = fixture.build(tmp_path)
+
+    live_root = tmp_path / "live"
+
+    seeded = seed_rollback_target(live_root)
+
+    publish(built)
+
+    attestation = built["destination_root"] / publisher.ATTESTATION_NAME
+
+    (live_root / seeded["rows_relative"]).unlink()
+
+    with pytest.raises(
+        publisher.PublishingRefused, match="could not be rolled back to"
+    ):
+        publish(
+            built,
+            canary_attestation=attestation,
+            **approved_live(tmp_path, live_root=live_root),
+        )
+
+
+def test_activation_with_all_seven_conditions_publishes_and_keeps_the_rollback(
+    tmp_path: Path,
+):
+    """The positive case, so the gates are not passing by always refusing.
+
+    Reached only with a forged switch, a forged destination and a forged
+    environment, none of which exist in this repository: against the committed
+    state this sequence is unreachable, which is the point. What it proves is
+    that the seven conditions are jointly satisfiable and that satisfying them
+    leaves the previous release in place as the rollback target.
+    """
+    built = fixture.build(tmp_path)
+
+    live_root = tmp_path / "live"
+
+    seeded = seed_rollback_target(live_root)
+
+    publish(built)
+
+    attestation = built["destination_root"] / publisher.ATTESTATION_NAME
+
+    receipt = publish(
+        built,
+        canary_attestation=attestation,
+        **approved_live(tmp_path, live_root=live_root),
+    )
+
+    assert receipt["outcome"] == publisher.OUTCOME_PUBLISHED
+    assert receipt["mode"] == publisher.MODE_LIVE
+    assert receipt["model_authority"] == publisher.MODEL_AUTHORITY
+    assert receipt["verification"]["verified"] is True
+    assert receipt["promotion"]["promoted"] is True
+    assert receipt["activation"]["rollback_target"]["release_id"] == (
+        seeded["release_id"]
+    )
+    assert receipt["activation"]["canary"]["rows_sha256"] == (
+        receipt["release"]["rows_sha256"]
+    )
+
+    live = publisher.LocalDirectoryTransport(live_root)
+
+    assert (
+        json.loads(live.read_bytes(publisher.PREVIOUS_POINTER))["release_id"]
+        == seeded["release_id"]
+    )
+
+    restored = publisher.rollback(live)
+
+    assert restored["restored_release_id"] == seeded["release_id"]
+
+
+def test_an_activation_leaves_no_canary_attestation_of_its_own(tmp_path: Path):
+    """Only a canary attests. Otherwise a live release would authorise itself.
+
+    An activation that wrote an attestation beside its own release would make
+    the next activation's canary gate satisfiable by the previous activation,
+    which turns a required canary into a formality after the first one.
+    """
+    built = fixture.build(tmp_path)
+
+    live_root = tmp_path / "live"
+
+    seed_rollback_target(live_root)
+
+    publish(built)
+
+    publish(
+        built,
+        canary_attestation=built["destination_root"] / publisher.ATTESTATION_NAME,
+        **approved_live(tmp_path, live_root=live_root),
+    )
+
+    assert publisher.ATTESTATION_NAME not in (
+        publisher.LocalDirectoryTransport(live_root).listing()
+    )
 
 
 # ======================================================================
