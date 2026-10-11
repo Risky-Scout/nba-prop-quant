@@ -65,6 +65,27 @@ so rollback is restoring a pointer to bytes that are still sitting there --
 not a rebuild, and nothing to do with the model. Promotion is the last step
 because any earlier ordering has a window where the destination serves a
 release that was never checked.
+
+Every action that changed a destination is appended to an audit log there, so
+what a destination is serving and how it got there are both readable from the
+destination itself.
+
+WHAT ACTIVATION WOULD TAKE
+--------------------------
+
+Activation is ``--mode live``, and it is gated on seven independent facts, all
+checked before a byte is written: the mode is named explicitly, the committed
+switch enables it, the receipt's authority is the incumbent, the environment
+carries the matching approval token, a successful canary of this same source
+artifact is attested, the release verifies at the destination, and a rollback
+target is already there to return to.
+
+The canary gate is matched on two digests -- the source artifact's and the
+published rows' -- so an activation cannot inherit a canary that proved
+something else. The rollback gate means no activation is the step that leaves
+a destination with nowhere to go back to, which includes the first one: before
+a destination is activated against for the first time, its rollback target has
+to be seeded from whatever it is already serving.
 """
 
 from __future__ import annotations
@@ -123,8 +144,22 @@ MANIFEST_NAME = "manifest.json"
 CURRENT_POINTER = "current.json"
 PREVIOUS_POINTER = "previous.json"
 
+#: What a successful canary leaves at its own destination, and what a later
+#: activation is required to be handed. It ties a canary run to the exact
+#: source artifact it published, so "this was canaried first" is a fact read
+#: off a file rather than an operator's recollection.
+ATTESTATION_NAME = "canary_attestation.json"
+
+#: Append-only record of every action that changed a destination. Written
+#: after the action completes, so a refusal leaves no entry and no bytes.
+AUDIT_LOG_NAME = "audit_log.jsonl"
+
 OUTCOME_PUBLISHED = "PUBLISHED"
 OUTCOME_ROLLED_BACK = "ROLLED_BACK"
+
+ACTION_PUBLISHED = "PUBLISHED"
+ACTION_REPUBLISHED = "REPUBLISHED_NO_OP"
+ACTION_ROLLED_BACK = "ROLLED_BACK"
 
 EXIT_OK = 0
 EXIT_REFUSED = 1
@@ -1082,6 +1117,197 @@ def verify_release(transport: LocalDirectoryTransport, release: Release) -> dict
     }
 
 
+def append_audit_entry(
+    transport: LocalDirectoryTransport, entry: dict[str, Any]
+) -> str:
+    """Record one completed action at the destination, keeping the earlier ones.
+
+    Read-and-rewrite rather than an append, because the transport offers one
+    write and it is atomic. That is the right trade here: an audit log a
+    crashed run could truncate would be worse than one written whole every
+    time, and the file holds one line per release rather than per row.
+    """
+    existing = (
+        transport.read_bytes(AUDIT_LOG_NAME)
+        if transport.exists(AUDIT_LOG_NAME)
+        else b""
+    )
+
+    line = json.dumps(entry, sort_keys=True).encode("utf-8") + b"\n"
+
+    transport.write_bytes(AUDIT_LOG_NAME, existing + line)
+
+    return AUDIT_LOG_NAME
+
+
+def read_audit_log(transport: LocalDirectoryTransport) -> list[dict[str, Any]]:
+    if not transport.exists(AUDIT_LOG_NAME):
+        return []
+
+    text = transport.read_bytes(AUDIT_LOG_NAME).decode("utf-8")
+
+    return [json.loads(line) for line in text.splitlines() if line.strip()]
+
+
+def attestation_for(
+    *,
+    mode: str,
+    release: Release,
+    provenance: dict[str, Any],
+    verification: dict[str, Any],
+    slate_date: str,
+) -> dict[str, Any]:
+    return {
+        "attested_at": _utc_now(),
+        "manifest_sha256": release.manifest_sha256,
+        "mode": mode,
+        "model_authority": MODEL_AUTHORITY,
+        "outcome": OUTCOME_PUBLISHED,
+        "production_code_sha": provenance.get("production_code_sha"),
+        "release_id": release.release_id,
+        "row_count": release.row_count,
+        "rows_sha256": release.rows_sha256,
+        "slate_date": slate_date,
+        "source_artifact_sha256": provenance.get(
+            "priced_market_artifact_sha256"
+        ),
+        "verified": bool(verification.get("verified")),
+    }
+
+
+def read_attestation(path: Path | None) -> dict[str, Any]:
+    """The canary attestation an activation was handed, or the refusal."""
+    if path is None:
+        raise PublishingRefused(
+            "live publication requires --canary-attestation naming the "
+            f"{ATTESTATION_NAME} a successful canary of this same source "
+            "artifact wrote. Activating something that was never canaried is "
+            "the one sequence this contract exists to prevent"
+        )
+
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise PublishingRefused(
+            f"the canary attestation at {path} could not be read ({error}), "
+            "so there is no evidence this artifact was canaried"
+        ) from error
+
+
+def assert_canary_attested(
+    attestation: dict[str, Any],
+    *,
+    release: Release,
+    provenance: dict[str, Any],
+) -> dict[str, Any]:
+    """Require a prior successful canary of *these* bytes, not of something.
+
+    Matched on two digests. The source artifact digest says the canary ran on
+    the same priced file; the rows digest says that file still renders to the
+    same published rows. Either one alone would let an activation inherit a
+    canary that proved a different thing.
+    """
+    if str(attestation.get("mode") or "") != MODE_CANARY:
+        raise PublishingRefused(
+            "the attestation records mode "
+            f"{attestation.get('mode')!r}, not {MODE_CANARY!r}, so it is not "
+            "a canary attestation"
+        )
+
+    if str(attestation.get("outcome") or "") != OUTCOME_PUBLISHED:
+        raise PublishingRefused(
+            f"the canary attestation records outcome "
+            f"{attestation.get('outcome')!r}, so no canary succeeded for this "
+            "artifact"
+        )
+
+    if attestation.get("verified") is not True:
+        raise PublishingRefused(
+            "the canary attestation does not record a verified readback, so "
+            "the canary did not prove the destination held what was sent"
+        )
+
+    if str(attestation.get("model_authority") or "") != MODEL_AUTHORITY:
+        raise PublishingRefused(
+            "the canary attestation records the model authority as "
+            f"{attestation.get('model_authority')!r}, not {MODEL_AUTHORITY!r}"
+        )
+
+    attested_source = str(attestation.get("source_artifact_sha256") or "")
+
+    source = str(provenance.get("priced_market_artifact_sha256") or "")
+
+    if attested_source != source:
+        raise PublishingRefused(
+            f"the canary attestation covers source artifact {attested_source} "
+            f"but this activation publishes {source}. The canary that would "
+            "authorise this release was run on different bytes"
+        )
+
+    if str(attestation.get("rows_sha256") or "") != release.rows_sha256:
+        raise PublishingRefused(
+            "the canary attestation covers rows "
+            f"{attestation.get('rows_sha256')} but this activation would "
+            f"publish {release.rows_sha256}, so what was canaried is not what "
+            "would go live"
+        )
+
+    return {
+        "attested_at": attestation.get("attested_at"),
+        "release_id": attestation.get("release_id"),
+        "rows_sha256": attestation.get("rows_sha256"),
+        "source_artifact_sha256": attested_source,
+    }
+
+
+def assert_rollback_target_exists(
+    transport: LocalDirectoryTransport,
+) -> dict[str, Any]:
+    """Require somewhere to go back to before changing what is live.
+
+    The release currently pointed at is the rollback target of the activation
+    about to happen: promotion rotates it into ``previous``. Checking it is
+    both named and still present means an activation cannot be the step that
+    leaves the destination with no way back -- including the first one, which
+    therefore needs its rollback target seeded from whatever the destination
+    is already serving.
+    """
+    current = read_pointer(transport, CURRENT_POINTER)
+
+    if not current:
+        raise PublishingRefused(
+            f"{CURRENT_POINTER} names no release at the destination, so this "
+            "activation would have no rollback target. Seed the destination "
+            "with the release it is already serving before activating"
+        )
+
+    rows_relative = str(current.get("rows_relative") or "")
+
+    if not rows_relative or not transport.exists(rows_relative):
+        raise PublishingRefused(
+            "the release currently at the destination names rows at "
+            f"{rows_relative or 'no path'}, which are not there, so it could "
+            "not be rolled back to"
+        )
+
+    actual = digest(transport.read_bytes(rows_relative))
+
+    expected = str(current.get("rows_sha256") or "")
+
+    if expected and actual != expected:
+        raise PublishingRefused(
+            f"the release currently at the destination reads back as {actual}, "
+            f"not the {expected} recorded when it was promoted, so it is not a "
+            "rollback target that can be trusted"
+        )
+
+    return {
+        "release_id": current.get("release_id"),
+        "rows_relative": rows_relative,
+        "rows_sha256": actual,
+    }
+
+
 def read_pointer(
     transport: LocalDirectoryTransport, relative: str
 ) -> dict[str, Any] | None:
@@ -1190,7 +1416,21 @@ def rollback(transport: LocalDirectoryTransport) -> dict[str, Any]:
         serialise({**previous, "promoted_at": _utc_now()}),
     )
 
+    audit_relative = append_audit_entry(
+        transport,
+        {
+            "action": ACTION_ROLLED_BACK,
+            "mode": str(previous.get("mode") or ""),
+            "model_authority": MODEL_AUTHORITY,
+            "recorded_at": _utc_now(),
+            "release_id": previous.get("release_id"),
+            "rows_sha256": actual,
+            "superseded_release_id": (superseded or {}).get("release_id"),
+        },
+    )
+
     return {
+        "audit_relative": audit_relative,
         "outcome": OUTCOME_ROLLED_BACK,
         "restored_release_id": previous.get("release_id"),
         "rows_sha256": actual,
@@ -1214,12 +1454,17 @@ def publish(
     destinations_path: Path | None = None,
     receipt_path: Path | None = None,
     priced_path: Path | None = None,
+    canary_attestation: Path | None = None,
     environment: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """One publication, start to finish, or the first refusal on the way.
 
     Ordered so the cheapest refusals come first and nothing is read from the
-    destination before the switch has allowed this mode at all.
+    destination before the switch has allowed this mode at all. The two
+    activation-only gates -- a prior canary of these bytes, and a rollback
+    target to return to -- are checked after the release is built, because
+    both are statements about this exact release, and before anything is
+    written, because an activation that fails them must leave live untouched.
     """
     root = Path(project_root or PROJECT_ROOT)
 
@@ -1291,13 +1536,66 @@ def publish(
 
     transport = build_transport(destination)
 
+    activation: dict[str, Any] | None = None
+
+    if mode == MODE_LIVE:
+        activation = {
+            "canary": assert_canary_attested(
+                read_attestation(canary_attestation),
+                release=release,
+                provenance=provenance,
+            ),
+            "rollback_target": assert_rollback_target_exists(transport),
+        }
+
     write_release(transport, release)
 
     verification = verify_release(transport, release)
 
     promotion = promote(transport, release, mode=mode)
 
+    # Not rewritten for a rerun that promoted nothing: the attestation already
+    # there covers the release still current, and restamping it would make a
+    # no-op rerun change what the destination holds.
+    if mode == MODE_CANARY and (
+        promotion["promoted"] or not transport.exists(ATTESTATION_NAME)
+    ):
+        transport.write_bytes(
+            ATTESTATION_NAME,
+            serialise(
+                attestation_for(
+                    mode=mode,
+                    release=release,
+                    provenance=provenance,
+                    verification=verification,
+                    slate_date=slate_date,
+                )
+            ),
+        )
+
+    audit_relative = append_audit_entry(
+        transport,
+        {
+            "action": (
+                ACTION_PUBLISHED if promotion["promoted"] else ACTION_REPUBLISHED
+            ),
+            "mode": mode,
+            "model_authority": MODEL_AUTHORITY,
+            "production_code_sha": provenance.get("production_code_sha"),
+            "recorded_at": _utc_now(),
+            "release_id": release.release_id,
+            "row_count": release.row_count,
+            "rows_sha256": release.rows_sha256,
+            "slate_date": slate_date,
+            "source_artifact_sha256": provenance.get(
+                "priced_market_artifact_sha256"
+            ),
+        },
+    )
+
     return {
+        "activation": activation,
+        "audit_relative": audit_relative,
         "destination": {
             "mode": destination.mode,
             "release_prefix": destination.release_prefix,
@@ -1337,6 +1635,7 @@ def render(receipt: dict[str, Any]) -> str:
             ("outcome", receipt["outcome"]),
             ("restored release", receipt.get("restored_release_id")),
             ("superseded release", receipt.get("superseded_release_id")),
+            ("audit entry", receipt.get("audit_relative")),
         ]
     else:
         rows = [
@@ -1349,6 +1648,7 @@ def render(receipt: dict[str, Any]) -> str:
             ("published rows", (receipt.get("release") or {}).get("row_count")),
             ("readback verified", (receipt.get("verification") or {}).get("verified")),
             ("destination", (receipt.get("destination") or {}).get("root")),
+            ("audit entry", receipt.get("audit_relative")),
         ]
 
     lines = [
@@ -1376,9 +1676,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--mode",
         choices=MODES,
         default=MODE_CANARY,
-        help="canary writes a non-live destination. live is DISABLED and "
-        "cannot be enabled from this repository: the host, directory, "
-        "protocol and credentials are all external facts.",
+        help="canary writes a non-live destination. live is the activation "
+        "verb, is DISABLED, and cannot be enabled from this repository: the "
+        "host, directory, protocol and credentials are all external facts.",
     )
     parser.add_argument("--slate-date", required=True)
     parser.add_argument("--data-root", type=Path, required=True)
@@ -1398,6 +1698,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="the receipt ops/run_incumbent_production_serving.py wrote. "
         f"Defaults to <data-root>/{SERVING_RECEIPTS_RELATIVE}/<slate-date>.json .",
+    )
+    parser.add_argument(
+        "--canary-attestation",
+        type=Path,
+        default=None,
+        help=f"the {ATTESTATION_NAME} a successful canary of this same source "
+        "artifact wrote. Required for live publication and refused without.",
     )
     parser.add_argument(
         "--rollback",
@@ -1440,6 +1747,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         switch_path=args.switch_path,
         destinations_path=args.destinations_path,
         receipt_path=args.serving_receipt,
+        canary_attestation=args.canary_attestation,
     )
 
 
