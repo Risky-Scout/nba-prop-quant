@@ -1,0 +1,23 @@
+{
+  "contract_version": 1,
+  "destinations": {
+    "canary": {
+      "release_prefix": "nba_prop_quant",
+      "root": null,
+      "transport": "local_directory"
+    },
+    "live": null
+  },
+  "missing_external_facts": [
+    "the wizardofodds.com host the feed is published to",
+    "the remote directory or object prefix the feed is served from",
+    "the transport protocol that host accepts (FTPS, SFTP, an HTTPS API or an object store)",
+    "the credential or secret names that transport authenticates with",
+    "a staging or canary destination on that host, separate from the live feed",
+    "the public URL or path the published rows appear at"
+  ],
+  "note": "live is null because every fact needed to describe it is external to this repository, and inventing any of them would produce a publisher that looks configured and writes nowhere real. The publisher refuses live mode while this is null, naming the missing facts. canary.root is null for a narrower reason: the canary root is a scratch location the operator names per run with --destination-root, so committing one would be a destination this repository asserted without being told.",
+  "supported_transports": [
+    "local_directory"
+  ]
+}

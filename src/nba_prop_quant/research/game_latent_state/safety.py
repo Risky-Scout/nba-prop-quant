@@ -303,10 +303,49 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: which it did not change. Those three entries were retired in turn when
 #: they landed, and are recorded nowhere for the same reason: all three are
 #: pre-existing production files this lineage changed rather than introduced,
-#: so touching any of them again requires declaring it again. This branch
-#: changes only ``tests/``, which is not a protected prefix, so the resting
-#: state is the correct content.
-DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType({})
+#: so touching any of them again requires declaring it again.
+#:
+#: This branch's four entries are all files it introduces rather than edits,
+#: and none is a model artifact, a config, a production script, a release or
+#: review path, or a production source the serving path reads. The incumbent
+#: publisher is additive in the strongest available sense: nothing that
+#: already exists changes, and the branch-safety test below pins that the
+#: serving entry points, the serving sources and the numerical modules are all
+#: byte-identical to production.
+DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
+    {
+        "ops/publish_incumbent_to_wizardofodds.py": (
+            "the publishing step PRODUCTION_AUTOMATION.md section 11 names as "
+            "following Step 3D, which did not exist. It reads the priced "
+            "markets and the serving receipt that step already wrote and "
+            "copies the approved incumbent values to a destination; it "
+            "computes no probability, price, edge or EV, and imports neither "
+            "the model, the copula, the calibration, the pricing path nor the "
+            "shadow. Live publication is DISABLED and refuses twice over: the "
+            "switch is not enabled and no live destination exists to reach"
+        ),
+        "ops/wizardofodds_publishing_switch.json": (
+            "the committed disabled state, in the three-condition shape the "
+            "shadow publishing switch already uses. Records the published "
+            "authority as incumbent and the candidate authority as shadow "
+            "only, so a release manifest asserting either is asserting this "
+            "file rather than a literal in code"
+        ),
+        "ops/wizardofodds_destinations.json": (
+            "the destination configuration, whose live entry is null because "
+            "every fact needed to describe it -- host, directory, protocol, "
+            "credentials, staging target, public URL -- is external to this "
+            "repository. Enumerating the missing facts here is what lets the "
+            "refusal name them instead of saying 'not configured'"
+        ),
+        "docs/wizardofodds/INCUMBENT_PUBLISHER.md": (
+            "what the publisher publishes, which rules refuse, how a release "
+            "is verified before it is promoted, how a rollback restores the "
+            "previous one, and the six external facts a live canary is "
+            "blocked on. Documentation only: no code reads it"
+        ),
+    }
+)
 
 #: Protected paths this lineage introduced into production and now owns.
 #:
