@@ -1,0 +1,26 @@
+{
+  "approved_freeze_id": "nba_prop_quant_20260818T205213Z",
+  "approved_freeze_stage": "external_test_deployment",
+  "approved_market_pricing_schema_version": 3,
+  "approved_projection_schema_version": 3,
+  "candidate_authority": "shadow_only",
+  "modes": {
+    "canary": {
+      "approval_token": "canary-writes-a-non-live-destination-only",
+      "reason": "A canary that cannot run proves nothing, so this mode is enabled. It is safe by construction rather than by permission: the only transport this repository implements is local_directory, no live destination is configured for the publisher to reach, and the publisher refuses a canary whose destination resolves to the live one.",
+      "state": "ENABLED"
+    },
+    "live": {
+      "approval_token": "no-approval-has-been-granted",
+      "reason": "The incumbent has not yet published a slate to wizardofodds.com. Enabling this is a separate reviewed decision taken after a real canary against the real destination, and it cannot be taken from this repository yet because the destination, its transport and its credentials are all facts this repository does not hold.",
+      "state": "DISABLED"
+    }
+  },
+  "note": "A missing switch file reads as DISABLED for every mode. The absence of a prohibition is not an approval.",
+  "published_authority": "incumbent",
+  "what_enabling_live_requires": [
+    "this file's modes.live.state set to ENABLED in a reviewed commit",
+    "the NBA_PROP_WOO_PUBLISH environment variable set to that same state",
+    "the NBA_PROP_WOO_PUBLISH_APPROVAL environment variable set to modes.live.approval_token"
+  ]
+}
