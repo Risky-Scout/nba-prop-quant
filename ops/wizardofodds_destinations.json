@@ -1,5 +1,5 @@
 {
-  "contract_version": 1,
+  "contract_version": 2,
   "destinations": {
     "canary": {
       "release_prefix": "nba_prop_quant",
@@ -9,15 +9,34 @@
     "live": null
   },
   "missing_external_facts": [
-    "the wizardofodds.com host the feed is published to",
-    "the remote directory or object prefix the feed is served from",
-    "the transport protocol that host accepts (FTPS, SFTP, an HTTPS API or an object store)",
-    "the credential or secret names that transport authenticates with",
-    "a staging or canary destination on that host, separate from the live feed",
-    "the public URL or path the published rows appear at"
+    "the reviewed decision to publish the incumbent on wizardofodds.com at all, which no canary can stand in for",
+    "the approval token that decision would set modes.live.approval_token to",
+    "whether the live feed is served from the NBA target's root or from a subpath beside the canary's",
+    "whether the live feed is addressed through a current pointer the website reads, or by a fixed filename it fetches",
+    "the retention the website needs behind the live feed, which is a question about its consumers rather than about this repository",
+    "a successful live proof against that path, which cannot exist before the decision above is taken"
   ],
-  "note": "live is null because every fact needed to describe it is external to this repository, and inventing any of them would produce a publisher that looks configured and writes nowhere real. The publisher refuses live mode while this is null, naming the missing facts. canary.root is null for a narrower reason: the canary root is a scratch location the operator names per run with --destination-root, so committing one would be a destination this repository asserted without being told.",
+  "named_destinations": {
+    "wizardofodds_nba_canary": {
+      "canary_subpath": "canary",
+      "credential_env": "NBA_WOO_SSH_PRIVATE_KEY",
+      "host": "sportsodds.wizardofodds.com", "host_scanner_note": "pragma: allowlist secret -- the public hostname of the website this feed is served from, which is not credential material",
+      "mode": "canary",
+      "note": "The real WizardOfOdds NBA canary. Non-live by construction: everything it writes lands under the canary_subpath, nothing outside it is addressable through this destination, and no live or current pointer at the NBA target's own root is created or read. The legacy woo-owned NBA pages and feeds sit in the parent directory and are not reachable from here.",
+      "port": 22,
+      "private_staging": "/var/www/.nba-prop-quant-deploy",
+      "public_base_url": "https://sportsodds.wizardofodds.com/tools/odds-scanner/predictions/nba/", "public_base_url_scanner_note": "pragma: allowlist secret -- a public URL anybody can fetch, and the one the readback proves this feed against",
+      "public_target": "/var/www/sportsodds/tools/odds-scanner/predictions/nba",
+      "release_prefix": "nba_prop_quant",
+      "retained_releases": 2,
+      "transport": "ssh_rsync",
+      "user": "nba-prop-deploy"
+    }
+  },
+  "note": "live is null because the facts still missing for it are decisions rather than addresses: the host, the transport, the credential's name and the public URL are now known and are recorded on the named canary destination below, but none of them amounts to an approval to serve the incumbent's numbers to the public. The publisher refuses live mode while this is null, naming what is missing. canary.root stays null for the narrower reason it always did: the default canary writes a local scratch directory the operator names per run with --destination-root. A canary against the real host is a named destination instead, selected explicitly with --destination-name, so reaching wizardofodds.com is something an operator asks for by name rather than the default.",
+  "secrets": "No credential material is recorded here and none belongs here. A remote destination names the environment variable its private key is read from, and the key itself reaches the publisher only through that variable.",
   "supported_transports": [
-    "local_directory"
+    "local_directory",
+    "ssh_rsync"
   ]
 }
