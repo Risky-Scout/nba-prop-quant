@@ -1476,6 +1476,328 @@ def test_the_real_destination_refuses_a_wrong_ssh_user():
         transport.close()
 
 
+#: The legacy NBA pages and feeds the website already publishes, beside the
+#: served root this publisher writes below. Hashed before and after the real
+#: canary: they are owned by somebody else's cron, and the whole reason the
+#: destination is confined to a subdirectory is that nothing here may touch
+#: them.
+LEGACY_NBA_FILES: tuple[str, ...] = (
+    "nba-props.html",
+    "nba-live-props.html",
+    "nba-pmf-research.html",
+    "nba_props_today.json",
+    "pmf_research.json",
+)
+
+
+def _ssh_beside_the_transport(destination: publisher.Destination, script: str) -> str:
+    """Run a command at the destination without going through the transport.
+
+    Deliberately not a transport method. The transport cannot address the
+    legacy files -- that is the property under test -- so checking they are
+    untouched has to be done by something that can, which makes this an
+    independent observer rather than the subject marking its own work.
+    """
+    remote = destination.remote
+
+    with tempfile.TemporaryDirectory() as directory:
+        key = Path(directory) / "key"
+
+        key.touch(mode=0o600)
+
+        material = os.environ[NBA_CREDENTIAL_ENV]
+
+        key.write_text(
+            material if material.endswith("\n") else material + "\n",
+            encoding="utf-8",
+        )
+
+        completed = subprocess.run(
+            [
+                "ssh",
+                "-i",
+                str(key),
+                "-p",
+                str(remote.port),
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "IdentitiesOnly=yes",
+                "-o",
+                "StrictHostKeyChecking=accept-new",
+                "-o",
+                f"UserKnownHostsFile={Path(directory) / 'known_hosts'}",
+                f"{remote.user}@{remote.host}",
+                f"set -eu; {script}",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        return completed.stdout
+
+
+def _legacy_digests(destination: publisher.Destination) -> dict[str, str]:
+    parent = Path(destination.remote.public_target).parent.as_posix()
+
+    output = _ssh_beside_the_transport(
+        destination,
+        f"cd {shlex.quote(parent)} && sha256sum -- "
+        + " ".join(shlex.quote(name) for name in LEGACY_NBA_FILES),
+    )
+
+    digests: dict[str, str] = {}
+
+    for line in output.splitlines():
+        if line.strip():
+            value, name = line.split(maxsplit=1)
+
+            digests[name.strip()] = value
+
+    return digests
+
+
+@real_canary
+@requires("rsync")
+def test_the_real_canary_publishes_the_frozen_models_slate_and_rolls_back(
+    tmp_path: Path,
+):
+    """The whole thing, against the real destination, in one sequence.
+
+    The frozen models score the serving fixture, the publisher puts the result
+    on the configured host under its canary subdirectory, a consumer fetching
+    the public URL gets exactly the priced numbers back, and a rollback moves
+    the destination to the release before it and then forward again.
+
+    One test rather than several because it is one ordered sequence against
+    one real destination, and tests that depend on each other's leftovers
+    through the suite's ordering are worse than a sequence that says so.
+
+    The rollback target is a release of the publisher's own fixture, published
+    first. A rollback needs two releases to be a rollback, the two have to
+    differ, and the alternative -- altering the frozen models' numbers to
+    manufacture a second one -- would mean publishing something that is not
+    the incumbent's output in order to test the incumbent's publisher. The
+    sequence ends on the frozen models' release, so that is what the canary is
+    left serving.
+    """
+    import frozen_bundle_slate_fixture as slate_fixture
+    from test_real_slate_serving_root import installed_bundle
+    from test_wizardofodds_canary_end_to_end import serve_and_provenance
+
+    bundle = installed_bundle()
+
+    if bundle is None:
+        pytest.skip(
+            "no installed frozen runtime bundle; set "
+            "NBA_PROP_TEST_FROZEN_BUNDLE_ROOT or NBA_PROP_WORK_DIR to a root "
+            "ops/install_frozen_model_artifacts.py has installed into"
+        )
+
+    document = publisher.read_destinations(project_root=PROJECT)
+
+    destination = publisher.resolve_destination(
+        publisher.MODE_CANARY, document, name=NBA_DESTINATION
+    )
+
+    legacy_before = _legacy_digests(destination)
+
+    assert sorted(legacy_before) == sorted(LEGACY_NBA_FILES)
+
+    # ---- the rollback target, published first ----------------------
+
+    seed = fixture.build(tmp_path / "seed")
+
+    seeded = publisher.publish(
+        mode=publisher.MODE_CANARY,
+        slate_date=seed["slate_date"],
+        data_root=seed["data_root"],
+        project_root=PROJECT,
+        destination_name=NBA_DESTINATION,
+    )
+
+    assert seeded["outcome"] == publisher.OUTCOME_PUBLISHED
+
+    # ---- the frozen models' own slate ------------------------------
+
+    root = tmp_path / "run"
+
+    provenanced = serve_and_provenance(bundle, root)
+
+    data_root = root / "data"
+
+    projections = pd.read_parquet(
+        data_root
+        / "processed"
+        / "projections"
+        / f"{slate_fixture.SLATE_DATE}.parquet"
+    )
+
+    priced = pd.read_parquet(
+        publisher.priced_markets_path(data_root, slate_fixture.SLATE_DATE)
+    )
+
+    assert len(projections) == len(slate_fixture.ROSTER) > 0
+    assert len(priced) == len(slate_fixture.QUOTED_PROPS) > 0
+
+    receipt = publisher.publish(
+        mode=publisher.MODE_CANARY,
+        slate_date=slate_fixture.SLATE_DATE,
+        data_root=data_root,
+        project_root=PROJECT,
+        destination_name=NBA_DESTINATION,
+    )
+
+    assert receipt["outcome"] == publisher.OUTCOME_PUBLISHED
+    assert receipt["mode"] == publisher.MODE_CANARY
+    assert receipt["model_authority"] == publisher.MODEL_AUTHORITY
+    assert receipt["live_publishing"] == publisher.STATE_DISABLED
+    assert receipt["promotion"]["promoted"] is True
+    assert receipt["promotion"]["rollback_target"] == seeded["release"]["release_id"]
+    assert receipt["destination"]["transport"] == publisher.TRANSPORT_SSH_RSYNC
+    assert receipt["destination"]["authenticated_as"]["user"] == "nba-prop-deploy"
+    assert receipt["release"]["row_count"] == len(priced)
+
+    verification = receipt["verification"]
+
+    assert verification["verified"] is True
+    assert verification["readback_rows"] == len(priced)
+    assert verification["public"]["checked"] is True
+    assert verification["public"]["readback_rows"] == len(priced)
+    assert verification["public"]["rows_sha256"] == receipt["release"]["rows_sha256"]
+
+    provenance = receipt["provenance"]
+
+    served_receipt = provenanced["receipt"]
+
+    assert provenance["model_authority"] == publisher.MODEL_AUTHORITY
+    assert provenance["production_code_sha"] == served_receipt["production_code_sha"]
+    assert (
+        provenance["priced_market_artifact_sha256"]
+        == served_receipt["priced_market_artifact"]["sha256"]
+    )
+    assert "incumbent_fit_id" in provenance
+
+    # ---- what a consumer actually receives -------------------------
+
+    with urllib.request.urlopen(
+        verification["public"]["rows_url"], timeout=60
+    ) as response:
+        body = response.read()
+
+    assert publisher.digest(body) == receipt["release"]["rows_sha256"]
+
+    served = json.loads(body)["rows"]
+
+    assert len(served) == len(priced)
+
+    by_quote = {int(row["quote_id"]): row for row in served}
+
+    assert sorted(by_quote) == sorted(int(value) for value in priced["id"])
+
+    for _, source in priced.iterrows():
+        out = by_quote[int(source["id"])]
+
+        for column in (
+            # the model's probabilities, and the market's
+            *publisher.PUBLISHED_PROBABILITY_FIELDS,
+            # the prices
+            "over_odds",
+            "under_odds",
+            "calibrated_fair_over_american",
+            "calibrated_fair_under_american",
+            "line_value",
+            # the edges and the EV
+            "calibrated_edge_over",
+            "calibrated_edge_under",
+            "calibrated_ev_over",
+            "calibrated_ev_under",
+            "model_preferred_edge",
+            "model_preferred_ev",
+        ):
+            assert float(out[column]) == float(source[column]), (
+                f"{column} on quote {source['id']} is not the served value"
+            )
+
+        assert out["freeze_id"] == source["freeze_id"]
+        assert out["model_preferred_side"] == source["model_preferred_side"]
+
+    assert set(served[0]) == {name for _, name in publisher.PUBLISHED_FIELDS}
+
+    # ---- the rollback ----------------------------------------------
+
+    transport = publisher.build_transport(destination)
+
+    try:
+        restored = publisher.rollback(transport)
+    finally:
+        transport.close()
+
+    assert restored["outcome"] == publisher.OUTCOME_ROLLED_BACK
+    assert restored["restored_release_id"] == seeded["release"]["release_id"]
+    assert restored["superseded_release_id"] == receipt["release"]["release_id"]
+    assert restored["rows_sha256"] == seeded["release"]["rows_sha256"]
+    assert restored["public_rows_sha256"] == seeded["release"]["rows_sha256"]
+
+    # ---- and forward again, so the canary serves the frozen slate --
+
+    republished = publisher.publish(
+        mode=publisher.MODE_CANARY,
+        slate_date=slate_fixture.SLATE_DATE,
+        data_root=data_root,
+        project_root=PROJECT,
+        destination_name=NBA_DESTINATION,
+    )
+
+    assert (
+        republished["release"]["release_id"] == receipt["release"]["release_id"]
+    )
+    assert republished["verification"]["public"]["readback_rows"] == len(priced)
+
+    observer = publisher.build_transport(destination)
+
+    try:
+        current = publisher.read_pointer(observer, publisher.CURRENT_POINTER)
+
+        listing = observer.listing()
+    finally:
+        observer.close()
+
+    assert current["release_id"] == receipt["release"]["release_id"]
+
+    # Nothing was written at the served root itself, so no live or current
+    # pointer for the website to read into existence was created.
+    served_root = Path(destination.remote.public_target)
+
+    at_the_root = _ssh_beside_the_transport(
+        destination,
+        f"find {shlex.quote(served_root.as_posix())} -maxdepth 1 -type f "
+        "-printf '%P\\n' || true",
+    ).split()
+
+    assert at_the_root == [], f"the canary wrote beside the legacy feed: {at_the_root}"
+
+    assert all(
+        name.startswith(
+            (
+                publisher.RELEASES_DIRECTORY,
+                publisher.AUDIT_LOG_NAME,
+                publisher.ATTESTATION_NAME,
+                publisher.CURRENT_POINTER,
+                publisher.PREVIOUS_POINTER,
+            )
+        )
+        for name in listing
+    ), listing
+
+    # ---- the legacy feed, byte for byte ----------------------------
+
+    assert _legacy_digests(destination) == legacy_before, (
+        "the canary changed a legacy NBA file"
+    )
+
+
 def _unusable_key() -> str:
     """A syntactically valid ed25519 key the destination has never seen."""
     with tempfile.TemporaryDirectory() as directory:
