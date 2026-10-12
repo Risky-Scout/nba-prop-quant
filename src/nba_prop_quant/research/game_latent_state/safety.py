@@ -310,57 +310,15 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: all four are recorded as owned below, and touching any of them again
 #: requires declaring it again. The activation-gate branch's two entries were
 #: retired the same way when they landed, and both of the files they named are
-#: owned, which is why this branch declares them again.
+#: owned, which is why the remote-transport branch declared them again.
 #:
-#: This branch's three entries add one remote transport to the publisher,
-#: configure the WizardOfOdds NBA canary destination it reaches, and document
-#: both. None is a model artifact, a config, a production script, a release or
-#: review path, or a production source the serving path reads. The publisher is
-#: still reached by nothing that runs on a schedule, live publication remains
-#: DISABLED with no live destination configured, and the branch-safety test
-#: below pins that the serving entry points, the serving sources and the
-#: numerical modules remain byte-identical to production.
-DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
-    {
-        "ops/publish_incumbent_to_wizardofodds.py": (
-            "one additional transport, ssh_rsync, and the release handling a "
-            "remote destination needs. A release is staged into a private "
-            "directory outside every document root, verified there against a "
-            "digest the destination computes, copied into the served tree by a "
-            "rename, verified again where it is served, and read back over its "
-            "public HTTPS URL; promotion happens after all of that, so a "
-            "transfer that ended early, arrived altered or cannot be fetched "
-            "refuses while nothing is promoted. Remote destinations are "
-            "addressed by name and confined to a subdirectory of the served "
-            "root, so neither a default run nor a relative path can reach "
-            "anything beside it. Retention keeps the served release, the one "
-            "before it and the receipts. Additive: the local_directory "
-            "transport, the switch, the provenance checks, the fail-closed "
-            "row rules and the activation gates are unchanged, live "
-            "publication remains DISABLED with no live destination to reach, "
-            "and nothing about which rows are published, or what they carry, "
-            "changes"
-        ),
-        "ops/wizardofodds_destinations.json": (
-            "the WizardOfOdds NBA canary destination, as a named destination "
-            "rather than as the default: its host, port, user, private "
-            "staging path, served target, public URL, canary subpath and "
-            "retention. No credential is recorded -- the entry names the "
-            "environment variable the private key is read from -- and "
-            "destinations.live stays null, because what live is still waiting "
-            "on is a reviewed decision rather than an address. The unnamed "
-            "canary is left as the local scratch directory it was, so a run "
-            "that names no destination still reaches nothing"
-        ),
-        "docs/wizardofodds/INCUMBENT_PUBLISHER.md": (
-            "the remote transport, the destination addressed by name, the "
-            "staging-verify-place-readback ordering, the subpath that confines "
-            "the canary away from the legacy NBA feed, the retention, and the "
-            "decisions -- rather than the addresses -- that live publication is "
-            "still waiting on. Documentation only: no code reads it"
-        ),
-    }
-)
+#: The remote-transport branch's three entries were retired in turn when they
+#: landed. All three are recorded as owned below, so touching any of them again
+#: requires declaring it again. Empty is the resting state and this branch is
+#: at rest: the only thing it changes is the production SHA a test fixture
+#: provenances its own served slate with, which is test surface, so it has
+#: nothing to declare.
+DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType({})
 
 #: Protected paths this lineage introduced into production and now owns.
 #:
