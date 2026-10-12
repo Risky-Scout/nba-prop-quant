@@ -861,14 +861,24 @@ def _read_remote(
             "whatever answered"
         )
 
-    subpath = str(declared["canary_subpath"]).strip("/")
+    declared_subpath = str(declared["canary_subpath"])
 
-    if not subpath or not _is_safe_remote_segment_path(subpath):
+    subpath = declared_subpath.rstrip("/")
+
+    # A leading slash is refused rather than stripped. It reads as an absolute
+    # path, and somebody who wrote one meant a location rather than a
+    # subdirectory: normalising it would silently publish somewhere other than
+    # where the configuration appears to say.
+    if (
+        declared_subpath.startswith("/")
+        or not subpath
+        or not _is_safe_remote_segment_path(subpath)
+    ):
         raise PublishingRefused(
             f"{source} gives {name!r} the canary subpath "
-            f"{declared['canary_subpath']!r}. It is the only thing confining "
-            "this destination to a non-live directory, so it has to be a "
-            "plain relative path and cannot be empty"
+            f"{declared_subpath!r}. It is the only thing confining this "
+            "destination to a non-live directory, so it has to be a plain "
+            "relative path below the served root and cannot be empty"
         )
 
     retained = declared.get("retained_releases")
@@ -1184,6 +1194,22 @@ class SshRsyncTransport:
             f"UserKnownHostsFile={self._known_hosts}",
         ]
 
+    def _assert_open(self) -> None:
+        """Refuse to act through a transport whose credential has been removed.
+
+        ``close`` deletes the key and the spool, which makes every later
+        operation fail somewhere further in -- at an ssh that cannot read its
+        identity file, or at a spool directory that gets silently recreated
+        without one. Both are confusing in a way the real cause is not, and a
+        second operation on a destination wants a second transport.
+        """
+        if self._closed:
+            raise PublishingRefused(
+                "this transport has been closed and its credential removed; "
+                "a further operation on the destination needs a transport of "
+                "its own"
+            )
+
     def _run_remote(self, script: str) -> str:
         """One shell script at the destination, or a refusal carrying its error.
 
@@ -1194,6 +1220,8 @@ class SshRsyncTransport:
         reported them all as "the remote command failed" would make the
         operator guess which one it hit.
         """
+        self._assert_open()
+
         completed = subprocess.run(
             [
                 *self._ssh_argv(),
@@ -1259,6 +1287,8 @@ class SshRsyncTransport:
     # ------------------------------------------------------------------
 
     def write_bytes(self, relative: str, payload: bytes) -> None:
+        self._assert_open()
+
         safe = self._relative(relative)
 
         expected = digest(payload)
