@@ -100,30 +100,43 @@ commit, `NBA_PROP_WOO_PUBLISH` set to that same state, and
 single mistake publishes.
 
 Even with all three, live publication refuses, and for a different reason:
-`ops/wizardofodds_destinations.json` carries `live: null` because **every fact
-needed to describe the destination is external to this repository**. The
-refusal names them rather than saying "not configured", because the difference
-between a missing line of config and a missing agreement with the destination
-is the difference between finishing this and being blocked on it:
+`ops/wizardofodds_destinations.json` carries `live: null`. What is missing is
+no longer the destination's address — the host, the transport, the credential's
+name and the public URL are all known now, and are recorded on the named
+canary destination below. What is missing is a decision, and the things that
+only follow one:
 
-- the wizardofodds.com host the feed is published to;
-- the remote directory or object prefix it is served from;
-- the transport protocol that host accepts (FTPS, SFTP, an HTTPS API or an
-  object store);
-- the credential or secret names that transport authenticates with;
-- a staging or canary destination on that host, separate from the live feed;
-- the public URL or path the published rows appear at.
+- the reviewed decision to publish the incumbent on wizardofodds.com at all,
+  which no canary can stand in for;
+- the approval token that decision would set `modes.live.approval_token` to;
+- whether the live feed is served from the NBA target's root or from a subpath
+  beside the canary's;
+- whether it is addressed through a pointer the website reads, or by a fixed
+  filename it fetches;
+- the retention the website needs behind the live feed, which is a question
+  about its consumers;
+- a successful live proof against that path, which cannot exist before the
+  decision above is taken.
 
-Inventing any of them would produce a publisher that looks configured and
-writes nowhere real, which is worse than one that refuses.
+The refusal names them rather than saying "not configured", because the
+difference between a missing line of config and a missing agreement is the
+difference between finishing and being blocked.
 
 ### `canary` — ENABLED, and safe by construction
 
 A canary nobody can run proves nothing, so this mode is enabled. It is safe
-because of what exists rather than because of what is permitted:
-`local_directory` is the only transport implemented, there is no live
-destination for it to reach, and a canary whose destination resolves to the
-live one is refused by name.
+because of what exists rather than because of what is permitted: there is no
+live destination for it to reach, a canary whose destination resolves to the
+live one is refused by name, and a canary against the real host can only
+address paths beneath its own non-live subdirectory of that host's NBA target.
+
+## Destinations: one by mode, one by name
+
+A **mode** decides what a run may do. A **name** decides which destination of
+that mode it does it to. The two are checked against each other, so a
+destination built as a canary is never reinterpreted as a live one.
+
+### Unnamed — a local scratch directory
 
 ```
 python ops/publish_incumbent_to_wizardofodds.py \
@@ -134,9 +147,89 @@ python ops/publish_incumbent_to_wizardofodds.py \
   --receipt-path /tmp/publication.json
 ```
 
-The canary root is supplied per run and is deliberately not committed: it is a
-scratch location, and committing one would be a destination this repository
-asserted without being told.
+The `local_directory` transport, under a root supplied per run and
+deliberately not committed: it is a scratch location, and committing one would
+be a destination this repository asserted without being told. This is what
+proves the publisher's own rules, and it reaches nothing.
+
+### `wizardofodds_nba_canary` — the real destination, over `ssh_rsync`
+
+```
+NBA_WOO_SSH_PRIVATE_KEY="$(cat /path/to/key)" \
+python ops/publish_incumbent_to_wizardofodds.py \
+  --mode canary \
+  --destination-name wizardofodds_nba_canary \
+  --slate-date 2026-10-20 \
+  --data-root "$NBA_PROP_DATA_DIR" \
+  --receipt-path /tmp/publication.json
+```
+
+| fact | value |
+| --- | --- |
+| transport | `ssh_rsync` |
+| user | `nba-prop-deploy` |
+| port | 22 |
+| credential | read from `NBA_WOO_SSH_PRIVATE_KEY` |
+| private staging | `/var/www/.nba-prop-quant-deploy` (mode 700, unserved) |
+| served target | `/var/www/sportsodds/tools/odds-scanner/predictions/nba` |
+| canary subpath | `canary` |
+| retained releases | 2 |
+
+Reaching a real host is therefore something an operator asks for by name,
+never something a default does — an unnamed destination asking for a remote
+transport is refused.
+
+**No credential is committed.** The destination records the *name* of the
+environment variable its private key is read from; the key reaches the
+publisher only through that variable, is written to a file mode 600 in a 700
+temporary directory outside the checkout, and is deleted when the transport
+closes.
+
+**The subpath is the confinement.** Every path this destination addresses is
+resolved beneath `<served target>/canary`, and a relative path that is
+absolute, empty, or contains `..` is refused on the way in. The legacy NBA
+pages and feeds — `nba-props.html`, `nba-live-props.html`,
+`nba-pmf-research.html`, `nba_props_today.json`, `pmf_research.json` — sit in
+the *parent* directory and are not expressible through this destination. A
+canary that is non-live because of where it *can* write is a stronger
+statement than one that is non-live because of what it was asked to write.
+
+### How a remote release is written
+
+SSH and rsync, and nothing else. No FTP, no FTPS, no SFTP library, no HTTP
+API and no object store: each would be a second contract to write, test and
+review, and the destination speaks this one.
+
+1. **Stage.** rsync puts the release in the private staging directory, which
+   is mode 700 and outside every document root. No `--partial`, so an
+   interrupted transfer leaves the staging path absent rather than short.
+2. **Verify where nobody can read it.** The destination is asked for its own
+   `sha256sum`. A transfer that ended early, arrived altered or went somewhere
+   other than where it was addressed is caught here, while the bytes are still
+   unreachable.
+3. **Place.** A verified staging file is copied to a temporary name in the
+   served directory and renamed, which is atomic within one filesystem.
+4. **Verify what is served.** The digest is checked again at the served path,
+   because the digest that matters is of what is served rather than of what
+   was uploaded.
+5. **Read it back publicly.** The release is fetched over its public HTTPS URL
+   and the digests and row count compared. This is the only check that speaks
+   for the destination *as a destination*: a file can be correct on disk and
+   still be unreachable, misaddressed, or shadowed by a web server rule.
+
+Promotion happens after all of that.
+
+### Retention
+
+The release served, the one before it, and the receipts. Every other release
+payload is pruned once the pointers have rotated past it — pointer-driven, and
+only after promotion, so nothing reachable is ever pruned. The audit log and
+the manifests are kept regardless, so what was published stays readable after
+the bytes it describes are gone.
+
+A dated snapshot accumulating per day is how the legacy NBA output became
+something nobody could reason about, which is why this is a fixed two rather
+than a date window.
 
 ## Releases and rollback
 
@@ -246,11 +339,15 @@ appended to the destination's audit log.
 
 In addition to the three switch conditions:
 
-1. the six external facts above, supplied by whoever owns the destination;
-2. a transport implementing that protocol, written against the real contract
-   rather than a guessed one;
-3. a canary against the real staging destination, with the readback verified
-   there, whose `canary_attestation.json` is then handed to the activation;
+1. the decisions listed above, taken by whoever owns the destination — the
+   transport and the credentials are no longer among them;
+2. a live destination configured from those decisions, which is a
+   `destinations.live` that is not null;
+3. a canary against the real destination, with both the readback and the
+   public readback verified there, whose `canary_attestation.json` is then
+   handed to the activation. One has now been run: see the
+   `ssh_rsync` canary evidence on
+   `/var/www/sportsodds/tools/odds-scanner/predictions/nba/canary`;
 4. a rollback target seeded at the live destination from whatever it is
    already serving;
 5. the activation SHA and activation time recorded, as
