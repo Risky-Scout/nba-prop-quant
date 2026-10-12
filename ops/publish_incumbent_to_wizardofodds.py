@@ -52,9 +52,61 @@ Two modes, switched independently in ``ops/wizardofodds_publishing_switch.json``
 
     canary
         ENABLED, because a canary nobody can run proves nothing. It is safe by
-        construction rather than by permission: ``local_directory`` is the only
-        transport implemented, there is no live destination to reach, and a
-        canary whose destination resolves to the live one is refused.
+        construction rather than by permission: there is no live destination to
+        reach, a canary whose destination resolves to the live one is refused,
+        and a canary against the real host can only address paths beneath its
+        own non-live subdirectory of that host's NBA target.
+
+WHICH DESTINATIONS THERE ARE
+----------------------------
+
+A mode decides what a run may do. A name decides which destination of that
+mode it does it to, and the two are checked against each other, so a
+destination built as a canary is never reinterpreted as a live one.
+
+Unnamed, the canary is a ``local_directory`` under a scratch root the operator
+passes per run. That is what proves the publisher's own rules, and it reaches
+nothing.
+
+Named with ``--destination-name``, it is a remote destination over
+``ssh_rsync``: the one the WizardOfOdds NBA canary is configured for, carrying
+its host, port, user, private staging path, served target, public URL and the
+*name* of the environment variable its key is read from. No credential is in
+this repository and none belongs here. Reaching a real host is therefore
+something an operator asks for by name, never something a default does.
+
+The remote path is SSH and rsync and nothing else. No FTP, no FTPS, no SFTP
+library, no HTTP API and no object store: each would be a second contract to
+write, test and review, and the destination speaks this one.
+
+HOW A REMOTE RELEASE IS WRITTEN
+-------------------------------
+
+Bytes arrive where nobody can read them and are proven before they are
+served. rsync puts the release in a private staging directory that is mode 700
+and outside every document root; the destination is then asked for its digest,
+so a transfer that ended early, arrived altered or went somewhere other than
+where it was addressed is caught while it is still unreachable. Only a
+verified staging file is copied into the served tree, by a rename within the
+directory, and its digest is checked again there -- because the digest that
+matters is of what is served, not of what was uploaded.
+
+Then the release is read back twice: through the transport, which is the
+publisher's existing check, and over its public HTTPS URL, which is the only
+check that speaks for the destination as a destination. A file can be correct
+on disk and still be unreachable, misaddressed, or shadowed by a web server
+rule, and nothing but fetching the public URL can see that. Promotion happens
+after both.
+
+WHAT A DESTINATION KEEPS
+------------------------
+
+The release it serves, the one before it, and the receipts. Nothing else:
+every other release payload is pruned once the pointers have been rotated
+past it. Dated snapshots accumulating per day is how the legacy NBA output
+became something nobody could reason about, and the audit log and manifests
+are kept regardless, so what was published stays readable after the bytes it
+describes are gone.
 
 RELEASES, AND GETTING BACK
 --------------------------
@@ -91,11 +143,18 @@ to be seeded from whatever it is already serving.
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import math
 import os
+import shlex
+import shutil
+import subprocess
 import sys
+import tempfile
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -132,6 +191,29 @@ PRICED_MARKETS_RELATIVE = Path("processed") / "priced_markets"
 SERVING_RECEIPTS_RELATIVE = Path("processed") / "incumbent_serving"
 
 TRANSPORT_LOCAL_DIRECTORY = "local_directory"
+TRANSPORT_SSH_RSYNC = "ssh_rsync"
+
+#: Destinations addressed by name rather than by mode. A mode still decides
+#: what a run is allowed to do; a name decides which of several destinations
+#: of that mode it does it to, so reaching a real host is something an
+#: operator asks for explicitly instead of inheriting from a default.
+NAMED_DESTINATIONS_KEY = "named_destinations"
+
+#: Where an ``ssh_rsync`` destination lands bytes before they are published:
+#: a subdirectory of the private staging root, which is mode 700 and outside
+#: any document root. Uploads are verified here, and only a verified upload is
+#: copied into the served tree.
+STAGING_SUBDIRECTORY = "releases_staging"
+
+SSH_CONNECT_TIMEOUT_SECONDS = 20
+SSH_COMMAND_TIMEOUT_SECONDS = 180
+PUBLIC_READBACK_TIMEOUT_SECONDS = 60
+
+#: Sentinel ``sha256sum`` is replaced by when the path is not there, so a
+#: missing file and an empty one are distinguishable. An absent upload is a
+#: partial release; a file that hashes to the digest of nothing is a different
+#: defect, and a transport that reported both as "" could not tell them apart.
+REMOTE_MISSING = "MISSING"
 
 #: The published record's own version. Independent of the two feed versions:
 #: this names the shape of what is written to the destination, not the shape
@@ -487,12 +569,72 @@ def assert_mode_enabled(switch: PublishingSwitch) -> None:
 
 
 @dataclass(frozen=True)
+class RemoteDestination:
+    """Where an ``ssh_rsync`` destination is, and what it may touch.
+
+    Two paths rather than one, because publishing to a served directory and
+    uploading to it are different operations with different exposure. Bytes
+    arrive in ``private_staging`` -- mode 700, outside every document root --
+    and are verified there. ``public_target`` is served, so nothing reaches it
+    that has not already been checked where nobody can read it.
+
+    ``canary_subpath`` is what keeps a canary a canary. Every path this
+    destination addresses is resolved beneath ``public_target/canary_subpath``,
+    so the destination cannot name the served root, cannot name anything
+    beside it, and has no way to express the legacy NBA pages and feeds that
+    sit in the parent directory. A canary that is non-live because of where it
+    can write is a stronger statement than one that is non-live because of
+    what it was asked to write.
+
+    No credential is held here. ``credential_env`` is the name of the
+    variable the private key is read from, which is a fact about the
+    deployment; the key is a fact about the environment and never about this
+    repository.
+    """
+
+    host: str
+    port: int
+    user: str
+    credential_env: str
+    private_staging: str
+    public_target: str
+    public_base_url: str
+    canary_subpath: str
+    retained_releases: int | None
+
+    @property
+    def published_root(self) -> str:
+        """The one directory this destination writes, served."""
+        return f"{self.public_target.rstrip('/')}/{self.canary_subpath.strip('/')}"
+
+    @property
+    def staging_root(self) -> str:
+        """The one directory this destination uploads to, unserved."""
+        return (
+            f"{self.private_staging.rstrip('/')}/{STAGING_SUBDIRECTORY}/"
+            f"{self.canary_subpath.strip('/')}"
+        )
+
+    @property
+    def published_base_url(self) -> str:
+        return (
+            self.public_base_url.rstrip("/")
+            + "/"
+            + self.canary_subpath.strip("/")
+            + "/"
+        )
+
+
+@dataclass(frozen=True)
 class Destination:
     mode: str
     transport: str
     root: Path
     release_prefix: str
     source: str
+    name: str = ""
+    remote: RemoteDestination | None = None
+    retained_releases: int | None = None
 
 
 def read_destinations(
@@ -526,16 +668,26 @@ def resolve_destination(
     document: dict[str, Any],
     *,
     root: Path | None = None,
+    name: str | None = None,
 ) -> Destination:
     """The destination for one mode, or a refusal naming what is missing.
 
-    ``live`` is null in the committed configuration because every fact needed
-    to describe it is external to this repository. The refusal quotes those
-    facts rather than saying "not configured", because the difference between
-    a missing line of config and a missing agreement with the destination is
-    the whole difference between finishing this and being blocked on it.
+    Without a name this is the mode's own destination, which is how it has
+    always worked. ``live`` is null in the committed configuration, and the
+    refusal quotes the facts that are still missing for it rather than saying
+    "not configured", because the difference between a missing line of config
+    and a missing agreement is the whole difference between finishing and
+    being blocked.
+
+    With a name it is one of the named destinations, and the name has to agree
+    with the mode. A named destination declares which mode it belongs to, so
+    pointing a live run at a destination built as a canary is a refusal rather
+    than a reinterpretation.
     """
     source = str(document.get("source") or DESTINATIONS_RELATIVE)
+
+    if name:
+        return _resolve_named_destination(mode, document, name=name, source=source)
 
     declared = (document.get("destinations") or {}).get(mode)
 
@@ -554,14 +706,14 @@ def resolve_destination(
             f"to publish.{detail}"
         )
 
-    transport = str(declared.get("transport") or "")
+    transport = _supported_transport(declared, document, mode=mode, source=source)
 
-    supported = tuple(document.get("supported_transports") or ())
-
-    if transport not in supported:
+    if transport != TRANSPORT_LOCAL_DIRECTORY:
         raise PublishingRefused(
-            f"{source} asks for the {transport!r} transport for {mode}, and "
-            f"only {list(supported)} is implemented"
+            f"{source} asks for the {transport!r} transport for the unnamed "
+            f"{mode} destination. A remote destination is addressed by name, "
+            "with --destination-name, so reaching a real host is never the "
+            "default"
         )
 
     resolved = root if root is not None else declared.get("root")
@@ -579,6 +731,229 @@ def resolve_destination(
         release_prefix=str(declared.get("release_prefix") or "nba_prop_quant"),
         source=source,
     )
+
+
+def _supported_transport(
+    declared: dict[str, Any],
+    document: dict[str, Any],
+    *,
+    mode: str,
+    source: str,
+) -> str:
+    transport = str(declared.get("transport") or "")
+
+    supported = tuple(document.get("supported_transports") or ())
+
+    if transport not in supported:
+        raise PublishingRefused(
+            f"{source} asks for the {transport!r} transport for {mode}, and "
+            f"only {list(supported)} is implemented"
+        )
+
+    return transport
+
+
+def _resolve_named_destination(
+    mode: str,
+    document: dict[str, Any],
+    *,
+    name: str,
+    source: str,
+) -> Destination:
+    named = document.get(NAMED_DESTINATIONS_KEY) or {}
+
+    declared = named.get(name)
+
+    if not declared:
+        raise PublishingRefused(
+            f"{source} configures no destination named {name!r}; it names "
+            f"{sorted(named)}"
+        )
+
+    declared_mode = str(declared.get("mode") or "")
+
+    if declared_mode != mode:
+        raise PublishingRefused(
+            f"{source} declares {name!r} a {declared_mode or 'modeless'} "
+            f"destination, and this run is {mode}. A destination built for one "
+            "mode is not reinterpreted as another"
+        )
+
+    transport = _supported_transport(declared, document, mode=mode, source=source)
+
+    if transport != TRANSPORT_SSH_RSYNC:
+        raise PublishingRefused(
+            f"{source} asks for the {transport!r} transport for {name!r}, and "
+            f"a named destination is remote: only {TRANSPORT_SSH_RSYNC!r} is "
+            "implemented for one"
+        )
+
+    remote = _read_remote(declared, name=name, source=source)
+
+    return Destination(
+        mode=mode,
+        transport=transport,
+        root=Path(remote.published_root),
+        release_prefix=str(declared.get("release_prefix") or "nba_prop_quant"),
+        source=source,
+        name=name,
+        remote=remote,
+        retained_releases=remote.retained_releases,
+    )
+
+
+#: Every field an ``ssh_rsync`` destination is described by. Required rather
+#: than defaulted: a remote destination with a guessed user, a guessed path or
+#: a guessed credential name is a destination that looks configured and writes
+#: somewhere nobody chose.
+REQUIRED_REMOTE_FIELDS: tuple[str, ...] = (
+    "canary_subpath",
+    "credential_env",
+    "host",
+    "port",
+    "private_staging",
+    "public_base_url",
+    "public_target",
+    "user",
+)
+
+
+def _read_remote(
+    declared: dict[str, Any], *, name: str, source: str
+) -> RemoteDestination:
+    missing = [
+        field_name
+        for field_name in REQUIRED_REMOTE_FIELDS
+        if declared.get(field_name) in (None, "", [], {})
+    ]
+
+    if missing:
+        raise PublishingRefused(
+            f"{source} describes {name!r} without " + ", ".join(sorted(missing))
+        )
+
+    try:
+        port = int(declared["port"])
+    except (TypeError, ValueError) as error:
+        raise PublishingRefused(
+            f"{source} gives {name!r} the port {declared.get('port')!r}, "
+            "which is not a port number"
+        ) from error
+
+    for field_name in ("private_staging", "public_target"):
+        value = str(declared[field_name])
+
+        if not value.startswith("/"):
+            raise PublishingRefused(
+                f"{source} gives {name!r} the relative {field_name} "
+                f"{value!r}; a remote path is resolved against whatever "
+                "directory the login happens to start in, so it has to be "
+                "absolute"
+            )
+
+    base_url = str(declared["public_base_url"])
+
+    if not base_url.startswith("https://"):
+        raise PublishingRefused(
+            f"{source} gives {name!r} the public base URL {base_url!r}. The "
+            "readback is the step that proves what the destination serves, "
+            "and reading it back over plaintext would prove it against "
+            "whatever answered"
+        )
+
+    declared_subpath = str(declared["canary_subpath"])
+
+    subpath = declared_subpath.rstrip("/")
+
+    # A leading slash is refused rather than stripped. It reads as an absolute
+    # path, and somebody who wrote one meant a location rather than a
+    # subdirectory: normalising it would silently publish somewhere other than
+    # where the configuration appears to say.
+    if (
+        declared_subpath.startswith("/")
+        or not subpath
+        or not _is_safe_remote_segment_path(subpath)
+    ):
+        raise PublishingRefused(
+            f"{source} gives {name!r} the canary subpath "
+            f"{declared_subpath!r}. It is the only thing confining this "
+            "destination to a non-live directory, so it has to be a plain "
+            "relative path below the served root and cannot be empty"
+        )
+
+    retained = declared.get("retained_releases")
+
+    if retained is not None:
+        try:
+            retained = int(retained)
+        except (TypeError, ValueError) as error:
+            raise PublishingRefused(
+                f"{source} gives {name!r} the retention "
+                f"{declared.get('retained_releases')!r}, which is not a count"
+            ) from error
+
+        if retained < 2:
+            raise PublishingRefused(
+                f"{source} asks {name!r} to retain {retained} releases. The "
+                "release currently served and the one before it are both "
+                "required: retaining fewer would prune the rollback target"
+            )
+
+    return RemoteDestination(
+        host=str(declared["host"]),
+        port=port,
+        user=str(declared["user"]),
+        credential_env=str(declared["credential_env"]),
+        private_staging=str(declared["private_staging"]).rstrip("/"),
+        public_target=str(declared["public_target"]).rstrip("/"),
+        public_base_url=base_url,
+        canary_subpath=subpath,
+        retained_releases=retained,
+    )
+
+
+def _is_safe_remote_segment_path(relative: str) -> bool:
+    """Whether a relative path addresses something strictly below its root.
+
+    No absolute paths, no ``..``, no ``.``, no empty segments and no
+    backslashes. The published tree is the one place this publisher writes on
+    a host that also serves the legacy NBA pages, and a path that could climb
+    out of it would make the confinement a convention rather than a property.
+    """
+    if not relative or relative.startswith("/") or "\\" in relative:
+        return False
+
+    segments = relative.split("/")
+
+    return all(
+        segment not in ("", ".", "..") and not segment.startswith("-")
+        for segment in segments
+    )
+
+
+def assert_remote_canary_is_confined(destination: Destination) -> None:
+    """A remote canary writes below the served root, never at it.
+
+    The served root holds the legacy NBA feed the website already publishes.
+    This publisher never addresses it, and the check is here rather than left
+    implicit because "the subpath is not empty" is the entire reason that is
+    true.
+    """
+    remote = destination.remote
+
+    if remote is None:
+        return
+
+    published = remote.published_root.rstrip("/")
+
+    target = remote.public_target.rstrip("/")
+
+    if published == target or not published.startswith(target + "/"):
+        raise PublishingRefused(
+            f"the remote canary would publish to {published}, which is not "
+            f"strictly below the served root {target}, so it is not confined "
+            "to a non-live directory"
+        )
 
 
 def assert_canary_is_not_live(canary: Destination, document: dict[str, Any]) -> None:
@@ -647,14 +1022,456 @@ class LocalDirectoryTransport:
             if path.is_file()
         )
 
+    def remove_tree(self, relative: str) -> None:
+        shutil.rmtree(self._resolve(relative), ignore_errors=True)
 
-def build_transport(destination: Destination) -> LocalDirectoryTransport:
-    if destination.transport != TRANSPORT_LOCAL_DIRECTORY:
-        raise PublishingRefused(
-            f"the {destination.transport!r} transport is not implemented"
+    def close(self) -> None:
+        return None
+
+
+class RemoteCommandFailed(PublishingRefused):
+    """A command at the destination did not succeed."""
+
+
+class SshRsyncTransport:
+    """Bytes to a served directory on a real host, over SSH and rsync.
+
+    Three hops, because the destination is a live web server and the only
+    orderings that are safe on one are the ones where nothing unverified is
+    ever served.
+
+    First the release is written to a local spool, which is what gives rsync
+    something whole to send. Then rsync puts it in ``private_staging`` -- mode
+    700, outside every document root -- and the upload is verified there by
+    asking the destination itself for the digest. A transfer that ended early,
+    went somewhere other than where it was addressed, or arrived altered is
+    caught at this point, with the bytes still unreachable by anybody.
+
+    Only then is the file copied into the served tree, and the copy is a
+    ``mv`` from a temporary name in the destination directory, so a reader
+    sees the old file or the new one and never a partial one. The digest is
+    checked again after the move, because the check that matters is of what is
+    served rather than of what was uploaded.
+
+    ``read_bytes`` reads the served file back over SSH, which is what makes
+    the publisher's existing verification a statement about this transport
+    too. ``public_readback`` reads it over HTTPS, which is the only check that
+    speaks for what a consumer would actually get: a file can be correct on
+    disk and unreachable, misaddressed or shadowed by a rule in the web
+    server's configuration, and nothing but a fetch of the public URL can see
+    that.
+
+    The private key never reaches the filesystem the repository is checked out
+    on. It is read from the environment variable the destination names, into a
+    file in a 700 temporary directory that ``close`` removes.
+    """
+
+    name = TRANSPORT_SSH_RSYNC
+
+    def __init__(
+        self,
+        destination: Destination,
+        *,
+        environment: dict[str, str] | None = None,
+    ) -> None:
+        remote = destination.remote
+
+        if remote is None:
+            raise PublishingRefused(
+                "an ssh_rsync destination was resolved without the facts "
+                "describing where it is"
+            )
+
+        self.destination = destination
+
+        self.remote = remote
+
+        self.root = Path(remote.published_root)
+
+        for executable in ("ssh", "rsync"):
+            if shutil.which(executable) is None:
+                raise PublishingRefused(
+                    f"{executable} is not on PATH, and this transport is SSH "
+                    "and rsync only"
+                )
+
+        env = dict(os.environ if environment is None else environment)
+
+        material = env.get(remote.credential_env) or ""
+
+        if not material.strip():
+            raise PublishingRefused(
+                f"{remote.credential_env} carries no private key, so there is "
+                f"no credential to authenticate to {remote.user}@{remote.host} "
+                "with. The key is supplied by the environment and is never "
+                "committed"
+            )
+
+        self._workspace = Path(tempfile.mkdtemp(prefix="nba_woo_ssh_rsync_"))
+
+        os.chmod(self._workspace, 0o700)
+
+        self._key_path = self._workspace / "credential"
+
+        self._key_path.touch(mode=0o600)
+
+        self._key_path.write_text(
+            material if material.endswith("\n") else material + "\n",
+            encoding="utf-8",
         )
 
-    return LocalDirectoryTransport(destination.root)
+        os.chmod(self._key_path, 0o600)
+
+        self._known_hosts = self._workspace / "known_hosts"
+
+        self._known_hosts.touch(mode=0o600)
+
+        self._spool = self._workspace / "spool"
+
+        self._spool.mkdir(mode=0o700)
+
+        self._closed = False
+
+    # ------------------------------------------------------------------
+    # lifecycle
+    # ------------------------------------------------------------------
+
+    def close(self) -> None:
+        """Remove the key, the known hosts file and the spool."""
+        if not self._closed:
+            shutil.rmtree(self._workspace, ignore_errors=True)
+
+            self._closed = True
+
+    def __enter__(self) -> SshRsyncTransport:
+        return self
+
+    def __exit__(self, *_: Any) -> None:
+        self.close()
+
+    # ------------------------------------------------------------------
+    # addressing
+    # ------------------------------------------------------------------
+
+    def _relative(self, relative: str) -> str:
+        if not _is_safe_remote_segment_path(relative):
+            raise PublishingRefused(
+                f"{relative!r} does not address a path below "
+                f"{self.remote.published_root}, so this transport will not "
+                "write it"
+            )
+
+        return relative
+
+    def _published(self, relative: str) -> str:
+        return f"{self.remote.published_root}/{self._relative(relative)}"
+
+    def _staged(self, relative: str) -> str:
+        return f"{self.remote.staging_root}/{self._relative(relative)}"
+
+    # ------------------------------------------------------------------
+    # the remote
+    # ------------------------------------------------------------------
+
+    def _ssh_argv(self) -> list[str]:
+        return [
+            "ssh",
+            "-i",
+            str(self._key_path),
+            "-p",
+            str(self.remote.port),
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "IdentitiesOnly=yes",
+            "-o",
+            "PasswordAuthentication=no",
+            "-o",
+            f"ConnectTimeout={SSH_CONNECT_TIMEOUT_SECONDS}",
+            "-o",
+            "StrictHostKeyChecking=accept-new",
+            "-o",
+            f"UserKnownHostsFile={self._known_hosts}",
+        ]
+
+    def _assert_open(self) -> None:
+        """Refuse to act through a transport whose credential has been removed.
+
+        ``close`` deletes the key and the spool, which makes every later
+        operation fail somewhere further in -- at an ssh that cannot read its
+        identity file, or at a spool directory that gets silently recreated
+        without one. Both are confusing in a way the real cause is not, and a
+        second operation on a destination wants a second transport.
+        """
+        if self._closed:
+            raise PublishingRefused(
+                "this transport has been closed and its credential removed; "
+                "a further operation on the destination needs a transport of "
+                "its own"
+            )
+
+    def _run_remote(self, script: str) -> str:
+        """One shell script at the destination, or a refusal carrying its error.
+
+        ``set -eu`` so a script's first failing command is the script's
+        failure. The destination's own stderr is quoted in the refusal: an
+        authentication failure, a permission denial and a missing directory
+        are different problems with different fixes, and a publisher that
+        reported them all as "the remote command failed" would make the
+        operator guess which one it hit.
+        """
+        self._assert_open()
+
+        completed = subprocess.run(
+            [
+                *self._ssh_argv(),
+                f"{self.remote.user}@{self.remote.host}",
+                f"set -eu; {script}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=SSH_COMMAND_TIMEOUT_SECONDS,
+            check=False,
+        )
+
+        if completed.returncode != 0:
+            raise RemoteCommandFailed(
+                f"{self.remote.user}@{self.remote.host} refused a command "
+                f"(exit {completed.returncode}): "
+                f"{(completed.stderr or completed.stdout).strip()}"
+            )
+
+        return completed.stdout
+
+    def verify_identity(self) -> dict[str, Any]:
+        """Who the destination thinks this is, and what it holds.
+
+        Asked before anything is written. The user is the one fact about a
+        deployment that a wrong answer to is silent: a key that authenticates
+        as somebody else succeeds, writes files owned by that somebody, and
+        looks exactly like a working publication until the ownership matters.
+        """
+        reported = self._run_remote("id -un; pwd").splitlines()
+
+        user = reported[0].strip() if reported else ""
+
+        if user != self.remote.user:
+            raise PublishingRefused(
+                f"{self.remote.host} authenticated this key as {user!r}, not "
+                f"the {self.remote.user!r} the destination is configured for. "
+                "Publishing as another account would write files that account "
+                "owns"
+            )
+
+        return {
+            "host": self.remote.host,
+            "port": self.remote.port,
+            "private_staging": self.remote.private_staging,
+            "public_target": self.remote.public_target,
+            "published_root": self.remote.published_root,
+            "user": user,
+        }
+
+    def _remote_digest(self, path: str) -> str:
+        quoted = shlex.quote(path)
+
+        output = self._run_remote(
+            f"if [ -f {quoted} ]; then sha256sum -- {quoted} | cut -d' ' -f1; "
+            f"else printf '%s\\n' {REMOTE_MISSING}; fi"
+        )
+
+        return output.strip()
+
+    # ------------------------------------------------------------------
+    # writing
+    # ------------------------------------------------------------------
+
+    def write_bytes(self, relative: str, payload: bytes) -> None:
+        self._assert_open()
+
+        safe = self._relative(relative)
+
+        expected = digest(payload)
+
+        local = self._spool / safe
+
+        local.parent.mkdir(parents=True, exist_ok=True)
+
+        local.write_bytes(payload)
+
+        self._upload(safe, local)
+
+        staged = self._remote_digest(self._staged(safe))
+
+        if staged != expected:
+            raise PublishingRefused(
+                f"{safe} uploaded to {self.remote.staging_root} hashes to "
+                f"{staged}, not the {expected} that was sent, so the upload is "
+                "partial or altered and nothing is published from it"
+            )
+
+        self._place(safe)
+
+        served = self._remote_digest(self._published(safe))
+
+        if served != expected:
+            raise PublishingRefused(
+                f"{safe} at {self.remote.published_root} hashes to {served}, "
+                f"not the {expected} that was staged, so the destination does "
+                "not serve what was verified"
+            )
+
+    def _upload(self, safe: str, local: Path) -> None:
+        """rsync one file into the private staging tree.
+
+        No ``--partial``: rsync writes a temporary and renames it when the
+        transfer completes, so an interrupted transfer leaves the staging path
+        absent rather than short. ``--checksum`` so a staging file that
+        already exists is compared by content rather than by size and
+        timestamp, which is the comparison a rerun needs.
+        """
+        target = self._staged(safe)
+
+        parent = target.rsplit("/", 1)[0]
+
+        self._run_remote(f"mkdir -p -- {shlex.quote(parent)}")
+
+        completed = subprocess.run(
+            [
+                "rsync",
+                "--checksum",
+                "--times",
+                "--chmod=F600",
+                "--no-perms",
+                "-e",
+                shlex.join(self._ssh_argv()),
+                "--",
+                str(local),
+                f"{self.remote.user}@{self.remote.host}:{target}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=SSH_COMMAND_TIMEOUT_SECONDS,
+            check=False,
+        )
+
+        if completed.returncode != 0:
+            raise RemoteCommandFailed(
+                f"rsync of {safe} to {self.remote.user}@{self.remote.host} "
+                f"failed (exit {completed.returncode}): "
+                f"{(completed.stderr or completed.stdout).strip()}"
+            )
+
+    def _place(self, safe: str) -> None:
+        """Copy a verified staging file into the served tree, atomically.
+
+        ``cp`` to a temporary name in the destination directory and then
+        ``mv``, which is a rename within one filesystem: a reader of the
+        served path sees the file that was there before this call or the one
+        after it. Copying straight onto the served path would leave a window
+        in which the file served is neither.
+        """
+        published = self._published(safe)
+
+        parent = published.rsplit("/", 1)[0]
+
+        self._run_remote(
+            f"mkdir -p -- {shlex.quote(parent)}; "
+            f"tmp={shlex.quote(parent)}/.nba_woo_place.$$; "
+            f"cp -- {shlex.quote(self._staged(safe))} \"$tmp\"; "
+            'chmod 644 "$tmp"; '
+            f"mv -f -- \"$tmp\" {shlex.quote(published)}"
+        )
+
+    # ------------------------------------------------------------------
+    # reading
+    # ------------------------------------------------------------------
+
+    def read_bytes(self, relative: str) -> bytes:
+        quoted = shlex.quote(self._published(relative))
+
+        return base64.b64decode(self._run_remote(f"base64 -- {quoted}"))
+
+    def exists(self, relative: str) -> bool:
+        return self._remote_digest(self._published(relative)) != REMOTE_MISSING
+
+    def listing(self) -> list[str]:
+        root = shlex.quote(self.remote.published_root)
+
+        output = self._run_remote(
+            f"if [ -d {root} ]; then find {root} -type f -printf '%P\\n'; fi"
+        )
+
+        return sorted(line for line in output.splitlines() if line.strip())
+
+    def remove_tree(self, relative: str) -> None:
+        self._run_remote(f"rm -rf -- {shlex.quote(self._published(relative))}")
+
+    # ------------------------------------------------------------------
+    # the public readback
+    # ------------------------------------------------------------------
+
+    def public_url(self, relative: str) -> str:
+        return self.remote.published_base_url + self._relative(relative)
+
+    def public_readback(self, relative: str) -> bytes:
+        """What a consumer fetching the public URL would receive.
+
+        The only check that speaks for the destination as a destination rather
+        than as a filesystem. Cache directives are refused on the request
+        because a readback served from an intermediary is a statement about
+        the intermediary.
+        """
+        url = self.public_url(relative)
+
+        request = urllib.request.Request(
+            url,
+            headers={
+                "Accept": "*/*",
+                "Cache-Control": "no-cache",
+                "Pragma": "no-cache",
+                "User-Agent": "nba-prop-quant-publisher/1",
+            },
+        )
+
+        try:
+            with urllib.request.urlopen(
+                request, timeout=PUBLIC_READBACK_TIMEOUT_SECONDS
+            ) as response:
+                if response.status != 200:
+                    raise PublishingRefused(
+                        f"{url} answered {response.status}, so the release is "
+                        "not publicly readable and is not promoted"
+                    )
+
+                return response.read()
+        except urllib.error.HTTPError as error:
+            raise PublishingRefused(
+                f"{url} answered {error.code} {error.reason}, so the release "
+                "is not publicly readable and is not promoted"
+            ) from error
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
+            raise PublishingRefused(
+                f"{url} could not be read back ({error}), so what the "
+                "destination serves is unproven and the release is not "
+                "promoted"
+            ) from error
+
+
+def build_transport(
+    destination: Destination,
+    *,
+    environment: dict[str, str] | None = None,
+) -> LocalDirectoryTransport | SshRsyncTransport:
+    if destination.transport == TRANSPORT_LOCAL_DIRECTORY:
+        return LocalDirectoryTransport(destination.root)
+
+    if destination.transport == TRANSPORT_SSH_RSYNC:
+        return SshRsyncTransport(destination, environment=environment)
+
+    raise PublishingRefused(
+        f"the {destination.transport!r} transport is not implemented"
+    )
 
 
 # ----------------------------------------------------------------------
@@ -1111,10 +1928,120 @@ def verify_release(transport: LocalDirectoryTransport, release: Release) -> dict
 
     return {
         "manifest_sha256": release.manifest_sha256,
+        "public": verify_public_readback(transport, release),
         "readback_rows": len(readback.get("rows") or []),
         "rows_sha256": release.rows_sha256,
         "verified": True,
     }
+
+
+def verify_public_readback(
+    transport: Any, release: Release
+) -> dict[str, Any]:
+    """Fetch the release from its public URL and check it is the release.
+
+    A transport that serves no public URL reports that it was not checked
+    rather than reporting a pass, because "there was nothing to fetch" and
+    "what was fetched was right" are different facts and a verification
+    summary that conflated them would let a local canary claim a public
+    readback it never did.
+
+    For one that does, this is the check the destination exists for. The
+    digests say the bytes a consumer receives are the bytes that were
+    published, and the row count says the document it parses holds the rows
+    that were priced -- which is the whole of what the website is promised.
+    """
+    reader = getattr(transport, "public_readback", None)
+
+    if reader is None:
+        return {
+            "checked": False,
+            "reason": (
+                "this transport serves no public URL, so there is nothing to "
+                "read a release back from"
+            ),
+        }
+
+    bodies: dict[str, bytes] = {}
+
+    for relative, expected in (
+        (release.rows_relative, release.rows_sha256),
+        (release.manifest_relative, release.manifest_sha256),
+    ):
+        body = reader(relative)
+
+        actual = digest(body)
+
+        if actual != expected:
+            raise PublishingRefused(
+                f"{transport.public_url(relative)} serves {actual} but the "
+                f"release was published as {expected}, so what the "
+                "destination serves publicly is not the release and it is not "
+                "promoted"
+            )
+
+        bodies[relative] = body
+
+    document = json.loads(bodies[release.rows_relative])
+
+    rows = document.get("rows") or []
+
+    if len(rows) != release.row_count:
+        raise PublishingRefused(
+            f"{transport.public_url(release.rows_relative)} serves "
+            f"{len(rows)} rows, not the {release.row_count} that were "
+            "published"
+        )
+
+    return {
+        "checked": True,
+        "manifest_sha256": digest(bodies[release.manifest_relative]),
+        "manifest_url": transport.public_url(release.manifest_relative),
+        "readback_rows": len(rows),
+        "rows_sha256": digest(bodies[release.rows_relative]),
+        "rows_url": transport.public_url(release.rows_relative),
+    }
+
+
+def prune_releases(
+    transport: Any, *, retained: int | None
+) -> dict[str, Any]:
+    """Remove every release the destination is not serving or holding back to.
+
+    Retention rather than accumulation, and an explicit two rather than a
+    date window: what a destination owes its consumers is the release it
+    serves, and what it owes an operator is the one before it. A dated
+    snapshot per day is how the legacy NBA output grew to something nobody
+    could reason about, and the receipts and manifests that record what was
+    published are kept regardless -- it is the payloads that are pruned, so
+    the audit trail outlives the bytes it describes.
+
+    Pointer-driven, so the two releases that are kept are the two the pointers
+    name rather than the two that sort last. A release is only ever removed
+    after the pointers have been rotated, so nothing reachable is pruned.
+    """
+    if retained is None:
+        return {"pruned": [], "retained": None}
+
+    kept = {
+        str((read_pointer(transport, pointer) or {}).get("release_id") or "")
+        for pointer in (CURRENT_POINTER, PREVIOUS_POINTER)
+    } - {""}
+
+    present = {
+        name.split("/")[1]
+        for name in transport.listing()
+        if name.startswith(f"{RELEASES_DIRECTORY}/") and name.count("/") >= 2
+    }
+
+    removed: list[str] = []
+
+    for release_id in sorted(present - kept):
+        transport.remove_tree(f"{RELEASES_DIRECTORY}/{release_id}")
+
+        removed.append(release_id)
+
+    return {"pruned": removed, "retained": sorted(kept)}
 
 
 def append_audit_entry(
@@ -1164,6 +2091,7 @@ def attestation_for(
         "model_authority": MODEL_AUTHORITY,
         "outcome": OUTCOME_PUBLISHED,
         "production_code_sha": provenance.get("production_code_sha"),
+        "public_readback": verification.get("public") or {},
         "release_id": release.release_id,
         "row_count": release.row_count,
         "rows_sha256": release.rows_sha256,
@@ -1409,6 +2337,15 @@ def rollback(transport: LocalDirectoryTransport) -> dict[str, Any]:
             "release it claims to be"
         )
 
+    public = _public_rows_digest(transport, rows_relative)
+
+    if public is not None and public != actual:
+        raise PublishingRefused(
+            f"the previous release's rows are served publicly as {public} but "
+            f"hold {actual} at the destination, so rolling back would point at "
+            "a release the destination does not actually serve"
+        )
+
     superseded = read_pointer(transport, CURRENT_POINTER)
 
     transport.write_bytes(
@@ -1422,6 +2359,7 @@ def rollback(transport: LocalDirectoryTransport) -> dict[str, Any]:
             "action": ACTION_ROLLED_BACK,
             "mode": str(previous.get("mode") or ""),
             "model_authority": MODEL_AUTHORITY,
+            "public_rows_sha256": public,
             "recorded_at": _utc_now(),
             "release_id": previous.get("release_id"),
             "rows_sha256": actual,
@@ -1432,10 +2370,25 @@ def rollback(transport: LocalDirectoryTransport) -> dict[str, Any]:
     return {
         "audit_relative": audit_relative,
         "outcome": OUTCOME_ROLLED_BACK,
+        "public_rows_sha256": public,
         "restored_release_id": previous.get("release_id"),
         "rows_sha256": actual,
         "superseded_release_id": (superseded or {}).get("release_id"),
     }
+
+
+def _public_rows_digest(transport: Any, rows_relative: str) -> str | None:
+    """What the public URL serves for one release's rows, when there is one.
+
+    ``None`` for a transport with no public URL, which is not a failure: a
+    local canary has nothing public to disagree with. For one that has, the
+    digest is the fact a rollback needs -- restoring a pointer to bytes the
+    destination holds but does not serve would be a rollback to nothing a
+    consumer can see.
+    """
+    reader = getattr(transport, "public_readback", None)
+
+    return None if reader is None else digest(reader(rows_relative))
 
 
 # ----------------------------------------------------------------------
@@ -1455,6 +2408,7 @@ def publish(
     receipt_path: Path | None = None,
     priced_path: Path | None = None,
     canary_attestation: Path | None = None,
+    destination_name: str | None = None,
     environment: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """One publication, start to finish, or the first refusal on the way.
@@ -1481,10 +2435,14 @@ def publish(
         project_root=root, destinations_path=destinations_path
     )
 
-    destination = resolve_destination(mode, document, root=destination_root)
+    destination = resolve_destination(
+        mode, document, root=destination_root, name=destination_name
+    )
 
     if mode == MODE_CANARY:
         assert_canary_is_not_live(destination, document)
+
+        assert_remote_canary_is_confined(destination)
 
     priced = (
         Path(priced_path)
@@ -1534,75 +2492,87 @@ def publish(
         slate_date=slate_date,
     )
 
-    transport = build_transport(destination)
+    transport = build_transport(destination, environment=environment)
 
-    activation: dict[str, Any] | None = None
-
-    if mode == MODE_LIVE:
-        activation = {
-            "canary": assert_canary_attested(
-                read_attestation(canary_attestation),
-                release=release,
-                provenance=provenance,
-            ),
-            "rollback_target": assert_rollback_target_exists(transport),
-        }
-
-    write_release(transport, release)
-
-    verification = verify_release(transport, release)
-
-    promotion = promote(transport, release, mode=mode)
-
-    # Not rewritten for a rerun that promoted nothing: the attestation already
-    # there covers the release still current, and restamping it would make a
-    # no-op rerun change what the destination holds.
-    if mode == MODE_CANARY and (
-        promotion["promoted"] or not transport.exists(ATTESTATION_NAME)
-    ):
-        transport.write_bytes(
-            ATTESTATION_NAME,
-            serialise(
-                attestation_for(
-                    mode=mode,
-                    release=release,
-                    provenance=provenance,
-                    verification=verification,
-                    slate_date=slate_date,
-                )
-            ),
+    try:
+        identity = (
+            transport.verify_identity()
+            if hasattr(transport, "verify_identity")
+            else None
         )
 
-    audit_relative = append_audit_entry(
-        transport,
-        {
-            "action": (
-                ACTION_PUBLISHED if promotion["promoted"] else ACTION_REPUBLISHED
-            ),
-            "mode": mode,
-            "model_authority": MODEL_AUTHORITY,
-            "production_code_sha": provenance.get("production_code_sha"),
-            "recorded_at": _utc_now(),
-            "release_id": release.release_id,
-            "row_count": release.row_count,
-            "rows_sha256": release.rows_sha256,
-            "slate_date": slate_date,
-            "source_artifact_sha256": provenance.get(
-                "priced_market_artifact_sha256"
-            ),
-        },
-    )
+        activation: dict[str, Any] | None = None
+
+        if mode == MODE_LIVE:
+            activation = {
+                "canary": assert_canary_attested(
+                    read_attestation(canary_attestation),
+                    release=release,
+                    provenance=provenance,
+                ),
+                "rollback_target": assert_rollback_target_exists(transport),
+            }
+
+        write_release(transport, release)
+
+        verification = verify_release(transport, release)
+
+        promotion = promote(transport, release, mode=mode)
+
+        # Not rewritten for a rerun that promoted nothing: the attestation
+        # already there covers the release still current, and restamping it
+        # would make a no-op rerun change what the destination holds.
+        if mode == MODE_CANARY and (
+            promotion["promoted"] or not transport.exists(ATTESTATION_NAME)
+        ):
+            transport.write_bytes(
+                ATTESTATION_NAME,
+                serialise(
+                    attestation_for(
+                        mode=mode,
+                        release=release,
+                        provenance=provenance,
+                        verification=verification,
+                        slate_date=slate_date,
+                    )
+                ),
+            )
+
+        # After the pointers, never before: the releases kept are the ones the
+        # pointers name, so pruning first could remove the rollback target
+        # this publication is about to create.
+        retention = prune_releases(
+            transport, retained=destination.retained_releases
+        )
+
+        audit_relative = append_audit_entry(
+            transport,
+            {
+                "action": (
+                    ACTION_PUBLISHED
+                    if promotion["promoted"]
+                    else ACTION_REPUBLISHED
+                ),
+                "mode": mode,
+                "model_authority": MODEL_AUTHORITY,
+                "production_code_sha": provenance.get("production_code_sha"),
+                "recorded_at": _utc_now(),
+                "release_id": release.release_id,
+                "row_count": release.row_count,
+                "rows_sha256": release.rows_sha256,
+                "slate_date": slate_date,
+                "source_artifact_sha256": provenance.get(
+                    "priced_market_artifact_sha256"
+                ),
+            },
+        )
+    finally:
+        transport.close()
 
     return {
         "activation": activation,
         "audit_relative": audit_relative,
-        "destination": {
-            "mode": destination.mode,
-            "release_prefix": destination.release_prefix,
-            "root": str(destination.root),
-            "source": destination.source,
-            "transport": destination.transport,
-        },
+        "destination": destination_payload(destination, identity=identity),
         "generated_at": _utc_now(),
         "live_publishing": read_publishing_switch(
             MODE_LIVE,
@@ -1623,10 +2593,56 @@ def publish(
             "rows_relative": release.rows_relative,
             "rows_sha256": release.rows_sha256,
         },
+        "retention": retention,
         "slate_date": slate_date,
         "switch": switch.payload(),
         "verification": verification,
     }
+
+
+def destination_payload(
+    destination: Destination, *, identity: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """What the receipt records about where this went.
+
+    The remote facts are addresses and are recorded; the credential is a name
+    and is recorded as one. No key material passes through here, which is the
+    same reason the configuration holds the variable's name rather than its
+    value.
+    """
+    payload: dict[str, Any] = {
+        "mode": destination.mode,
+        "release_prefix": destination.release_prefix,
+        "root": str(destination.root),
+        "source": destination.source,
+        "transport": destination.transport,
+    }
+
+    if destination.name:
+        payload["name"] = destination.name
+
+    if destination.retained_releases is not None:
+        payload["retained_releases"] = destination.retained_releases
+
+    remote = destination.remote
+
+    if remote is not None:
+        payload["remote"] = {
+            "credential_env": remote.credential_env,
+            "host": remote.host,
+            "port": remote.port,
+            "private_staging": remote.private_staging,
+            "public_base_url": remote.published_base_url,
+            "public_target": remote.public_target,
+            "published_root": remote.published_root,
+            "staging_root": remote.staging_root,
+            "user": remote.user,
+        }
+
+    if identity is not None:
+        payload["authenticated_as"] = identity
+
+    return payload
 
 
 def render(receipt: dict[str, Any]) -> str:
@@ -1635,9 +2651,14 @@ def render(receipt: dict[str, Any]) -> str:
             ("outcome", receipt["outcome"]),
             ("restored release", receipt.get("restored_release_id")),
             ("superseded release", receipt.get("superseded_release_id")),
+            ("public rows digest", receipt.get("public_rows_sha256")),
             ("audit entry", receipt.get("audit_relative")),
         ]
     else:
+        destination = receipt.get("destination") or {}
+
+        public = (receipt.get("verification") or {}).get("public") or {}
+
         rows = [
             ("outcome", receipt.get("outcome")),
             ("mode", receipt.get("mode")),
@@ -1647,7 +2668,14 @@ def render(receipt: dict[str, Any]) -> str:
             ("release", (receipt.get("release") or {}).get("release_id")),
             ("published rows", (receipt.get("release") or {}).get("row_count")),
             ("readback verified", (receipt.get("verification") or {}).get("verified")),
-            ("destination", (receipt.get("destination") or {}).get("root")),
+            ("public readback", public.get("checked")),
+            ("public rows", public.get("readback_rows")),
+            ("transport", destination.get("transport")),
+            ("destination", destination.get("name") or destination.get("root")),
+            ("destination root", destination.get("root")),
+            ("public url", public.get("rows_url")),
+            ("retained releases", (receipt.get("retention") or {}).get("retained")),
+            ("pruned releases", (receipt.get("retention") or {}).get("pruned")),
             ("audit entry", receipt.get("audit_relative")),
         ]
 
@@ -1686,8 +2714,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--destination-root",
         type=Path,
         default=None,
-        help="where the release tree is written. Required for the canary, "
-        "whose root is a scratch location this repository does not assert.",
+        help="where the release tree is written. Required for the unnamed "
+        "canary, whose root is a scratch location this repository does not "
+        "assert. Ignored by a named destination, which carries its own.",
+    )
+    parser.add_argument(
+        "--destination-name",
+        default=None,
+        help="publish to one of the configuration's named destinations "
+        "instead of the mode's own. A named destination is remote and carries "
+        "its own host, paths and credential variable, so reaching a real host "
+        "is something asked for by name rather than the default.",
     )
     parser.add_argument("--project-root", type=Path, default=PROJECT_ROOT)
     parser.add_argument("--switch-path", type=Path, default=None)
@@ -1727,11 +2764,22 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         )
 
         destination = resolve_destination(
-            args.mode, document, root=args.destination_root
+            args.mode,
+            document,
+            root=args.destination_root,
+            name=args.destination_name,
         )
 
+        transport = build_transport(destination)
+
+        try:
+            restored = rollback(transport)
+        finally:
+            transport.close()
+
         return {
-            **rollback(build_transport(destination)),
+            **restored,
+            "destination": destination_payload(destination),
             "generated_at": _utc_now(),
             "mode": args.mode,
             "model_authority": MODEL_AUTHORITY,
@@ -1748,6 +2796,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         destinations_path=args.destinations_path,
         receipt_path=args.serving_receipt,
         canary_attestation=args.canary_attestation,
+        destination_name=args.destination_name,
     )
 
 

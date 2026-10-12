@@ -308,39 +308,56 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: The incumbent publisher's four entries were retired in turn when they
 #: landed. All four are files that lineage introduced rather than edited, so
 #: all four are recorded as owned below, and touching any of them again
-#: requires declaring it again -- which is what this branch does for two of
-#: them.
+#: requires declaring it again. The activation-gate branch's two entries were
+#: retired the same way when they landed, and both of the files they named are
+#: owned, which is why this branch declares them again.
 #:
-#: This branch's two entries extend the publisher's release contract with the
-#: two activation gates and the durable audit receipt the publishing brief
-#: requires, and document them. Neither is a model artifact, a config, a
-#: production script, a release or review path, or a production source the
-#: serving path reads; the publisher is still reached by nothing that runs on a
-#: schedule, and the branch-safety test below pins that the serving entry
-#: points, the serving sources and the numerical modules remain byte-identical
-#: to production.
+#: This branch's three entries add one remote transport to the publisher,
+#: configure the WizardOfOdds NBA canary destination it reaches, and document
+#: both. None is a model artifact, a config, a production script, a release or
+#: review path, or a production source the serving path reads. The publisher is
+#: still reached by nothing that runs on a schedule, live publication remains
+#: DISABLED with no live destination configured, and the branch-safety test
+#: below pins that the serving entry points, the serving sources and the
+#: numerical modules remain byte-identical to production.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
         "ops/publish_incumbent_to_wizardofodds.py": (
-            "two activation gates and an audit receipt, all additive. Live "
-            "publication now additionally requires a successful canary of the "
-            "same source artifact, matched on both the artifact digest and "
-            "the published-rows digest, and a rollback target already at the "
-            "destination; both are checked before anything is written, so a "
-            "refused activation leaves the destination untouched. Every "
-            "completed action appends one line to an audit log at the "
-            "destination. Live publication remains DISABLED and still refuses "
-            "twice over before either new gate is reached: the switch is not "
-            "enabled and no live destination exists. Nothing about which rows "
-            "are published, or what they carry, changes"
+            "one additional transport, ssh_rsync, and the release handling a "
+            "remote destination needs. A release is staged into a private "
+            "directory outside every document root, verified there against a "
+            "digest the destination computes, copied into the served tree by a "
+            "rename, verified again where it is served, and read back over its "
+            "public HTTPS URL; promotion happens after all of that, so a "
+            "transfer that ended early, arrived altered or cannot be fetched "
+            "refuses while nothing is promoted. Remote destinations are "
+            "addressed by name and confined to a subdirectory of the served "
+            "root, so neither a default run nor a relative path can reach "
+            "anything beside it. Retention keeps the served release, the one "
+            "before it and the receipts. Additive: the local_directory "
+            "transport, the switch, the provenance checks, the fail-closed "
+            "row rules and the activation gates are unchanged, live "
+            "publication remains DISABLED with no live destination to reach, "
+            "and nothing about which rows are published, or what they carry, "
+            "changes"
+        ),
+        "ops/wizardofodds_destinations.json": (
+            "the WizardOfOdds NBA canary destination, as a named destination "
+            "rather than as the default: its host, port, user, private "
+            "staging path, served target, public URL, canary subpath and "
+            "retention. No credential is recorded -- the entry names the "
+            "environment variable the private key is read from -- and "
+            "destinations.live stays null, because what live is still waiting "
+            "on is a reviewed decision rather than an address. The unnamed "
+            "canary is left as the local scratch directory it was, so a run "
+            "that names no destination still reaches nothing"
         ),
         "docs/wizardofodds/INCUMBENT_PUBLISHER.md": (
-            "the seven conditions an activation is gated on, the two files a "
-            "destination now carries beside its releases, and the operator "
-            "precondition the rollback gate creates: a destination's rollback "
-            "target has to be seeded from whatever it is already serving "
-            "before it is activated against for the first time. Documentation "
-            "only: no code reads it"
+            "the remote transport, the destination addressed by name, the "
+            "staging-verify-place-readback ordering, the subpath that confines "
+            "the canary away from the legacy NBA feed, the retention, and the "
+            "decisions -- rather than the addresses -- that live publication is "
+            "still waiting on. Documentation only: no code reads it"
         ),
     }
 )

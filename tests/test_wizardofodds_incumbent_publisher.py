@@ -181,10 +181,17 @@ def test_live_publishing_with_every_approval_still_has_nowhere_to_go(tmp_path: P
     """The destination, not the switch, is what blocks live publication.
 
     Worth separating because the two refusals mean opposite things. A disabled
-    switch is a decision not yet taken; a null destination is a fact this
-    repository does not hold, and no commit here can supply it. The refusal
-    has to name the facts so that distinction survives into the operator's
-    terminal.
+    switch is a decision not yet taken; a null destination is something this
+    repository does not hold. The refusal has to name what is missing so that
+    distinction survives into the operator's terminal.
+
+    What is missing has changed shape since the real canary destination was
+    configured, and the test tracks it rather than the old wording. The host,
+    the transport, the credential's name and the public URL are now known --
+    they are on the named canary destination. What live still lacks is a
+    reviewed decision and the facts that only follow one, so those are what
+    the refusal is required to name. A refusal still quoting a missing host
+    would now be misleading rather than reassuring.
     """
     built = fixture.build(tmp_path)
 
@@ -217,8 +224,20 @@ def test_live_publishing_with_every_approval_still_has_nowhere_to_go(tmp_path: P
 
     assert "configures no live destination" in message
 
-    for fact in ("host", "transport protocol", "credential"):
+    for fact in ("reviewed decision", "approval token", "live proof"):
         assert fact in message, f"the refusal does not name the missing {fact}"
+
+    # The canary being real is not an argument that live is configured: no
+    # named destination is a live one either.
+    named = json.loads(
+        (PROJECT / publisher.DESTINATIONS_RELATIVE).read_text(encoding="utf-8")
+    )[publisher.NAMED_DESTINATIONS_KEY]
+
+    assert [
+        name
+        for name, declared in named.items()
+        if declared.get("mode") != publisher.MODE_CANARY
+    ] == []
 
 
 def test_an_unreadable_switch_reads_as_disabled(tmp_path: Path):
@@ -651,14 +670,31 @@ def test_a_canary_pointed_at_the_live_destination_refuses(tmp_path: Path):
 
 
 def test_the_committed_destinations_configure_no_live_target():
-    """The state this change is required to leave behind, read off disk."""
+    """The state this change is required to leave behind, read off disk.
+
+    Two transports now, and exactly two: a remote one was added because the
+    destination is real, and nothing else was. The live target is still null,
+    which is the fact this file is mostly about -- a real canary destination
+    and an enabled live destination are separate decisions, and only the first
+    one has been taken.
+    """
     document = json.loads(
         (PROJECT / publisher.DESTINATIONS_RELATIVE).read_text(encoding="utf-8")
     )
 
     assert document["destinations"][publisher.MODE_LIVE] is None
-    assert document["supported_transports"] == [publisher.TRANSPORT_LOCAL_DIRECTORY]
+    assert document["supported_transports"] == [
+        publisher.TRANSPORT_LOCAL_DIRECTORY,
+        publisher.TRANSPORT_SSH_RSYNC,
+    ]
     assert len(document["missing_external_facts"]) >= 5
+
+    # The unnamed canary is still the local scratch directory, so a run that
+    # named no destination cannot reach a host.
+    canary = document["destinations"][publisher.MODE_CANARY]
+
+    assert canary["transport"] == publisher.TRANSPORT_LOCAL_DIRECTORY
+    assert canary["root"] is None
 
 
 # ======================================================================
