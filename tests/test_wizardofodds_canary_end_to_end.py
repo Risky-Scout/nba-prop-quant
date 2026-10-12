@@ -20,6 +20,7 @@ are published as a release asset precisely so they are not in Git.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -33,6 +34,7 @@ for relative in ("ops", "src", "tests"):
         sys.path.insert(0, str(PROJECT / relative))
 
 import frozen_bundle_slate_fixture as slate_fixture  # noqa: E402
+import production_lifecycle_preflight as preflight  # noqa: E402
 import publish_incumbent_to_wizardofodds as publisher  # noqa: E402
 import run_incumbent_production_serving as serving  # noqa: E402
 from test_real_slate_serving_root import (  # noqa: E402
@@ -40,6 +42,49 @@ from test_real_slate_serving_root import (  # noqa: E402
     serve_the_fixture,
 )
 from install_frozen_model_artifacts import verify_frozen_bundle  # noqa: E402
+
+#: The shape of a resolved commit. Necessary and nowhere near sufficient: the
+#: placeholder this fixture used to emit was forty hex characters too, which is
+#: exactly why it went unnoticed. Shape is checked first only so that an
+#: obviously malformed value is reported as malformed.
+FULL_COMMIT_SHA = re.compile(r"\A[0-9a-f]{40}\Z")
+
+
+def names_a_commit(sha: str) -> bool:
+    """Whether ``sha`` is a commit this repository actually holds.
+
+    The property that separates a code SHA from something merely shaped like
+    one. A stand-in can satisfy any amount of pattern matching; it cannot be
+    an object in the object database.
+    """
+    if not FULL_COMMIT_SHA.fullmatch(sha or ""):
+        return False
+
+    return preflight.git("cat-file", "-t", sha) == "commit"
+
+
+def checkout_sha() -> str:
+    """The commit that generated this fixture's served slate.
+
+    The lifecycle resolves the checkout and passes it to serving as
+    ``--production-sha``, and ``preflight.git`` is the helper that resolves it
+    there, so the fixture provenances itself exactly the way production does
+    rather than inventing its own answer.
+
+    Refused rather than defaulted when it will not resolve. A served slate
+    whose code SHA is a placeholder provenances nothing, and publishing that
+    placeholder to the destination is the defect this replaced.
+    """
+    sha = preflight.git("rev-parse", "HEAD")
+
+    if not names_a_commit(sha):
+        raise AssertionError(
+            "the checkout's HEAD does not resolve to a commit "
+            f"({sha or 'nothing'}), so this fixture cannot provenance the "
+            "slate it serves with the SHA that generated it"
+        )
+
+    return sha
 
 
 @pytest.fixture(scope="module")
@@ -58,21 +103,31 @@ def frozen_bundle() -> Path:
     return bundle
 
 
-def serve_and_provenance(bundle: Path, root: Path) -> dict:
+def serve_and_provenance(bundle: Path, root: Path, *, production_sha: str) -> dict:
     """A real served slate, with the receipt production would have written.
 
     ``build_receipt`` rather than a hand-written dict, and
     ``missing_provenance`` asserted, so the publisher is handed the same thing
     the lifecycle hands the grader -- including the parts that would make it
     refuse if they were absent.
+
+    ``production_sha`` is required of the caller, because the commit that
+    generated a served slate is a fact about that run and not something a
+    fixture helper is entitled to decide. Callers serving the real slate pass
+    :func:`checkout_sha`.
     """
+    assert names_a_commit(production_sha), (
+        f"{production_sha!r} is not a commit this repository holds, so a "
+        "receipt carrying it would provenance this slate to nothing"
+    )
+
     served = serve_the_fixture(bundle, root)
 
     assert served["outcome"] == serving.OUTCOME_SERVED
 
     receipt = serving.build_receipt(
         slate_date=slate_fixture.SLATE_DATE,
-        production_sha="e2e" + "0" * 37,
+        production_sha=production_sha,
         incumbent={
             "authority": serving.AUTHORITY_FROZEN_BUNDLE,
             "bundle_root": str(bundle),
@@ -117,7 +172,9 @@ def test_the_served_slate_publishes_to_a_canary_and_reads_back(
     """
     root = tmp_path / "run"
 
-    provenanced = serve_and_provenance(frozen_bundle, root)
+    provenanced = serve_and_provenance(
+        frozen_bundle, root, production_sha=checkout_sha()
+    )
 
     data_root = root / "data"
 
@@ -198,6 +255,9 @@ def test_the_served_slate_publishes_to_a_canary_and_reads_back(
 
     assert provenance["model_authority"] == publisher.MODEL_AUTHORITY
     assert provenance["production_code_sha"] == served_receipt["production_code_sha"]
+    # Not merely equal to the receipt, but equal to the commit that produced
+    # the slate. Equality alone was true of the placeholder this replaced.
+    assert provenance["production_code_sha"] == checkout_sha()
     assert (
         provenance["input_state_fingerprint"]
         == served_receipt["input_state_fingerprint"]
@@ -223,7 +283,7 @@ def test_every_published_number_is_the_frozen_models_own(
     """
     root = tmp_path / "run"
 
-    serve_and_provenance(frozen_bundle, root)
+    serve_and_provenance(frozen_bundle, root, production_sha=checkout_sha())
 
     data_root = root / "data"
 
@@ -309,7 +369,7 @@ def test_republishing_the_same_served_slate_is_a_no_op(
     """
     root = tmp_path / "run"
 
-    serve_and_provenance(frozen_bundle, root)
+    serve_and_provenance(frozen_bundle, root, production_sha=checkout_sha())
 
     destination = tmp_path / "canary"
 

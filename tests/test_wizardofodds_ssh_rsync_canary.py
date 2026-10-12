@@ -1584,7 +1584,10 @@ def test_the_real_canary_publishes_the_frozen_models_slate_and_rolls_back(
     """
     import frozen_bundle_slate_fixture as slate_fixture
     from test_real_slate_serving_root import installed_bundle
-    from test_wizardofodds_canary_end_to_end import serve_and_provenance
+    from test_wizardofodds_canary_end_to_end import (
+        checkout_sha,
+        serve_and_provenance,
+    )
 
     bundle = installed_bundle()
 
@@ -1623,7 +1626,9 @@ def test_the_real_canary_publishes_the_frozen_models_slate_and_rolls_back(
 
     root = tmp_path / "run"
 
-    provenanced = serve_and_provenance(bundle, root)
+    provenanced = serve_and_provenance(
+        bundle, root, production_sha=checkout_sha()
+    )
 
     data_root = root / "data"
 
@@ -1673,11 +1678,30 @@ def test_the_real_canary_publishes_the_frozen_models_slate_and_rolls_back(
 
     assert provenance["model_authority"] == publisher.MODEL_AUTHORITY
     assert provenance["production_code_sha"] == served_receipt["production_code_sha"]
+    assert provenance["production_code_sha"] == checkout_sha()
     assert (
         provenance["priced_market_artifact_sha256"]
         == served_receipt["priced_market_artifact"]["sha256"]
     )
     assert "incumbent_fit_id" in provenance
+
+    # ---- the provenance a consumer can read off the destination ----
+    #
+    # The receipt is what this process believes it published. The manifest
+    # fetched over its public URL is what the destination will tell anybody
+    # else, and the code SHA is the field that has to survive that trip: a
+    # publication whose manifest names a commit nobody can check provenances
+    # the numbers to nothing.
+    with urllib.request.urlopen(
+        verification["public"]["manifest_url"], timeout=60
+    ) as response:
+        published_manifest = json.loads(response.read())
+
+    assert (
+        published_manifest["provenance"]["production_code_sha"]
+        == served_receipt["production_code_sha"]
+    )
+    assert published_manifest["provenance"]["production_code_sha"] == checkout_sha()
 
     # ---- what a consumer actually receives -------------------------
 
