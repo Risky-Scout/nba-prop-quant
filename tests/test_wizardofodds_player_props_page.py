@@ -126,11 +126,13 @@ def published(tmp_path: Path) -> dict:
 
 @pytest.fixture
 def with_affiliates(tmp_path: Path) -> dict:
-    """A slate where all three tiers quote the same wager.
+    """A slate where one affiliate and two other books quote the same wager.
 
     ``fanduel`` has the best price of the three and is not an affiliate, so the
-    page has to show a primary affiliate while a better number exists -- which
-    is the labelling requirement's whole point.
+    page has to show the affiliate while a better number exists -- which is the
+    labelling requirement's whole point. ``busr`` is here as a book the
+    registry records as unsupported: it must be treated as any other
+    non-affiliate rather than given a tier of its own.
     """
     return publish(
         tmp_path,
@@ -665,7 +667,6 @@ def test_a_primary_affiliate_is_selected_over_a_better_non_affiliate_price(
 
     assert built["manifest"]["rendered"]["by_tier"] == {
         routing.TIER_PRIMARY: 1,
-        routing.TIER_SECONDARY: 0,
         routing.TIER_FALLBACK: 0,
         routing.TIER_NONE: 0,
     }
@@ -710,11 +711,11 @@ def test_an_affiliate_selection_is_never_called_best_available(with_affiliates):
     """Case 10's other half: the label may not overstate the price.
 
     ``fanduel`` has the better number here, so the honest claim is that this
-    is the best primary affiliate price and nothing more.
+    is the best affiliate price and nothing more.
     """
     html = html_of(with_affiliates)
 
-    assert badges_in(html) == ["Best Primary Affiliate Price"]
+    assert badges_in(html) == ["Best Affiliate Price"]
 
     assert "also best overall" not in html
 
@@ -819,39 +820,112 @@ def test_a_wager_no_book_offers_renders_no_button_at_all(tmp_path):
     assert re.findall(r'<a class="cta"', html) == []
 
 
-def test_a_secondary_affiliate_is_rendered_as_secondary(tmp_path):
-    state = publish(
-        tmp_path,
-        frame=affiliate_frame((("busr", -115), ("fanduel", 140))),
-    )
+def test_the_page_has_no_secondary_affiliate_tier(with_affiliates):
+    """There is one affiliate tier, so there is no second one to render.
 
-    secondary = routing.Book(
-        registry_id="busr",
-        display_name="BUSR",
-        tier=routing.TIER_SECONDARY,
-        vendor_keys=("busr",),
-        redirect_book="busr",
-        missing=(),
-    )
-
-    registry = routing.AffiliateRegistry(
-        (secondary,),
-        redirect_path=REGISTRY.redirect_path,
-        redirect_parameter=REGISTRY.redirect_parameter,
-        non_affiliate_names=REGISTRY.non_affiliate_names,
-    )
-
-    built = page.build_page(state["transport"], registry=registry)
+    Asserted on the rendered document, the build's tier tally and the page's
+    own labels together, because a tier that still existed anywhere would have
+    to show up in one of the three.
+    """
+    built = build(with_affiliates)
 
     html = built["files"][page.PAGE_NAME].decode("utf-8")
 
-    assert built["rows"][0].routed.tier == routing.TIER_SECONDARY
+    assert set(built["manifest"]["rendered"]["by_tier"]) == {
+        routing.TIER_PRIMARY,
+        routing.TIER_FALLBACK,
+        routing.TIER_NONE,
+    }
 
-    assert badges_in(html) == ["Best Secondary Affiliate Price"]
+    assert set(page.TIER_LABEL) == {
+        routing.TIER_PRIMARY,
+        routing.TIER_FALLBACK,
+        routing.TIER_NONE,
+    }
 
-    assert 'class="tier secondary"' in html
+    assert "secondary" not in html.lower()
 
-    assert "BET AT BUSR" in html
+    source = (PROJECT / "ops" / "wizardofodds_player_props_page.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "secondary" not in source.lower()
+
+
+@pytest.mark.parametrize(
+    ("vendor", "name"),
+    [
+        ("busr", "BUSR"),
+        ("voltage_bet", "Voltage Bet"),
+        ("betwhale", "Betwhale"),
+        ("xbet", "Xbet"),
+    ],
+)
+def test_a_book_the_integration_does_not_support_is_never_an_affiliate(
+    tmp_path, vendor, name
+):
+    """The four unsupported books take no part in affiliate selection.
+
+    Each is given the only quote on the wager, so if it were routable it would
+    be selected and linked. It is selected -- a price is a price -- but as a
+    fallback, with no referral and no affiliate styling.
+    """
+    state = publish(tmp_path, frame=affiliate_frame(((vendor, -115),)))
+
+    built = build(state)
+
+    html = built["files"][page.PAGE_NAME].decode("utf-8")
+
+    routed = built["rows"][0].routed
+
+    assert routed.tier == routing.TIER_FALLBACK
+
+    assert routed.destination is None
+
+    assert REGISTRY.book_for(vendor) is None
+
+    assert f"go.php?book={vendor}" not in html
+
+    assert f"BET AT {name.upper()}" not in html
+
+    assert re.findall(r'<a class="cta"', html) == []
+
+
+def test_betanysports_is_rendered_and_linked_as_betanything(tmp_path):
+    """BetAnything is the rebranded BetAnySports, so its quotes are its own.
+
+    The Odds API spells the book ``betanysports``; the operator's brand is
+    BetAnything. A reader sees the brand, and the referral goes to the key the
+    site's redirect declares for that sportsbook.
+    """
+    state = publish(
+        tmp_path,
+        frame=affiliate_frame((("betanysports", -120), ("fanduel", 140))),
+    )
+
+    built = build(state)
+
+    html = built["files"][page.PAGE_NAME].decode("utf-8")
+
+    routed = built["rows"][0].routed
+
+    assert routed.tier == routing.TIER_PRIMARY
+
+    assert routed.offer.vendor == "betanysports"
+
+    assert routed.display_name == "BetAnything"
+
+    assert "BET AT BETANYTHING" in html
+
+    assert ">BetAnything<" in html
+
+    assert "BetAnySports" not in html
+
+    assert routed.destination == (
+        "/tools/odds-scanner/predictions/api/go.php?book=betanysports"
+    )
+
+    assert routed.destination in html
 
 
 # ======================================================================
@@ -1142,7 +1216,7 @@ def test_the_page_needs_no_network_and_no_dependency(published):
 
 
 def test_the_controls_the_page_requires_are_all_present(published):
-    """Player search, three filters, three sorts."""
+    """Player search, three filters, and the two sorts the feed supports."""
     html = html_of(published)
 
     for element in (
@@ -1157,7 +1231,6 @@ def test_the_controls_the_page_requires_are_all_present(published):
     for option in (
         'value="edge"',
         'value="ev"',
-        'value="game"',
     ):
         assert option in html, option
 
@@ -1165,9 +1238,45 @@ def test_the_controls_the_page_requires_are_all_present(published):
 
     assert "Expected value (highest first)" in html
 
-    assert "Game time" in html
+
+def test_there_is_no_game_time_sort_because_there_are_no_tip_off_times(published):
+    """A sort the data cannot support is absent rather than approximated.
+
+    The publication carries no tip-off timestamp, so ordering cards by
+    anything and calling it game time would be a false label. The control is
+    gone, the script has no branch for it, and the page says why instead.
+    """
+    built = build(published)
+
+    html = built["files"][page.PAGE_NAME].decode("utf-8")
+
+    assert "Game time" not in html
+
+    assert "game time" not in html.lower()
+
+    assert 'value="game"' not in html
+
+    sorts = re.search(r'<select id="f-sort">(.*?)</select>', html, re.S)
+
+    assert sorts is not None
+
+    assert re.findall(r'value="([^"]+)"', sorts.group(1)) == ["edge", "ev"]
+
+    assert "data-order=" not in html
+
+    assert "mode === 'game'" not in html
 
     assert "Tip-off times are not part of the published feed" in html
+
+    assert "there is no game-time ordering" in html
+
+    source = (PROJECT / "ops" / "wizardofodds_player_props_page.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Game time" not in source
+
+    assert '("game",' not in source
 
 
 def test_every_card_carries_what_the_filters_and_sorts_read(published):
@@ -1191,7 +1300,7 @@ def test_every_card_carries_what_the_filters_and_sorts_read(published):
             "data-book=",
             "data-edge=",
             "data-ev=",
-            "data-order=",
+            "data-stable=",
             "data-tier=",
             "data-search=",
         ):
@@ -1226,20 +1335,56 @@ def test_the_affiliate_disclosure_is_rendered(published):
         ), claim
 
 
-def test_the_books_with_no_verified_facts_are_named_rather_than_shown(published):
-    """A reader is told which books are absent, and why they are absent."""
+def test_the_disclosure_names_the_four_affiliate_books_and_no_others(published):
+    """The reader is told which four books are paid, by name.
+
+    The registry's own primary books rather than a written-out list, so the
+    disclosure and the routing cannot drift apart: a fifth paid book would
+    have to be disclosed or this fails.
+    """
     html = html_of(published)
 
-    for name in ("BetAnything", "BUSR", "Betwhale", "Voltage Bet", "Xbet"):
+    primary = [
+        book.display_name
+        for book in REGISTRY.books_in_tier(routing.TIER_PRIMARY)
+    ]
+
+    assert sorted(primary) == ["BetAnything", "BetOnline", "BetUS", "Bovada"]
+
+    for name in primary:
+        assert name in page.AFFILIATE_DISCLOSURE, name
+
         assert name in html, name
 
-    assert "never shown and never linked" in html
+    assert "those four books" in page.AFFILIATE_DISCLOSURE
 
-    assert "rather than being guessed at" in html
+    assert "are paid affiliate links" in html
 
-    assert "go.php?book=busr" not in html
 
-    assert "go.php?book=xbet" not in html
+def test_no_unsupported_book_is_named_or_linked_anywhere_on_the_page(published):
+    """Books the integration does not support are simply not in the product.
+
+    They were previously listed as books with facts missing, which read as a
+    promise to add them. They are not blockers and they are not pending: they
+    take no part in routing, so the page neither names them nor links them.
+    """
+    html = html_of(published)
+
+    for key, name in (
+        ("busr", "BUSR"),
+        ("voltage_bet", "Voltage Bet"),
+        ("betwhale", "Betwhale"),
+        ("xbet", "Xbet"),
+    ):
+        assert name not in html, name
+
+        assert f"go.php?book={key}" not in html, key
+
+        assert REGISTRY.book_for(key) is None, key
+
+    assert REGISTRY.missing_facts() == {}
+
+    assert "never shown and never linked" not in html
 
 
 # ======================================================================
@@ -1488,6 +1633,76 @@ def test_publishing_the_page_writes_both_files_and_reads_them_back(
     )
 
 
+def test_a_prefix_publishes_beside_the_page_without_replacing_it(
+    with_affiliates, tmp_path
+):
+    """A proof page goes in a child directory, leaving the page where it is.
+
+    Published twice into one destination: once at the root, once under a
+    prefix. The second must not disturb the first, which is what makes a
+    routing-proof canary publishable beside a page canary rather than over it.
+    """
+    page_root = tmp_path / "page-destination"
+
+    page_transport = publisher.LocalDirectoryTransport(page_root)
+
+    page.publish_page(
+        source_transport=with_affiliates["transport"],
+        page_transport=page_transport,
+        registry=REGISTRY,
+    )
+
+    before = {
+        name: (page_root / name).read_bytes()
+        for name in (page.PAGE_NAME, page.PAGE_MANIFEST_NAME)
+    }
+
+    receipt = page.publish_page(
+        source_transport=with_affiliates["transport"],
+        page_transport=page_transport,
+        registry=REGISTRY,
+        prefix="routing-proof",
+    )
+
+    assert receipt["prefix"] == "routing-proof"
+
+    assert receipt["written"] == [
+        f"routing-proof/{page.PAGE_NAME}",
+        f"routing-proof/{page.PAGE_MANIFEST_NAME}",
+    ]
+
+    for name, payload in before.items():
+        assert (page_root / name).read_bytes() == payload
+
+        assert (page_root / "routing-proof" / name).read_bytes() == payload
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    ["..", "../canary", "/var/www/sportsodds", "routing-proof/../..", "-rf"],
+)
+def test_a_prefix_that_climbs_out_of_the_destination_is_refused(
+    with_affiliates, tmp_path, prefix
+):
+    """The prefix is confined by the same predicate every other path is.
+
+    The absolute case is the one worth having: stripping its leading slash
+    would make it a legal relative path, and the page would be published at a
+    location nobody asked for while the receipt reported success.
+    """
+    page_root = tmp_path / "out"
+
+    with pytest.raises(page.PageRefused, match="does not address a directory below"):
+        page.publish_page(
+            source_transport=with_affiliates["transport"],
+            page_transport=publisher.LocalDirectoryTransport(page_root),
+            registry=REGISTRY,
+            prefix=prefix,
+        )
+
+    assert not page_root.exists() or list(page_root.rglob("*.html")) == []
+
+
 def test_publishing_the_page_touches_nothing_at_the_source(with_affiliates, tmp_path):
     """The feed canary is read from and never written to."""
     before = {
@@ -1533,7 +1748,7 @@ def test_the_page_manifest_records_what_a_check_needs(with_affiliates):
 
     manifest = built["manifest"]
 
-    assert manifest["contract_version"] == 1
+    assert manifest["contract_version"] == 2
 
     assert manifest["mode"] == publisher.MODE_CANARY
 
@@ -1542,18 +1757,27 @@ def test_the_page_manifest_records_what_a_check_needs(with_affiliates):
     assert manifest["released"]["rows_sha256"] == built["publication"].rows_sha256
 
     assert manifest["affiliate_registry"]["routable_books"] == [
+        "BetAnything",
         "BetOnline",
         "BetUS",
         "Bovada",
     ]
 
-    assert set(manifest["affiliate_registry"]["missing_facts"]) == {
+    assert manifest["affiliate_registry"]["primary_books"] == [
         "BetAnything",
-        "BUSR",
-        "Betwhale",
-        "Voltage Bet",
-        "Xbet",
-    }
+        "BetOnline",
+        "BetUS",
+        "Bovada",
+    ]
+
+    assert manifest["affiliate_registry"]["missing_facts"] == {}
+
+    assert manifest["affiliate_registry"]["tie_priority"] == [
+        "BetOnline",
+        "Bovada",
+        "BetAnything",
+        "BetUS",
+    ]
 
     assert len(manifest["routed"]) == len(built["rows"])
 
