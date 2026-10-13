@@ -1390,6 +1390,53 @@ def test_the_page_destination_is_a_canary_and_declares_itself_one():
         )
 
 
+def test_the_page_destination_addresses_the_real_host_and_the_exact_path():
+    """The host is the website's, and the public path is the one required.
+
+    The path is case-sensitive at the server and ``NBA/player-props`` is what
+    the product requires, so the lower-case feed path and the underscore
+    spelling are both asserted absent. The host is asserted equal to the feed
+    canary's rather than written out again, because the two are the same
+    machine and a second copy of a hostname is a second thing to get wrong --
+    which is exactly how this entry first went in holding a placeholder.
+    """
+    document = publisher.read_destinations(project_root=PROJECT)
+
+    named = document[publisher.NAMED_DESTINATIONS_KEY]
+
+    entry = named[PAGE_DESTINATION]
+
+    host = named["wizardofodds_nba_canary"]["host"]
+
+    assert entry["host"] == host
+
+    assert entry["public_base_url"] == (
+        f"https://{host}/tools/odds-scanner/predictions/NBA/player-props/"
+    )
+
+    assert entry["public_target"] == (
+        "/var/www/sportsodds/tools/odds-scanner/predictions/NBA/player-props"
+    )
+
+    addressed = entry["public_base_url"] + " " + entry["public_target"]
+
+    for wrong in (
+        "/predictions/nba/player-props",
+        "player_props",
+        "basketball",
+        "[REDACTED]",
+        "example.com",
+        "localhost",
+    ):
+        assert wrong not in addressed, wrong
+
+    remote = page_destination().remote
+
+    assert remote.published_base_url == (
+        entry["public_base_url"] + "canary/"
+    )
+
+
 def test_the_existing_feed_canary_destination_is_untouched():
     """The page reads the feed canary and this branch does not re-address it."""
     document = publisher.read_destinations(project_root=PROJECT)
