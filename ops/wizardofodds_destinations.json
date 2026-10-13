@@ -17,6 +17,21 @@
     "a successful live proof against that path, which cannot exist before the decision above is taken"
   ],
   "named_destinations": {
+    "wizardofodds_nba_player_props_page_canary": {
+      "canary_subpath": "canary",
+      "credential_env": "NBA_WOO_SSH_PRIVATE_KEY",
+      "host": "sportsodds.wizardofodds.com", "host_scanner_note": "pragma: allowlist secret -- the public hostname of the website this page is served from, which is not credential material",
+      "mode": "canary",
+      "note": "The real WizardOfOdds NBA player-props page canary. Non-live for the same structural reason the feed canary is: every path this destination can address resolves beneath the canary_subpath, so the final live index one directory up at NBA/player-props/ is not addressable from here and cannot be written by mistake. The page is built from the feed canary's published release, which this destination never touches; the legacy woo-owned NBA pages and feeds sit three directories up and are likewise unreachable.",
+      "port": 22,
+      "private_staging": "/var/www/.nba-prop-quant-deploy",
+      "public_base_url": "https://sportsodds.wizardofodds.com/tools/odds-scanner/predictions/NBA/player-props/", "public_base_url_scanner_note": "pragma: allowlist secret -- a public URL anybody can fetch, and the one the readback proves this page against",
+      "public_target": "/var/www/sportsodds/tools/odds-scanner/predictions/NBA/player-props",
+      "release_prefix": "nba_prop_quant_player_props_page",
+      "retained_releases": 2,
+      "transport": "ssh_rsync",
+      "user": "nba-prop-deploy"
+    },
     "wizardofodds_nba_canary": {
       "canary_subpath": "canary",
       "credential_env": "NBA_WOO_SSH_PRIVATE_KEY",
