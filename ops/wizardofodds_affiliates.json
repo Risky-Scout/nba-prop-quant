@@ -2,92 +2,50 @@
   "books": {
     "betanything": {
       "display_name": "BetAnything",
-      "evidence": "none. Searched this repository and the NBA-scoped WizardOfOdds site tree (477 files, football excluded) for betanything: zero hits. The site does carry betanysports, which its own BOOK_NAMES map in predictions/api/index.html labels 'BetAnySports' and which api/go.php gives a destination of its own. BetAnySports is a different sportsbook name and nothing proves it is this book, so no identifier and no destination were adopted for BetAnything.",
-      "missing": [
-        "the canonical sportsbook identifier BetAnything appears under in the authoritative market data",
-        "the affiliate destination WizardOfOdds uses for BetAnything"
-      ],
-      "redirect_book": null,
+      "evidence": "identifier: the operator states that BetAnything is the rebranded BetAnySports, whose canonical Odds API key is betanysports. That is the fact this entry rests on, and it is an operator fact rather than something this repository could derive: predictions/api/index.html BOOK_NAMES labels betanysports 'BetAnySports', which is the pre-rebrand name. Destination: predictions/api/go.php declares an explicit betanysports entry, and a request for it answers HTTP 302 to the sportsbook's own betanysports.eu affiliate path rather than to the Bovada fallback.",
+      "missing": [],
+      "redirect_book": "betanysports",
+      "tie_priority": 3,
       "tier": "primary",
-      "vendor_keys": []
+      "vendor_keys": [
+        "betanysports"
+      ]
     },
     "betonline": {
       "display_name": "BetOnline",
-      "evidence": "identifier: predictions/api/index.html BOOK_NAMES maps both betonlineag and betonline to 'BetOnline', and predictions/nba-props.html ALL_BOOK_DISPLAY maps betonlineag to label 'BetOnline' with affiliate true. Observed in NBA market data: predictions/affiliate_dashboard.json slates carry book 'betonlineag'. Destination: predictions/api/go.php answers book=betonline with a redirect to this book's affiliate network, and predictions/api/live_props.php $AFFILIATE_CONFIG['betonlineag'] records the same book as rev-share with cta 'Bet at BetOnline'.",
+      "evidence": "identifier: betonlineag, which predictions/nba-props.html ALL_BOOK_DISPLAY labels 'BetOnline' with affiliate true and which predictions/affiliate_dashboard.json slates carry as the book value in NBA market data. Destination: predictions/api/go.php declares an explicit betonline entry, and a request for it answers HTTP 302 to this book's own affiliate network rather than to the Bovada fallback.",
       "missing": [],
       "redirect_book": "betonline",
+      "tie_priority": 1,
       "tier": "primary",
       "vendor_keys": [
-        "betonline",
         "betonlineag"
       ]
     },
     "betus": {
       "display_name": "BetUS",
-      "evidence": "identifier: predictions/api/index.html BOOK_NAMES maps betus to 'BetUS', and predictions/nba-props.html ALL_BOOK_DISPLAY maps betus to label 'BetUS' with affiliate true. Destination: predictions/api/go.php answers book=betus with a redirect to this book's affiliate network, and predictions/api/live_props.php $AFFILIATE_CONFIG['betus'] records it as rev-share with cta 'Bet at BetUS'. Not observed in the NBA slate dashboards sampled, which is a statement about which books quoted those slates rather than about the identifier.",
+      "evidence": "identifier: predictions/api/index.html BOOK_NAMES maps betus to 'BetUS', and predictions/nba-props.html ALL_BOOK_DISPLAY maps betus to label 'BetUS' with affiliate true. Destination: predictions/api/go.php declares an explicit betus entry, and a request for it answers HTTP 302 to this book's own affiliate network rather than to the Bovada fallback.",
       "missing": [],
       "redirect_book": "betus",
+      "tie_priority": 4,
       "tier": "primary",
       "vendor_keys": [
         "betus"
       ]
     },
-    "betwhale": {
-      "display_name": "Betwhale",
-      "evidence": "none. Zero hits for betwhale in this repository and in the NBA-scoped WizardOfOdds site tree.",
-      "missing": [
-        "the canonical sportsbook identifier Betwhale appears under in the authoritative market data",
-        "the affiliate destination WizardOfOdds uses for Betwhale"
-      ],
-      "redirect_book": null,
-      "tier": "secondary",
-      "vendor_keys": []
-    },
     "bovada": {
       "display_name": "Bovada",
-      "evidence": "identifier: predictions/api/index.html BOOK_NAMES maps bovada to 'Bovada', and predictions/nba-props.html ALL_BOOK_DISPLAY maps bovada to label 'Bovada' with affiliate true. Observed in NBA market data: predictions/affiliate_dashboard.json carries 838 rows with book 'bovada' and an affiliate_url set. Destination: predictions/api/go.php answers book=bovada with a redirect to this book's affiliate network, and predictions/api/live_props.php $AFFILIATE_CONFIG['bovada'] records it as rev-share priority 1 with cta 'Bet at Bovada'.",
+      "evidence": "identifier: predictions/api/index.html BOOK_NAMES maps bovada to 'Bovada', and predictions/nba-props.html ALL_BOOK_DISPLAY maps bovada to label 'Bovada' with affiliate true. Observed in NBA market data: predictions/affiliate_dashboard.json carries 838 rows with book 'bovada'. Destination: predictions/api/go.php declares an explicit bovada entry. A request cannot distinguish that entry from the fallback, because the fallback is Bovada's own destination, so the explicit entry in the source is what verifies this key.",
       "missing": [],
       "redirect_book": "bovada",
+      "tie_priority": 2,
       "tier": "primary",
       "vendor_keys": [
         "bovada"
       ]
-    },
-    "busr": {
-      "display_name": "BUSR",
-      "evidence": "none. Zero hits for busr in this repository and in the NBA-scoped WizardOfOdds site tree. api/go.php has no busr key and answers an unknown book by redirecting to Bovada, which is the reason an unproven identifier may never be given a destination here.",
-      "missing": [
-        "the canonical sportsbook identifier BUSR appears under in the authoritative market data",
-        "the affiliate destination WizardOfOdds uses for BUSR"
-      ],
-      "redirect_book": null,
-      "tier": "secondary",
-      "vendor_keys": []
-    },
-    "voltage_bet": {
-      "display_name": "Voltage Bet",
-      "evidence": "none. Zero hits for voltage in this repository and in the NBA-scoped WizardOfOdds site tree.",
-      "missing": [
-        "the canonical sportsbook identifier Voltage Bet appears under in the authoritative market data",
-        "the affiliate destination WizardOfOdds uses for Voltage Bet"
-      ],
-      "redirect_book": null,
-      "tier": "secondary",
-      "vendor_keys": []
-    },
-    "xbet": {
-      "display_name": "Xbet",
-      "evidence": "none. Zero hits for xbet in this repository and in the NBA-scoped WizardOfOdds site tree. api/go.php has no xbet key and answers an unknown book by redirecting to Bovada, so inventing one would silently attribute Xbet traffic to Bovada.",
-      "missing": [
-        "the canonical sportsbook identifier Xbet appears under in the authoritative market data",
-        "the affiliate destination WizardOfOdds uses for Xbet"
-      ],
-      "redirect_book": null,
-      "tier": "secondary",
-      "vendor_keys": []
     }
   },
-  "contract_version": 1,
+  "contract_version": 2,
   "non_affiliate_books": {
     "betmgm": "BetMGM",
     "betparx": "betPARX",
@@ -111,14 +69,21 @@
     "williamhill_us": "William Hill",
     "wynnbet": "WynnBET"
   },
-  "non_affiliate_books_note": "Display names only, for books that are in the offer universe but earn nothing. Recorded so a fallback selection can be named honestly rather than shown as an opaque key, and recorded separately from the eight affiliate entries so that nothing here can ever be handed a destination. Sources: predictions/api/index.html BOOK_NAMES and predictions/nba-props.html ALL_BOOK_DISPLAY, where every one of these carries affiliate: false. betanysports is deliberately absent from this map and from the affiliate entries alike: it is an affiliate of the site but it is not one of the eight books this page routes, and listing it in either place would invite reading it as BetAnything.",
-  "note": "The eight books this page routes, their tier, the sportsbook identifiers each is proven to appear under in the authoritative market data, and the destination a click is sent to. Tier and display name come from the product requirement and are authoritative by themselves. An identifier or a destination is not: each is recorded only where site or data evidence proves it, and the evidence is quoted per book. Five of the eight have neither, so they are recorded with empty vendor_keys and a null redirect_book, which the router reads as 'can never match an offer and can never be given a link'. That is deliberate. Nothing in this file may be filled in from a book's name resembling an identifier.",
+  "non_affiliate_books_note": "Display names only, for books that may appear in the offer universe but earn nothing. Recorded so a fallback selection can be named honestly rather than shown as an opaque key, and recorded separately from the affiliate entries so that nothing here can ever be handed a destination. This map is a courtesy, not a filter: fallback considers every book in the published offer universe, and a book absent from here is still eligible and is shown under the identifier the data used. Sources: predictions/api/index.html BOOK_NAMES and predictions/nba-props.html ALL_BOOK_DISPLAY, where every one of these carries affiliate: false.",
+  "note": "The four books automated routing may select for their affiliate value, their canonical Odds API identifier, the tie priority among them and the destination a click is sent to. There is one affiliate tier. A wager no affiliate book offers falls back to the best price among all other books in the published offer universe, which is a price rather than a referral. Identifiers and destinations are recorded only where evidence proves them, and the evidence is quoted per book; nothing here may be filled in from a book's name resembling an identifier.",
   "redirect": {
-    "evidence": "predictions/api/go.php holds the affiliate-network destinations for bovada, betonline, betus and betanysports and answers each with HTTP 302. The links themselves stay there and are not reproduced here. predictions/api/live_props.php line 1044 states the site's convention: 'Redirect-only links (spec B.7 -- never direct affiliate URL)'.",
+    "evidence": "predictions/api/go.php declares exactly four books -- bovada, betonline, betus, betanysports -- and answers each with HTTP 302 to that book's destination. The destinations themselves stay there and are not reproduced here. predictions/api/live_props.php line 1044 states the site's convention: 'Redirect-only links (spec B.7 -- never direct affiliate URL)'.",
     "parameter": "book",
     "path": "/tools/odds-scanner/predictions/api/go.php",
-    "unknown_book_behaviour": "go.php redirects an unrecognised book to Bovada rather than refusing. A link built from an unproven identifier would therefore not fail visibly, it would quietly send that book's traffic to Bovada. This is why redirect_book is null wherever the mapping is unproven, and why the router refuses to construct a destination without one."
+    "unknown_book_behaviour": "go.php redirects an unrecognised book to Bovada's destination rather than refusing. A link built from an unproven key would therefore not fail visibly, it would quietly send that book's traffic to Bovada. This is why a destination is recorded only for a key go.php actually declares, and why the router refuses to construct a destination without one."
   },
-  "redirect_note": "A click is sent to the site's own redirect rather than to the sportsbook, which is the convention the existing NBA pages follow and which keeps the affiliate-network tracking links in one place on the server instead of copied into this repository. No tracking link, affiliate id, campaign id or click id is recorded here, and none belongs here.",
-  "secrets": "No credential material is recorded here and none belongs here."
+  "redirect_note": "A click is sent to the site's own redirect rather than to the sportsbook, which is the convention the existing NBA pages follow and which keeps the affiliate-network tracking links in one place on the server instead of copied into this repository. The redirect's key namespace is the site's and is not the Odds API's: BetOnline is betonlineag in the market data and betonline at the redirect, which is why the two are recorded separately. No tracking link, affiliate id, campaign id or click id is recorded here, and none belongs here.",
+  "secrets": "No credential material is recorded here and none belongs here.",
+  "unsupported_books": {
+    "busr": "BUSR",
+    "betwhale": "Betwhale",
+    "voltage_bet": "Voltage Bet",
+    "xbet": "Xbet"
+  },
+  "unsupported_books_note": "Not supported by the current Odds API integration and therefore not part of automated sportsbook selection. Recorded here so that their absence from routing is a decision on the record rather than an omission, and recorded outside books so that the loader cannot route them: nothing reads this map, and no identifier or destination is declared for any of them. They are not blockers. If one later acquires a canonical Odds API identifier and a declared go.php entry, it becomes a books entry at that point and not before."
 }

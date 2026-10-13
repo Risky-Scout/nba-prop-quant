@@ -10,13 +10,29 @@ this must never be.
 THE RULE IS FROZEN AND IT IS A TIER RULE
 ----------------------------------------
 
-Tiers first, price second. Primary affiliates are preferred over secondary
-affiliates, secondary over everybody else, and only inside the chosen tier does
-the best price win. A non-affiliate book with a better number does not take the
-click while an affiliate offers the same wager -- which is a commercial choice,
-openly made, and the reason the page may not call an affiliate selection "best
-available odds" unless it independently is. :func:`route` reports that as
+Affiliates first, price second. There is one affiliate tier, holding exactly
+the four books the operator routes, and only inside it does the best price
+win. A book outside it with a better number does not take the click while an
+affiliate offers the same wager -- which is a commercial choice, openly made,
+and the reason the page may not call an affiliate selection "best available
+odds" unless it independently is. :func:`route` reports that as
 ``best_overall`` so the caller can label honestly rather than guess.
+
+When no affiliate offers the wager, the fallback is the best price across
+every other book in the published offer universe. It is not a shortlist: any
+sportsbook the authoritative market data carries is eligible, and the one that
+wins is simply the one with the best number.
+
+PRICE FIRST, PRIORITY ONLY ON AN EXACT TIE
+------------------------------------------
+
+Among affiliates the best price wins outright. The operator's priority order
+-- BetOnline, Bovada, BetAnything, BetUS -- settles an exact tie and nothing
+else, so it can never cost a reader a better number. It is recorded per book
+in the registry as ``tie_priority`` rather than written into this module,
+because it is a commercial fact and not a property of the rule. Fallback ties
+break on the sportsbook identifier instead, since no priority is declared for
+books nobody is paid for.
 
 AN OFFER HAS TO BE THE SAME BET
 -------------------------------
@@ -39,11 +55,13 @@ A BOOK NAME IS NOT AN IDENTIFIER
 Tier membership and display name come from the product requirement.
 Which sportsbook identifier a book appears under, and where a click goes, do
 not: both are read from :data:`REGISTRY_RELATIVE`, which records them only
-where site or data evidence proves them. Five of the eight books have neither,
-so they cannot match an offer and cannot be given a link. That is not a gap to
-be filled in by resemblance -- the site's redirect answers an unrecognised book
-by sending it to Bovada, so a guessed identifier would not break visibly, it
-would silently misattribute someone else's traffic.
+where evidence proves them. A book with neither cannot match an offer and
+cannot be given a link, and the gap is not filled in by resemblance -- the
+site's redirect answers an unrecognised book by sending it to Bovada, so a
+guessed identifier would not break visibly, it would silently misattribute
+someone else's traffic. ``betanysports`` matching BetAnything is an operator
+fact recorded in the registry's evidence, not something this module infers
+from the names.
 """
 
 from __future__ import annotations
@@ -67,21 +85,26 @@ REGISTRY_RELATIVE = "ops/wizardofodds_affiliates.json"
 
 TIER_PRIMARY = "primary"
 
-TIER_SECONDARY = "secondary"
-
 TIER_FALLBACK = "fallback"
 
 #: No book offers this wager. Not a tier so much as the absence of one, named
 #: so a caller cannot mistake it for a tier it could render a button for.
 TIER_NONE = "none"
 
-#: The order the tier rule tries, which is the whole of the rule.
-TIER_ORDER: tuple[str, ...] = (TIER_PRIMARY, TIER_SECONDARY)
+#: The order the tier rule tries, which is the whole of the rule. One affiliate
+#: tier, then everybody else: there is no secondary tier, and a book is either
+#: one of the four the operator routes or it is in the fallback.
+TIER_ORDER: tuple[str, ...] = (TIER_PRIMARY,)
 
 #: The tiers a registry entry may declare. ``fallback`` is not among them: a
 #: book is in the fallback tier by not being an affiliate, never by being
 #: recorded as one.
-DECLARABLE_TIERS: frozenset[str] = frozenset({TIER_PRIMARY, TIER_SECONDARY})
+DECLARABLE_TIERS: frozenset[str] = frozenset({TIER_PRIMARY})
+
+#: What ``tie_priority`` means when a registry entry does not declare one.
+#: Behind every declared priority, so an affiliate without one still loses an
+#: exact tie to an affiliate with one rather than winning by accident.
+UNRANKED_TIE_PRIORITY = 10_000
 
 SIDE_OVER = "over"
 
@@ -152,7 +175,7 @@ def payout_multiple(american: Any) -> float | None:
 
 @dataclass(frozen=True)
 class Book:
-    """One of the eight books this page routes, as the registry records it."""
+    """One of the books this page routes, as the registry records it."""
 
     registry_id: str
     display_name: str
@@ -160,6 +183,7 @@ class Book:
     vendor_keys: tuple[str, ...]
     redirect_book: str | None
     missing: tuple[str, ...]
+    tie_priority: int = UNRANKED_TIE_PRIORITY
 
     @property
     def routable(self) -> bool:
@@ -230,10 +254,8 @@ class AffiliateRegistry:
     """The book facts, and the only place a destination may come from.
 
     Constructed from the committed configuration in the normal case. Tests
-    construct it directly, which is also how the identifier-dependent half of
-    the tier rule can be exercised at all: five of the eight books have no
-    proven identifier, and inventing one to make a test pass would be the
-    defect the registry exists to prevent.
+    construct it directly where they need a book the committed registry does
+    not hold, rather than adding one to the registry to make a test pass.
     """
 
     def __init__(
@@ -339,6 +361,9 @@ class AffiliateRegistry:
                         else None
                     ),
                     missing=tuple(str(fact) for fact in entry.get("missing") or []),
+                    tie_priority=int(
+                        entry.get("tie_priority") or UNRANKED_TIE_PRIORITY
+                    ),
                 )
             )
 
@@ -405,6 +430,16 @@ class AffiliateRegistry:
 
     def books_in_tier(self, tier: str) -> tuple[Book, ...]:
         return tuple(book for book in self.books if book.tier == tier)
+
+    def tie_priorities(self) -> Mapping[str, int]:
+        """Sportsbook identifier -> the operator's rank, for exact ties only."""
+        return MappingProxyType(
+            {
+                key: book.tie_priority
+                for book in self.books
+                for key in book.vendor_keys
+            }
+        )
 
     def missing_facts(self) -> dict[str, tuple[str, ...]]:
         """What is still unknown, by book. Empty when the registry is complete."""
@@ -497,16 +532,33 @@ def _offer_order(offer: Offer) -> tuple[str, str]:
     return (offer.vendor, str(offer.quote_id))
 
 
-def best_offer(offers: tuple[Offer, ...]) -> Offer | None:
-    """The best customer price, ties broken by stable identifier ordering."""
+def best_offer(
+    offers: tuple[Offer, ...],
+    *,
+    priority: Mapping[str, int] | None = None,
+) -> Offer | None:
+    """The best customer price, ties broken after the price is settled.
+
+    ``priority`` maps a sportsbook identifier to the operator's rank, and is
+    consulted only when two offers carry exactly the same payout -- the price
+    comparison happens first and is never overridden, so a priority can cost
+    nobody a better number. Without it, and behind it, ties break on the
+    stable identifier ordering.
+    """
     priced = [offer for offer in offers if offer.payout is not None]
 
     if not priced:
         return None
 
+    ranks = dict(priority or {})
+
     return min(
         priced,
-        key=lambda offer: (-(offer.payout or 0.0), *_offer_order(offer)),
+        key=lambda offer: (
+            -(offer.payout or 0.0),
+            ranks.get(offer.vendor, UNRANKED_TIE_PRIORITY),
+            *_offer_order(offer),
+        ),
     )
 
 
@@ -522,9 +574,11 @@ def route(
 ) -> Routed:
     """Apply the frozen tier rule to one wager's offer universe.
 
-    Primary affiliates, then secondary affiliates, then everybody else; best
-    price inside whichever tier was reached. No offers at all is answered with
-    no selection, because the alternative would be a button that bets nothing.
+    The four affiliate books, then every other book in the published universe;
+    best price inside whichever tier was reached, with the operator's priority
+    settling an exact tie among affiliates only. No offers at all is answered
+    with no selection, because the alternative would be a button that bets
+    nothing.
     """
     considered = tuple(sorted(offers, key=_offer_order))
 
@@ -549,7 +603,7 @@ def route(
             if registry.tier_of(offer.vendor) == tier
         )
 
-        selected = best_offer(eligible)
+        selected = best_offer(eligible, priority=registry.tie_priorities())
 
         if selected is not None:
             return _selected(
@@ -559,8 +613,8 @@ def route(
                 considered=considered,
                 overall=overall,
                 reason=(
-                    f"the best price among {tier} affiliate books offering "
-                    "this exact wager"
+                    "the best price among the affiliate books offering this "
+                    "exact wager"
                 ),
             )
 
@@ -588,8 +642,8 @@ def route(
         considered=considered,
         overall=overall,
         reason=(
-            "no primary or secondary affiliate book offers this exact wager, "
-            "so the best available price from the remaining books"
+            "no affiliate book offers this exact wager, so the best available "
+            "price across every other sportsbook in the published data"
         ),
     )
 
@@ -656,7 +710,7 @@ __all__ = [
     "TIER_NONE",
     "TIER_ORDER",
     "TIER_PRIMARY",
-    "TIER_SECONDARY",
+    "UNRANKED_TIE_PRIORITY",
     "Wager",
     "best_offer",
     "normalise_vendor",

@@ -157,23 +157,22 @@ SIDE_EXPECTED_VALUE: Mapping[str, str] = {
 #: no affiliate offers the wager -- so it is the one case where "best available"
 #: is a statement of fact rather than a sales line.
 TIER_LABEL: Mapping[str, str] = {
-    routing.TIER_PRIMARY: "Best Primary Affiliate Price",
-    routing.TIER_SECONDARY: "Best Secondary Affiliate Price",
+    routing.TIER_PRIMARY: "Best Affiliate Price",
     routing.TIER_FALLBACK: "Best Available Price",
     routing.TIER_NONE: "No sportsbook offers this wager",
 }
 
 AFFILIATE_DISCLOSURE = (
-    "Affiliate disclosure: links to Bovada, BetOnline and BetUS are paid "
-    "affiliate links and WizardOfOdds may earn a commission if you open an "
-    "account through them. Which sportsbook is featured is decided by the "
-    "published routing rule, which prefers affiliate books over non-affiliate "
-    "books at the same wager, so a featured price is not necessarily the best "
-    "price available anywhere. Where a card says Best Available Price, no "
-    "affiliate book offered that wager and the price shown is the best in the "
-    "published data. Model numbers are never changed by this routing. Odds "
-    "move; check the sportsbook before betting. 21+ where applicable, and "
-    "nothing here is a guarantee of profit."
+    "Affiliate disclosure: links to Bovada, BetOnline, BetUS and BetAnything "
+    "are paid affiliate links and WizardOfOdds may earn a commission if you "
+    "open an account through them. Which sportsbook is featured is decided by "
+    "the published routing rule, which prefers those four books over any "
+    "other book at the same wager, so a featured price is not necessarily the "
+    "best price available anywhere. Where a card says Best Available Price, no "
+    "affiliate book offered that wager and the price shown is the best across "
+    "every sportsbook in the published data. Model numbers are never changed "
+    "by this routing. Odds move; check the sportsbook before betting. 21+ "
+    "where applicable, and nothing here is a guarantee of profit."
 )
 
 
@@ -433,13 +432,14 @@ class PageRow:
         return f"Team {team} {joiner} Team {opponent}"
 
     @property
-    def game_order(self) -> tuple[str, str, str, str, str]:
-        """Deterministic order for the game-time control.
+    def stable_order(self) -> tuple[str, str, str, str, str]:
+        """The last tie-break in the card order, so a build is reproducible.
 
-        Tip-off times are not in the published feed, so this is the closest
-        deterministic order over the fields that are: slate date, then game,
-        then player, then prop, then line. The page says as much where the
-        control is.
+        Slate date, game, player, prop, line: identifiers, in a fixed order,
+        used only after edge and expected value have failed to separate two
+        cards. It is not a time and it is not offered to a reader as one.
+        Tip-off timestamps are not in the published feed, so the page has no
+        game-time ordering at all rather than one standing in for it.
         """
         return (
             str(self.row.get("date") or ""),
@@ -522,7 +522,7 @@ def page_rows(
             key=lambda page_row: (
                 -_number(page_row.edge),
                 -_number(page_row.expected_value),
-                page_row.game_order,
+                page_row.stable_order,
             ),
         )
     )
@@ -715,7 +715,6 @@ h1{margin:0 0 6px;font-size:1.5rem;letter-spacing:-.02em}
   padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--ink-dim);
 }
 .tier.primary{color:var(--cta-hi);border-color:#1d3b28;background:rgba(34,197,94,.08)}
-.tier.secondary{color:var(--aff);border-color:#3a3017;background:rgba(245,158,11,.08)}
 .book{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:9px 0 0}
 .book .name{font-weight:650}
 .book .odds{font-size:1.3rem;font-weight:750;font-variant-numeric:tabular-nums}
@@ -794,13 +793,10 @@ SCRIPT = """
     var ordered = cards.slice().sort(function (a, b) {
       if (mode === 'ev') {
         return num(b, 'data-ev') - num(a, 'data-ev') ||
-          a.getAttribute('data-order').localeCompare(b.getAttribute('data-order'));
-      }
-      if (mode === 'game') {
-        return a.getAttribute('data-order').localeCompare(b.getAttribute('data-order'));
+          a.getAttribute('data-stable').localeCompare(b.getAttribute('data-stable'));
       }
       return num(b, 'data-edge') - num(a, 'data-edge') ||
-        a.getAttribute('data-order').localeCompare(b.getAttribute('data-order'));
+        a.getAttribute('data-stable').localeCompare(b.getAttribute('data-stable'));
     });
     ordered.forEach(function (card) { grid.appendChild(card); });
 
@@ -970,7 +966,7 @@ def _card(page_row: PageRow) -> str:
         f' data-book="{escape(routing.normalise_vendor(routed.offer.vendor) if routed.offer else "")}"'
         f' data-edge="{escape(str(page_row.edge))}"'
         f' data-ev="{escape(str(page_row.expected_value))}"'
-        f' data-order="{escape("|".join(page_row.game_order))}"'
+        f' data-stable="{escape("|".join(page_row.stable_order))}"'
         f' data-tier="{escape(tier)}"'
         f' data-search="{escape(search)}">'
         '<div class="card-head">'
@@ -1052,7 +1048,6 @@ def render(
                 [
                     ("edge", "Model edge (strongest first)"),
                     ("ev", "Expected value (highest first)"),
-                    ("game", "Game time"),
                 ],
             ),
         )
@@ -1115,7 +1110,7 @@ def render(
 <p class="sub">Slate {escape(publication.slate_date)} · {len(rows)} published prediction{'' if len(rows) == 1 else 's'} · every number below is copied from the incumbent model's published release, unchanged.</p>
 <p class="notice">{escape(AFFILIATE_DISCLOSURE)}</p>
 {missing_note}
-<p class="notice">Tip-off times are not part of the published feed, so they are not shown. The <em>Game time</em> sort orders by slate date, then game, then player, then prop, then line.</p>
+<p class="notice">Tip-off times are not part of the published feed, so they are not shown and there is no game-time ordering. Cards are ordered by the model's edge or by expected value, both as published.</p>
 {_provenance_block(publication)}
 </header>
 <section class="controls" aria-label="Filter and sort">{controls}</section>
@@ -1150,7 +1145,6 @@ def page_manifest(
     """What this build was, in a form a check can read rather than parse HTML."""
     by_tier: dict[str, int] = {
         routing.TIER_PRIMARY: 0,
-        routing.TIER_SECONDARY: 0,
         routing.TIER_FALLBACK: 0,
         routing.TIER_NONE: 0,
     }
@@ -1172,13 +1166,16 @@ def page_manifest(
             "routable_books": sorted(
                 book.display_name for book in registry.books if book.routable
             ),
-            "secondary_books": [
-                book.display_name
-                for book in registry.books_in_tier(routing.TIER_SECONDARY)
-            ],
             "source": Path(registry.source).name if registry.source else "",
+            "tie_priority": [
+                book.display_name
+                for book in sorted(
+                    registry.books_in_tier(routing.TIER_PRIMARY),
+                    key=lambda entry: entry.tie_priority,
+                )
+            ],
         },
-        "contract_version": 1,
+        "contract_version": 2,
         "mode": publication.mode,
         "page_name": PAGE_NAME,
         "page_sha256": page_sha256,
@@ -1270,6 +1267,7 @@ def publish_page(
     source_transport: Any,
     page_transport: Any,
     registry: routing.AffiliateRegistry,
+    prefix: str = "",
 ) -> dict[str, Any]:
     """Build the page from one publication and write it to the page canary.
 
@@ -1277,43 +1275,68 @@ def publish_page(
     written through another, so the destination that holds the feed is only
     ever read from here and the destination that holds the page is the only one
     written to.
+
+    ``prefix`` puts the two files in a child directory of the destination
+    instead of at its root, which is how a proof page is published beside the
+    page without the possibility of writing over it. It may only name a
+    directory below the destination, and it is checked as given rather than
+    cleaned up first: a prefix that cannot be published where it says it
+    publishes is refused, rather than quietly reinterpreted as a relative path
+    and written somewhere the caller did not ask for.
     """
+    if prefix and not publisher._is_safe_remote_segment_path(prefix):
+        raise PageRefused(
+            f"{prefix!r} does not address a directory below the page "
+            "destination, so this page is not published"
+        )
+
     built = build_page(source_transport, registry=registry)
 
-    for name, payload in sorted(built["files"].items()):
-        page_transport.write_bytes(name, payload)
+    relative = {
+        name: f"{prefix}/{name}" if prefix else name for name in built["files"]
+    }
+
+    for name, target in sorted(relative.items()):
+        if not publisher._is_safe_remote_segment_path(target):
+            raise PageRefused(
+                f"{target!r} does not address a path below the page "
+                "destination, so this page is not published"
+            )
+
+        page_transport.write_bytes(target, built["files"][name])
 
     readback: dict[str, Any] = {}
 
-    for name in sorted(built["files"]):
-        served = page_transport.read_bytes(name)
+    for name, target in sorted(relative.items()):
+        served = page_transport.read_bytes(target)
 
         if served != built["files"][name]:
             raise PageRefused(
-                f"{name} at the page destination does not read back as what "
+                f"{target} at the page destination does not read back as what "
                 "was written, so the page is not published"
             )
 
         if hasattr(page_transport, "public_readback"):
-            public = page_transport.public_readback(name)
+            public = page_transport.public_readback(target)
 
             if public != built["files"][name]:
                 raise PageRefused(
-                    f"{name} fetched from "
-                    f"{page_transport.public_url(name)} is not what was "
+                    f"{target} fetched from "
+                    f"{page_transport.public_url(target)} is not what was "
                     "published, so what a reader would get is unproven"
                 )
 
-            readback[name] = {
+            readback[target] = {
                 "sha256": publisher.digest(public),
-                "url": page_transport.public_url(name),
+                "url": page_transport.public_url(target),
             }
 
     return {
         "generated_at": datetime.now(UTC).isoformat(),
         "manifest": built["manifest"],
+        "prefix": prefix,
         "public_readback": readback,
-        "written": sorted(built["files"]),
+        "written": sorted(relative.values()),
     }
 
 
