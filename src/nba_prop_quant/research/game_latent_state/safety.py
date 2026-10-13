@@ -314,11 +314,26 @@ PATH_DECLARATION_MODULE = "safety.py"
 #:
 #: The remote-transport branch's three entries were retired in turn when they
 #: landed. All three are recorded as owned below, so touching any of them again
-#: requires declaring it again. Empty is the resting state and this branch is
-#: at rest: the only thing it changes is the production SHA a test fixture
-#: provenances its own served slate with, which is test surface, so it has
-#: nothing to declare.
-DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType({})
+#: requires declaring it again. The production-SHA provenance branch declared
+#: nothing, because the only thing it changed was the production SHA a test
+#: fixture provenances its own served slate with, which is test surface. This
+#: branch is the owned case again: it changes the publisher, which is owned
+#: below, so it declares it.
+DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
+    {
+        "ops/publish_incumbent_to_wizardofodds.py": (
+            "refreshes the canary attestation when a rerun promotes nothing. "
+            "The attestation describes the release the destination serves now, "
+            "and a release whose provenance was corrected republishes under the "
+            "same id, so the previous write condition left the attestation "
+            "describing a manifest that no longer existed. Nothing about what is "
+            "published changes: no model, feature, prediction or pricing code is "
+            "touched, the release id, both pointers and rollback keep their "
+            "meanings, the audit log stays append-only, and live publishing "
+            "stays disabled."
+        ),
+    }
+)
 
 #: Protected paths this lineage introduced into production and now owns.
 #:
