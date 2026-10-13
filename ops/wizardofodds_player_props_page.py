@@ -85,6 +85,10 @@ REQUIRED_CANDIDATE_AUTHORITY = "shadow_only"
 #: renderer's own requirement rather than the publisher's: a row missing one of
 #: these would render as a blank where a number belongs.
 REQUIRED_ROW_FIELDS: tuple[str, ...] = (
+    "calibrated_edge_over",
+    "calibrated_edge_under",
+    "calibrated_ev_over",
+    "calibrated_ev_under",
     "calibrated_q_over_nonpush",
     "calibrated_q_under_nonpush",
     "date",
@@ -132,6 +136,20 @@ SIDE_MODEL_PROBABILITY: Mapping[str, str] = {
 SIDE_MARKET_PROBABILITY: Mapping[str, str] = {
     routing.SIDE_OVER: "market_devig_q_over",
     routing.SIDE_UNDER: "market_devig_q_under",
+}
+
+#: Side -> the published edge and expected value for that side. The side's own
+#: columns rather than ``model_preferred_edge``, because a card is about one
+#: wager and the row it reads may be a book whose own preferred side is the
+#: other one. Both are published fields either way: nothing is recomputed.
+SIDE_EDGE: Mapping[str, str] = {
+    routing.SIDE_OVER: "calibrated_edge_over",
+    routing.SIDE_UNDER: "calibrated_edge_under",
+}
+
+SIDE_EXPECTED_VALUE: Mapping[str, str] = {
+    routing.SIDE_OVER: "calibrated_ev_over",
+    routing.SIDE_UNDER: "calibrated_ev_under",
 }
 
 #: How a selected offer may be described, by tier. A fallback selection is the
@@ -364,11 +382,19 @@ def load_publication(transport: Any) -> Publication:
 
 @dataclass(frozen=True)
 class PageRow:
-    """One card: the model's opinion, and where to take it."""
+    """One card: the model's opinion on one wager, and where to take it.
+
+    ``row`` is the published row of the sportsbook the reader is sent to, so
+    the market probability, edge and expected value shown beside a price are
+    that book's own published numbers at that price. ``quotes`` is every
+    published row on the wager, which is the offer universe the routing
+    considered.
+    """
 
     wager: routing.Wager
     routed: routing.Routed
     row: Mapping[str, Any] = field(repr=False)
+    quotes: tuple[Mapping[str, Any], ...] = field(default=(), repr=False)
 
     @property
     def side(self) -> str:
@@ -384,11 +410,11 @@ class PageRow:
 
     @property
     def edge(self) -> Any:
-        return self.row["model_preferred_edge"]
+        return self.row[SIDE_EDGE[self.side]]
 
     @property
     def expected_value(self) -> Any:
-        return self.row["model_preferred_ev"]
+        return self.row[SIDE_EXPECTED_VALUE[self.side]]
 
     @property
     def matchup(self) -> str:
@@ -434,21 +460,61 @@ def _truthy(value: Any) -> bool:
 def page_rows(
     publication: Publication, *, registry: routing.AffiliateRegistry
 ) -> tuple[PageRow, ...]:
-    """Every published row, routed, strongest model edge first.
+    """One card per exact wager, routed, strongest model edge first.
+
+    The publication is one row per quote, so a wager several books price
+    appears several times. A card is about a wager rather than about a quote:
+    the duplicate rows are that wager's offer universe, which is precisely
+    what the routing rule is for, and rendering one card each would state the
+    same opinion repeatedly at prices the reader was not sent to.
+
+    The card then reads the row of the book it sends the reader to, so the
+    market probability, edge and expected value shown are the published
+    numbers at the published price of that sportsbook. The model's own
+    probability does not depend on a price, so it is the same in every row on
+    the wager -- asserted below rather than assumed, because showing one
+    book's number as the model's opinion would be a claim this page cannot
+    support if they disagreed.
 
     The default order is the strongest edge, because that is what somebody
-    opening the page is looking for. The sort is over the published
-    ``model_preferred_edge`` and nothing derived from it: no ranking score was
+    opening the page is looking for. The sort is over published edge and
+    expected value and nothing derived from them: no ranking score was
     invented here.
     """
-    built: list[PageRow] = []
+    grouped: dict[routing.Wager, list[Mapping[str, Any]]] = {}
 
     for row in publication.rows:
-        wager, routed = routing.route_row(
-            row, rows=publication.rows, registry=registry
+        wager = routing.wager_of(row)
+
+        grouped.setdefault(wager, []).append(row)
+
+    built: list[PageRow] = []
+
+    for wager, quotes in grouped.items():
+        ordered = tuple(
+            sorted(
+                quotes,
+                key=lambda quote: (
+                    routing.normalise_vendor(quote.get("vendor")),
+                    str(quote.get("quote_id")),
+                ),
+            )
         )
 
-        built.append(PageRow(wager=wager, routed=routed, row=row))
+        _agree_on_the_model(ordered, wager=wager)
+
+        routed = routing.route(
+            routing.offers_for(publication.rows, wager), registry=registry
+        )
+
+        built.append(
+            PageRow(
+                wager=wager,
+                routed=routed,
+                row=_quoting_row(ordered, routed=routed),
+                quotes=ordered,
+            )
+        )
 
     return tuple(
         sorted(
@@ -460,6 +526,43 @@ def page_rows(
             ),
         )
     )
+
+
+def _agree_on_the_model(
+    quotes: tuple[Mapping[str, Any], ...], *, wager: routing.Wager
+) -> None:
+    """Refuse a wager whose rows disagree about the model's probability."""
+    field_name = SIDE_MODEL_PROBABILITY[wager.side]
+
+    values = {str(quote.get(field_name)) for quote in quotes}
+
+    if len(values) > 1:
+        raise PageRefused(
+            f"the published rows for {wager.prop_type} {wager.side} "
+            f"{wager.line_value} on player {wager.player_id} disagree about "
+            f"{field_name} ({sorted(values)}), so what the model says about "
+            "this wager is not settled and no card can state it"
+        )
+
+
+def _quoting_row(
+    quotes: tuple[Mapping[str, Any], ...], *, routed: routing.Routed
+) -> Mapping[str, Any]:
+    """The row the card reads: the selected book's, or the first on the wager.
+
+    Falling back to the first row matters only when nothing was selected, and
+    then the card shows no price at all -- the model fields it still shows are
+    the same in every row on the wager.
+    """
+    if routed.offer is not None:
+        for quote in quotes:
+            if (
+                routing.normalise_vendor(quote.get("vendor")) == routed.offer.vendor
+                and str(quote.get("quote_id")) == str(routed.offer.quote_id)
+            ):
+                return quote
+
+    return quotes[0]
 
 
 def _number(value: Any) -> float:
@@ -1097,6 +1200,7 @@ def page_manifest(
             ),
             "by_tier": by_tier,
             "prediction_count": len(rows),
+            "published_row_count": len(publication.rows),
         },
         "routed": [
             {
