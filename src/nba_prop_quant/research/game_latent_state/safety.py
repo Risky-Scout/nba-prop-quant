@@ -322,51 +322,64 @@ PATH_DECLARATION_MODULE = "safety.py"
 #:
 #: The attestation-refresh branch's one entry was retired in turn when it
 #: landed, for the reason that entry itself gave: the publisher is owned below,
-#: so touching it again requires declaring it again. This branch declares four
-#: paths, of which three are files it introduces and one is the pre-existing
-#: destination configuration it extends.
+#: so touching it again requires declaring it again. The player-props page
+#: branch's four entries were retired the same way when they landed. Three of
+#: the four are files that branch introduced and are recorded as owned below;
+#: the fourth was the pre-existing destination configuration, which is owned
+#: already and which this branch does not touch at all.
+#:
+#: This branch declares four paths: the three owned player-props files, whose
+#: affiliate contract it corrects, and one new module that builds the
+#: deterministic slate the corrected routing is proven against in public.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
         "ops/wizardofodds_affiliate_routing.py": (
-            "new. Chooses which sportsbook a published wager points a reader "
-            "at, by the frozen tier rule: primary affiliates, then secondary "
-            "affiliates, then everybody else, best posted price inside "
-            "whichever tier was reached. A product layer downstream of "
+            "corrects the routing contract to the one the operator actually "
+            "has. There is one affiliate tier rather than two, so the "
+            "secondary tier is deleted outright; the fallback is every other "
+            "sportsbook in the published data rather than a shortlist; and "
+            "price decides first, with the operator's order breaking an exact "
+            "tie and nothing else. Still a product layer downstream of "
             "everything -- it reads no model number and writes none, so no "
-            "routing decision can move a probability, a fair price, an edge or "
-            "an expected value. It publishes nothing and is reachable from no "
-            "production entry point other than the page builder below."
+            "routing decision can move a probability, a fair price, an edge "
+            "or an expected value. It publishes nothing and is reachable from "
+            "no production entry point other than the page builder below."
         ),
         "ops/wizardofodds_affiliates.json": (
-            "new. The eight books the page routes, their tier, the sportsbook "
-            "identifiers each is proven to appear under, and where a click "
-            "goes. Tier and display name are the product requirement and are "
-            "authoritative on their own; identifiers and destinations are "
-            "recorded only where site or data evidence proves them, with the "
-            "evidence quoted per book. Five of the eight have neither and are "
-            "recorded as having neither. No tracking link, affiliate id, "
-            "campaign id or credential is in it."
-        ),
-        "ops/wizardofodds_destinations.json": (
-            "adds one named destination for the player-props page canary. "
-            "Non-live by the same construction as the feed canary: every path "
-            "it can address resolves beneath its canary_subpath, so the live "
-            "index one directory up is not expressible through it. live stays "
-            "null, the existing feed canary entry is untouched, and no "
-            "credential is recorded -- the entry names the environment "
-            "variable its key is read from, as the existing one does."
+            "replaces the eight-book registry with the four books the Odds "
+            "API integration actually supports: bovada, betonlineag, betus "
+            "and betanysports, the last shown as BetAnything because the "
+            "operator states BetAnything is the rebranded BetAnySports. Each "
+            "entry still records the evidence for its identifier and its "
+            "redirect key, and each of the four redirects was verified to "
+            "resolve to its own sportsbook rather than to the fail-open "
+            "default. The four books the integration does not support are "
+            "recorded outside the routed set so the loader cannot route them. "
+            "No tracking link, affiliate id, campaign id or credential is in "
+            "it."
         ),
         "ops/wizardofodds_player_props_page.py": (
-            "new. Renders the NBA player-props page from one published "
-            "incumbent release, read back and cross-checked through the "
-            "publisher's own transport, and writes it to the page canary. A "
-            "renderer: it copies every number out of the publication and "
-            "computes no probability, fair price, edge or expected value, so "
-            "there is no second pricing system here. It refuses a publication "
-            "that is mid-write, that records a non-incumbent authority, or "
-            "whose candidate is no longer shadow-only, and it renders "
-            "provenance from an allow-list so the manifest's absolute "
-            "artifact path cannot reach a public page."
+            "renders the corrected contract and drops a control the data "
+            "cannot support. The publication carries no tip-off timestamp, so "
+            "the game-time sort is removed rather than left ordering cards by "
+            "identifiers under a time label, and the page says why. Also "
+            "gains a prefix for publishing a proof page into a child "
+            "directory, checked through the transport's own confinement "
+            "predicate as given, so it can be published beside the page "
+            "canary and not over it. Still a renderer: it copies every number "
+            "out of the publication and computes no probability, fair price, "
+            "edge or expected value."
+        ),
+        "ops/wizardofodds_routing_proof.py": (
+            "new, and declared test data rather than a slate. Four wagers in "
+            "the real published schema, chosen so that the four routing "
+            "outcomes are all visible at once on a public page: an affiliate "
+            "preferred over a better non-affiliate price, a fallback across "
+            "arbitrary books, an exact affiliate tie, and a wager nobody "
+            "prices. It builds rows and publishes them to a local destination "
+            "only; it imports no model, pricing or calibration code, calls no "
+            "serving entry point, and nothing it produces reaches the feed "
+            "canary or the live page."
         ),
     }
 )
@@ -532,6 +545,33 @@ SHADOW_OWNED_PRODUCTION_PATHS: Mapping[str, str] = MappingProxyType(
             "promoted, how a rollback restores the previous one, and the six "
             "external facts a live canary is blocked on. Documentation only: "
             "no code reads it"
+        ),
+        "ops/wizardofodds_affiliate_routing.py": (
+            "which sportsbook a published wager points a reader at. A product "
+            "layer downstream of everything: it reads a posted price and a "
+            "registry and returns a selection, so it cannot move a "
+            "probability, a fair price, an edge or an expected value. It "
+            "publishes nothing and is reachable from no production entry "
+            "point other than the page builder"
+        ),
+        "ops/wizardofodds_affiliates.json": (
+            "the affiliate books the page routes, the sportsbook identifiers "
+            "each is proven to appear under, and which redirect key a click "
+            "uses. Evidence is quoted per book. No tracking link, affiliate "
+            "id, campaign id or credential is in it, because the site's own "
+            "convention is that a click goes to its redirect rather than to "
+            "an affiliate URL"
+        ),
+        "ops/wizardofodds_player_props_page.py": (
+            "renders the NBA player-props page from one published incumbent "
+            "release, read back and cross-checked through the publisher's own "
+            "transport, and writes it to the page canary. A renderer: every "
+            "number is copied out of the publication, so there is no second "
+            "pricing system here. It refuses a publication that is mid-write, "
+            "that records a non-incumbent authority, or whose candidate is no "
+            "longer shadow-only, and it renders provenance from an allow-list "
+            "so the manifest's absolute artifact path cannot reach a public "
+            "page"
         ),
     }
 )
