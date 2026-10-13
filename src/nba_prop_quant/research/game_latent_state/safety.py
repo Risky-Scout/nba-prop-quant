@@ -319,18 +319,54 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: fixture provenances its own served slate with, which is test surface. This
 #: branch is the owned case again: it changes the publisher, which is owned
 #: below, so it declares it.
+#:
+#: The attestation-refresh branch's one entry was retired in turn when it
+#: landed, for the reason that entry itself gave: the publisher is owned below,
+#: so touching it again requires declaring it again. This branch declares four
+#: paths, of which three are files it introduces and one is the pre-existing
+#: destination configuration it extends.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
-        "ops/publish_incumbent_to_wizardofodds.py": (
-            "refreshes the canary attestation when a rerun promotes nothing. "
-            "The attestation describes the release the destination serves now, "
-            "and a release whose provenance was corrected republishes under the "
-            "same id, so the previous write condition left the attestation "
-            "describing a manifest that no longer existed. Nothing about what is "
-            "published changes: no model, feature, prediction or pricing code is "
-            "touched, the release id, both pointers and rollback keep their "
-            "meanings, the audit log stays append-only, and live publishing "
-            "stays disabled."
+        "ops/wizardofodds_affiliate_routing.py": (
+            "new. Chooses which sportsbook a published wager points a reader "
+            "at, by the frozen tier rule: primary affiliates, then secondary "
+            "affiliates, then everybody else, best posted price inside "
+            "whichever tier was reached. A product layer downstream of "
+            "everything -- it reads no model number and writes none, so no "
+            "routing decision can move a probability, a fair price, an edge or "
+            "an expected value. It publishes nothing and is reachable from no "
+            "production entry point other than the page builder below."
+        ),
+        "ops/wizardofodds_affiliates.json": (
+            "new. The eight books the page routes, their tier, the sportsbook "
+            "identifiers each is proven to appear under, and where a click "
+            "goes. Tier and display name are the product requirement and are "
+            "authoritative on their own; identifiers and destinations are "
+            "recorded only where site or data evidence proves them, with the "
+            "evidence quoted per book. Five of the eight have neither and are "
+            "recorded as having neither. No tracking link, affiliate id, "
+            "campaign id or credential is in it."
+        ),
+        "ops/wizardofodds_destinations.json": (
+            "adds one named destination for the player-props page canary. "
+            "Non-live by the same construction as the feed canary: every path "
+            "it can address resolves beneath its canary_subpath, so the live "
+            "index one directory up is not expressible through it. live stays "
+            "null, the existing feed canary entry is untouched, and no "
+            "credential is recorded -- the entry names the environment "
+            "variable its key is read from, as the existing one does."
+        ),
+        "ops/wizardofodds_player_props_page.py": (
+            "new. Renders the NBA player-props page from one published "
+            "incumbent release, read back and cross-checked through the "
+            "publisher's own transport, and writes it to the page canary. A "
+            "renderer: it copies every number out of the publication and "
+            "computes no probability, fair price, edge or expected value, so "
+            "there is no second pricing system here. It refuses a publication "
+            "that is mid-write, that records a non-incumbent authority, or "
+            "whose candidate is no longer shadow-only, and it renders "
+            "provenance from an allow-list so the manifest's absolute "
+            "artifact path cannot reach a public page."
         ),
     }
 )
