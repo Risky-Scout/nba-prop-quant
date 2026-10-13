@@ -2,7 +2,7 @@
   "books": {
     "betanything": {
       "display_name": "BetAnything",
-      "evidence": "none. Searched this repository and the NBA-scoped WizardOfOdds site tree (477 files, football excluded) for betanything: zero hits. The site does carry betanysports, which its own BOOK_NAMES map in predictions/api/index.html labels 'BetAnySports' and which api/go.php routes to www.betanysports.eu/aff/?a=WOO. BetAnySports is a different sportsbook name and nothing proves it is this book, so no identifier and no destination were adopted for BetAnything.",
+      "evidence": "none. Searched this repository and the NBA-scoped WizardOfOdds site tree (477 files, football excluded) for betanything: zero hits. The site does carry betanysports, which its own BOOK_NAMES map in predictions/api/index.html labels 'BetAnySports' and which api/go.php gives a destination of its own. BetAnySports is a different sportsbook name and nothing proves it is this book, so no identifier and no destination were adopted for BetAnything.",
       "missing": [
         "the canonical sportsbook identifier BetAnything appears under in the authoritative market data",
         "the affiliate destination WizardOfOdds uses for BetAnything"
@@ -13,18 +13,18 @@
     },
     "betonline": {
       "display_name": "BetOnline",
-      "evidence": "identifier: predictions/api/index.html BOOK_NAMES maps both betonlineag and betonline to 'BetOnline', and predictions/nba-props.html ALL_BOOK_DISPLAY maps betonlineag to label 'BetOnline' with affiliate true. Observed in NBA market data: predictions/affiliate_dashboard.json slates carry book 'betonlineag'. Destination: predictions/api/go.php routes book=betonline to record.commissionkings.ag, and predictions/api/live_props.php $AFFILIATE_CONFIG['betonlineag'] records the same book as rev-share with cta 'Bet at BetOnline'.",
+      "evidence": "identifier: predictions/api/index.html BOOK_NAMES maps both betonlineag and betonline to 'BetOnline', and predictions/nba-props.html ALL_BOOK_DISPLAY maps betonlineag to label 'BetOnline' with affiliate true. Observed in NBA market data: predictions/affiliate_dashboard.json slates carry book 'betonlineag'. Destination: predictions/api/go.php answers book=betonline with a redirect to this book's affiliate network, and predictions/api/live_props.php $AFFILIATE_CONFIG['betonlineag'] records the same book as rev-share with cta 'Bet at BetOnline'.",
       "missing": [],
       "redirect_book": "betonline",
+      "tier": "primary",
       "vendor_keys": [
         "betonline",
         "betonlineag"
-      ],
-      "tier": "primary"
+      ]
     },
     "betus": {
       "display_name": "BetUS",
-      "evidence": "identifier: predictions/api/index.html BOOK_NAMES maps betus to 'BetUS', and predictions/nba-props.html ALL_BOOK_DISPLAY maps betus to label 'BetUS' with affiliate true. Destination: predictions/api/go.php routes book=betus to record.revmasters.com, and predictions/api/live_props.php $AFFILIATE_CONFIG['betus'] records it as rev-share with cta 'Bet at BetUS'. Not observed in the NBA slate dashboards sampled, which is a statement about which books quoted those slates rather than about the identifier.",
+      "evidence": "identifier: predictions/api/index.html BOOK_NAMES maps betus to 'BetUS', and predictions/nba-props.html ALL_BOOK_DISPLAY maps betus to label 'BetUS' with affiliate true. Destination: predictions/api/go.php answers book=betus with a redirect to this book's affiliate network, and predictions/api/live_props.php $AFFILIATE_CONFIG['betus'] records it as rev-share with cta 'Bet at BetUS'. Not observed in the NBA slate dashboards sampled, which is a statement about which books quoted those slates rather than about the identifier.",
       "missing": [],
       "redirect_book": "betus",
       "tier": "primary",
@@ -45,7 +45,7 @@
     },
     "bovada": {
       "display_name": "Bovada",
-      "evidence": "identifier: predictions/api/index.html BOOK_NAMES maps bovada to 'Bovada', and predictions/nba-props.html ALL_BOOK_DISPLAY maps bovada to label 'Bovada' with affiliate true. Observed in NBA market data: predictions/affiliate_dashboard.json carries 838 rows with book 'bovada' and affiliate_url set. Destination: predictions/api/go.php routes book=bovada to record.revenuenetwork.com, and predictions/api/live_props.php $AFFILIATE_CONFIG['bovada'] records it as rev-share priority 1 with cta 'Bet at Bovada'.",
+      "evidence": "identifier: predictions/api/index.html BOOK_NAMES maps bovada to 'Bovada', and predictions/nba-props.html ALL_BOOK_DISPLAY maps bovada to label 'Bovada' with affiliate true. Observed in NBA market data: predictions/affiliate_dashboard.json carries 838 rows with book 'bovada' and an affiliate_url set. Destination: predictions/api/go.php answers book=bovada with a redirect to this book's affiliate network, and predictions/api/live_props.php $AFFILIATE_CONFIG['bovada'] records it as rev-share priority 1 with cta 'Bet at Bovada'.",
       "missing": [],
       "redirect_book": "bovada",
       "tier": "primary",
@@ -114,7 +114,7 @@
   "non_affiliate_books_note": "Display names only, for books that are in the offer universe but earn nothing. Recorded so a fallback selection can be named honestly rather than shown as an opaque key, and recorded separately from the eight affiliate entries so that nothing here can ever be handed a destination. Sources: predictions/api/index.html BOOK_NAMES and predictions/nba-props.html ALL_BOOK_DISPLAY, where every one of these carries affiliate: false. betanysports is deliberately absent from this map and from the affiliate entries alike: it is an affiliate of the site but it is not one of the eight books this page routes, and listing it in either place would invite reading it as BetAnything.",
   "note": "The eight books this page routes, their tier, the sportsbook identifiers each is proven to appear under in the authoritative market data, and the destination a click is sent to. Tier and display name come from the product requirement and are authoritative by themselves. An identifier or a destination is not: each is recorded only where site or data evidence proves it, and the evidence is quoted per book. Five of the eight have neither, so they are recorded with empty vendor_keys and a null redirect_book, which the router reads as 'can never match an offer and can never be given a link'. That is deliberate. Nothing in this file may be filled in from a book's name resembling an identifier.",
   "redirect": {
-    "evidence": "predictions/api/go.php holds the affiliate-network tracking links for bovada, betonline, betus and betanysports and answers HTTP 302 to each. predictions/api/live_props.php line 1044 states the site's convention: 'Redirect-only links (spec B.7 -- never direct affiliate URL)'.",
+    "evidence": "predictions/api/go.php holds the affiliate-network destinations for bovada, betonline, betus and betanysports and answers each with HTTP 302. The links themselves stay there and are not reproduced here. predictions/api/live_props.php line 1044 states the site's convention: 'Redirect-only links (spec B.7 -- never direct affiliate URL)'.",
     "parameter": "book",
     "path": "/tools/odds-scanner/predictions/api/go.php",
     "unknown_book_behaviour": "go.php redirects an unrecognised book to Bovada rather than refusing. A link built from an unproven identifier would therefore not fail visibly, it would quietly send that book's traffic to Bovada. This is why redirect_book is null wherever the mapping is unproven, and why the router refuses to construct a destination without one."
