@@ -122,6 +122,15 @@ Every action that changed a destination is appended to an audit log there, so
 what a destination is serving and how it got there are both readable from the
 destination itself.
 
+The two records a destination keeps about itself answer different questions
+and are maintained differently. ``audit_log.jsonl`` is history: one appended
+line per completed action, never rewritten, because rewriting it would
+falsify what was published when. ``canary_attestation.json`` is current state:
+it describes the release the destination is serving now, so it is rewritten
+whenever that stops being what it says -- including by a rerun that promoted
+nothing, since the release id is the rows digest and a release whose
+provenance was corrected republishes under the same id.
+
 WHAT ACTIVATION WOULD TAKE
 --------------------------
 
@@ -2103,6 +2112,251 @@ def attestation_for(
     }
 
 
+#: The one attestation field that is a clock rather than a fact about the
+#: release. Two attestations differing only here describe the same publication,
+#: so rewriting one as the other would change the destination's bytes without
+#: changing anything it claims.
+ATTESTATION_CLOCK_FIELD = "attested_at"
+
+#: What a current release's manifest must carry for that release to be
+#: attestable. These are the field names of the provenance projection
+#: :func:`verify_receipt` returns and :func:`build_release` embeds, which are
+#: not the serving receipt's own field names in
+#: :data:`REQUIRED_PROVENANCE_FIELDS`: the receipt has ``generated_at`` and a
+#: ``priced_market_artifact`` object where the manifest has ``served_at`` and
+#: that object's digest.
+ATTESTABLE_PROVENANCE_FIELDS: tuple[str, ...] = (
+    "incumbent_authority",
+    "incumbent_version",
+    "input_state_fingerprint",
+    "model_authority",
+    "priced_market_artifact_sha256",
+    "production_code_sha",
+    "served_at",
+    "slate_date",
+)
+
+#: Present rather than non-empty, for the reason
+#: :data:`REQUIRED_PROVENANCE_KEYS` gives: null is the true value before the
+#: first human promotion.
+ATTESTABLE_PROVENANCE_KEYS: tuple[str, ...] = ("incumbent_fit_id",)
+
+
+def _attestation_identity(attestation: dict[str, Any]) -> dict[str, Any]:
+    """Everything an attestation claims, which is all of it but the clock."""
+    return {
+        name: value
+        for name, value in attestation.items()
+        if name != ATTESTATION_CLOCK_FIELD
+    }
+
+
+def attestable_current_release(
+    transport: Any, *, release: Release
+) -> dict[str, Any]:
+    """The release ``current.json`` names, read back and cross-checked.
+
+    The attestation is a statement about what the destination is serving, so it
+    may only describe the release the destination says is current -- read back
+    from there rather than remembered from this run. Three documents have to
+    agree before anything is attested: the pointer, the manifest it names, and
+    the rows that manifest describes.
+
+    Checked from the specific to the general, so that each way this can be
+    wrong is refused by the check that names it and the manifest digest is left
+    as the catch-all for the rest. Refused rather than repaired throughout: a
+    destination whose pointer, manifest and rows disagree is in a state no
+    attestation should describe, and picking one of the three to believe is how
+    a wrong attestation would become a confident one.
+    """
+    current = read_pointer(transport, CURRENT_POINTER)
+
+    if not current:
+        raise PublishingRefused(
+            f"{CURRENT_POINTER} names no release at the destination, so there "
+            f"is no current release for {ATTESTATION_NAME} to describe"
+        )
+
+    if str(current.get("release_id") or "") != release.release_id:
+        raise PublishingRefused(
+            f"{CURRENT_POINTER} names release "
+            f"{current.get('release_id')!r} and this publication wrote "
+            f"{release.release_id!r}, so attesting it would describe something "
+            "the destination is not serving"
+        )
+
+    manifest_relative = str(current.get("manifest_relative") or "")
+
+    if not manifest_relative or not transport.exists(manifest_relative):
+        raise PublishingRefused(
+            f"{CURRENT_POINTER} names a manifest at "
+            f"{manifest_relative or 'no path'}, which is not at the "
+            "destination, so the current release cannot be attested"
+        )
+
+    manifest_bytes = transport.read_bytes(manifest_relative)
+
+    try:
+        manifest = json.loads(manifest_bytes)
+    except ValueError as error:
+        raise PublishingRefused(
+            f"{manifest_relative} is not readable JSON ({error}), so the "
+            "current release cannot be attested"
+        ) from error
+
+    authority = str(manifest.get("model_authority") or "")
+
+    if authority != MODEL_AUTHORITY:
+        raise PublishingRefused(
+            "the current release's manifest records the model authority as "
+            f"{authority or 'nothing'}, not {MODEL_AUTHORITY!r}, so it is not "
+            "an incumbent publication and is not attested"
+        )
+
+    provenance = manifest.get("provenance") or {}
+
+    missing = sorted(
+        [
+            name
+            for name in ATTESTABLE_PROVENANCE_FIELDS
+            if provenance.get(name) in (None, "", {}, [])
+        ]
+        + [
+            name
+            for name in ATTESTABLE_PROVENANCE_KEYS
+            if name not in provenance
+        ]
+    )
+
+    if missing:
+        raise PublishingRefused(
+            "the current release's manifest is missing required provenance: "
+            + ", ".join(missing)
+        )
+
+    rows_relative = str(manifest.get("rows_relative") or "")
+
+    rows_sha256 = str(manifest.get("rows_sha256") or "")
+
+    for label, pointed, recorded in (
+        (
+            "release id",
+            str(current.get("release_id") or ""),
+            str(manifest.get("release_id") or ""),
+        ),
+        ("rows path", str(current.get("rows_relative") or ""), rows_relative),
+        ("rows digest", str(current.get("rows_sha256") or ""), rows_sha256),
+    ):
+        if pointed != recorded:
+            raise PublishingRefused(
+                f"{CURRENT_POINTER} and {manifest_relative} disagree on the "
+                f"{label} of the current release ({pointed or 'nothing'} "
+                f"against {recorded or 'nothing'}), so what the destination "
+                "serves is not settled and is not attested"
+            )
+
+    if not rows_relative or not transport.exists(rows_relative):
+        raise PublishingRefused(
+            "the current release's manifest names rows at "
+            f"{rows_relative or 'no path'}, which are not at the destination, "
+            "so there is nothing to attest"
+        )
+
+    served = digest(transport.read_bytes(rows_relative))
+
+    if served != rows_sha256:
+        raise PublishingRefused(
+            f"{rows_relative} reads back as {served} but the current "
+            f"release's manifest records {rows_sha256}, so the destination is "
+            "not serving the release it says it is"
+        )
+
+    manifest_sha256 = digest(manifest_bytes)
+
+    # Last, so that anything the checks above name is refused by the check
+    # that names it. This one catches whatever they do not: a manifest reading
+    # back as the one this publication wrote is that manifest field for field,
+    # which is what makes attesting the release this run built the same thing
+    # as attesting the release the destination holds.
+    if manifest_sha256 != release.manifest_sha256:
+        raise PublishingRefused(
+            f"{manifest_relative} reads back as {manifest_sha256} but this "
+            f"publication wrote {release.manifest_sha256}, so the destination "
+            "does not hold the manifest that would be attested"
+        )
+
+    return {
+        "manifest_relative": manifest_relative,
+        "manifest_sha256": manifest_sha256,
+        "provenance": provenance,
+        "release_id": str(manifest.get("release_id") or ""),
+        "rows_sha256": rows_sha256,
+        "slate_date": str(manifest.get("slate_date") or ""),
+    }
+
+
+def ensure_canary_attestation(
+    transport: Any, *, release: Release, verification: dict[str, Any]
+) -> dict[str, Any]:
+    """Make ``canary_attestation.json`` describe the release now current.
+
+    The attestation and the audit log beside it answer different questions and
+    are maintained differently. ``audit_log.jsonl`` records what each run did,
+    and is appended to and never rewritten, because rewriting it would falsify
+    history. The attestation records what the destination is serving *now*, so
+    it has to be rewritten whenever that stops being what it says.
+
+    It used to be written only by a publication that promoted something, on the
+    reasoning that a rerun of the release already current changes nothing a
+    reader would see. A rerun can change the manifest, though: the release id
+    is the rows digest, so a release whose *provenance* was corrected
+    republishes under the same id. That is how a destination came to serve a
+    corrected manifest while its attestation still named the production SHA the
+    correction had replaced -- and the attestation, not the manifest, is what a
+    later activation reads.
+
+    Rewritten only when stale. An attestation that already describes the
+    current release differs from a freshly built one by its timestamp alone,
+    and restamping it would make a no-op rerun change the destination's bytes.
+    """
+    current = attestable_current_release(transport, release=release)
+
+    expected = attestation_for(
+        mode=MODE_CANARY,
+        release=release,
+        provenance=current["provenance"],
+        verification=verification,
+        slate_date=current["slate_date"],
+    )
+
+    existing = read_pointer(transport, ATTESTATION_NAME)
+
+    if existing is not None and _attestation_identity(
+        existing
+    ) == _attestation_identity(expected):
+        return {
+            "attested_at": existing.get(ATTESTATION_CLOCK_FIELD),
+            "reason": "the attestation already describes the current release",
+            "refreshed": False,
+            "relative": ATTESTATION_NAME,
+            "release_id": current["release_id"],
+        }
+
+    transport.write_bytes(ATTESTATION_NAME, serialise(expected))
+
+    return {
+        "attested_at": expected[ATTESTATION_CLOCK_FIELD],
+        "reason": (
+            "the attestation did not describe the current release"
+            if existing is not None
+            else "the destination had no attestation"
+        ),
+        "refreshed": True,
+        "relative": ATTESTATION_NAME,
+        "release_id": current["release_id"],
+    }
+
+
 def read_attestation(path: Path | None) -> dict[str, Any]:
     """The canary attestation an activation was handed, or the refusal."""
     if path is None:
@@ -2519,24 +2773,16 @@ def publish(
 
         promotion = promote(transport, release, mode=mode)
 
-        # Not rewritten for a rerun that promoted nothing: the attestation
-        # already there covers the release still current, and restamping it
-        # would make a no-op rerun change what the destination holds.
-        if mode == MODE_CANARY and (
-            promotion["promoted"] or not transport.exists(ATTESTATION_NAME)
-        ):
-            transport.write_bytes(
-                ATTESTATION_NAME,
-                serialise(
-                    attestation_for(
-                        mode=mode,
-                        release=release,
-                        provenance=provenance,
-                        verification=verification,
-                        slate_date=slate_date,
-                    )
-                ),
+        # After the pointers, because the attestation describes the release
+        # they name. A rerun that promoted nothing still refreshes it when it
+        # is stale, and leaves it byte-identical when it is not.
+        attestation = (
+            ensure_canary_attestation(
+                transport, release=release, verification=verification
             )
+            if mode == MODE_CANARY
+            else None
+        )
 
         # After the pointers, never before: the releases kept are the ones the
         # pointers name, so pruning first could remove the rollback target
@@ -2571,6 +2817,7 @@ def publish(
 
     return {
         "activation": activation,
+        "attestation": attestation,
         "audit_relative": audit_relative,
         "destination": destination_payload(destination, identity=identity),
         "generated_at": _utc_now(),
