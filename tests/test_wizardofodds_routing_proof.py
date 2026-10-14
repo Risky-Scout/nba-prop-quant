@@ -29,10 +29,13 @@ for relative in ("ops", "src", "tests"):
 
 import publish_incumbent_to_wizardofodds as publisher  # noqa: E402
 import wizardofodds_affiliate_routing as routing  # noqa: E402
+import wizardofodds_fallback_destinations as fallback  # noqa: E402
 import wizardofodds_player_props_page as page  # noqa: E402
 import wizardofodds_routing_proof as proof  # noqa: E402
 
 REGISTRY = routing.AffiliateRegistry.load(project_root=PROJECT)
+
+FALLBACK = fallback.FallbackDestinations.load(project_root=PROJECT)
 
 PROOF_SHA = "764d5564ad4e1dcc250b724f458e2e452471c74e"
 
@@ -516,22 +519,39 @@ def test_the_proof_page_names_no_unsupported_sportsbook(html, key, name):
     assert REGISTRY.book_for(key) is None
 
 
-def test_the_proof_page_links_only_the_four_affiliate_books(html):
-    links = set(re.findall(r'<a class="cta" href="([^"]+)"', html))
+def test_the_proof_page_routes_paid_clicks_only_through_the_redirect(html):
+    """Every affiliate link is the site's redirect, and only affiliates are.
 
-    assert links == {
+    The direct link on case B is deliberately excluded by the pattern: it
+    carries a different class because it is a different relationship, and the
+    assertion below is that no direct destination is a redirect URL.
+    """
+    paid = set(re.findall(r'<a class="cta" href="([^"]+)"', html))
+
+    assert paid == {
         REGISTRY.destination_for("betonlineag"),
         REGISTRY.destination_for("betanysports"),
     }
 
-    for destination in links:
+    for destination in paid:
         assert destination.startswith(
             "/tools/odds-scanner/predictions/api/go.php?book="
         )
 
-    assert "https://" not in html
+    direct = set(re.findall(r'<a class="cta direct" href="([^"]+)"', html))
+
+    assert direct == {FALLBACK.url_for("draftkings")}
+
+    for destination in direct:
+        assert destination.startswith("https://")
+
+        assert "go.php" not in destination
 
     assert "http://" not in html
+
+    assert set(re.findall(r'src="([^"]+)"', html)) == set(), (
+        "the page must still fetch nothing"
+    )
 
 
 def test_the_proof_page_carries_the_provenance_of_its_own_publication(built, html):

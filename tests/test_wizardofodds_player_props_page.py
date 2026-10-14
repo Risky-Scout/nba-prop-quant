@@ -1202,17 +1202,29 @@ def test_the_page_is_built_for_a_phone_first(published):
 def test_the_page_needs_no_network_and_no_dependency(published):
     """Static and self-contained, which is what the host serves.
 
-    The only URL in the document is the site-relative affiliate redirect.
+    Self-contained is about what the document *fetches*, not about where its
+    links point: an outbound sportsbook link is a destination a reader chooses,
+    while a stylesheet or an image is a request the page makes on their behalf
+    before they have chosen anything. So no ``src``, no ``link`` and no
+    ``@import``, and the only ``href`` permitted is a call to action.
     """
     html = html_of(published)
 
     assert "<style>" in html
 
-    urls = re.findall(r'(?:src|href)="([^"]+)"', html)
+    assert re.findall(r'src="([^"]+)"', html) == []
 
-    assert urls == []
+    assert "<link" not in html
 
-    assert "https://" not in html
+    assert "@import" not in html
+
+    hrefs = set(re.findall(r'href="([^"]+)"', html))
+
+    cta_hrefs = set(re.findall(r'<a class="cta[^"]*" href="([^"]+)"', html))
+
+    assert hrefs == cta_hrefs
+
+    assert hrefs == set(), "this fixture's books are not linkable"
 
 
 def test_the_controls_the_page_requires_are_all_present(published):
@@ -1748,7 +1760,7 @@ def test_the_page_manifest_records_what_a_check_needs(with_affiliates):
 
     manifest = built["manifest"]
 
-    assert manifest["contract_version"] == 2
+    assert manifest["contract_version"] == 3
 
     assert manifest["mode"] == publisher.MODE_CANARY
 
