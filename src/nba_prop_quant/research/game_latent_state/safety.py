@@ -328,58 +328,56 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: the fourth was the pre-existing destination configuration, which is owned
 #: already and which this branch does not touch at all.
 #:
-#: This branch declares four paths: the three owned player-props files, whose
-#: affiliate contract it corrects, and one new module that builds the
-#: deterministic slate the corrected routing is proven against in public.
+#: The affiliate-correction branch's four entries were retired in turn when
+#: they landed. Three of the four were already owned; the fourth, the
+#: routing-proof module, is a file that branch introduced and is recorded as
+#: owned below, so touching any of them again requires declaring it again.
+#:
+#: This branch declares four paths: two owned files it edits, and two new files
+#: holding the direct destinations a non-affiliate selection can be linked to.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
-        "ops/wizardofodds_affiliate_routing.py": (
-            "corrects the routing contract to the one the operator actually "
-            "has. There is one affiliate tier rather than two, so the "
-            "secondary tier is deleted outright; the fallback is every other "
-            "sportsbook in the published data rather than a shortlist; and "
-            "price decides first, with the operator's order breaking an exact "
-            "tie and nothing else. Still a product layer downstream of "
-            "everything -- it reads no model number and writes none, so no "
-            "routing decision can move a probability, a fair price, an edge "
-            "or an expected value. It publishes nothing and is reachable from "
-            "no production entry point other than the page builder below."
-        ),
         "ops/wizardofodds_affiliates.json": (
-            "replaces the eight-book registry with the four books the Odds "
-            "API integration actually supports: bovada, betonlineag, betus "
-            "and betanysports, the last shown as BetAnything because the "
-            "operator states BetAnything is the rebranded BetAnySports. Each "
-            "entry still records the evidence for its identifier and its "
-            "redirect key, and each of the four redirects was verified to "
-            "resolve to its own sportsbook rather than to the fail-open "
-            "default. The four books the integration does not support are "
-            "recorded outside the routed set so the loader cannot route them. "
-            "No tracking link, affiliate id, campaign id or credential is in "
+            "corrects one note that this branch makes untrue. It said books "
+            "recorded as non-affiliates could never be handed a destination, "
+            "which was a statement about affiliate destinations and now reads "
+            "as a statement about all of them. No book, tier, identifier, "
+            "redirect key or tie priority changes: the affiliate contract is "
+            "byte-for-byte the contract that landed, and this is a comment on "
             "it."
         ),
-        "ops/wizardofodds_player_props_page.py": (
-            "renders the corrected contract and drops a control the data "
-            "cannot support. The publication carries no tip-off timestamp, so "
-            "the game-time sort is removed rather than left ordering cards by "
-            "identifiers under a time label, and the page says why. Also "
-            "gains a prefix for publishing a proof page into a child "
-            "directory, checked through the transport's own confinement "
-            "predicate as given, so it can be published beside the page "
-            "canary and not over it. Still a renderer: it copies every number "
-            "out of the publication and computes no probability, fair price, "
-            "edge or expected value."
+        "ops/wizardofodds_fallback_destinations.json": (
+            "new. Direct public destinations for seven sportsbooks "
+            "WizardOfOdds is not paid by, taken from the NBA live-props "
+            "page's own link configuration -- specifically the entries of it "
+            "that carry no tracking parameter, which is what distinguishes a "
+            "direct link from a referral. The three entries of that "
+            "configuration that do carry one are primary affiliates and are "
+            "deliberately not reproduced: those clicks go through the site's "
+            "redirect. Holds no tracking parameter, affiliate id, campaign id "
+            "or credential, and declares in data that nothing in it may be "
+            "rendered as paid."
         ),
-        "ops/wizardofodds_routing_proof.py": (
-            "new, and declared test data rather than a slate. Four wagers in "
-            "the real published schema, chosen so that the four routing "
-            "outcomes are all visible at once on a public page: an affiliate "
-            "preferred over a better non-affiliate price, a fallback across "
-            "arbitrary books, an exact affiliate tie, and a wager nobody "
-            "prices. It builds rows and publishes them to a local destination "
-            "only; it imports no model, pricing or calibration code, calls no "
-            "serving entry point, and nothing it produces reaches the feed "
-            "canary or the live page."
+        "ops/wizardofodds_fallback_destinations.py": (
+            "new. A lookup, consulted after the routing rule has already "
+            "selected a sportsbook, that answers whether that sportsbook has "
+            "an established destination. It takes no offer, no price and no "
+            "universe, so it has no way to express a preference and cannot "
+            "move a selection: a book with the best available price is "
+            "selected and shown whether or not a URL for it is known. It "
+            "reads no model number, publishes nothing, and is reachable from "
+            "no production entry point other than the page builder."
+        ),
+        "ops/wizardofodds_player_props_page.py": (
+            "renders the second kind of outbound link. A selection that is "
+            "not an affiliate now gets a button to the sportsbook's own page, "
+            "labelled VIEW AT rather than BET AT, carrying no sponsored rel, "
+            "and saying on the card that WizardOfOdds earns nothing from it. "
+            "The affiliate path is untouched and byte-identical. Whether a "
+            "book can be linked is asked after the routing result exists, so "
+            "it cannot reach the selection. Still a renderer: it copies every "
+            "number out of the publication and computes no probability, fair "
+            "price, edge or expected value."
         ),
     }
 )
@@ -572,6 +570,16 @@ SHADOW_OWNED_PRODUCTION_PATHS: Mapping[str, str] = MappingProxyType(
             "longer shadow-only, and it renders provenance from an allow-list "
             "so the manifest's absolute artifact path cannot reach a public "
             "page"
+        ),
+        "ops/wizardofodds_routing_proof.py": (
+            "the deterministic slate the routing rule is proven against in "
+            "public, in the real published schema and declared test data "
+            "rather than a model slate. Four wagers chosen so that all four "
+            "routing outcomes are visible on one page. It builds rows and "
+            "publishes them to a local destination only; it imports no "
+            "model, pricing or calibration code and calls no serving entry "
+            "point, so nothing it produces can reach the feed canary or the "
+            "live page"
         ),
     }
 )

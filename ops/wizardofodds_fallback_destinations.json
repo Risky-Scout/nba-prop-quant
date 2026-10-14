@@ -1,0 +1,78 @@
+{
+  "contract_version": 1,
+  "note": "Direct public destinations for sportsbooks WizardOfOdds is NOT paid by. Deliberately a separate file from ops/wizardofodds_affiliates.json: nothing recorded here is an affiliate, nothing here carries a tracking parameter, and nothing here may be sent through the site's affiliate redirect. A book is in this file only so that a reader shown the best available price can actually reach it; the selection itself is made by the routing rule before this file is consulted, and a book's presence or absence here must never change which sportsbook is selected.",
+  "source": "predictions/api/live_props.php, the NBA live-props page's own $AFFILIATE_CONFIG. That array declares one entry per book the site links. Three of its entries -- bovada, betonlineag and betus -- carry an affiliate tracking parameter and are therefore NOT reproduced here: those books are primary affiliates and are routed through the site's go.php redirect, per the site's own convention that an affiliate click never uses a direct URL. The entries below are the ones that carry no tracking parameter of any kind, which is what makes them direct links rather than referrals.",
+  "books": {
+    "betmgm": {
+      "display_name": "BetMGM",
+      "url": "https://sports.betmgm.com/en/sports/basketball-7",
+      "verification": {
+        "observed": "HTTP 200, redirected by the sportsbook to its own state site (www.va.betmgm.com) as a geo-redirect",
+        "source": "predictions/api/live_props.php $AFFILIATE_CONFIG['betmgm']['link']",
+        "type": "site_configuration"
+      }
+    },
+    "betparx": {
+      "display_name": "betPARX",
+      "url": "https://www.betparx.com/en/sports/basketball",
+      "verification": {
+        "observed": "HTTP 200, redirected by the sportsbook to its own root",
+        "source": "predictions/api/live_props.php $AFFILIATE_CONFIG['betparx']['link']",
+        "type": "site_configuration"
+      }
+    },
+    "betrivers": {
+      "display_name": "BetRivers",
+      "url": "https://betrivers.com/?page=sportsbook",
+      "verification": {
+        "observed": "HTTP 200, redirected by the sportsbook to its own state site (va.betrivers.com) as a geo-redirect",
+        "source": "predictions/api/live_props.php $AFFILIATE_CONFIG['betrivers']['link']",
+        "type": "site_configuration"
+      }
+    },
+    "caesars": {
+      "display_name": "Caesars",
+      "url": "https://sportsbook.caesars.com/us/nj/bet/basketball/nba",
+      "verification": {
+        "observed": "HTTP 200. The path the site configures is scoped to one state (us/nj); that is the site's own choice and is recorded as configured rather than broadened here",
+        "source": "predictions/api/live_props.php $AFFILIATE_CONFIG['caesars']['link']",
+        "type": "site_configuration"
+      }
+    },
+    "draftkings": {
+      "display_name": "DraftKings",
+      "url": "https://sportsbook.draftkings.com/",
+      "verification": {
+        "observed": "the configured deep path /basketball/nba answers HTTP 404 while the host's own root answers HTTP 200, so the configured path is stale rather than geo-blocked. Recorded as the host the site configures, with the stale path segment dropped: that is a reduction of the configured destination and not a deep link constructed here. The site's stale entry is reported as a defect and is not edited by this task",
+        "source": "predictions/api/live_props.php $AFFILIATE_CONFIG['draftkings']['link'], host only",
+        "type": "site_configuration_host"
+      }
+    },
+    "fanatics": {
+      "display_name": "Fanatics",
+      "url": "https://sportsbook.fanatics.com/basketball/nba",
+      "verification": {
+        "observed": "HTTP 403 from this network for every path including the host root, so the sportsbook blocks datacentre addresses and the probe can neither confirm nor refute the path. Rests on the site configuration, which is an accepted source on its own",
+        "source": "predictions/api/live_props.php $AFFILIATE_CONFIG['fanatics']['link']",
+        "type": "site_configuration"
+      }
+    },
+    "fanduel": {
+      "display_name": "FanDuel",
+      "url": "https://sportsbook.fanduel.com/basketball/nba",
+      "verification": {
+        "observed": "HTTP 200, and the document returned is the sportsbook's own NBA page",
+        "source": "predictions/api/live_props.php $AFFILIATE_CONFIG['fanduel']['link']",
+        "type": "site_configuration_and_fetch"
+      }
+    }
+  },
+  "link_policy": {
+    "note": "How a destination recorded here may be rendered. Stated in the data rather than only in code, because the whole point of the file is that these are not paid links and a future renderer must not be able to read it as though they were.",
+    "rel": "nofollow noopener",
+    "rel_must_not_contain": "sponsored",
+    "may_use_affiliate_redirect": false,
+    "may_claim_affiliate": false,
+    "may_append_tracking_parameters": false
+  }
+}

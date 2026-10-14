@@ -18,6 +18,23 @@ destination mid-publication, or one serving a candidate, produces a refusal
 rather than a page, because a page is a claim about what the model says and a
 half-written release cannot support one.
 
+TWO KINDS OF OUTBOUND LINK
+--------------------------
+
+A card's button is one of two different relationships and says which. An
+affiliate selection goes through the site's own redirect and is labelled "BET
+AT", carries ``rel="sponsored"`` and is disclosed as paid. A fallback
+selection -- a book nobody is paid by, reached only when no affiliate offers
+the wager -- goes straight to that sportsbook's own page, is labelled "VIEW
+AT", carries no ``sponsored`` token, and says on the card that WizardOfOdds
+earns nothing from it. The two destinations come from two separate files for
+that reason; see :mod:`wizardofodds_fallback_destinations`.
+
+Whether a book can be linked is asked *after* the selection is made and can
+never change it. A sportsbook posting the best available price is shown at
+that price whether or not a destination for it is known; not knowing one costs
+the reader a button, not a better number.
+
 WHAT IT WILL NOT PUT ON A PAGE
 ------------------------------
 
@@ -62,6 +79,7 @@ if str(PROJECT_ROOT / "ops") not in sys.path:
 
 import publish_incumbent_to_wizardofodds as publisher  # noqa: E402
 import wizardofodds_affiliate_routing as routing  # noqa: E402
+import wizardofodds_fallback_destinations as fallback_destinations  # noqa: E402
 
 #: What the page writes, beside each other, in the canary directory.
 PAGE_NAME = "index.html"
@@ -170,10 +188,20 @@ AFFILIATE_DISCLOSURE = (
     "other book at the same wager, so a featured price is not necessarily the "
     "best price available anywhere. Where a card says Best Available Price, no "
     "affiliate book offered that wager and the price shown is the best across "
-    "every sportsbook in the published data. Model numbers are never changed "
-    "by this routing. Odds move; check the sportsbook before betting. 21+ "
-    "where applicable, and nothing here is a guarantee of profit."
+    "every sportsbook in the published data; a link on one of those cards goes "
+    "straight to that sportsbook's own page, is not a paid placement, and "
+    "earns WizardOfOdds nothing. Whether a sportsbook can be linked never "
+    "affects which one is selected. Model numbers are never changed by this "
+    "routing. Odds move; check the sportsbook before betting. 21+ where "
+    "applicable, and nothing here is a guarantee of profit."
 )
+
+#: What a direct, unpaid link says on it. Deliberately not "BET AT", which is
+#: what an affiliate call to action says: the two are different relationships
+#: and a reader should be able to see which one they are looking at.
+DIRECT_CTA_VERB = "VIEW AT"
+
+AFFILIATE_CTA_VERB = "BET AT"
 
 
 class PageRefused(RuntimeError):
@@ -395,6 +423,12 @@ class PageRow:
     row: Mapping[str, Any] = field(repr=False)
     quotes: tuple[Mapping[str, Any], ...] = field(default=(), repr=False)
 
+    #: Where the selected sportsbook can be reached when it is not an
+    #: affiliate and the site has an established destination for it. ``None``
+    #: whenever the selection is an affiliate -- those go through the redirect
+    #: -- and whenever no destination is proven for the book.
+    direct_url: str | None = None
+
     @property
     def side(self) -> str:
         return self.wager.side
@@ -458,7 +492,10 @@ def _truthy(value: Any) -> bool:
 
 
 def page_rows(
-    publication: Publication, *, registry: routing.AffiliateRegistry
+    publication: Publication,
+    *,
+    registry: routing.AffiliateRegistry,
+    fallback: fallback_destinations.FallbackDestinations | None = None,
 ) -> tuple[PageRow, ...]:
     """One card per exact wager, routed, strongest model edge first.
 
@@ -513,6 +550,7 @@ def page_rows(
                 routed=routed,
                 row=_quoting_row(ordered, routed=routed),
                 quotes=ordered,
+                direct_url=_direct_url(routed, fallback=fallback),
             )
         )
 
@@ -526,6 +564,37 @@ def page_rows(
             ),
         )
     )
+
+
+def _direct_url(
+    routed: routing.Routed,
+    *,
+    fallback: fallback_destinations.FallbackDestinations | None,
+) -> str | None:
+    """A direct destination for a selection that is not a referral.
+
+    Deliberately takes the routing result rather than the offer universe, and
+    is called after :func:`wizardofodds_affiliate_routing.route` has returned.
+    There is no argument here that could express a preference, so knowing a URL
+    for a sportsbook cannot make that sportsbook win: the best available price
+    is selected first and the question of whether it can be linked is asked
+    second.
+
+    An affiliate selection is excluded outright rather than merely expected to
+    be absent from the fallback registry. An affiliate click goes through the
+    site's redirect, which is the site's own convention, and a direct link for
+    a book that pays commission would be an unattributed referral.
+    """
+    if fallback is None or routed.offer is None:
+        return None
+
+    if routed.tier != routing.TIER_FALLBACK or routed.is_affiliate:
+        return None
+
+    if routed.destination is not None:
+        return None
+
+    return fallback.url_for(routed.offer.vendor)
 
 
 def _agree_on_the_model(
@@ -728,6 +797,13 @@ h1{margin:0 0 6px;font-size:1.5rem;letter-spacing:-.02em}
 }
 .cta:active{transform:translateY(1px)}
 .cta .amt{font-variant-numeric:tabular-nums}
+/* A direct link to a book nobody is paid by. Readable and tappable, and
+   visually not the paid button: same size, different colour, "VIEW AT". */
+.cta.direct{
+  background:var(--panel-2);color:var(--ink);
+  border:1px solid #27455c;box-shadow:inset 0 0 0 1px rgba(56,189,248,.10);
+}
+.unpaid{margin:8px 0 0;color:var(--ink-faint);font-size:.7rem}
 .no-cta{
   margin:11px 0 0;padding:13px 14px;border-radius:12px;
   border:1px dashed var(--line);background:var(--panel-2);
@@ -883,18 +959,29 @@ def _cta(page_row: PageRow) -> str:
 
     name = routed.display_name or routed.offer.vendor
 
-    if routed.destination is None:
+    if routed.destination is not None:
         return (
-            f'<p class="no-cta">Shown at <strong>{escape(name)}</strong> '
-            f"{escape(price)}. WizardOfOdds has no affiliate link for this "
-            "sportsbook, so this is a price, not a referral.</p>"
+            f'<a class="cta" href="{escape(routed.destination)}" '
+            'target="_blank" rel="sponsored nofollow noopener">'
+            f"<span>{AFFILIATE_CTA_VERB} {escape(name.upper())}</span>"
+            f'<span class="amt">{escape(price)}</span></a>'
+        )
+
+    if page_row.direct_url is not None:
+        return (
+            f'<a class="cta direct" href="{escape(page_row.direct_url)}" '
+            f'target="_blank" rel="{fallback_destinations.REQUIRED_REL}">'
+            f"<span>{DIRECT_CTA_VERB} {escape(name.upper())}</span>"
+            f'<span class="amt">{escape(price)}</span></a>'
+            '<p class="unpaid">Direct link to the sportsbook\'s own page. '
+            "Not a paid placement: this is a price, not a referral, and "
+            "WizardOfOdds earns nothing if you use it.</p>"
         )
 
     return (
-        f'<a class="cta" href="{escape(routed.destination)}" '
-        'target="_blank" rel="sponsored nofollow noopener">'
-        f"<span>BET AT {escape(name.upper())}</span>"
-        f'<span class="amt">{escape(price)}</span></a>'
+        f'<p class="no-cta">Shown at <strong>{escape(name)}</strong> '
+        f"{escape(price)}. WizardOfOdds has no established link for this "
+        "sportsbook, so this is a price, not a referral.</p>"
     )
 
 
@@ -1140,6 +1227,7 @@ def page_manifest(
     rows: tuple[PageRow, ...],
     *,
     registry: routing.AffiliateRegistry,
+    fallback: fallback_destinations.FallbackDestinations,
     page_sha256: str,
 ) -> dict[str, Any]:
     """What this build was, in a form a check can read rather than parse HTML."""
@@ -1175,7 +1263,12 @@ def page_manifest(
                 )
             ],
         },
-        "contract_version": 2,
+        "contract_version": 3,
+        "fallback_destinations": {
+            "linkable_books": dict(fallback.linkable_books()),
+            "rel": fallback_destinations.REQUIRED_REL,
+            "source": Path(fallback.source).name if fallback.source else "",
+        },
         "mode": publication.mode,
         "page_name": PAGE_NAME,
         "page_sha256": page_sha256,
@@ -1196,6 +1289,9 @@ def page_manifest(
                 1 for row in rows if row.routed.has_affiliate_destination
             ),
             "by_tier": by_tier,
+            "direct_cta_count": sum(
+                1 for row in rows if row.direct_url is not None
+            ),
             "prediction_count": len(rows),
             "published_row_count": len(publication.rows),
         },
@@ -1203,6 +1299,7 @@ def page_manifest(
             {
                 "best_overall": row.routed.best_overall,
                 "destination": row.routed.destination,
+                "direct_destination": row.direct_url,
                 "display_name": row.routed.display_name,
                 "offers_considered": len(row.routed.considered),
                 "selected_odds": (
@@ -1230,15 +1327,26 @@ def page_manifest(
 
 
 def build_page(
-    transport: Any, *, registry: routing.AffiliateRegistry
+    transport: Any,
+    *,
+    registry: routing.AffiliateRegistry,
+    fallback: fallback_destinations.FallbackDestinations | None = None,
 ) -> dict[str, Any]:
     """Read one publication and render the page and its manifest.
 
     No clock is read, so the same release renders the same bytes every time.
+
+    ``fallback`` defaults to the committed destination file, so an ordinary
+    build links the books the site has established destinations for. A caller
+    passing one explicitly gets exactly that one, which is how a test states
+    which books are linkable without editing committed configuration.
     """
+    if fallback is None:
+        fallback = fallback_destinations.FallbackDestinations.load()
+
     publication = load_publication(transport)
 
-    rows = page_rows(publication, registry=registry)
+    rows = page_rows(publication, registry=registry, fallback=fallback)
 
     html = render(publication, rows, registry=registry)
 
@@ -1248,6 +1356,7 @@ def build_page(
         publication,
         rows,
         registry=registry,
+        fallback=fallback,
         page_sha256=publisher.digest(page_bytes),
     )
 
@@ -1267,6 +1376,7 @@ def publish_page(
     source_transport: Any,
     page_transport: Any,
     registry: routing.AffiliateRegistry,
+    fallback: fallback_destinations.FallbackDestinations | None = None,
     prefix: str = "",
 ) -> dict[str, Any]:
     """Build the page from one publication and write it to the page canary.
@@ -1290,7 +1400,7 @@ def publish_page(
             "destination, so this page is not published"
         )
 
-    built = build_page(source_transport, registry=registry)
+    built = build_page(source_transport, registry=registry, fallback=fallback)
 
     relative = {
         name: f"{prefix}/{name}" if prefix else name for name in built["files"]
@@ -1410,6 +1520,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     registry = routing.AffiliateRegistry.load(project_root=root)
 
+    fallback = fallback_destinations.FallbackDestinations.load(project_root=root)
+
     source = _transport_for(
         name=arguments.source_destination_name,
         root=arguments.source_destination_root,
@@ -1427,8 +1539,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             source_transport=source,
             page_transport=page,
             registry=registry,
+            fallback=fallback,
         )
-    except (PageRefused, routing.RoutingRefused, publisher.PublishingRefused) as error:
+    except (
+        PageRefused,
+        routing.RoutingRefused,
+        fallback_destinations.DestinationRefused,
+        publisher.PublishingRefused,
+    ) as error:
         print(json.dumps({"outcome": "REFUSED", "reason": str(error)}, indent=2))
 
         return publisher.EXIT_REFUSED
