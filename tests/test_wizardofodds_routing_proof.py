@@ -47,7 +47,9 @@ def built(tmp_path_factory) -> dict:
 
     transport = proof.publish_locally(root, production_sha=PROOF_SHA)
 
-    return page.build_page(transport, registry=REGISTRY)
+    return page.build_page(
+        transport, registry=REGISTRY, presentation=page.ROUTING_PROOF_QA
+    )
 
 
 @pytest.fixture(scope="module")
@@ -56,10 +58,13 @@ def html(built) -> str:
 
 
 def card_for(html_text: str, player_name: str) -> str:
-    """The one card about a player, so a case is read in isolation."""
-    cards = re.findall(
-        r"<article class=\"card[^\"]*\" data-card.*?</article>", html_text, re.S
-    )
+    """The one card about a player, so a case is read in isolation.
+
+    A card is one wager, one opinion, one price and one button. The page now
+    draws it as a table row, which changes where it is cut out of the document
+    and nothing about what it has to say.
+    """
+    cards = re.findall(r"<tr data-row.*?</tr>", html_text, re.S)
 
     matching = [card for card in cards if player_name in card]
 
@@ -117,7 +122,9 @@ def test_republishing_the_proof_slate_proves_the_same_thing(built, tmp_path):
     """
     transport = proof.publish_locally(tmp_path / "again", production_sha=PROOF_SHA)
 
-    again = page.build_page(transport, registry=REGISTRY)
+    again = page.build_page(
+        transport, registry=REGISTRY, presentation=page.ROUTING_PROOF_QA
+    )
 
     assert again["manifest"]["routed"] == built["manifest"]["routed"]
 
@@ -130,14 +137,14 @@ def test_republishing_the_proof_slate_proves_the_same_thing(built, tmp_path):
     second = again["files"][page.PAGE_NAME].decode("utf-8")
 
     def cards(text: str) -> list[str]:
-        return re.findall(
-            r"<article class=\"card[^\"]*\" data-card.*?</article>", text, re.S
-        )
+        return re.findall(r"<tr data-row.*?</tr>", text, re.S)
 
     assert cards(second) == cards(first)
 
     def without_provenance(text: str) -> str:
-        return re.sub(r'<dl class="prov">.*?</dl>', "", text, flags=re.S)
+        return re.sub(
+            r'<dl class="wf-(?:prov|facts)">.*?</dl>', "", text, flags=re.S
+        )
 
     assert without_provenance(second) == without_provenance(first)
 
@@ -241,9 +248,7 @@ def test_case_a_selects_an_affiliate_although_a_fallback_is_priced_better(
 
     card = card_for(html, "Routing Proof A")
 
-    assert ">BetOnline<" in card
-
-    assert "BET AT BETONLINE" in card
+    assert "BET AT BETONLINE -108" in card
 
     assert "+105" not in card
 
@@ -327,7 +332,7 @@ def test_case_a_is_one_card_about_one_exact_wager(built, html):
 
     assert "Points" in card
 
-    assert f'data-game="{proof.GAME_ID}"' in card
+    assert f'data-stable="{proof.SLATE_DATE}|{proof.GAME_ID}|' in card
 
 
 # ======================================================================
@@ -367,11 +372,11 @@ def test_case_b_selects_the_best_price_across_every_other_sportsbook(built, html
 
     assert "Best Available Price" in card
 
-    assert "this is a price, not a referral" in card
+    assert "Not a paid placement" in card
 
     assert "+101" in card
 
-    assert '<a class="cta"' not in card
+    assert '<a class="wf-bo-btn"' not in card
 
 
 # ======================================================================
@@ -400,11 +405,11 @@ def test_case_c_offers_nothing_and_renders_no_button(built, html):
 
     card = card_for(html, "Routing Proof C")
 
-    assert "No sportsbook offers this wager" in card
+    assert 'data-offer="no"' in card
 
-    assert "there is nothing to bet here" in card
+    assert "No sportsbook in the published data offers this wager" in card
 
-    assert '<a class="cta"' not in card
+    assert "<a " not in card
 
     assert "0 sportsbook offers matched this exact wager" in card
 
@@ -473,9 +478,7 @@ def test_case_d_shows_betanysports_under_the_brand_betanything(built, html):
 
     card = card_for(html, "Routing Proof D")
 
-    assert ">BetAnything<" in card
-
-    assert "BET AT BETANYTHING" in card
+    assert "BET AT BETANYTHING -110" in card
 
     assert routed.destination in card
 
@@ -499,7 +502,11 @@ def test_the_proof_page_has_no_secondary_tier_and_no_game_time_sort(html):
 
     sorts = re.search(r'<select id="f-sort">(.*?)</select>', html, re.S)
 
-    assert re.findall(r'value="([^"]+)"', sorts.group(1)) == ["edge", "ev"]
+    assert re.findall(r'value="([^"]+)"', sorts.group(1)) == [
+        "ev",
+        "win",
+        "player",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -526,7 +533,7 @@ def test_the_proof_page_routes_paid_clicks_only_through_the_redirect(html):
     carries a different class because it is a different relationship, and the
     assertion below is that no direct destination is a redirect URL.
     """
-    paid = set(re.findall(r'<a class="cta" href="([^"]+)"', html))
+    paid = set(re.findall(r'<a class="wf-bo-btn" href="([^"]+)"', html))
 
     assert paid == {
         REGISTRY.destination_for("betonlineag"),
@@ -538,7 +545,7 @@ def test_the_proof_page_routes_paid_clicks_only_through_the_redirect(html):
             "/tools/odds-scanner/predictions/api/go.php?book="
         )
 
-    direct = set(re.findall(r'<a class="cta direct" href="([^"]+)"', html))
+    direct = set(re.findall(r'<a class="wf-bo-btn direct" href="([^"]+)"', html))
 
     assert direct == {FALLBACK.url_for("draftkings")}
 

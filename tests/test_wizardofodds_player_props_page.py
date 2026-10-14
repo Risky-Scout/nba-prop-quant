@@ -167,7 +167,13 @@ def load_manifest(state: dict) -> dict:
 
 
 def cards_in(html: str) -> list[str]:
-    return re.findall(r"<article class=\"card[^\"]*\" data-card.*?</article>", html, re.S)
+    """One card per wager, where a card is now drawn as a table row.
+
+    A card is one wager, one opinion, one price and one button; the page draws
+    it densely instead of as a tile, which changes how it is cut out of the
+    document and nothing about how many there are.
+    """
+    return re.findall(r"<tr data-row.*?</tr>", html, re.S)
 
 
 def badges_in(html: str) -> list[str]:
@@ -177,7 +183,7 @@ def badges_in(html: str) -> list[str]:
     because the affiliate disclosure quotes the labels in order to explain
     them and a substring search would find those sentences too.
     """
-    return re.findall(r'<span class="tier [^"]*">([^<]*)</span>', html)
+    return re.findall(r'<span class="wf-tag claim">([^<]*)</span>', html)
 
 
 #: The fixture slate is one quote per wager, which is what makes a card count
@@ -256,13 +262,19 @@ def test_a_valid_current_publication_renders_every_published_row(published):
     assert sorted(built["files"]) == [page.PAGE_NAME, page.PAGE_MANIFEST_NAME]
 
 
-def test_the_strongest_model_edge_is_rendered_first(published):
-    """Default order, over the published edge and nothing derived from it."""
+def test_the_best_expected_value_is_rendered_first(published):
+    """Default order, over the published expected value and nothing derived.
+
+    Expected value rather than edge because expected value is the one number
+    on the page that answers the reader's question -- what this wager is worth
+    at the price actually shown next to it -- and because edge is no longer
+    rendered at all.
+    """
     built = build(published)
 
-    edges = [float(row.edge) for row in built["rows"]]
+    values = [float(row.expected_value) for row in built["rows"]]
 
-    assert edges == sorted(edges, reverse=True)
+    assert values == sorted(values, reverse=True)
 
 
 # ======================================================================
@@ -353,9 +365,9 @@ def test_a_release_with_no_rows_renders_a_page_that_says_so(tmp_path):
 
     assert cards_in(html) == []
 
-    assert "nothing to show for this slate" in html
+    assert "there is nothing to bet on this slate" in html
 
-    assert "none were invented" in html
+    assert "Nothing was withheld and nothing was invented" in html
 
     assert built["manifest"]["rendered"]["prediction_count"] == 0
 
@@ -692,7 +704,7 @@ def test_the_affiliate_call_to_action_uses_the_verified_destination(
 
     assert expected == "/tools/odds-scanner/predictions/api/go.php?book=bovada"
 
-    links = re.findall(r'<a class="cta" href="([^"]+)"[^>]*>', html)
+    links = re.findall(r'<a class="wf-bo-btn" href="([^"]+)"[^>]*>', html)
 
     assert links == [expected]
 
@@ -755,7 +767,7 @@ def test_a_fallback_offer_is_not_presented_as_an_affiliate_offer(published):
 
     assert built["manifest"]["rendered"]["affiliate_cta_count"] == 0
 
-    assert re.findall(r'<a class="cta"', html) == []
+    assert re.findall(r'<a class="wf-bo-btn"', html) == []
 
     assert "sponsored nofollow noopener" not in html
 
@@ -765,7 +777,7 @@ def test_a_fallback_offer_is_not_presented_as_an_affiliate_offer(published):
 
     assert 'class="tier secondary"' not in html
 
-    assert "this is a price, not a referral" in html
+    assert "nothing there is a referral" in html
 
     assert set(badges_in(html)) == {"Best Available Price"}
 
@@ -815,9 +827,11 @@ def test_a_wager_no_book_offers_renders_no_button_at_all(tmp_path):
 
     assert built["manifest"]["rendered"]["by_tier"][routing.TIER_NONE] >= 1
 
-    assert "there is nothing to bet here" in html
+    assert "No sportsbook in the published data offers this wager" in html
 
-    assert re.findall(r'<a class="cta"', html) == []
+    assert "No current offer" in html
+
+    assert re.findall(r'<a class="wf-bo-btn"', html) == []
 
 
 def test_the_page_has_no_secondary_affiliate_tier(with_affiliates):
@@ -888,7 +902,7 @@ def test_a_book_the_integration_does_not_support_is_never_an_affiliate(
 
     assert f"BET AT {name.upper()}" not in html
 
-    assert re.findall(r'<a class="cta"', html) == []
+    assert re.findall(r'<a class="wf-bo-btn"', html) == []
 
 
 def test_betanysports_is_rendered_and_linked_as_betanything(tmp_path):
@@ -981,7 +995,7 @@ def test_the_rendered_percentages_round_the_published_values(published):
     for page_row in built["rows"]:
         assert page.percent(page_row.model_probability) in html
 
-        assert page.signed_percent(page_row.edge) in html
+        assert page.signed_percent(page_row.expected_value) in html
 
     assert page.percent(0.529480523251765) == "52.9%"
 
@@ -1176,19 +1190,19 @@ def test_the_page_is_built_for_a_phone_first(published):
 
     assert '<meta name="viewport" content="width=device-width,initial-scale=1">' in html
 
-    assert "@media (max-width:640px)" in html
+    assert "@media (max-width:720px)" in html
 
-    narrow = html.split("@media (max-width:640px)")[1]
+    narrow = html.split("@media (max-width:720px)")[1]
 
-    assert "grid-template-columns:1fr" in narrow
+    assert ".wf-table thead{display:none}" in narrow
 
-    assert "min-height:56px" in narrow
+    assert "grid-template-columns:repeat(2,minmax(0,1fr))" in narrow
+
+    assert "min-height:44px" in narrow
+
+    assert "overflow-x:visible" in narrow
 
     assert "font-size:16px" in html
-
-    assert "min-height:52px" in html
-
-    assert "minmax(320px,1fr)" in html
 
     assert "-webkit-text-size-adjust:100%" in html
 
@@ -1220,7 +1234,7 @@ def test_the_page_needs_no_network_and_no_dependency(published):
 
     hrefs = set(re.findall(r'href="([^"]+)"', html))
 
-    cta_hrefs = set(re.findall(r'<a class="cta[^"]*" href="([^"]+)"', html))
+    cta_hrefs = set(re.findall(r'<a class="wf-bo-btn[^"]*" href="([^"]+)"', html))
 
     assert hrefs == cta_hrefs
 
@@ -1228,27 +1242,38 @@ def test_the_page_needs_no_network_and_no_dependency(published):
 
 
 def test_the_controls_the_page_requires_are_all_present(published):
-    """Player search, three filters, and the two sorts the feed supports."""
+    """Player search, two filters, and the three sorts the feed supports.
+
+    The game filter is gone rather than relabelled: its only possible labels
+    were internal game identifiers, and a filter whose options are integers a
+    reader has never seen is not a filter. ``Featured book`` is named for what
+    it actually does -- it filters on the one sportsbook each prediction
+    shows, not on every sportsbook quoting the wager.
+    """
     html = html_of(published)
 
     for element in (
         'id="f-search"',
-        'id="f-game"',
         'id="f-prop"',
         'id="f-book"',
         'id="f-sort"',
     ):
         assert element in html, element
 
+    assert 'id="f-game"' not in html
+
+    assert "Featured book" in html
+
     for option in (
-        'value="edge"',
         'value="ev"',
+        'value="win"',
+        'value="player"',
     ):
         assert option in html, option
 
-    assert "Model edge (strongest first)" in html
-
     assert "Expected value (highest first)" in html
+
+    assert "Win probability (highest first)" in html
 
 
 def test_there_is_no_game_time_sort_because_there_are_no_tip_off_times(published):
@@ -1272,15 +1297,19 @@ def test_there_is_no_game_time_sort_because_there_are_no_tip_off_times(published
 
     assert sorts is not None
 
-    assert re.findall(r'value="([^"]+)"', sorts.group(1)) == ["edge", "ev"]
+    assert re.findall(r'value="([^"]+)"', sorts.group(1)) == [
+        "ev",
+        "win",
+        "player",
+    ]
 
     assert "data-order=" not in html
 
     assert "mode === 'game'" not in html
 
-    assert "Tip-off times are not part of the published feed" in html
+    assert "Tip-off times are not in the published release" in html
 
-    assert "there is no game-time ordering" in html
+    assert "there is no ordering by start time" in html
 
     source = (PROJECT / "ops" / "wizardofodds_player_props_page.py").read_text(
         encoding="utf-8"
@@ -1295,7 +1324,7 @@ def test_every_card_carries_what_the_filters_and_sorts_read(published):
     """Filtering is a DOM operation over attributes already in the HTML.
 
     Which is what makes "filters do not hide the CTA" structural: the script
-    toggles whole cards, and a card's call to action is inside it.
+    toggles whole rows, and a row's call to action is inside it.
     """
     built = build(published)
 
@@ -1307,20 +1336,21 @@ def test_every_card_carries_what_the_filters_and_sorts_read(published):
 
     for card in cards:
         for attribute in (
-            "data-game=",
+            "data-offer=",
             "data-prop=",
             "data-book=",
-            "data-edge=",
             "data-ev=",
+            "data-win=",
+            "data-sortname=",
             "data-stable=",
             "data-tier=",
             "data-search=",
         ):
             assert attribute in card, attribute
 
-        assert 'class="offer"' in card
+        assert 'class="c-book"' in card
 
-    assert "card.hidden = !ok" in html
+    assert "row.style.display = ok ? '' : 'none'" in html
 
 
 def test_the_affiliate_disclosure_is_rendered(published):
@@ -1760,7 +1790,7 @@ def test_the_page_manifest_records_what_a_check_needs(with_affiliates):
 
     manifest = built["manifest"]
 
-    assert manifest["contract_version"] == 3
+    assert manifest["contract_version"] == 4
 
     assert manifest["mode"] == publisher.MODE_CANARY
 
