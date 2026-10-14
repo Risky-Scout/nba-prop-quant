@@ -115,47 +115,43 @@ def build(
 
 
 def one_card(built: dict) -> tuple[Any, str]:
-    """The single card a one-wager slate renders, and its markup."""
+    """The single prediction a one-wager slate renders, and its markup.
+
+    Still called a card because that is what it is -- one wager, one opinion,
+    one price, one button -- even though the page now draws it as a table row.
+    """
     html = built["files"][page.PAGE_NAME].decode("utf-8")
 
-    cards = re.findall(
-        r"<article class=\"card[^\"]*\" data-card.*?</article>", html, re.S
-    )
+    rows = re.findall(r"<tr data-row.*?</tr>", html, re.S)
 
-    assert len(cards) == 1, len(cards)
+    assert len(rows) == 1, len(rows)
 
     assert len(built["rows"]) == 1
 
-    return built["rows"][0], cards[0]
+    return built["rows"][0], rows[0]
+
+
+def _link(markup: str, *, klass: str) -> tuple[str, str, str]:
+    """(href, rel, label) of one call to action, or empty strings."""
+    found = re.search(
+        rf'<a class="{klass}" href="([^"]+)" target="_blank" '
+        r'rel="([^"]+)">([^<]+)</a>',
+        markup,
+    )
+
+    return (
+        (found.group(1), found.group(2), found.group(3))
+        if found
+        else ("", "", "")
+    )
 
 
 def direct_link(markup: str) -> tuple[str, str, str]:
-    """(href, rel, label) of a direct call to action, or empty strings."""
-    found = re.search(
-        r'<a class="cta direct" href="([^"]+)" target="_blank" '
-        r'rel="([^"]+)"><span>([^<]+)</span><span class="amt">([^<]+)</span>',
-        markup,
-    )
-
-    return (
-        (found.group(1), found.group(2), f"{found.group(3)} {found.group(4)}")
-        if found
-        else ("", "", "")
-    )
+    return _link(markup, klass="wf-bo-btn direct")
 
 
 def affiliate_link(markup: str) -> tuple[str, str, str]:
-    found = re.search(
-        r'<a class="cta" href="([^"]+)" target="_blank" '
-        r'rel="([^"]+)"><span>([^<]+)</span><span class="amt">([^<]+)</span>',
-        markup,
-    )
-
-    return (
-        (found.group(1), found.group(2), f"{found.group(3)} {found.group(4)}")
-        if found
-        else ("", "", "")
-    )
+    return _link(markup, klass="wf-bo-btn")
 
 
 # ======================================================================
@@ -273,15 +269,17 @@ def test_a_fallback_book_with_no_destination_gets_no_invented_link(
 
     assert direct_link(card) == ("", "", "")
 
-    assert '<a class="cta' not in card
+    assert "<a " not in card
 
-    assert "no established link for this sportsbook" in card
-
-    assert "this is a price, not a referral" in card
+    assert page.UNLINKED_TAG in card
 
     assert built["manifest"]["rendered"]["direct_cta_count"] == 0
 
     html = built["files"][page.PAGE_NAME].decode("utf-8")
+
+    assert "no established link for" in html
+
+    assert "nothing there is a referral" in html
 
     assert "https://" not in html, "no destination was invented for this book"
 
@@ -378,7 +376,7 @@ def test_a_direct_link_never_uses_the_affiliate_redirect(tmp_path):
 
     assert row.direct_url.startswith("https://sportsbook.draftkings.com")
 
-    links = re.findall(r'<a class="cta[^"]*" href="([^"]+)"', card)
+    links = re.findall(r'<a class="wf-bo-btn[^"]*" href="([^"]+)"', card)
 
     assert links == [row.direct_url]
 
@@ -421,7 +419,9 @@ def test_a_direct_link_makes_no_affiliate_claim(tmp_path):
 
     assert "sponsored" not in card
 
-    assert 'class="card aff"' not in card
+    assert page.AFFILIATE_CTA_VERB not in card
+
+    assert "Paid link" not in card
 
     assert row.routed.is_affiliate is False
 
@@ -434,8 +434,6 @@ def test_a_direct_link_makes_no_affiliate_claim(tmp_path):
     assert "Not a paid placement" in card
 
     assert "WizardOfOdds earns nothing if you use it" in card
-
-    assert "this is a price, not a referral" in card
 
 
 # ======================================================================
@@ -617,9 +615,10 @@ def test_no_published_number_moves_when_a_link_is_added(tmp_path, vendors):
 def test_the_rendered_page_differs_only_by_the_link(tmp_path):
     """The whole of the change, as a diff of two documents.
 
-    All the fallback registry can do to a card is replace the paragraph saying
-    there is nowhere to go with a button and the sentence under it. Asserted by
-    cutting both of those out of both documents and requiring the remainder to
+    All the fallback registry can do to a row is replace the book's name and
+    the words saying there is nowhere to go with a button and the sentence
+    under it, and take away the note that explains the former. Asserted by
+    cutting all of those out of both documents and requiring the remainder to
     be identical, so anything else the registry had reached would show up here.
     """
     state = publish(tmp_path, (("draftkings", 101),))
@@ -632,19 +631,32 @@ def test_the_rendered_page_differs_only_by_the_link(tmp_path):
 
     assert linked != unlinked
 
-    assert '<a class="cta direct"' in linked
+    assert '<a class="wf-bo-btn direct"' in linked
 
-    assert '<p class="no-cta">' in unlinked
+    assert page.UNLINKED_TAG in unlinked
+
+    assert page.UNLINKED_NOTE in unlinked
 
     def without_the_call_to_action(html: str) -> str:
         html = re.sub(
-            r'<a class="cta direct".*?</a><p class="unpaid">.*?</p>',
+            r'<a class="wf-bo-btn direct".*?</a>'
+            r'<span class="wf-bo-note">.*?</span>',
             "",
             html,
             flags=re.S,
         )
 
-        return re.sub(r'<p class="no-cta">.*?</p>', "", html, flags=re.S)
+        html = re.sub(
+            r'<span class="wf-bo-book">.*?</span>'
+            rf'<span class="wf-tag">{page.UNLINKED_TAG}</span>',
+            "",
+            html,
+            flags=re.S,
+        )
+
+        return html.replace(
+            f'<p class="wf-disc">{page.UNLINKED_NOTE}</p>', ""
+        )
 
     assert without_the_call_to_action(linked) == without_the_call_to_action(
         unlinked
@@ -732,7 +744,11 @@ def test_the_game_time_sort_is_still_absent(tmp_path):
 
     sorts = re.search(r'<select id="f-sort">(.*?)</select>', html, re.S)
 
-    assert re.findall(r'value="([^"]+)"', sorts.group(1)) == ["edge", "ev"]
+    assert re.findall(r'value="([^"]+)"', sorts.group(1)) == [
+        "ev",
+        "win",
+        "player",
+    ]
 
 
 # ======================================================================

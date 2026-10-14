@@ -333,51 +333,39 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: routing-proof module, is a file that branch introduced and is recorded as
 #: owned below, so touching any of them again requires declaring it again.
 #:
-#: This branch declares four paths: two owned files it edits, and two new files
-#: holding the direct destinations a non-affiliate selection can be linked to.
+#: The fallback-destination branch's four entries were retired in turn when
+#: they landed. All four are owned below -- two it introduced and two it
+#: edited -- so touching any of them again requires declaring it again.
+#:
+#: This branch declares two paths, both owned, and both presentation only: the
+#: page renderer and the one line of the routing-proof script that tells the
+#: renderer which audience it is drawing for.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
-        "ops/wizardofodds_affiliates.json": (
-            "corrects one note that this branch makes untrue. It said books "
-            "recorded as non-affiliates could never be handed a destination, "
-            "which was a statement about affiliate destinations and now reads "
-            "as a statement about all of them. No book, tier, identifier, "
-            "redirect key or tie priority changes: the affiliate contract is "
-            "byte-for-byte the contract that landed, and this is a comment on "
-            "it."
-        ),
-        "ops/wizardofodds_fallback_destinations.json": (
-            "new. Direct public destinations for seven sportsbooks "
-            "WizardOfOdds is not paid by, taken from the NBA live-props "
-            "page's own link configuration -- specifically the entries of it "
-            "that carry no tracking parameter, which is what distinguishes a "
-            "direct link from a referral. The three entries of that "
-            "configuration that do carry one are primary affiliates and are "
-            "deliberately not reproduced: those clicks go through the site's "
-            "redirect. Holds no tracking parameter, affiliate id, campaign id "
-            "or credential, and declares in data that nothing in it may be "
-            "rendered as paid."
-        ),
-        "ops/wizardofodds_fallback_destinations.py": (
-            "new. A lookup, consulted after the routing rule has already "
-            "selected a sportsbook, that answers whether that sportsbook has "
-            "an established destination. It takes no offer, no price and no "
-            "universe, so it has no way to express a preference and cannot "
-            "move a selection: a book with the best available price is "
-            "selected and shown whether or not a URL for it is known. It "
-            "reads no model number, publishes nothing, and is reachable from "
-            "no production entry point other than the page builder."
-        ),
         "ops/wizardofodds_player_props_page.py": (
-            "renders the second kind of outbound link. A selection that is "
-            "not an affiliate now gets a button to the sportsbook's own page, "
-            "labelled VIEW AT rather than BET AT, carrying no sponsored rel, "
-            "and saying on the card that WizardOfOdds earns nothing from it. "
-            "The affiliate path is untouched and byte-identical. Whether a "
-            "book can be linked is asked after the routing result exists, so "
-            "it cannot reach the selection. Still a renderer: it copies every "
-            "number out of the publication and computes no probability, fair "
-            "price, edge or expected value."
+            "presentation only. The same publication, the same routing result "
+            "and the same numbers, drawn as the site's own light, dense "
+            "predictions table instead of a dark card dashboard: a bettor's "
+            "ordering of the columns, a compact three-fact header in place of "
+            "the provenance strip, one sentence of commission disclosure with "
+            "the full text one disclosure away, wagers nobody prices moved "
+            "into their own non-actionable section, and a filter count that "
+            "can no longer disagree with the rows on screen. Still a "
+            "renderer: it selects no sportsbook, computes no probability, "
+            "fair price, edge or expected value, and asks whether a book can "
+            "be linked only after the routing result exists. The two outbound "
+            "link classes are byte-identical in destination, rel and verb to "
+            "the ones that landed. Two columns the previous page showed -- "
+            "market probability and edge -- are no longer rendered because "
+            "neither is unambiguous beside a single displayed price; both "
+            "fields remain published and unmodified."
+        ),
+        "ops/wizardofodds_routing_proof.py": (
+            "one line. The QA slate now names its audience when it asks for a "
+            "page, so the routing rule's own wording and the TEST DATA banner "
+            "are rendered for the proof page and cannot reach the consumer "
+            "page. The slate, the four cases, the quotes, the prices, the "
+            "publication path and the fixture arithmetic are unchanged."
         ),
     }
 )

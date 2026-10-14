@@ -518,6 +518,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             source_transport=source,
             page_transport=destination,
             registry=registry,
+            presentation=page.ROUTING_PROOF_QA,
             prefix=PROOF_PREFIX,
         )
     except (

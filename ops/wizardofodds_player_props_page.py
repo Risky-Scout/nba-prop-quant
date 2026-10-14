@@ -18,6 +18,33 @@ destination mid-publication, or one serving a candidate, produces a refusal
 rather than a page, because a page is a claim about what the model says and a
 half-written release cannot support one.
 
+WHAT A BETTOR SEES
+------------------
+
+A dense light table in the site's own predictions styling, one row per wager:
+player, prop, the pick, the model's win probability, the model's fair price,
+the price the featured sportsbook is posting, the expected value at that
+price, and a button. That is the whole hierarchy, and everything that is not
+one of those things has been moved below it or into one collapsed section --
+the full affiliate disclosure, how a sportsbook comes to be the featured one,
+and the release's complete provenance.
+
+Two published columns are deliberately not in that table. The published
+market probability is the devigged pair implied by a book's two prices, which
+is *not* the implied probability of the single price shown beside it; a column
+labelled "Market Probability" next to a price invites a comparison that does
+not mean what it looks like. Edge is that same quantity subtracted from the
+model's, so it inherits the ambiguity. Both are still published, still in
+every row this page reads, and still in the page manifest; they are simply
+not offered to a reader as the headline. Expected value is computed at the
+price in its own row, so it says the same thing unambiguously.
+
+Columns whose fields the release does not carry are absent rather than
+invented. There is no projection field, so there is no projection column.
+There are no team names -- only ``team_id`` and ``opponent_id`` -- so there is
+no matchup column, because two integers are not a matchup. Fair odds *are*
+published, so they are shown.
+
 TWO KINDS OF OUTBOUND LINK
 --------------------------
 
@@ -70,6 +97,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from html import escape
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -85,6 +113,13 @@ import wizardofodds_fallback_destinations as fallback_destinations  # noqa: E402
 PAGE_NAME = "index.html"
 
 PAGE_MANIFEST_NAME = "page_manifest.json"
+
+#: Where the consumer preview is published, relative to the page canary's own
+#: root. A directory of its own so that previewing the page cannot write over
+#: whatever is already published beside it, and so that the live index -- one
+#: directory further up and not addressable from here at all -- stays a
+#: separate, reviewed step.
+PREVIEW_PREFIX = "page-preview"
 
 #: The published document's contract this renderer was written against.
 SUPPORTED_ROWS_CONTRACT = 1
@@ -170,6 +205,37 @@ SIDE_EXPECTED_VALUE: Mapping[str, str] = {
     routing.SIDE_UNDER: "calibrated_ev_under",
 }
 
+#: Side -> the published fair price for that side. The model's own view of
+#: what the wager is worth, published, and independent of anybody's price: it
+#: is the number a reader compares a sportsbook's odds against. Published, so
+#: shown; nothing here derives it.
+SIDE_FAIR_ODDS: Mapping[str, str] = {
+    routing.SIDE_OVER: "calibrated_fair_over_american",
+    routing.SIDE_UNDER: "calibrated_fair_under_american",
+}
+
+#: The names a published projection would arrive under. None of them is in
+#: the current contract, which is why the page has no projection column. The
+#: page looks and finds nothing rather than asserting the absence, so the
+#: column appears by itself the day the field is published, and in the
+#: meantime nothing here turns a probability into a projected number.
+PROJECTION_FIELDS: tuple[str, ...] = (
+    "model_projection",
+    "projected_value",
+    "model_mean",
+    "projection",
+)
+
+#: Where a human-readable matchup would come from. The contract carries
+#: ``team_id`` and ``opponent_id`` and no names at all, and two integers are
+#: not a matchup: rendering "Team 71 vs Team 72" tells a reader nothing and
+#: makes a finished page look like a fixture dump. So the column is omitted
+#: until names are published, and no schedule lookup is added here to
+#: manufacture them.
+MATCHUP_FIELD = "matchup"
+
+MATCHUP_NAME_FIELDS: tuple[str, str] = ("team_name", "opponent_name")
+
 #: How a selected offer may be described, by tier. A fallback selection is the
 #: best price in the whole universe by construction -- it is only reached when
 #: no affiliate offers the wager -- so it is the one case where "best available"
@@ -179,6 +245,70 @@ TIER_LABEL: Mapping[str, str] = {
     routing.TIER_FALLBACK: "Best Available Price",
     routing.TIER_NONE: "No sportsbook offers this wager",
 }
+
+#: The grid, in order: column key, header a reader sees, and whether the
+#: column is a number and therefore right-aligned.
+#:
+#: What is deliberately *not* here is a market-probability column and an edge
+#: column. Both are published and both stay published; neither is a sensible
+#: headline number for a bettor. The published market probability is the
+#: devigged pair implied by a book's two prices, which is not the implied
+#: probability of the single price shown beside it, and a column labelled
+#: "Market Probability" showing the first while a price shows the second
+#: invites exactly the wrong arithmetic. Edge is that same quantity
+#: subtracted from the model's, so it inherits the ambiguity. Win %, fair
+#: odds, the price and expected value say the same thing without it: expected
+#: value is computed at the price in the row beside it, so the one number that
+#: tells a reader whether to bet is the one that is unambiguous.
+COLUMNS: tuple[tuple[str, str, bool], ...] = (
+    ("player", "Player", False),
+    ("matchup", "Matchup", False),
+    ("prop", "Prop", False),
+    ("pick", "Pick", False),
+    ("projection", "Model Proj", True),
+    ("win", "Win %", True),
+    ("fair", "Fair Odds", True),
+    ("market", "Market Odds", True),
+    ("ev", "EV", True),
+    ("book", "Sportsbook", False),
+)
+
+#: Columns rendered only when the publication carries the field behind them.
+CONDITIONAL_COLUMNS: tuple[str, ...] = ("matchup", "projection", "fair")
+
+#: Columns a wager nobody prices cannot honestly fill. A price nobody is
+#: offering is not a price, and an expected value at a price that does not
+#: exist is not an expected value, so the section for those wagers does not
+#: have the columns rather than having them full of dashes.
+UNOFFERED_COLUMNS: tuple[str, ...] = ("market", "ev")
+
+COLUMN_LABEL: Mapping[str, str] = MappingProxyType(
+    {key: label for key, label, _ in COLUMNS}
+)
+
+COLUMN_NUMERIC: Mapping[str, bool] = MappingProxyType(
+    {key: numeric for key, _, numeric in COLUMNS}
+)
+
+#: What a row says when the featured sportsbook has no established
+#: destination. Two words on the row and one sentence under the table, rather
+#: than the sentence on every row: on a slate where no book is linkable the
+#: long version is the widest thing on the page and says the same thing ten
+#: times.
+UNLINKED_TAG = "Price only"
+
+UNLINKED_NOTE = (
+    "Rows marked “Price only” are sportsbooks WizardOfOdds has no established "
+    "link for. The price is what the release publishes; there is nothing to "
+    "click, and nothing there is a referral."
+)
+
+#: What the page says about commission where a reader will actually see it.
+#: The full disclosure is still on the page, one disclosure away; a wall of
+#: it above the predictions is a wall nobody reads.
+SHORT_DISCLOSURE = (
+    "WizardOfOdds may earn commission from certain sportsbook links."
+)
 
 AFFILIATE_DISCLOSURE = (
     "Affiliate disclosure: links to Bovada, BetOnline, BetUS and BetAnything "
@@ -202,6 +332,67 @@ AFFILIATE_DISCLOSURE = (
 DIRECT_CTA_VERB = "VIEW AT"
 
 AFFILIATE_CTA_VERB = "BET AT"
+
+
+@dataclass(frozen=True)
+class Presentation:
+    """Who a build of this page is for.
+
+    One renderer serves two readers who need different things said out loud.
+    A bettor wants the player, the pick, the price and a button, and is owed a
+    plain statement that the page is not live yet. Somebody checking the
+    sportsbook-selection rule wants that rule's own reasoning on every row,
+    and the slate they are looking at is constructed test data that must never
+    be mistaken for a betting opinion.
+
+    Keeping the difference in one object rather than in scattered flags is
+    what stops the QA vocabulary -- the rule's wording, the word proof, the
+    fixture's player names -- from reaching a page meant for bettors: a
+    consumer build is simply never handed it.
+    """
+
+    #: The headline of the banner at the top of the page.
+    banner: str
+
+    #: The sentence under the banner, explaining what the reader is looking at.
+    detail: str
+
+    #: Which of the site's note styles the banner uses.
+    tone: str
+
+    #: Whether each row carries the routing rule's own explanation of why that
+    #: sportsbook was selected. QA only: see the class docstring.
+    show_routing_reason: bool
+
+
+#: The consumer page, published to a canary path before activation. The bytes
+#: here are the bytes the live page will be built from, which is the whole
+#: point of previewing it rather than designing it twice.
+CONSUMER_PREVIEW = Presentation(
+    banner="CANARY PREVIEW — NOT YET LIVE",
+    detail=(
+        "This is the NBA player props page as it will be published. It is "
+        "served from a preview path, it is not linked from the site, and the "
+        "predictions below are the ones the current release carries."
+    ),
+    tone="warn",
+    show_routing_reason=False,
+)
+
+#: The routing QA page. The slate behind it is constructed so that every
+#: sportsbook-selection outcome is visible at once, which makes it useful
+#: evidence and makes it something nobody should ever bet.
+ROUTING_PROOF_QA = Presentation(
+    banner="TEST DATA — ROUTING PROOF — NOT LIVE BETTING PICKS",
+    detail=(
+        "Every prediction on this page is constructed test data, built so "
+        "that each sportsbook-selection outcome can be checked in public. "
+        "These are not model picks for a real slate and nothing here should "
+        "be bet."
+    ),
+    tone="err",
+    show_routing_reason=True,
+)
 
 
 class PageRefused(RuntimeError):
@@ -450,20 +641,55 @@ class PageRow:
         return self.row[SIDE_EXPECTED_VALUE[self.side]]
 
     @property
-    def matchup(self) -> str:
-        """Who is playing, from the ids the publication actually carries.
+    def fair_odds(self) -> Any:
+        """The model's own price for this side, as published, or ``None``.
 
-        Team names are not published, so they are not shown. ``is_home``
-        decides the direction, which is the one thing about the matchup the
-        published fields do settle.
+        ``None`` when the publication does not carry the field, which is the
+        only reason the column would be missing: no fair price is computed
+        here from anything.
         """
-        team = self.row.get("team_id")
+        return self.row.get(SIDE_FAIR_ODDS[self.side])
 
-        opponent = self.row.get("opponent_id")
+    @property
+    def projection(self) -> Any:
+        """The model's projected number, if the publication publishes one.
+
+        It does not, today. The page looks anyway, so the column appears of
+        its own accord when the field lands, and so that its absence is a fact
+        about the data rather than an opinion held in the renderer.
+        """
+        for name in PROJECTION_FIELDS:
+            value = self.row.get(name)
+
+            if value not in (None, ""):
+                return value
+
+        return None
+
+    @property
+    def matchup(self) -> str | None:
+        """Who is playing, in words, or ``None``.
+
+        The publication carries ``team_id`` and ``opponent_id`` and no names.
+        Two integers are not a matchup -- "Team 71 vs Team 72" tells a reader
+        nothing and makes a finished page look unfinished -- so this returns
+        nothing at all and the column disappears. ``is_home`` decides the
+        direction if names ever arrive, which is the one thing about the
+        matchup the published fields already settle.
+        """
+        stated = self.row.get(MATCHUP_FIELD)
+
+        if stated not in (None, ""):
+            return str(stated)
+
+        team, opponent = (self.row.get(name) for name in MATCHUP_NAME_FIELDS)
+
+        if team in (None, "") or opponent in (None, ""):
+            return None
 
         joiner = "vs" if _truthy(self.row.get("is_home")) else "@"
 
-        return f"Team {team} {joiner} Team {opponent}"
+        return f"{team} {joiner} {opponent}"
 
     @property
     def stable_order(self) -> tuple[str, str, str, str, str]:
@@ -513,10 +739,13 @@ def page_rows(
     book's number as the model's opinion would be a claim this page cannot
     support if they disagreed.
 
-    The default order is the strongest edge, because that is what somebody
-    opening the page is looking for. The sort is over published edge and
-    expected value and nothing derived from them: no ranking score was
-    invented here.
+    The default order is the highest expected value, because that is the
+    column the page shows and the one number that answers whether a wager is
+    worth taking: it is the model's probability measured against the price the
+    reader is actually being pointed at. Published edge breaks ties and the
+    wager's identifiers break those, so the order is total and a rebuild does
+    not reshuffle. The sort is over published edge and published expected
+    value and nothing derived from them: no ranking score was invented here.
     """
     grouped: dict[routing.Wager, list[Mapping[str, Any]]] = {}
 
@@ -558,8 +787,8 @@ def page_rows(
         sorted(
             built,
             key=lambda page_row: (
-                -_number(page_row.edge),
                 -_number(page_row.expected_value),
+                -_number(page_row.edge),
                 page_row.stable_order,
             ),
         )
@@ -681,8 +910,59 @@ def line_text(value: Any) -> str:
     return f"{number:g}"
 
 
+#: Props a bettor already has a word for. Anything not here is title-cased
+#: from the published name, which is right for "points" and "rebounds" and
+#: would be wrong for "threes": nobody shopping a prop calls it Threes.
+PROP_LABEL: Mapping[str, str] = MappingProxyType(
+    {
+        "points": "Points",
+        "rebounds": "Rebounds",
+        "assists": "Assists",
+        "threes": "3PM",
+        "three_pointers": "3PM",
+        "blocks": "Blocks",
+        "steals": "Steals",
+        "turnovers": "Turnovers",
+    }
+)
+
+
 def prop_label(prop_type: Any) -> str:
-    return str(prop_type or "").replace("_", " ").title()
+    key = str(prop_type or "").strip().lower()
+
+    return PROP_LABEL.get(key, key.replace("_", " ").title())
+
+
+def number_text(value: Any) -> str:
+    """A published number, printed as published rather than rounded away."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return "—"
+
+    return f"{number:g}"
+
+
+def _minute(value: Any) -> str:
+    """An ISO timestamp from the publication, to the minute, in UTC.
+
+    Reformatting, not clock-reading: the value is the publication's own
+    ``served_at``, so two builds of one release still produce the same bytes.
+    """
+    text = str(value or "").strip()
+
+    if not text:
+        return ""
+
+    try:
+        moment = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return text
+
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+
+    return moment.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
 
 def _json_for_html(payload: Any) -> str:
@@ -701,185 +981,291 @@ def _json_for_html(payload: Any) -> str:
     )
 
 
+#: The page's own stylesheet, in the site's light palette.
+#:
+#: The tokens, class names and rules are the ones the existing WizardOfOdds
+#: predictions module already uses -- ``--wf-*`` for the palette, ``wf-body``
+#: and ``wf`` for the page shell, ``wf-table`` for a data table, ``wf-bo-btn``
+#: for a sportsbook button -- so this page reads as part of the same site
+#: rather than as a second design that happens to live next door. It is
+#: inlined rather than linked: the publisher writes one directory containing
+#: one document, so a relative stylesheet reference would be a 404, and a page
+#: that cannot fetch its own stylesheet is a page that renders unstyled prices.
 STYLE = """
-:root{
-  --bg:#0b0f16;--panel:#131a26;--panel-2:#182130;--line:#243040;
-  --ink:#eaf0f8;--ink-dim:#93a3b8;--ink-faint:#64748b;
-  --good:#22c55e;--bad:#ef4444;--warn:#f59e0b;
-  --cta:#16a34a;--cta-hi:#22c55e;--cta-ink:#04140a;
-  --aff:#f59e0b;--aff2:#38bdf8;
-  --radius:14px;
+.wf-body{margin:0;background:#fff;-webkit-text-size-adjust:100%}
+.wf{
+  --wf-bg:#fff;--wf-bg2:#f6f7f8;--wf-bg3:#eef0f2;--wf-text:#23262b;
+  --wf-muted:#626973;--wf-border:#dfe2e6;--wf-line:#eceef1;
+  --wf-gold:#b8891a;--wf-gold-soft:#fbf4df;--wf-win:#1e7a3c;--wf-loss:#a8323e;
+  --wf-warn-bg:#fff6dd;--wf-warn:#6b4d00;--wf-err-bg:#fdecee;--wf-err:#8a1f2b;
+  color-scheme:light;color:var(--wf-text);background:var(--wf-bg);
+  font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  max-width:1180px;margin:0 auto;padding:12px 16px 24px;box-sizing:border-box;
 }
-*{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%}
-body{
-  margin:0;background:var(--bg);color:var(--ink);
-  font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+.wf *,.wf *::before,.wf *::after{box-sizing:border-box}
+/* An element asked to be hidden is hidden, whatever else sets a display on
+   it. Without this the mobile rules below would repaint filtered-out rows as
+   grids and the visible count would start describing a page nobody is
+   looking at. */
+.wf [hidden]{display:none!important}
+.wf a{color:#7a5a0c;text-underline-offset:2px}
+.wf a:hover{color:var(--wf-text)}
+.wf :focus-visible{outline:2px solid var(--wf-gold);outline-offset:2px}
+.wf-h1{font-size:22px;line-height:1.25;margin:6px 0 4px;letter-spacing:-.01em}
+.wf h2{font-size:17px;margin:0 0 8px;letter-spacing:-.005em}
+.wf-muted{color:var(--wf-muted)}
+.wf-small{font-size:12.5px}
+.wf-lead{margin:0 0 10px;color:var(--wf-muted);font-size:13px;max-width:62em}
+.wf .num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.wf-tag{
+  display:inline-block;font-size:10.5px;font-weight:600;padding:0 6px;
+  border:1px solid var(--wf-border);border-radius:3px;color:var(--wf-muted);
+  background:var(--wf-bg2);white-space:nowrap;
 }
-a{color:var(--aff2)}
-.wrap{max-width:1280px;margin:0 auto;padding:16px}
-header.top{padding:4px 0 14px}
-h1{margin:0 0 6px;font-size:1.5rem;letter-spacing:-.02em}
-.sub{color:var(--ink-dim);font-size:.9rem;margin:0}
-.notice{
-  margin:14px 0 0;padding:10px 12px;border:1px solid var(--line);
-  border-left:3px solid var(--warn);border-radius:8px;
-  background:var(--panel);color:var(--ink-dim);font-size:.82rem;
+.wf-tag.paid{color:#7a5a0c;border-color:#e4cf96;background:var(--wf-gold-soft)}
+/* banner */
+.wf-note{
+  padding:8px 12px;border-radius:6px;margin:0 0 10px;font-size:13px;
+  background:var(--wf-bg2);border:1px solid var(--wf-border);
 }
-.prov{
-  margin:14px 0 0;padding:12px;border:1px solid var(--line);border-radius:var(--radius);
-  background:var(--panel);display:grid;gap:10px;
-  grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+.wf-note.warn{background:var(--wf-warn-bg);color:var(--wf-warn);border-color:#efd999}
+.wf-note.err{background:var(--wf-err-bg);color:var(--wf-err);border-color:#f0c2c8}
+.wf-note b{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase}
+.wf-note span{display:block;margin-top:2px;font-size:12.5px}
+/* compact header provenance */
+.wf-prov{
+  display:flex;flex-wrap:wrap;gap:2px 16px;margin:0 0 12px;padding:0;
+  font-size:12px;color:var(--wf-muted);border-bottom:2px solid var(--wf-gold);
+  padding-bottom:8px;
 }
-.prov div{min-width:0}
-.prov dt{margin:0;color:var(--ink-faint);font-size:.68rem;text-transform:uppercase;letter-spacing:.06em}
-.prov dd{margin:2px 0 0;font-size:.8rem;word-break:break-all;font-variant-numeric:tabular-nums}
-.controls{
-  position:sticky;top:0;z-index:5;margin:16px 0 0;padding:12px;
-  border:1px solid var(--line);border-radius:var(--radius);
-  background:rgba(19,26,38,.96);backdrop-filter:blur(8px);
-  display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+.wf-prov div{display:flex;gap:5px}
+.wf-prov dt{font-weight:400}
+.wf-prov dd{margin:0;color:var(--wf-text);font-weight:600;font-variant-numeric:tabular-nums}
+/* controls: one row of four, widest where the text is longest. Explicit
+   tracks rather than auto-fit, because an auto-fit track is sized by the
+   narrowest control in the row and the sort option "Expected value (highest
+   first)" then renders clipped. */
+.wf-controls{
+  display:grid;gap:8px 10px;margin:0 0 8px;
+  grid-template-columns:
+    minmax(0,1.5fr) minmax(0,1fr) minmax(0,1.1fr) minmax(0,1.5fr);
 }
-.controls label{display:block;color:var(--ink-faint);font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
-.controls input,.controls select{
-  width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);
-  background:var(--panel-2);color:var(--ink);font-size:16px;
+.wf-controls > div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.wf-controls label{
+  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--wf-muted);
 }
-.controls .wide{grid-column:1/-1}
-.count{padding:12px 2px 0;color:var(--ink-dim);font-size:.82rem}
-.grid{
-  display:grid;gap:14px;padding:12px 0 36px;
-  grid-template-columns:repeat(auto-fill,minmax(320px,1fr));
+/* 16px, not the 13px the rest of the page is set in: below 16px iOS Safari
+   zooms the whole document when a field takes focus, and a bettor who taps
+   the search box should not have to pinch their way back to the table. */
+.wf-controls input,.wf-controls select{
+  font:inherit;font-size:16px;padding:7px 9px;border:1px solid #c9ced5;
+  border-radius:5px;background:#fff;color:var(--wf-text);min-height:40px;width:100%;
 }
-.card{
-  border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);
-  display:flex;flex-direction:column;overflow:hidden;
+.wf-count{margin:0 0 6px;font-size:12.5px;font-weight:600;color:var(--wf-muted)}
+.wf-disc{margin:0 0 8px;font-size:12px;color:var(--wf-muted)}
+/* table */
+.wf-tablewrap{
+  overflow-x:auto;border:1px solid var(--wf-border);border-radius:6px;
+  background:var(--wf-bg);
 }
-.card.aff{border-color:#3a3017;box-shadow:inset 0 0 0 1px rgba(245,158,11,.14)}
-.card-head{padding:12px 14px 10px;border-bottom:1px solid var(--line)}
-.who{font-weight:650;font-size:1.02rem;letter-spacing:-.01em}
-.where{color:var(--ink-faint);font-size:.76rem;margin-top:2px}
-.pick{
-  display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;
-  padding:12px 14px 0;
+.wf-table{border-collapse:collapse;width:100%;font-size:13px}
+.wf-table th,.wf-table td{padding:7px 9px;border-bottom:1px solid var(--wf-line);vertical-align:top}
+.wf-table thead th{
+  background:var(--wf-bg2);font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.04em;color:var(--wf-muted);text-align:left;white-space:nowrap;
+  border-bottom:1px solid var(--wf-border);
 }
-.pick .side{
-  font-weight:750;font-size:1.22rem;letter-spacing:-.02em;
-  padding:2px 9px;border-radius:8px;background:var(--panel-2);border:1px solid var(--line);
+.wf-table thead th.num{text-align:right}
+.wf-table tbody tr:last-child > *{border-bottom:0}
+.wf-table tbody tr:hover{background:#fafbfc}
+.wf-table tbody tr:nth-child(even){background:#fafafb}
+.wf-table tbody tr:nth-child(even):hover{background:#f6f8fa}
+.c-player{font-weight:600;white-space:nowrap}
+.c-prop{white-space:nowrap;color:var(--wf-muted)}
+.c-pick{font-weight:700;white-space:nowrap}
+.c-pick .over{color:var(--wf-win)}
+.c-pick .under{color:#34506e}
+.pos{color:var(--wf-win);font-weight:600}
+.neg{color:var(--wf-muted)}
+/* the sportsbook cell and its two kinds of button */
+.wf-bookpick{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;min-width:0}
+.wf-bo-book{font-weight:700;font-size:12px;letter-spacing:.02em;text-transform:uppercase}
+.wf .wf-bo-btn{
+  display:inline-block;padding:6px 12px;border-radius:5px;background:var(--wf-gold);
+  color:#fff!important;font-size:11.5px;font-weight:700;letter-spacing:.04em;
+  text-transform:uppercase;text-decoration:none;white-space:nowrap;line-height:1.3;
+  border:1px solid #9c7413;min-height:30px;
 }
-.pick .side.over{color:var(--good)}
-.pick .side.under{color:var(--aff2)}
-.pick .stat{color:var(--ink-dim);font-size:.92rem}
-.nums{
-  display:grid;grid-template-columns:repeat(2,1fr);gap:1px;
-  margin:12px 0 0;background:var(--line);
+.wf .wf-bo-btn:hover{background:#9c7413;color:#fff!important}
+/* A direct link to a sportsbook nobody is paid by: same shape and the same
+   tap target, deliberately not the gold of a paid placement, and "VIEW AT"
+   rather than "BET AT". */
+.wf .wf-bo-btn.direct{
+  background:var(--wf-bg);color:var(--wf-text)!important;border:1px solid var(--wf-text);
 }
-.nums div{background:var(--panel);padding:9px 14px}
-.nums dt{margin:0;color:var(--ink-faint);font-size:.66rem;text-transform:uppercase;letter-spacing:.06em}
-.nums dd{margin:2px 0 0;font-size:1rem;font-variant-numeric:tabular-nums}
-.pos{color:var(--good)}.neg{color:var(--bad)}
-.offer{padding:12px 14px 14px;margin-top:auto;border-top:1px solid var(--line)}
-.tier{
-  display:inline-block;font-size:.64rem;text-transform:uppercase;letter-spacing:.08em;
-  padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--ink-dim);
+.wf .wf-bo-btn.direct:hover{background:var(--wf-bg2);color:var(--wf-text)!important}
+/* The two long explanations in a sportsbook cell take their own line rather
+   than stretching the column: the numbers are what the table is for. */
+.wf-bo-note{flex:1 0 100%;font-size:11px;color:var(--wf-muted);white-space:normal}
+.wf-why{flex:1 0 100%;font-size:11px;color:var(--wf-muted);white-space:normal}
+/* sections below the table */
+.wf-pending{margin:16px 0 0}
+.wf-pending h2{margin:0 0 2px}
+.wf-empty{
+  padding:22px 14px;text-align:center;color:var(--wf-muted);font-size:13px;
+  border:1px solid var(--wf-border);border-top:0;border-radius:0 0 6px 6px;background:var(--wf-bg2);
 }
-.tier.primary{color:var(--cta-hi);border-color:#1d3b28;background:rgba(34,197,94,.08)}
-.book{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:9px 0 0}
-.book .name{font-weight:650}
-.book .odds{font-size:1.3rem;font-weight:750;font-variant-numeric:tabular-nums}
-.cta{
-  display:flex;align-items:center;justify-content:center;gap:10px;
-  margin:11px 0 0;padding:15px 16px;min-height:52px;
-  border-radius:12px;border:0;text-decoration:none;
-  background:linear-gradient(180deg,var(--cta-hi),var(--cta));
-  color:var(--cta-ink);font-weight:800;font-size:1.02rem;letter-spacing:.01em;
-  text-align:center;line-height:1.2;
+.wf-gloss{margin:16px 0 0;font-size:13px}
+.wf-gloss summary{cursor:pointer;font-weight:700}
+.wf-gloss h3{font-size:13px;margin:12px 0 4px}
+.wf-gloss p{margin:4px 0;color:var(--wf-muted);max-width:68em}
+.wf-gloss dt{font-weight:700;margin-top:6px;font-size:12.5px}
+.wf-gloss dd{margin:1px 0 0;color:var(--wf-muted);font-size:12.5px}
+.wf-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:6px 16px;margin:6px 0 0}
+.wf-facts dt{font-size:11px;color:var(--wf-muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin:0}
+.wf-facts dd{margin:0 0 4px;font-size:12px;color:var(--wf-text);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.wf-foot{
+  margin-top:18px;padding-top:10px;border-top:1px solid var(--wf-border);
+  font-size:12px;color:var(--wf-muted);
 }
-.cta:active{transform:translateY(1px)}
-.cta .amt{font-variant-numeric:tabular-nums}
-/* A direct link to a book nobody is paid by. Readable and tappable, and
-   visually not the paid button: same size, different colour, "VIEW AT". */
-.cta.direct{
-  background:var(--panel-2);color:var(--ink);
-  border:1px solid #27455c;box-shadow:inset 0 0 0 1px rgba(56,189,248,.10);
+.wf-foot p{margin:3px 0}
+@media (max-width:860px){
+  .wf-controls{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .wf-controls .wide,.wf-controls .sort{grid-column:1/-1}
 }
-.unpaid{margin:8px 0 0;color:var(--ink-faint);font-size:.7rem}
-.no-cta{
-  margin:11px 0 0;padding:13px 14px;border-radius:12px;
-  border:1px dashed var(--line);background:var(--panel-2);
-  color:var(--ink-dim);font-size:.82rem;text-align:center;
-}
-.why{margin:8px 0 0;color:var(--ink-faint);font-size:.7rem}
-.empty{
-  padding:34px 16px;text-align:center;color:var(--ink-dim);
-  border:1px dashed var(--line);border-radius:var(--radius);background:var(--panel);
-}
-footer.foot{padding:18px 0 40px;color:var(--ink-faint);font-size:.74rem;border-top:1px solid var(--line)}
-@media (max-width:640px){
-  .wrap{padding:12px}
-  h1{font-size:1.25rem}
-  .grid{grid-template-columns:1fr;gap:12px}
-  .controls{grid-template-columns:1fr 1fr;position:static}
-  .controls .wide{grid-column:1/-1}
-  .cta{min-height:56px;font-size:1.06rem}
+/* Below this width the table stops being a table: each prediction becomes a
+   compact labelled record, so nothing has to be scrolled sideways to read a
+   price or reach a button. */
+@media (max-width:720px){
+  .wf{padding:10px 12px 20px}
+  .wf-tablewrap{overflow-x:visible;border-radius:6px}
+  .wf-table{font-size:13.5px}
+  .wf-table thead{display:none}
+  .wf-table tbody tr{
+    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 12px;
+    padding:10px 12px;border-bottom:1px solid var(--wf-border);
+  }
+  .wf-table tbody tr[hidden]{display:none!important}
+  .wf-table tbody td{display:block;border:0;padding:0;white-space:normal}
+  .wf-table tbody td.num{text-align:left}
+  .wf-table tbody td::before{
+    content:attr(data-label);display:block;font-size:10px;font-weight:700;
+    text-transform:uppercase;letter-spacing:.04em;color:var(--wf-muted);
+  }
+  .wf-table tbody td.c-player::before,.wf-table tbody td.c-pick::before{content:none}
+  .c-player{grid-column:1/-1;font-size:15px}
+  .c-prop{grid-column:1/-1;font-size:12px}
+  .c-pick{grid-column:1/-1;font-size:15px;margin-bottom:4px}
+  .c-book{grid-column:1/-1;margin-top:6px}
+  .wf .wf-bo-btn{padding:11px 16px;font-size:12.5px;min-height:44px}
+  .wf-bo-note{max-width:none}
 }
 """
 
 SCRIPT = """
 'use strict';
 (function () {
-  var cards = Array.prototype.slice.call(
-    document.querySelectorAll('[data-card]')
+  var rows = Array.prototype.slice.call(
+    document.querySelectorAll('tr[data-row]')
   );
-  var grid = document.getElementById('grid');
-  var empty = document.getElementById('empty');
+  var picks = document.getElementById('picks-body');
   var count = document.getElementById('count');
+  var empty = document.getElementById('empty');
+  var pending = document.getElementById('pending');
+  var pendingCount = document.getElementById('pending-count');
   var inputs = {
     search: document.getElementById('f-search'),
-    game: document.getElementById('f-game'),
     prop: document.getElementById('f-prop'),
     book: document.getElementById('f-book'),
     sort: document.getElementById('f-sort')
   };
+  var offered = rows.filter(function (row) {
+    return row.getAttribute('data-offer') === 'yes';
+  });
 
-  function num(card, name) {
-    var raw = card.getAttribute(name);
-    var value = parseFloat(raw);
-    return isNaN(value) ? -Infinity : value;
+  function value(row, name) {
+    var parsed = parseFloat(row.getAttribute(name));
+    return isNaN(parsed) ? -Infinity : parsed;
+  }
+
+  function choice(key) {
+    return inputs[key] ? inputs[key].value : 'all';
+  }
+
+  /* Showing and hiding writes the inline style as well as the attribute.
+     The attribute alone is a standing invitation to the bug this replaced:
+     any later rule that sets a display on a row beats the hidden
+     attribute, the row keeps painting, and the count below -- computed
+     from the same decision -- then contradicts the page. An inline style
+     cannot be overridden by a stylesheet, so what is counted is what is
+     drawn. */
+  function show(row, ok) {
+    row.hidden = !ok;
+    row.style.display = ok ? '' : 'none';
+  }
+
+  function matches(row, needle, prop, book) {
+    if (needle && row.getAttribute('data-search').indexOf(needle) === -1) {
+      return false;
+    }
+    if (prop !== 'all' && row.getAttribute('data-prop') !== prop) {
+      return false;
+    }
+    return book === 'all' || row.getAttribute('data-book') === book;
   }
 
   function apply() {
-    var needle = (inputs.search.value || '').trim().toLowerCase();
-    var game = inputs.game.value;
-    var prop = inputs.prop.value;
-    var book = inputs.book.value;
+    var needle = (inputs.search ? inputs.search.value || '' : '')
+      .trim()
+      .toLowerCase();
+    var prop = choice('prop');
+    var book = choice('book');
     var shown = 0;
+    var waiting = 0;
 
-    cards.forEach(function (card) {
-      var ok =
-        (!needle || card.getAttribute('data-search').indexOf(needle) !== -1) &&
-        (game === 'all' || card.getAttribute('data-game') === game) &&
-        (prop === 'all' || card.getAttribute('data-prop') === prop) &&
-        (book === 'all' || card.getAttribute('data-book') === book);
-      card.hidden = !ok;
-      if (ok) shown += 1;
-    });
-
-    var mode = inputs.sort.value;
-    var ordered = cards.slice().sort(function (a, b) {
-      if (mode === 'ev') {
-        return num(b, 'data-ev') - num(a, 'data-ev') ||
-          a.getAttribute('data-stable').localeCompare(b.getAttribute('data-stable'));
+    rows.forEach(function (row) {
+      var ok = matches(row, needle, prop, book);
+      show(row, ok);
+      if (!ok) {
+        return;
       }
-      return num(b, 'data-edge') - num(a, 'data-edge') ||
-        a.getAttribute('data-stable').localeCompare(b.getAttribute('data-stable'));
+      if (row.getAttribute('data-offer') === 'yes') {
+        shown += 1;
+      } else {
+        waiting += 1;
+      }
     });
-    ordered.forEach(function (card) { grid.appendChild(card); });
 
-    count.textContent =
-      shown + (shown === 1 ? ' prediction' : ' predictions') +
-      ' shown of ' + cards.length;
-    if (empty) empty.hidden = shown !== 0 || cards.length === 0;
+    var mode = choice('sort');
+    var ordered = offered.slice().sort(function (a, b) {
+      var key = mode === 'win' ? 'data-win' : 'data-ev';
+      if (mode === 'player') {
+        return a.getAttribute('data-sortname')
+          .localeCompare(b.getAttribute('data-sortname'));
+      }
+      return value(b, key) - value(a, key) ||
+        a.getAttribute('data-stable').localeCompare(
+          b.getAttribute('data-stable')
+        );
+    });
+    if (picks) {
+      ordered.forEach(function (row) { picks.appendChild(row); });
+    }
+
+    if (count) {
+      count.textContent = 'Showing ' + shown + ' of ' + offered.length +
+        (offered.length === 1 ? ' prediction' : ' predictions');
+    }
+    if (empty) {
+      empty.hidden = shown !== 0 || offered.length === 0;
+    }
+    if (pendingCount) {
+      pendingCount.textContent = String(waiting);
+    }
+    if (pending) {
+      pending.hidden = waiting === 0;
+    }
   }
 
   Object.keys(inputs).forEach(function (key) {
@@ -898,11 +1284,15 @@ def _option(value: str, label: str) -> str:
 
 
 def _select(
-    element_id: str, label: str, options: Sequence[tuple[str, str]], *, wide: bool = False
+    element_id: str,
+    label: str,
+    options: Sequence[tuple[str, str]],
+    *,
+    klass: str = "",
 ) -> str:
     rendered = "".join(_option(value, text) for value, text in options)
 
-    classes = ' class="wide"' if wide else ""
+    classes = f' class="{klass}"' if klass else ""
 
     return (
         f"<div{classes}><label for=\"{element_id}\">{escape(label)}</label>"
@@ -910,7 +1300,49 @@ def _select(
     )
 
 
-def _provenance_block(publication: Publication) -> str:
+def _header_provenance(publication: Publication) -> str:
+    """The three facts a reader has any use for, on one line.
+
+    When the model last spoke, which model it was, and which build published
+    it. Everything else the publication records is real and stays available in
+    the methodology section and in ``page_manifest.json``; it is simply not
+    what somebody looking for a prop bet came for, and a page that opens with
+    a digest is a page that looks like it was built for its author.
+    """
+    cells: list[str] = []
+
+    updated = _minute(publication.provenance.get("served_at"))
+
+    if updated:
+        cells.append(f"<div><dt>Model updated</dt><dd>{escape(updated)}</dd></div>")
+
+    version = publication.provenance.get("incumbent_version")
+
+    if version:
+        cells.append(
+            f"<div><dt>Model version</dt><dd>{escape(str(version))}</dd></div>"
+        )
+
+    build = str(publication.provenance.get("production_code_sha") or "")
+
+    if build:
+        cells.append(
+            f"<div><dt>Production build</dt><dd>{escape(build[:12])}</dd></div>"
+        )
+
+    if not cells:
+        return ""
+
+    return '<dl class="wf-prov">' + "".join(cells) + "</dl>"
+
+
+def _full_provenance(publication: Publication) -> str:
+    """Everything the allow-list permits, inside the collapsed section.
+
+    Nothing is dropped from the publication by making the header short: the
+    same fields the previous page printed across the top are all still here,
+    one disclosure away, and all of them are still in the page manifest.
+    """
     cells: list[str] = []
 
     for name, label in RENDERED_PROVENANCE:
@@ -920,39 +1352,42 @@ def _provenance_block(publication: Publication) -> str:
             continue
 
         cells.append(
-            f"<div><dt>{escape(label)}</dt>"
-            f"<dd>{escape(str(value))}</dd></div>"
+            f"<dt>{escape(label)}</dt><dd>{escape(str(value))}</dd>"
         )
 
-    cells.append(
-        f"<div><dt>Release</dt><dd>{escape(publication.release_id)}</dd></div>"
-    )
+    cells.append(f"<dt>Release</dt><dd>{escape(publication.release_id)}</dd>")
 
     cells.append(
-        "<div><dt>Rows digest</dt>"
-        f"<dd>{escape(publication.rows_sha256)}</dd></div>"
+        f"<dt>Rows digest</dt><dd>{escape(publication.rows_sha256)}</dd>"
     )
 
     if publication.promoted_at:
         cells.append(
-            "<div><dt>Published</dt>"
-            f"<dd>{escape(publication.promoted_at)}</dd></div>"
+            f"<dt>Published</dt><dd>{escape(publication.promoted_at)}</dd>"
         )
 
-    cells.append(
-        f"<div><dt>Mode</dt><dd>{escape(publication.mode)}</dd></div>"
-    )
+    cells.append(f"<dt>Mode</dt><dd>{escape(publication.mode)}</dd>")
 
-    return '<dl class="prov">' + "".join(cells) + "</dl>"
+    return '<dl class="wf-facts">' + "".join(cells) + "</dl>"
 
 
 def _cta(page_row: PageRow) -> str:
+    """The sportsbook cell: who is offering the price, and how to get there.
+
+    Three outcomes, and the markup says which without the reader having to
+    read the small print. An affiliate selection is the site's gold button
+    through the site's redirect and is tagged as paid. A selection nobody is
+    paid by is the same button in the page's own colours, labelled "VIEW AT",
+    with no sponsored token and a line saying the link earns nothing. A
+    selection with no established destination keeps its name and its price and
+    gets no link at all rather than an invented one.
+    """
     routed = page_row.routed
 
     if routed.offer is None:
         return (
-            '<p class="no-cta">No sportsbook in the published data offers '
-            "this exact wager, so there is nothing to bet here.</p>"
+            '<span class="wf-bo-note">No sportsbook in the published data '
+            "offers this wager.</span>"
         )
 
     price = american(routed.offer.american_odds)
@@ -961,122 +1396,313 @@ def _cta(page_row: PageRow) -> str:
 
     if routed.destination is not None:
         return (
-            f'<a class="cta" href="{escape(routed.destination)}" '
+            f'<a class="wf-bo-btn" href="{escape(routed.destination)}" '
             'target="_blank" rel="sponsored nofollow noopener">'
-            f"<span>{AFFILIATE_CTA_VERB} {escape(name.upper())}</span>"
-            f'<span class="amt">{escape(price)}</span></a>'
+            f"{AFFILIATE_CTA_VERB} {escape(name.upper())} {escape(price)}</a>"
+            '<span class="wf-tag paid">Paid link</span>'
         )
 
     if page_row.direct_url is not None:
         return (
-            f'<a class="cta direct" href="{escape(page_row.direct_url)}" '
+            f'<a class="wf-bo-btn direct" href="{escape(page_row.direct_url)}" '
             f'target="_blank" rel="{fallback_destinations.REQUIRED_REL}">'
-            f"<span>{DIRECT_CTA_VERB} {escape(name.upper())}</span>"
-            f'<span class="amt">{escape(price)}</span></a>'
-            '<p class="unpaid">Direct link to the sportsbook\'s own page. '
-            "Not a paid placement: this is a price, not a referral, and "
-            "WizardOfOdds earns nothing if you use it.</p>"
+            f"{DIRECT_CTA_VERB} {escape(name.upper())} {escape(price)}</a>"
+            '<span class="wf-bo-note">Goes straight to the sportsbook. Not a '
+            "paid placement: WizardOfOdds earns nothing if you use it.</span>"
         )
 
     return (
-        f'<p class="no-cta">Shown at <strong>{escape(name)}</strong> '
-        f"{escape(price)}. WizardOfOdds has no established link for this "
-        "sportsbook, so this is a price, not a referral.</p>"
+        f'<span class="wf-bo-book">{escape(name)}</span>'
+        f'<span class="wf-tag">{escape(UNLINKED_TAG)}</span>'
     )
 
 
-def _card(page_row: PageRow) -> str:
-    row = page_row.row
+def visible_columns(rows: Sequence[PageRow]) -> tuple[str, ...]:
+    """Which columns this publication can actually fill.
 
-    routed = page_row.routed
+    Three of them depend on fields the published contract does not currently
+    carry, and the page asks rather than assumes. A projection has no field at
+    all, so the column is absent; team names have no field either, so the
+    matchup column is absent rather than showing two integers and calling them
+    a fixture. Fair odds *are* published, so they are shown. If a projection
+    or a team name is published later the column appears on its own, and
+    nothing here will have invented one in the meantime.
+    """
+    return tuple(
+        key
+        for key, _, _ in COLUMNS
+        if key not in CONDITIONAL_COLUMNS
+        or any(_has_column(page_row, key) for page_row in rows)
+    )
 
+
+def _has_column(page_row: PageRow, key: str) -> bool:
+    if key == "matchup":
+        return bool(page_row.matchup)
+
+    if key == "projection":
+        return page_row.projection is not None
+
+    if key == "fair":
+        return page_row.fair_odds is not None
+
+    return True
+
+
+def _pick(page_row: PageRow) -> str:
     side = page_row.side
 
-    tier = routed.tier
+    return (
+        f'<span class="{escape(side)}">{escape(side.upper())} '
+        f'{escape(line_text(page_row.row.get("line_value")))}</span>'
+    )
 
-    tier_label = TIER_LABEL.get(tier, tier)
 
-    if tier == routing.TIER_PRIMARY and routed.best_overall:
-        tier_label += " · also best overall"
+def _cell(page_row: PageRow, key: str) -> tuple[str, str]:
+    """One cell's markup and its class, by column key."""
+    row = page_row.row
 
-    book_name = routed.display_name or routed.offer.vendor if routed.offer else ""
+    if key == "player":
+        return escape(str(row.get("player_name") or "")), "c-player"
 
-    search = " ".join(
+    if key == "matchup":
+        return escape(page_row.matchup or ""), "c-matchup"
+
+    if key == "prop":
+        return escape(prop_label(row.get("prop_type"))), "c-prop"
+
+    if key == "pick":
+        return _pick(page_row), "c-pick"
+
+    if key == "projection":
+        return escape(number_text(page_row.projection)), "c-proj num"
+
+    if key == "win":
+        return escape(percent(page_row.model_probability)), "c-win num"
+
+    if key == "fair":
+        return escape(american(page_row.fair_odds)), "c-fair num"
+
+    if key == "market":
+        offer = page_row.routed.offer
+
+        return (
+            escape(american(offer.american_odds)) if offer is not None else "—",
+            "c-market num",
+        )
+
+    if key == "ev":
+        value = page_row.expected_value
+
+        if page_row.routed.offer is None:
+            return "—", "c-ev num"
+
+        tone = "pos" if _number(value) > 0 else "neg"
+
+        return (
+            f'<span class="{tone}">{escape(signed_percent(value))}</span>',
+            "c-ev num",
+        )
+
+    return _cta(page_row), "c-book"
+
+
+def _search_text(page_row: PageRow) -> str:
+    routed = page_row.routed
+
+    book = routed.display_name or (routed.offer.vendor if routed.offer else "")
+
+    return " ".join(
         str(value).lower()
         for value in (
-            row.get("player_name"),
-            prop_label(row.get("prop_type")),
+            page_row.row.get("player_name"),
+            prop_label(page_row.row.get("prop_type")),
             page_row.matchup,
-            book_name,
-            side,
+            book,
+            page_row.side,
         )
         if value
     )
 
-    nums = (
-        ("Model probability", percent(page_row.model_probability), ""),
-        ("Market probability", percent(page_row.market_probability), ""),
-        (
-            "Edge",
-            signed_percent(page_row.edge),
-            "pos" if _number(page_row.edge) > 0 else "neg",
-        ),
-        (
-            "Expected value",
-            signed_percent(page_row.expected_value),
-            "pos" if _number(page_row.expected_value) > 0 else "neg",
-        ),
-    )
 
-    numbers = "".join(
-        f"<div><dt>{escape(label)}</dt>"
-        f'<dd class="{klass}">{escape(text)}</dd></div>'
-        for label, text, klass in nums
-    )
+def _tier_label(page_row: PageRow) -> str:
+    routed = page_row.routed
 
-    offer_bits = ""
+    label = TIER_LABEL.get(routed.tier, routed.tier)
 
-    if routed.offer is not None:
-        offer_bits = (
-            '<div class="book">'
-            f'<span class="name">{escape(book_name)}</span>'
-            f'<span class="odds">{escape(american(routed.offer.american_odds))}</span>'
-            "</div>"
+    if routed.tier == routing.TIER_PRIMARY and routed.best_overall:
+        label += " · also best overall"
+
+    return label
+
+
+def _row(
+    page_row: PageRow,
+    *,
+    columns: Sequence[str],
+    presentation: Presentation,
+    offered: bool,
+) -> str:
+    """One prediction, as one table row.
+
+    The routing rule's own wording is rendered only for the QA presentation.
+    A bettor is owed the sportsbook, the price and a way to get there; how the
+    sportsbook came to be the one shown is a methodology question, and it is
+    answered once below the table instead of restated on every row.
+    """
+    routed = page_row.routed
+
+    cells: list[str] = []
+
+    for key in columns:
+        markup, klass = _cell(page_row, key)
+
+        header = COLUMN_LABEL[key]
+
+        if key == "book":
+            badge = (
+                '<span class="wf-tag claim">'
+                f"{escape(_tier_label(page_row))}</span>"
+                if offered
+                else ""
+            )
+
+            why = ""
+
+            if presentation.show_routing_reason:
+                considered = len(routed.considered)
+
+                why = (
+                    f'<span class="wf-why">{escape(routed.reason)}. '
+                    f"{considered} sportsbook offer"
+                    f"{'' if considered == 1 else 's'} matched this exact "
+                    "wager in the published data.</span>"
+                )
+
+            markup = f'<div class="wf-bookpick">{badge}{markup}{why}</div>'
+
+        cells.append(
+            f'<td class="{klass}" data-label="{escape(header)}">{markup}</td>'
         )
 
-    considered = len(routed.considered)
+    book_key = (
+        routing.normalise_vendor(routed.offer.vendor)
+        if routed.offer is not None
+        else ""
+    )
 
     return (
-        f'<article class="card{" aff" if routed.is_affiliate else ""}" data-card'
-        f' data-game="{escape(str(row.get("game_id")))}"'
-        f' data-prop="{escape(str(row.get("prop_type")))}"'
-        f' data-book="{escape(routing.normalise_vendor(routed.offer.vendor) if routed.offer else "")}"'
-        f' data-edge="{escape(str(page_row.edge))}"'
+        "<tr data-row"
+        f' data-offer="{"yes" if offered else "no"}"'
+        f' data-prop="{escape(str(page_row.row.get("prop_type")))}"'
+        f' data-book="{escape(book_key)}"'
         f' data-ev="{escape(str(page_row.expected_value))}"'
+        f' data-win="{escape(str(page_row.model_probability))}"'
+        f' data-sortname="{escape(str(page_row.row.get("player_name") or ""))}"'
         f' data-stable="{escape("|".join(page_row.stable_order))}"'
-        f' data-tier="{escape(tier)}"'
-        f' data-search="{escape(search)}">'
-        '<div class="card-head">'
-        f'<div class="who">{escape(str(row.get("player_name") or ""))}</div>'
-        f'<div class="where">{escape(page_row.matchup)} · '
-        f'{escape(str(row.get("date") or ""))}</div>'
-        "</div>"
-        '<div class="pick">'
-        f'<span class="side {escape(side)}">{escape(side.upper())} '
-        f'{escape(line_text(row.get("line_value")))}</span>'
-        f'<span class="stat">{escape(prop_label(row.get("prop_type")))}</span>'
-        "</div>"
-        f'<dl class="nums">{numbers}</dl>'
-        '<div class="offer">'
-        f'<span class="tier {escape(tier)}">{escape(tier_label)}</span>'
-        f"{offer_bits}"
-        f"{_cta(page_row)}"
-        f'<p class="why">{escape(routed.reason)}. '
-        f"{considered} sportsbook offer{'' if considered == 1 else 's'} "
-        "matched this exact wager in the published data.</p>"
-        "</div>"
-        "</article>"
+        f' data-tier="{escape(routed.tier)}"'
+        f' data-search="{escape(_search_text(page_row))}">'
+        + "".join(cells)
+        + "</tr>"
     )
+
+
+def _head(columns: Sequence[str]) -> str:
+    cells = "".join(
+        f'<th scope="col" class="{"num" if COLUMN_NUMERIC[key] else ""}">'
+        f"{escape(COLUMN_LABEL[key])}</th>"
+        for key in columns
+    )
+
+    return f"<thead><tr>{cells}</tr></thead>"
+
+
+def _methodology(
+    publication: Publication,
+    *,
+    registry: routing.AffiliateRegistry,
+    columns: Sequence[str],
+) -> str:
+    """The collapsed section: what the columns mean, how a book is chosen.
+
+    Everything that used to compete with the predictions for the top of the
+    page lives here. It is one click away and it is on the page, which is the
+    difference between a disclosure and a wall.
+    """
+    key_terms = {
+        "pick": (
+            "The side and line the model prefers on this prop, as published."
+        ),
+        "win": (
+            "The model's probability that the pick wins, excluding pushes."
+        ),
+        "fair": (
+            "The American price at which the model's probability would break "
+            "even. Compare it against the market odds beside it: a market "
+            "price better than fair is the whole point of the page."
+        ),
+        "market": (
+            "The price the featured sportsbook is posting on this exact "
+            "wager, as published in the release below."
+        ),
+        "ev": (
+            "Expected value at that posted price, as published. It is "
+            "computed at the price in the same row, so it is the number that "
+            "answers whether the bet is worth taking."
+        ),
+        "projection": (
+            "The model's projected number for the stat, where the release "
+            "publishes one."
+        ),
+        "matchup": "Who is playing, where the release publishes team names.",
+    }
+
+    terms = "".join(
+        f"<dt>{escape(COLUMN_LABEL[key])}</dt><dd>{escape(key_terms[key])}</dd>"
+        for key in columns
+        if key in key_terms
+    )
+
+    books = ", ".join(sorted(book.display_name for book in registry.books))
+
+    missing = registry.missing_facts()
+
+    missing_note = ""
+
+    if missing:
+        missing_note = (
+            "<p>WizardOfOdds has no verified identifier or destination for "
+            f"{escape('; '.join(sorted(missing)))}, so those sportsbooks are "
+            "never shown and never linked rather than guessed at.</p>"
+        )
+
+    return f"""<details class="wf-gloss">
+<summary>Methodology, sportsbook selection and full provenance</summary>
+<h3>What the columns mean</h3>
+<dl>{terms}</dl>
+<h3>How the featured sportsbook is chosen</h3>
+<p>Every prediction is one exact wager, and several sportsbooks may post a
+price on it. The featured sportsbook is picked by price first. Where one of
+WizardOfOdds' partner sportsbooks ({escape(books)}) posts the wager, the
+featured price is the best of those, and the card says Best Affiliate Price:
+another sportsbook may be posting better odds, which is why that label does
+not claim to be the best price anywhere. Where none of them posts it, the
+featured price is the best across every sportsbook in the release and the card
+says Best Available Price. Nothing about this selection changes a single model
+number, and whether a sportsbook can be linked to is decided after it has been
+selected, never before.</p>
+{missing_note}
+<h3>Affiliate disclosure</h3>
+<p>{escape(AFFILIATE_DISCLOSURE)}</p>
+<h3>What this page does not have</h3>
+<p>Tip-off times are not in the published release, so they are not shown and
+there is no ordering by start time. Team names are not published either, so no
+matchup is shown rather than one assembled out of internal identifiers. Model
+numbers here are copied from the release: this page computes no probability, no
+fair price and no expected value of its own.</p>
+<h3>Full provenance</h3>
+{_full_provenance(publication)}
+</details>"""
 
 
 def render(
@@ -1084,15 +1710,25 @@ def render(
     rows: tuple[PageRow, ...],
     *,
     registry: routing.AffiliateRegistry,
+    presentation: Presentation = CONSUMER_PREVIEW,
 ) -> str:
     """The page, as one self-contained document.
 
-    Every card is in the HTML. The script filters and reorders nodes that are
-    already there, so the predictions and their calls to action are readable
-    without it, and no filter can remove a call to action from a card it
-    leaves visible.
+    Every prediction is in the HTML. The script filters and reorders rows that
+    are already there, so the table and its buttons are readable without it,
+    and no filter can leave a row on screen while the count says it is gone --
+    showing and hiding writes an inline style that no stylesheet can override.
+
+    Wagers nobody prices are a separate section rather than rows with dashes
+    where a price belongs. There is nothing to bet on them, so they are not
+    offered as though there were, and they are not dropped either: the
+    published record is still rendered, below, under its own heading.
     """
-    games = sorted({str(row.row.get("game_id")) for row in rows})
+    columns = visible_columns(rows)
+
+    offered = tuple(row for row in rows if row.routed.offer is not None)
+
+    unoffered = tuple(row for row in rows if row.routed.offer is None)
 
     props = sorted({str(row.row.get("prop_type")) for row in rows})
 
@@ -1102,8 +1738,7 @@ def render(
                 routing.normalise_vendor(row.routed.offer.vendor),
                 row.routed.display_name or row.routed.offer.vendor,
             )
-            for row in rows
-            if row.routed.offer is not None
+            for row in offered
         }
     )
 
@@ -1111,13 +1746,8 @@ def render(
         (
             '<div class="wide"><label for="f-search">Player search</label>'
             '<input id="f-search" type="search" inputmode="search" '
-            'placeholder="Search player, team, prop or sportsbook" '
+            'placeholder="Search player, prop or sportsbook" '
             'autocomplete="off"></div>',
-            _select(
-                "f-game",
-                "Game",
-                [("all", "All games")] + [(game, f"Game {game}") for game in games],
-            ),
             _select(
                 "f-prop",
                 "Prop",
@@ -1126,47 +1756,84 @@ def render(
             ),
             _select(
                 "f-book",
-                "Sportsbook",
+                "Featured book",
                 [("all", "All sportsbooks")] + [(key, name) for key, name in books],
             ),
             _select(
                 "f-sort",
                 "Sort",
                 [
-                    ("edge", "Model edge (strongest first)"),
                     ("ev", "Expected value (highest first)"),
+                    ("win", "Win probability (highest first)"),
+                    ("player", "Player (A–Z)"),
                 ],
+                klass="sort",
             ),
         )
     )
 
-    cards = "".join(_card(row) for row in rows)
+    picks = "".join(
+        _row(row, columns=columns, presentation=presentation, offered=True)
+        for row in offered
+    )
 
-    body = (
-        cards
-        if cards
+    unlinked = (
+        f'<p class="wf-disc">{escape(UNLINKED_NOTE)}</p>'
+        if any(
+            row.routed.destination is None and row.direct_url is None
+            for row in offered
+        )
+        else ""
+    )
+
+    table = (
+        f"""<div class="wf-tablewrap">
+<table class="wf-table" id="picks">
+{_head(columns)}
+<tbody id="picks-body">{picks}</tbody>
+</table>
+</div>
+<p class="wf-empty" id="empty" hidden>No prediction matches these filters.</p>
+{unlinked}"""
+        if offered
         else (
-            '<p class="empty">The current release carries no published rows, '
-            "so there is nothing to show for this slate. No predictions were "
-            "withheld and none were invented.</p>"
+            '<p class="wf-empty">No sportsbook in this release posts a price '
+            "on any of the model's wagers, so there is nothing to bet on this "
+            "slate. Nothing was withheld and nothing was invented.</p>"
         )
     )
 
-    missing = registry.missing_facts()
+    pending_columns = tuple(
+        key for key in columns if key not in UNOFFERED_COLUMNS
+    )
 
-    missing_note = ""
-
-    if missing:
-        listed = "; ".join(
-            f"{escape(book)}" for book in sorted(missing)
+    pending_rows = "".join(
+        _row(
+            row,
+            columns=pending_columns,
+            presentation=presentation,
+            offered=False,
         )
+        for row in unoffered
+    )
 
-        missing_note = (
-            '<p class="notice">WizardOfOdds has no verified sportsbook '
-            f"identifier or affiliate destination for {listed}. Those books "
-            "are therefore never shown and never linked, rather than being "
-            "guessed at.</p>"
-        )
+    pending = (
+        f"""<section class="wf-pending" id="pending">
+<h2>No current offer (<span id="pending-count">{len(unoffered)}</span>)</h2>
+<p class="wf-muted wf-small">The model has an opinion on these wagers and no
+sportsbook in the release posts a price on them, so there is no bet to place
+and no expected value to quote. They are listed because the model published
+them, not as betting opportunities.</p>
+<div class="wf-tablewrap">
+<table class="wf-table">
+{_head(pending_columns)}
+<tbody>{pending_rows}</tbody>
+</table>
+</div>
+</section>"""
+        if unoffered
+        else ""
+    )
 
     embedded = {
         "note": (
@@ -1186,28 +1853,27 @@ def render(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <meta name="referrer" content="no-referrer-when-downgrade">
-<title>NBA Player Props — Model Edges | WizardOfOdds</title>
-<meta name="description" content="Model-priced NBA player prop edges for {escape(publication.slate_date)}, with the sportsbook offering each exact wager.">
+<title>NBA Player Props Predictions | WizardOfOdds</title>
+<meta name="description" content="NBA player prop predictions for {escape(publication.slate_date)}: model win probability, fair odds, the best sportsbook price on each exact wager and its expected value.">
 <style>{STYLE}</style>
 </head>
-<body>
-<div class="wrap">
-<header class="top">
-<h1>NBA Player Props — Model Edges</h1>
-<p class="sub">Slate {escape(publication.slate_date)} · {len(rows)} published prediction{'' if len(rows) == 1 else 's'} · every number below is copied from the incumbent model's published release, unchanged.</p>
-<p class="notice">{escape(AFFILIATE_DISCLOSURE)}</p>
-{missing_note}
-<p class="notice">Tip-off times are not part of the published feed, so they are not shown and there is no game-time ordering. Cards are ordered by the model's edge or by expected value, both as published.</p>
-{_provenance_block(publication)}
-</header>
-<section class="controls" aria-label="Filter and sort">{controls}</section>
-<p class="count" id="count" aria-live="polite"></p>
-<main class="grid" id="grid">{body}</main>
-<p class="empty" id="empty" hidden>No prediction matches these filters.</p>
-<footer class="foot">
+<body class="wf-body">
+<div class="wf">
+<main>
+<p class="wf-note {escape(presentation.tone)}"><b>{escape(presentation.banner)}</b><span>{escape(presentation.detail)}</span></p>
+<h1 class="wf-h1">NBA Player Props Predictions</h1>
+<p class="wf-lead">Model projections against live sportsbook prices for the {escape(publication.slate_date)} slate: {len(offered)} wager{'' if len(offered) == 1 else 's'} a sportsbook is pricing, with the model's win probability, its fair odds and the expected value at the posted price.</p>
+{_header_provenance(publication)}
+<section class="wf-controls" aria-label="Filter and sort">{controls}</section>
+<p class="wf-count" id="count" aria-live="polite">Showing {len(offered)} of {len(offered)} prediction{'' if len(offered) == 1 else 's'}</p>
+<p class="wf-disc">{escape(SHORT_DISCLOSURE)}</p>
+{table}
+{pending}
+{_methodology(publication, registry=registry, columns=columns)}
+</main>
+<footer class="wf-foot">
 <p>Published authority: incumbent. The research candidate is shadow-only and never appears here.</p>
-<p>Source release {escape(publication.release_id)}, rows {escape(publication.rows_sha256)}, production code {escape(str(publication.provenance.get('production_code_sha') or 'unknown'))}.</p>
-<p>Odds change without notice. Nothing on this page is a guarantee of profit, and no offer here is risk-free unless the sportsbook itself says so in its own terms.</p>
+<p>Odds change without notice. Nothing on this page is a guarantee of profit, and no offer here is risk-free unless the sportsbook says so in its own terms. 21+ where applicable.</p>
 </footer>
 </div>
 <script type="application/json" id="source-note">{_json_for_html(embedded)}</script>
@@ -1228,6 +1894,7 @@ def page_manifest(
     *,
     registry: routing.AffiliateRegistry,
     fallback: fallback_destinations.FallbackDestinations,
+    presentation: Presentation,
     page_sha256: str,
 ) -> dict[str, Any]:
     """What this build was, in a form a check can read rather than parse HTML."""
@@ -1263,7 +1930,7 @@ def page_manifest(
                 )
             ],
         },
-        "contract_version": 3,
+        "contract_version": 4,
         "fallback_destinations": {
             "linkable_books": dict(fallback.linkable_books()),
             "rel": fallback_destinations.REQUIRED_REL,
@@ -1272,6 +1939,11 @@ def page_manifest(
         "mode": publication.mode,
         "page_name": PAGE_NAME,
         "page_sha256": page_sha256,
+        "presentation": {
+            "banner": presentation.banner,
+            "routing_reason_shown": presentation.show_routing_reason,
+            "tone": presentation.tone,
+        },
         "provenance": {
             name: publication.provenance.get(name)
             for name, _ in RENDERED_PROVENANCE
@@ -1289,8 +1961,15 @@ def page_manifest(
                 1 for row in rows if row.routed.has_affiliate_destination
             ),
             "by_tier": by_tier,
+            "columns": list(visible_columns(rows)),
             "direct_cta_count": sum(
                 1 for row in rows if row.direct_url is not None
+            ),
+            "no_offer_count": sum(
+                1 for row in rows if row.routed.offer is None
+            ),
+            "offered_count": sum(
+                1 for row in rows if row.routed.offer is not None
             ),
             "prediction_count": len(rows),
             "published_row_count": len(publication.rows),
@@ -1331,6 +2010,7 @@ def build_page(
     *,
     registry: routing.AffiliateRegistry,
     fallback: fallback_destinations.FallbackDestinations | None = None,
+    presentation: Presentation = CONSUMER_PREVIEW,
 ) -> dict[str, Any]:
     """Read one publication and render the page and its manifest.
 
@@ -1340,6 +2020,10 @@ def build_page(
     build links the books the site has established destinations for. A caller
     passing one explicitly gets exactly that one, which is how a test states
     which books are linkable without editing committed configuration.
+
+    ``presentation`` defaults to the consumer page. A caller wanting the QA
+    page has to ask for it, so no ordinary build can acquire the routing
+    vocabulary or the test-data banner by accident.
     """
     if fallback is None:
         fallback = fallback_destinations.FallbackDestinations.load()
@@ -1348,7 +2032,9 @@ def build_page(
 
     rows = page_rows(publication, registry=registry, fallback=fallback)
 
-    html = render(publication, rows, registry=registry)
+    html = render(
+        publication, rows, registry=registry, presentation=presentation
+    )
 
     page_bytes = html.encode("utf-8")
 
@@ -1357,6 +2043,7 @@ def build_page(
         rows,
         registry=registry,
         fallback=fallback,
+        presentation=presentation,
         page_sha256=publisher.digest(page_bytes),
     )
 
@@ -1377,6 +2064,7 @@ def publish_page(
     page_transport: Any,
     registry: routing.AffiliateRegistry,
     fallback: fallback_destinations.FallbackDestinations | None = None,
+    presentation: Presentation = CONSUMER_PREVIEW,
     prefix: str = "",
 ) -> dict[str, Any]:
     """Build the page from one publication and write it to the page canary.
@@ -1400,7 +2088,12 @@ def publish_page(
             "destination, so this page is not published"
         )
 
-    built = build_page(source_transport, registry=registry, fallback=fallback)
+    built = build_page(
+        source_transport,
+        registry=registry,
+        fallback=fallback,
+        presentation=presentation,
+    )
 
     relative = {
         name: f"{prefix}/{name}" if prefix else name for name in built["files"]
@@ -1490,6 +2183,17 @@ def _parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--prefix",
+        default=PREVIEW_PREFIX,
+        help=(
+            "directory below the page destination the page is written to. "
+            "Defaults to the preview directory, so the ordinary invocation "
+            "publishes a preview and does not write over anything already "
+            "published beside it."
+        ),
+    )
+
+    parser.add_argument(
         "--project-root",
         default=None,
         help="repository root the configuration is read from",
@@ -1540,6 +2244,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             page_transport=page,
             registry=registry,
             fallback=fallback,
+            presentation=CONSUMER_PREVIEW,
+            prefix=arguments.prefix,
         )
     except (
         PageRefused,
