@@ -1041,13 +1041,16 @@ STYLE = """
 .wf-prov div{display:flex;gap:5px}
 .wf-prov dt{font-weight:400}
 .wf-prov dd{margin:0;color:var(--wf-text);font-weight:600;font-variant-numeric:tabular-nums}
-/* controls */
+/* controls: one row of four, widest where the text is longest. Explicit
+   tracks rather than auto-fit, because an auto-fit track is sized by the
+   narrowest control in the row and the sort option "Expected value (highest
+   first)" then renders clipped. */
 .wf-controls{
   display:grid;gap:8px 10px;margin:0 0 8px;
-  grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+  grid-template-columns:
+    minmax(0,1.5fr) minmax(0,1fr) minmax(0,1.1fr) minmax(0,1.5fr);
 }
 .wf-controls > div{display:flex;flex-direction:column;gap:3px;min-width:0}
-.wf-controls .wide{grid-column:1/-1;max-width:420px}
 .wf-controls label{
   font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
   color:var(--wf-muted);
@@ -1127,6 +1130,10 @@ STYLE = """
   font-size:12px;color:var(--wf-muted);
 }
 .wf-foot p{margin:3px 0}
+@media (max-width:860px){
+  .wf-controls{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .wf-controls .wide,.wf-controls .sort{grid-column:1/-1}
+}
 /* Below this width the table stops being a table: each prediction becomes a
    compact labelled record, so nothing has to be scrolled sideways to read a
    price or reach a button. */
@@ -1277,11 +1284,15 @@ def _option(value: str, label: str) -> str:
 
 
 def _select(
-    element_id: str, label: str, options: Sequence[tuple[str, str]], *, wide: bool = False
+    element_id: str,
+    label: str,
+    options: Sequence[tuple[str, str]],
+    *,
+    klass: str = "",
 ) -> str:
     rendered = "".join(_option(value, text) for value, text in options)
 
-    classes = ' class="wide"' if wide else ""
+    classes = f' class="{klass}"' if klass else ""
 
     return (
         f"<div{classes}><label for=\"{element_id}\">{escape(label)}</label>"
@@ -1756,6 +1767,7 @@ def render(
                     ("win", "Win probability (highest first)"),
                     ("player", "Player (A–Z)"),
                 ],
+                klass="sort",
             ),
         )
     )
