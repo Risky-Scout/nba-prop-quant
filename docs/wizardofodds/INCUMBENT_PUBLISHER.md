@@ -45,13 +45,42 @@ they are.
 | Group | Fields |
 | --- | --- |
 | Who and which game | `player_id`, `player_name`, `team_id`, `opponent_id`, `is_home`, `game_id`, `date` |
+| Who is playing, in words | `away_team`, `home_team`, `player_team`, `tip_off_utc` |
 | Which quote | `quote_id`, `vendor`, `prop_type`, `line_value`, `market_type` |
+| Model projection | `model_projection` |
 | Posted price | `over_odds`, `under_odds` |
 | Model probability | `calibrated_q_over_nonpush`, `calibrated_q_under_nonpush`, `calibrated_p_push`, `calibration_method` |
 | Market probability | `market_devig_q_over`, `market_devig_q_under`, `market_hold_pct` |
 | Fair model odds | `calibrated_fair_over_american`, `calibrated_fair_under_american` |
 | Edge and EV | `calibrated_edge_over`, `calibrated_edge_under`, `calibrated_ev_over`, `calibrated_ev_under`, `model_preferred_side`, `model_preferred_edge`, `model_preferred_ev` |
 | Deployment identity | `freeze_id`, `freeze_stage`, `manifest_sha256`, `market_pricing_schema_version` |
+
+### The record's own version
+
+`contract_version` names the shape of what is written, independently of the
+two feed versions in `docs/WIZARDOFODDS_INTEGRATION.md` §1, which describe
+what was read. It is **2**: version 1 published neither the model's projection
+nor the teams.
+
+A consumer must compare it for **equality**, not as a floor, and the page
+renderer does. A renderer written against version 2 reading a version 1
+release would find the projection and matchup fields simply absent and draw a
+page with holes in it rather than refusing, and a page with holes is the
+failure mode worth being loudest about.
+
+Two groups are published under names the runtime does not use, which are the
+only two renames in the list. The schedule's `visitor_team_abbreviation` and
+`home_team_abbreviation` are published as `away_team` and `home_team`, because
+a slate is read away side first and a consumer ordering a matchup from
+"visitor" and "home" would have to know that. `player_team_abbreviation` is
+published as `player_team` for the same reason and no other.
+
+`model_projection` is the one number saying what the model projects for the
+player's statistic, and like every other field it is copied, not computed:
+`scripts/15_price_markets.py` writes it as a copy of the mean it priced that
+row's line against. §4 of the integration contract says which column that is
+per prop and why a combo line carries null. Publishing a null is deliberate —
+the alternative is a projection the model never made.
 
 No `raw_*` field is published. §5 of the integration contract says they "are
 retained for audit and should not be published as the model's price", and the

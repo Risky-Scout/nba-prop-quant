@@ -832,6 +832,31 @@ def main() -> None:
                 column
             ]
 
+        # What the model projects for this player's stat, under one name, so
+        # that publishing it does not require the consumer to know which
+        # per-target mean this prop is priced from. A copy of the column the
+        # call above priced against and nothing else: no projection is
+        # computed, chosen or adjusted here.
+        #
+        # The choice of column is spelled out twice because the call above is
+        # pinned syntax-identical to production and cannot be refactored into
+        # a shared name. The two copies cannot drift silently: the parity
+        # tests reprice every prop from this column and require the same
+        # probabilities the row already carries.
+        part[
+            "model_projection"
+        ] = pd.to_numeric(
+            part[
+                "gate3_mu_ast"
+                if prop_type
+                == "assists"
+                else mu_columns[
+                    target
+                ]
+            ],
+            errors="coerce",
+        )
+
         part[
             "dependence_lambda"
         ] = 0.0
@@ -969,6 +994,17 @@ def main() -> None:
             how="left",
             validate="many_to_one",
         )
+
+        # Stated absent rather than left for the concat below to invent. A
+        # combo line is priced from a joint distribution over its components
+        # and no central forecast of the combined total exists anywhere on
+        # this path, so there is no projection to carry. Writing the column
+        # as null keeps a combo-only slate carrying the field and saying it
+        # has no value, instead of omitting it and reading like a feed from
+        # before the field existed.
+        priced_part[
+            "model_projection"
+        ] = np.nan
 
         priced_parts.append(
             priced_part

@@ -35,6 +35,26 @@ were created at version 2 and moved to version 3 when the certified Gate 3
 production candidate was integrated, which added the role-state, candidate
 override and capture-lineage fields.
 
+Both feeds later gained fields **without** the version moving, and that is
+deliberate rather than an oversight. The projections feed gained the
+schedule's team abbreviations and tip time, and the priced feed gained
+`model_projection`. Neither version was incremented, for two reasons:
+
+- the two emitters are declared additive-only under
+  `src/nba_prop_quant/research/game_latent_state/safety.py`, and the
+  branch-safety tests require every line the production ref has to still be
+  present. Editing a version literal removes a line, so an increment is not
+  a change either emitter can receive;
+- nothing is left unguarded by that. The version check is not what protects a
+  consumer from a feed missing these columns —
+  `assert_schema_is_publishable` is, and it refuses a priced file that lacks
+  any source column the publisher reads. A feed produced before these fields
+  existed is rejected either way; the only difference is which rule names it.
+
+What *did* move is the published record's own `contract_version`, which went
+from 1 to 2. That is the version a website reads, and
+`docs/wizardofodds/INCUMBENT_PUBLISHER.md` covers it.
+
 ---
 
 ## 2. What each feed is
@@ -80,6 +100,10 @@ season
 team_id
 opponent_id
 is_home
+home_team_abbreviation
+visitor_team_abbreviation
+player_team_abbreviation
+tip_off_utc
 expected_minutes
 availability_status
 availability_out
@@ -88,6 +112,29 @@ gate3_role_ready
 history_latest_date
 advanced_latest_date
 ```
+
+### Game context
+
+`team_id`, `opponent_id`, `home_team_id` and `visitor_team_id` identify the
+teams and describe them to nobody. These four fields are the human-readable
+form, taken verbatim from the schedule payload the slate is built from and
+carried through unparsed:
+
+| Field | Source | Notes |
+| --- | --- | --- |
+| `home_team_abbreviation` | `home_team.abbreviation` | e.g. `DEN` |
+| `visitor_team_abbreviation` | `visitor_team.abbreviation` | the away side |
+| `player_team_abbreviation` | whichever of the two the row's `is_home` selects | the player's own side |
+| `tip_off_utc` | the schedule's `datetime` | string, not a timestamp |
+
+`tip_off_utc` is a **string** by design. The publisher renders any
+`pd.Timestamp` as a date, so a tip time carried as a timestamp would reach the
+website having lost its time of day.
+
+Any of the four is `None` when the schedule payload did not carry it. A
+missing abbreviation is a fact about the schedule: nothing downstream
+substitutes a team list of its own, and the website omits the matchup rather
+than printing team numbers.
 
 ### Capture lineage (snapshot mode only)
 
@@ -163,6 +210,35 @@ preprice_hold_pct   posted hold, used by the quote filter
 quote_filter_reason empty string on priced rows
 quote_eligible      true on priced rows
 ```
+
+### Model projection
+
+```text
+model_projection    the mean this row's line was priced against
+```
+
+One column naming the central forecast of the player's statistic, so a
+consumer does not have to know which per-target mean applies to which prop.
+It is a copy, never a recomputation, of the column
+`nba_prop_quant.pricing.central_mean_column` selects:
+
+| Prop | Column copied | Why |
+| --- | --- | --- |
+| `assists` | `gate3_mu_ast` | the Gate 3 role state scales the selected assists mean before it reaches the marginal, so this is the assists projection and `mu_selected_ast` is not |
+| any other single stat | `mu_selected_<target>` | the selected mean under the frozen routing policy |
+| any combo | `NaN` | see below |
+
+It is a **mean**, not the median `<target>_p50`, and it is the same quantity
+the marginal that produced `p_over` was built from — so the projection and
+the probability beside it can never disagree. It does not depend on the
+vendor, the posted odds or the line: every quote row for the same
+`game_id`, `player_id` and `prop_type` carries the same value.
+
+A combo prop — `points_rebounds`, `points_assists`, `rebounds_assists`,
+`points_rebounds_assists`, `stocks` — is priced from a joint distribution over
+its components, and no central forecast of the combined total is produced
+anywhere on this path. Those rows carry `NaN`, which is published as null. The
+sum of the component means is **not** that forecast and is not substituted.
 
 ### Raw model probabilities
 
