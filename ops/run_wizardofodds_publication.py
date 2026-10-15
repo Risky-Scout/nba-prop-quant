@@ -579,6 +579,8 @@ def publish_the_page(
 
     manifest = published["manifest"]
 
+    rendered = manifest.get("rendered") or {}
+
     return {
         "generated_at": _utc_now(),
         "manifest": manifest,
@@ -590,7 +592,11 @@ def publish_the_page(
             f"the page for {source_release['release_id']} was published to "
             + ", ".join(published["written"])
         ),
-        "row_count": len(manifest.get("rows") or []) or manifest.get("row_count"),
+        # The page's own count, not the release's. They differ legitimately --
+        # several books quoting one wager are one row -- and the deliverable is
+        # the number of predictions a reader is shown.
+        "row_count": rendered.get("prediction_count"),
+        "published_row_count": rendered.get("published_row_count"),
         "slate_date": slate_date,
         "source_release": source_release,
         "stage": STAGE_PAGE,
@@ -635,6 +641,7 @@ def render(receipt: dict[str, Any]) -> str:
         rows += [
             ("built from release", source_release.get("release_id")),
             ("rows digest", str(source_release.get("rows_sha256") or "")[:16]),
+            ("predictions on the page", receipt.get("row_count")),
             ("page digest", str(receipt.get("page_sha256") or "")[:16]),
             ("published", ", ".join(receipt.get("written") or [])),
         ]
