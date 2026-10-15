@@ -459,12 +459,51 @@ Do not publish a row when:
 - `line_value` is invalid;
 - a Gate 3 prop has `gate3_role_ready` false;
 - `history_latest_date` or `advanced_latest_date` is not strictly before the
-  slate date.
+  slate date;
+- `player_name` does not name a person (see below).
 
-The last rule is now also enforced upstream. `nba_prop_quant.slate` fails
+The date rule is now also enforced upstream. `nba_prop_quant.slate` fails
 closed before any feature is built when historical inputs are not strictly
 older than the slate date, so a leaking projection file should not be produced
 at all. The website check remains as defence in depth.
+
+### Player identity
+
+The public name comes from one place. `scripts/10_predict_slate.py` joins the
+authoritative active-player roster — `active_players` for the slate's teams,
+normalised by `normalize_players`, which keeps the payload's `id`,
+`first_name` and `last_name` verbatim — and builds `player_name` as
+`first_name` and `last_name` joined with a single space and stripped. That is
+the only construction of it on this path, and `15_price_markets.py` merges it
+forward from the projections side of the join.
+
+A sportsbook's spelling of a player is never the authority, and cannot be:
+`normalize_props` carries `player_id` and no name at all, so there is no
+vendor text for the join to prefer.
+
+A row is refused when `player_name` is:
+
+- absent from the frame, or null, or `NaN`;
+- empty, or whitespace only;
+- an identifier wearing a person's slot — `12345`, `P12345`, `Player 12345`,
+  `player_id 12345`, `Unknown`, `Unknown Player`, `none`, `nan`, `null`,
+  `n/a`, in any spacing or case.
+
+None of those can come out of a roster that answered, because the name is
+built from two fields of the active-player record. An identifier in that slot
+means the join found nobody and something downstream filled the gap, or the
+roster itself returned a placeholder. Either way it is a source-data problem,
+and the answer to a source-data problem here is to refuse rather than to put a
+row number on a page where a person belongs. The refusal is the whole
+publication, not the row: a publisher that dropped it would serve a thinner
+feed and report success.
+
+The rule is about shape, not about digits. `Walt Frazier III` and
+`D'Angelo Example-Jones` publish normally.
+
+The website applies the same rule again when it reads a release, because it
+reads one it did not write and its Player cell renders the published string
+with no fallback.
 
 ---
 
