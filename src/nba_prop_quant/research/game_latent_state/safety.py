@@ -358,16 +358,16 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: for the reason that entry itself gave: the renderer is owned below, so
 #: touching it again requires declaring it again.
 #:
-#: This branch declares eight paths and widens nothing. The published page
+#: This branch declares nine paths and widens nothing. The published page
 #: could state neither what the model projects nor who a player is playing,
 #: because the publication carried neither -- and both quantities already
 #: existed upstream and were simply being dropped on the way through. So the
 #: declarations are the two serving stages that stop dropping them, under the
-#: additive-only rule and nothing more; the serving-source registry relock
-#: those two require; the publisher and the renderer, both owned, which carry
-#: and show them; the routing-proof builder, which has to carry the new
-#: columns as nulls or stop being publishable at all; and the two documents
-#: that record the contract.
+#: additive-only rule and nothing more; the two serving-source registries
+#: those two require relocking, one of which records the other's digest; the
+#: publisher and the renderer, both owned, which carry and show them; the
+#: routing-proof builder, which has to carry the new columns as nulls or stop
+#: being publishable at all; and the two documents that record the contract.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
         "src/nba_prop_quant/slate.py": (
@@ -408,6 +408,16 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
             "purpose asks for. Every historical_reference_sha256, the "
             "architecture reference and the historical contract hash are "
             "untouched, and no locked file is dropped"
+        ),
+        "models/frozen_manifests/"
+        "nba_prop_quant_v2_adaptive_update_protocol.json": (
+            "one hash, following the relock above. This file records the "
+            "digest of the serving source contract, and the production "
+            "preflight derives that digest from the tree and refuses the run "
+            "on a mismatch -- so a relock that did not land here would fail "
+            "the lifecycle before any model was loaded. Nothing else in it "
+            "moves: the architecture contract digest, the protocol version "
+            "and every rule it states are untouched"
         ),
         "ops/publish_incumbent_to_wizardofodds.py": (
             "five source columns added to the published field list and the "
