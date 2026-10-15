@@ -110,6 +110,17 @@ FEED_DESTINATIONS: dict[str, str] = {
 #: drift without something saying so.
 SERVED_OUTCOME = "SERVED"
 
+#: The outcomes that mean there was legitimately nothing to publish: a date
+#: before opening day, and a date with no games on it. Both are successes
+#: everywhere else in the lifecycle and both are successes here.
+#:
+#: Enumerated rather than inferred from "not SERVED", because the difference
+#: matters: a serving step that *failed* has produced no artifact for the same
+#: reason an off day has, and treating the two alike would turn a broken
+#: serving run into a quiet no-op with yesterday's page still up. Pinned
+#: against the serving module's own outcomes by a test.
+NO_OP_OUTCOMES: tuple[str, ...] = ("NO_PRODUCTION_SLATE", "NO_GAMES_ON_SLATE")
+
 OUTCOME_PUBLISHED = "PUBLISHED"
 OUTCOME_NOT_SERVED = "NOT_SERVED_NOTHING_TO_PUBLISH"
 
@@ -179,13 +190,21 @@ def read_serving_receipt(
 
     outcome = str(receipt.get("outcome") or "")
 
-    if outcome != SERVED_OUTCOME:
+    if outcome in NO_OP_OUTCOMES:
         return {
             "outcome": outcome,
             "served": False,
             "receipt_path": str(path),
             "slate_date": recorded,
         }
+
+    if outcome != SERVED_OUTCOME:
+        raise PublicationStageFailed(
+            f"{path} records the serving outcome {outcome or 'nothing'}, which "
+            "is neither a served slate nor one of the recorded no-ops "
+            f"({', '.join(NO_OP_OUTCOMES)}), so whether there is anything to "
+            "publish is unknown and nothing is published"
+        )
 
     artifact = receipt.get("priced_market_artifact") or {}
 
