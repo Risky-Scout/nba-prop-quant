@@ -103,9 +103,17 @@ function main() {
     }
   };
 
+  /* By id, not "the last script on the page": the page also carries the site's
+     iframe height handshake, and running that one here would prove nothing
+     about the filtering this harness exists to check. */
+  const opening = '<script id="page-controls">';
+  const start = html.indexOf(opening);
+  if (start === -1) {
+    throw new Error('the page has no ' + opening + ' element');
+  }
   const script = html.slice(
-    html.lastIndexOf('<script>') + '<script>'.length,
-    html.lastIndexOf('</script>')
+    start + opening.length,
+    html.indexOf('</script>', start)
   );
 
   vm.runInNewContext(script, { document: document });

@@ -996,7 +996,7 @@ def test_the_manifest_records_the_presentation_and_the_columns(consumer):
     """Case 23. A check can read what was rendered without parsing HTML."""
     manifest = consumer["manifest"]
 
-    assert manifest["contract_version"] == 4
+    assert manifest["contract_version"] == 5
 
     assert manifest["presentation"] == {
         "banner": page.CONSUMER_PREVIEW.banner,

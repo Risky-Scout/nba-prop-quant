@@ -281,7 +281,12 @@ def test_a_fallback_book_with_no_destination_gets_no_invented_link(
 
     assert "nothing there is a referral" in html
 
-    assert "https://" not in html, "no destination was invented for this book"
+    # No address anywhere in the document, rather than no occurrence of the
+    # scheme: the page also names the origins it broadcasts its height to when
+    # the site embeds it, and those are not somewhere a reader can be sent.
+    assert "href" not in html, "no destination was invented for this book"
+
+    assert "sportsbook.example" not in html
 
 
 # ======================================================================

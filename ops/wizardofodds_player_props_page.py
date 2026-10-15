@@ -121,6 +121,28 @@ PAGE_MANIFEST_NAME = "page_manifest.json"
 #: separate, reviewed step.
 PREVIEW_PREFIX = "page-preview"
 
+#: The origins the page broadcasts its height to when it is embedded. The
+#: WizardOfOdds site hosts a predictions page in an iframe and sizes that frame
+#: from a ``postMessage`` the page sends; a target origin that does not match
+#: the embedding page exactly is not an error, it is silently not delivered, so
+#: a page carrying one hardcoded origin works on one host and silently sizes
+#: wrong on the other. Both hosts the site itself uses are listed, production
+#: first. Posting to an origin that is not the parent's does nothing, so the
+#: message reaches the real parent once and goes nowhere else.
+PARENT_ORIGINS: tuple[str, ...] = (
+    "https://wizardofodds.com",
+    "https://dev.wizardofodds.com",
+)
+
+#: The element the height is measured from, and the key the parent reads. Both
+#: are the site's existing convention rather than this page's choice: every
+#: embedded predictions page on the site wraps its content in ``app-root`` and
+#: sends ``{frameHeight: <px>}``, and the listener on the other side is the
+#: site's. Renaming either would leave the frame stuck at its default height.
+EMBED_WRAPPER_ID = "app-root"
+
+EMBED_MESSAGE_KEY = "frameHeight"
+
 #: The published document's contract this renderer was written against.
 SUPPORTED_ROWS_CONTRACT = 1
 
@@ -1278,6 +1300,72 @@ SCRIPT = """
 })();
 """
 
+#: The site's own iframe height handshake, as it already runs on the football
+#: index and the other embedded predictions pages. Kept recognisably identical
+#: to those copies -- same measured element, same message, same triggers, same
+#: 2px threshold -- because the receiving listener is the site's and is shared
+#: with them. The one change is the loop: the copies on the site each name a
+#: single parent origin, which is why the staging copies had to be hand-edited
+#: to a second one, and why an embed on the other host silently sizes wrong.
+EMBED_SCRIPT = """
+(function () {
+    if (window.self === window.top) {
+        return;
+    }
+
+    const parentOrigins = __ORIGINS__;
+    let lastSentHeight = 0;
+
+    function sendHeightToParent() {
+        try {
+            const body = document.body;
+            const html = document.documentElement;
+            if (!body || !html) return;
+
+            const contentWrapper = document.getElementById('__WRAPPER__') || body;
+            const currentHeight = Math.ceil(contentWrapper.getBoundingClientRect().height || html.scrollHeight);
+
+            if (currentHeight > 0 && Math.abs(currentHeight - lastSentHeight) > 2) {
+                lastSentHeight = currentHeight;
+                console.log("Iframe broadcast event! Height sent: " + currentHeight + "px");
+                parentOrigins.forEach(function (origin) {
+                    window.parent.postMessage({ __KEY__: currentHeight }, origin);
+                });
+            }
+        } catch (error) {
+            console.warn("Skipped frame height calculation:", error.message);
+        }
+    }
+
+    window.addEventListener('load', sendHeightToParent);
+    document.addEventListener('DOMContentLoaded', sendHeightToParent);
+
+    document.addEventListener('click', function() {
+        // Wait 150ms to give the layout time to physically render the change after the click
+        setTimeout(sendHeightToParent, 150);
+    });
+
+    if (window.MutationObserver) {
+        const observer = new MutationObserver(sendHeightToParent);
+        observer.observe(document.body, { attributes: true, childList: true, subtree: true });
+    }
+
+    if (window.ResizeObserver) {
+        const resizeObserver = new ResizeObserver(sendHeightToParent);
+        resizeObserver.observe(document.body);
+    }
+
+    setInterval(sendHeightToParent, 1000);
+
+})();
+""".replace(
+    "__ORIGINS__", json.dumps(list(PARENT_ORIGINS))
+).replace(
+    "__WRAPPER__", EMBED_WRAPPER_ID
+).replace(
+    "__KEY__", EMBED_MESSAGE_KEY
+)
+
 
 def _option(value: str, label: str) -> str:
     return f'<option value="{escape(value)}">{escape(label)}</option>'
@@ -1858,6 +1946,7 @@ them, not as betting opportunities.</p>
 <style>{STYLE}</style>
 </head>
 <body class="wf-body">
+<div id="{EMBED_WRAPPER_ID}">
 <div class="wf">
 <main>
 <p class="wf-note {escape(presentation.tone)}"><b>{escape(presentation.banner)}</b><span>{escape(presentation.detail)}</span></p>
@@ -1876,8 +1965,10 @@ them, not as betting opportunities.</p>
 <p>Odds change without notice. Nothing on this page is a guarantee of profit, and no offer here is risk-free unless the sportsbook says so in its own terms. 21+ where applicable.</p>
 </footer>
 </div>
+</div>
 <script type="application/json" id="source-note">{_json_for_html(embedded)}</script>
-<script>{SCRIPT}</script>
+<script id="page-controls">{SCRIPT}</script>
+<script id="frame-height">{EMBED_SCRIPT}</script>
 </body>
 </html>
 """
@@ -1930,7 +2021,12 @@ def page_manifest(
                 )
             ],
         },
-        "contract_version": 4,
+        "contract_version": 5,
+        "embed": {
+            "message_key": EMBED_MESSAGE_KEY,
+            "parent_origins": list(PARENT_ORIGINS),
+            "wrapper_id": EMBED_WRAPPER_ID,
+        },
         "fallback_destinations": {
             "linkable_books": dict(fallback.linkable_books()),
             "rel": fallback_destinations.REQUIRED_REL,

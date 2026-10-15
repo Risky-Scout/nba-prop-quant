@@ -337,35 +337,31 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: they landed. All four are owned below -- two it introduced and two it
 #: edited -- so touching any of them again requires declaring it again.
 #:
-#: This branch declares two paths, both owned, and both presentation only: the
-#: page renderer and the one line of the routing-proof script that tells the
-#: renderer which audience it is drawing for.
+#: The public-page-UI branch's two entries were retired in turn when they
+#: landed. Both are owned below -- the renderer and the routing-proof script
+#: are files this lineage introduced -- so touching either again requires
+#: declaring it again.
+#:
+#: This branch declares one path, owned, and additive within the page it
+#: already owns: the renderer gains the site's iframe height handshake and the
+#: wrapper that handshake measures.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
         "ops/wizardofodds_player_props_page.py": (
-            "presentation only. The same publication, the same routing result "
-            "and the same numbers, drawn as the site's own light, dense "
-            "predictions table instead of a dark card dashboard: a bettor's "
-            "ordering of the columns, a compact three-fact header in place of "
-            "the provenance strip, one sentence of commission disclosure with "
-            "the full text one disclosure away, wagers nobody prices moved "
-            "into their own non-actionable section, and a filter count that "
-            "can no longer disagree with the rows on screen. Still a "
-            "renderer: it selects no sportsbook, computes no probability, "
-            "fair price, edge or expected value, and asks whether a book can "
-            "be linked only after the routing result exists. The two outbound "
-            "link classes are byte-identical in destination, rel and verb to "
-            "the ones that landed. Two columns the previous page showed -- "
-            "market probability and edge -- are no longer rendered because "
-            "neither is unambiguous beside a single displayed price; both "
-            "fields remain published and unmodified."
-        ),
-        "ops/wizardofodds_routing_proof.py": (
-            "one line. The QA slate now names its audience when it asks for a "
-            "page, so the routing rule's own wording and the TEST DATA banner "
-            "are rendered for the proof page and cannot reach the consumer "
-            "page. The slate, the four cases, the quotes, the prices, the "
-            "publication path and the fixture arithmetic are unchanged."
+            "embedding only. The site serves a predictions page by framing it "
+            "and sizing the frame from a message the page sends, so the page "
+            "now sends it: the same handshake, the same measured wrapper and "
+            "the same message key the football index and every other embedded "
+            "predictions page on the site already use, carried as a constant "
+            "so the consumer page and the QA page cannot drift apart. Nothing "
+            "a reader is shown changes -- same columns, same numbers, same "
+            "ordering, same two outbound link classes, byte-identical in "
+            "destination, rel and verb -- and nothing is selected, priced or "
+            "computed here. The only departure from the copies on the site is "
+            "that the height is addressed to both hosts the site serves from "
+            "rather than one, because a target origin that does not match the "
+            "embedding page is not an error: the message is silently not "
+            "delivered, and the frame keeps the wrong height."
         ),
     }
 )
