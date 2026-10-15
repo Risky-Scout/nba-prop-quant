@@ -7,12 +7,12 @@
   "modes": {
     "canary": {
       "approval_token": "canary-writes-a-non-live-destination-only",
-      "reason": "A canary that cannot run proves nothing, so this mode is enabled. It is safe by construction rather than by permission: the only transport this repository implements is local_directory, no live destination is configured for the publisher to reach, and the publisher refuses a canary whose destination resolves to the live one.",
+      "reason": "A canary that cannot run proves nothing, so this mode is enabled. It is safe by construction rather than by permission: every canary destination is confined to a subdirectory of the served root, nothing above that subdirectory is addressable through it, and the publisher refuses a canary whose destination resolves to any live one. Live destinations are now fully addressed, which changes none of that: reaching one needs modes.live.state ENABLED here plus both approval variables in the environment, and this mode's enablement grants no part of that.",
       "state": "ENABLED"
     },
     "live": {
       "approval_token": "no-approval-has-been-granted",
-      "reason": "The incumbent has not yet published a slate to wizardofodds.com. Enabling this is a separate reviewed decision taken after a real canary against the real destination, and it cannot be taken from this repository yet because the destination, its transport and its credentials are all facts this repository does not hold.",
+      "reason": "The incumbent has not yet published a slate to the live NBA Player Props path. Enabling this is a separate reviewed decision taken after a real natural-slate proof. The destination, its transport and its credential variable are no longer the obstacle: they are configured on the named live destinations and proven one directory below by the canary. What is missing is the decision itself and the two approval variables that carry it, so an activation supplies an approval rather than any new code or configuration.",
       "state": "DISABLED"
     }
   },

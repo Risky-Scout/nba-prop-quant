@@ -11,11 +11,9 @@
   "missing_external_facts": [
     "the reviewed decision to publish the incumbent on wizardofodds.com at all, which no canary can stand in for",
     "the approval token that decision would set modes.live.approval_token to",
-    "whether the live feed is served from the NBA target's root or from a subpath beside the canary's",
-    "whether the live feed is addressed through a current pointer the website reads, or by a fixed filename it fetches",
-    "the retention the website needs behind the live feed, which is a question about its consumers rather than about this repository",
     "a successful live proof against that path, which cannot exist before the decision above is taken"
   ],
+  "missing_external_facts_note": "Three, and all three are decisions or consequences of one. The addresses are no longer among them: whether the live feed is served from the NBA target's root (it is), whether it is addressed through a current pointer the way the canary is (it is), and what retention sits behind it (two releases, so the rollback target survives) are settled on the named live destinations below, which the publisher refuses to use until the decision above is taken.",
   "named_destinations": {
     "wizardofodds_nba_player_props_page_canary": {
       "canary_subpath": "canary",
@@ -26,6 +24,34 @@
       "port": 22,
       "private_staging": "/var/www/.nba-prop-quant-deploy",
       "public_base_url": "https://sportsodds.wizardofodds.com/tools/odds-scanner/predictions/NBA/player-props/", "public_base_url_scanner_note": "pragma: allowlist secret -- a public URL anybody can fetch, and the one the readback proves this page against",
+      "public_target": "/var/www/sportsodds/tools/odds-scanner/predictions/NBA/player-props",
+      "release_prefix": "nba_prop_quant_player_props_page",
+      "retained_releases": 2,
+      "transport": "ssh_rsync",
+      "user": "nba-prop-deploy"
+    },
+    "wizardofodds_nba_live": {
+      "credential_env": "NBA_WOO_SSH_PRIVATE_KEY",
+      "host": "sportsodds.wizardofodds.com", "host_scanner_note": "pragma: allowlist secret -- the public hostname of the website this feed is served from, which is not credential material",
+      "mode": "live",
+      "note": "The NBA feed as the website serves it: the released rows, their manifest and the current pointer at the served root rather than beneath a canary subpath. Fully addressed and fully disabled. Publishing here needs modes.live.state set to ENABLED in a reviewed commit, NBA_PROP_WOO_PUBLISH set to that same state and NBA_PROP_WOO_PUBLISH_APPROVAL set to the approval token, and the switch commits none of those. What this record settles is only the address: the host, the user, the credential variable, the staging root and the served root are the same facts the canary one directory below already proves, so an activation supplies an approval rather than a destination.",
+      "port": 22,
+      "private_staging": "/var/www/.nba-prop-quant-deploy",
+      "public_base_url": "https://sportsodds.wizardofodds.com/tools/odds-scanner/predictions/nba/", "public_base_url_scanner_note": "pragma: allowlist secret -- a public URL anybody can fetch, and the one the readback would prove this feed against",
+      "public_target": "/var/www/sportsodds/tools/odds-scanner/predictions/nba",
+      "release_prefix": "nba_prop_quant",
+      "retained_releases": 2,
+      "transport": "ssh_rsync",
+      "user": "nba-prop-deploy"
+    },
+    "wizardofodds_nba_player_props_page_live": {
+      "credential_env": "NBA_WOO_SSH_PRIVATE_KEY",
+      "host": "sportsodds.wizardofodds.com", "host_scanner_note": "pragma: allowlist secret -- the public hostname of the website this page is served from, which is not credential material",
+      "mode": "live",
+      "note": "The NBA Player Props page as a reader reaches it: index.html and page_manifest.json at the served root, which is the final public URL this whole integration is for. Fully addressed and fully disabled, on the same three conditions as the live feed. The page is built from a live feed release and never from fixture or proof data; the canary preview one directory below publishes the identical bytes from the identical builder, so what an activation changes is which directory they land in.",
+      "port": 22,
+      "private_staging": "/var/www/.nba-prop-quant-deploy",
+      "public_base_url": "https://sportsodds.wizardofodds.com/tools/odds-scanner/predictions/NBA/player-props/", "public_base_url_scanner_note": "pragma: allowlist secret -- a public URL anybody can fetch, and the one the readback would prove this page against",
       "public_target": "/var/www/sportsodds/tools/odds-scanner/predictions/NBA/player-props",
       "release_prefix": "nba_prop_quant_player_props_page",
       "retained_releases": 2,
@@ -48,7 +74,7 @@
       "user": "nba-prop-deploy"
     }
   },
-  "note": "live is null because the facts still missing for it are decisions rather than addresses: the host, the transport, the credential's name and the public URL are now known and are recorded on the named canary destination below, but none of them amounts to an approval to serve the incumbent's numbers to the public. The publisher refuses live mode while this is null, naming what is missing. canary.root stays null for the narrower reason it always did: the default canary writes a local scratch directory the operator names per run with --destination-root. A canary against the real host is a named destination instead, selected explicitly with --destination-name, so reaching wizardofodds.com is something an operator asks for by name rather than the default.",
+  "note": "destinations.live stays null because that slot is the unnamed, local-directory one: a remote destination is addressed by name, so reaching a real host is never what a mode resolves to by default. The live addresses themselves are no longer missing. named_destinations now holds wizardofodds_nba_live and wizardofodds_nba_player_props_page_live, which are the served feed root and the served page root, fully described and fully disabled: the publisher refuses live mode on the committed switch alone, before it resolves a destination at all, so a complete address is not an approval and was never the thing standing between this repository and publishing. What remains missing is in missing_external_facts, and all of it is a decision. canary.root stays null for the narrower reason it always did: the default canary writes a local scratch directory the operator names per run with --destination-root.",
   "secrets": "No credential material is recorded here and none belongs here. A remote destination names the environment variable its private key is read from, and the key itself reaches the publisher only through that variable.",
   "supported_transports": [
     "local_directory",

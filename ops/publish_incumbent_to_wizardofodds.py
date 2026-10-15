@@ -607,13 +607,22 @@ class RemoteDestination:
     and are verified there. ``public_target`` is served, so nothing reaches it
     that has not already been checked where nobody can read it.
 
-    ``canary_subpath`` is what keeps a canary a canary. Every path this
-    destination addresses is resolved beneath ``public_target/canary_subpath``,
-    so the destination cannot name the served root, cannot name anything
-    beside it, and has no way to express the legacy NBA pages and feeds that
-    sit in the parent directory. A canary that is non-live because of where it
-    can write is a stronger statement than one that is non-live because of
-    what it was asked to write.
+    ``canary_subpath`` is what keeps a canary a canary. Every path a canary
+    addresses is resolved beneath ``public_target/canary_subpath``, so the
+    destination cannot name the served root, cannot name anything beside it,
+    and has no way to express the legacy NBA pages and feeds that sit in the
+    parent directory. A canary that is non-live because of where it can write
+    is a stronger statement than one that is non-live because of what it was
+    asked to write.
+
+    A live destination is the one case where the served root is the point, so
+    it carries no subpath and ``published_root`` is ``public_target`` itself.
+    That is the whole of the difference between the two, and it is why ``mode``
+    is held here rather than inferred: the confinement rule is read off the
+    mode the configuration declares, so a destination cannot acquire the
+    served root by leaving a field out. :func:`_read_remote` requires the
+    subpath of a canary and refuses one on a live destination, and
+    :func:`assert_live_destination_is_the_served_root` checks the result.
 
     No credential is held here. ``credential_env`` is the name of the
     variable the private key is read from, which is a fact about the
@@ -630,28 +639,38 @@ class RemoteDestination:
     public_base_url: str
     canary_subpath: str
     retained_releases: int | None
+    mode: str = MODE_CANARY
+
+    @property
+    def confinement(self) -> str:
+        """The subdirectory this destination is confined to, if any."""
+        return self.canary_subpath.strip("/")
 
     @property
     def published_root(self) -> str:
         """The one directory this destination writes, served."""
-        return f"{self.public_target.rstrip('/')}/{self.canary_subpath.strip('/')}"
+        target = self.public_target.rstrip("/")
+
+        return f"{target}/{self.confinement}" if self.confinement else target
 
     @property
     def staging_root(self) -> str:
-        """The one directory this destination uploads to, unserved."""
+        """The one directory this destination uploads to, unserved.
+
+        Segmented by the confinement where there is one and by the mode where
+        there is not, so a live destination stages beside the canary rather
+        than into the directory above both of them.
+        """
         return (
             f"{self.private_staging.rstrip('/')}/{STAGING_SUBDIRECTORY}/"
-            f"{self.canary_subpath.strip('/')}"
+            f"{self.confinement or self.mode}"
         )
 
     @property
     def published_base_url(self) -> str:
-        return (
-            self.public_base_url.rstrip("/")
-            + "/"
-            + self.canary_subpath.strip("/")
-            + "/"
-        )
+        base = self.public_base_url.rstrip("/") + "/"
+
+        return f"{base}{self.confinement}/" if self.confinement else base
 
 
 @dataclass(frozen=True)
@@ -817,7 +836,7 @@ def _resolve_named_destination(
             "implemented for one"
         )
 
-    remote = _read_remote(declared, name=name, source=source)
+    remote = _read_remote(declared, name=name, source=source, mode=mode)
 
     return Destination(
         mode=mode,
@@ -835,8 +854,12 @@ def _resolve_named_destination(
 #: than defaulted: a remote destination with a guessed user, a guessed path or
 #: a guessed credential name is a destination that looks configured and writes
 #: somewhere nobody chose.
+#:
+#: ``canary_subpath`` is not here because it is required of a canary and
+#: refused of a live destination, which is a statement about the mode rather
+#: than about the shape of the record. :func:`_read_remote` makes it, and a
+#: canary without one is refused there in the same terms it was refused here.
 REQUIRED_REMOTE_FIELDS: tuple[str, ...] = (
-    "canary_subpath",
     "credential_env",
     "host",
     "port",
@@ -848,7 +871,7 @@ REQUIRED_REMOTE_FIELDS: tuple[str, ...] = (
 
 
 def _read_remote(
-    declared: dict[str, Any], *, name: str, source: str
+    declared: dict[str, Any], *, name: str, source: str, mode: str
 ) -> RemoteDestination:
     missing = [
         field_name
@@ -890,15 +913,29 @@ def _read_remote(
             "whatever answered"
         )
 
-    declared_subpath = str(declared["canary_subpath"])
+    declared_subpath = str(declared.get("canary_subpath") or "")
 
     subpath = declared_subpath.rstrip("/")
+
+    if mode == MODE_LIVE:
+        # The served root is what live publication is for, so a subpath here
+        # would be a live destination that is not the live one. Refused rather
+        # than ignored: a configuration that names a directory it does not
+        # write is the kind that gets activated against on the strength of
+        # what it appears to say.
+        if subpath:
+            raise PublishingRefused(
+                f"{source} gives the live destination {name!r} the subpath "
+                f"{declared_subpath!r}. A live destination publishes the "
+                "served root itself, so a subpath would mean activating "
+                "somewhere other than the page or feed a reader fetches"
+            )
 
     # A leading slash is refused rather than stripped. It reads as an absolute
     # path, and somebody who wrote one meant a location rather than a
     # subdirectory: normalising it would silently publish somewhere other than
     # where the configuration appears to say.
-    if (
+    elif (
         declared_subpath.startswith("/")
         or not subpath
         or not _is_safe_remote_segment_path(subpath)
@@ -938,6 +975,7 @@ def _read_remote(
         public_base_url=base_url,
         canary_subpath=subpath,
         retained_releases=retained,
+        mode=mode,
     )
 
 
@@ -985,20 +1023,83 @@ def assert_remote_canary_is_confined(destination: Destination) -> None:
         )
 
 
-def assert_canary_is_not_live(canary: Destination, document: dict[str, Any]) -> None:
-    """A canary pointed at the live destination is not a canary."""
-    live = (document.get("destinations") or {}).get(MODE_LIVE) or {}
+def assert_live_destination_is_the_served_root(destination: Destination) -> None:
+    """A live destination publishes the served root and nothing else.
 
-    live_root = live.get("root")
+    The mirror of :func:`assert_remote_canary_is_confined`, and here for the
+    same reason: the subpath rule is what separates the two modes, so the
+    result of applying it is checked rather than assumed. A live destination
+    that resolved below its served root would publish a page no reader
+    fetches while reporting a successful activation, and one that resolved
+    above it would write the directory the site's own pages live in.
+    """
+    remote = destination.remote
 
-    if not live_root:
+    if remote is None:
         return
 
-    if Path(live_root).resolve() == canary.root.resolve():
+    published = remote.published_root.rstrip("/")
+
+    target = remote.public_target.rstrip("/")
+
+    if published != target:
         raise PublishingRefused(
-            f"the canary destination {canary.root} is the live destination, so "
-            "running it would alter live output"
+            f"the live destination would publish to {published}, which is not "
+            f"the served root {target}, so activating it would not change "
+            "what a reader gets"
         )
+
+
+def _live_published_roots(document: dict[str, Any]) -> list[str]:
+    """Every served root a live destination in this configuration names.
+
+    Read off the configuration rather than off a resolved destination, so a
+    canary is compared against live addresses that exist in the file whether
+    or not anything has resolved them. Unreadable live records are skipped:
+    this is a comparison, and a live destination that cannot be resolved is
+    refused by :func:`resolve_destination` on its own account.
+    """
+    roots: list[str] = []
+
+    declared = (document.get("destinations") or {}).get(MODE_LIVE) or {}
+
+    if declared.get("root"):
+        roots.append(str(declared["root"]))
+
+    for name, record in sorted(
+        (document.get(NAMED_DESTINATIONS_KEY) or {}).items()
+    ):
+        if not isinstance(record, dict) or record.get("mode") != MODE_LIVE:
+            continue
+
+        try:
+            roots.append(
+                _read_remote(
+                    record, name=name, source="", mode=MODE_LIVE
+                ).published_root
+            )
+        except PublishingRefused:
+            continue
+
+    return roots
+
+
+def assert_canary_is_not_live(canary: Destination, document: dict[str, Any]) -> None:
+    """A canary pointed at a live destination is not a canary.
+
+    Every live destination the configuration holds, not just the unnamed one.
+    The named live destinations are the real served roots, and a canary whose
+    own root resolved to one of them would publish to the page or feed the
+    public reads while reporting a canary.
+    """
+    for live_root in _live_published_roots(document):
+        if str(canary.root) == live_root or (
+            Path(live_root).resolve() == canary.root.resolve()
+        ):
+            raise PublishingRefused(
+                f"the canary destination {canary.root} is a live destination, "
+                "so running it would alter live output"
+            )
 
 
 class LocalDirectoryTransport:
@@ -2774,6 +2875,9 @@ def publish(
         assert_canary_is_not_live(destination, document)
 
         assert_remote_canary_is_confined(destination)
+
+    else:
+        assert_live_destination_is_the_served_root(destination)
 
     priced = (
         Path(priced_path)

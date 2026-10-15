@@ -87,6 +87,8 @@ REQUIRED_STEPS: tuple[str, ...] = (
     "Run the adaptive daily protocol",
     "Install the verified frozen runtime bundle",
     "Serve the slate with the incumbent",
+    "Publish the served slate to the WizardOfOdds feed",
+    "Build and publish the WizardOfOdds player-props page",
     "Grade the incumbent's previous slate",
     "Shadow the slate beside production",
     "Monitor the accumulated live shadow evidence",
@@ -103,6 +105,7 @@ REQUIRED_ENTRY_POINTS: tuple[str, ...] = (
     "ops/run_adaptive_daily_fit.py",
     "ops/install_frozen_model_artifacts.py",
     "ops/run_incumbent_production_serving.py",
+    "ops/run_wizardofodds_publication.py",
     "ops/grade_incumbent_production_slate.py",
     "ops/run_production_shadow.py",
     "ops/monitor_live_shadow_evidence.py",
@@ -128,6 +131,10 @@ RUN_ADAPTIVE_UNGATED_ENTRY_POINTS: tuple[str, ...] = (
     # would leave serving without the artifacts it was handed.
     "ops/install_frozen_model_artifacts.py",
     "ops/run_incumbent_production_serving.py",
+    # Publishing tonight's slate is a different question from whether a
+    # candidate was refitted this morning, and binding them would mean a
+    # future off-day fit policy silently stopped the public page updating.
+    "ops/run_wizardofodds_publication.py",
     "ops/grade_incumbent_production_slate.py",
     # The shadow only has something to say on a day it refitted, but the
     # accumulated window is what the frozen policy judges, and it must be
@@ -158,6 +165,12 @@ BLOCKING_ENTRY_POINTS: tuple[str, ...] = (
     # SHADOW_DISABLED_FOR_SAFETY -- is the operator signal the frozen policy
     # exists to raise. continue-on-error here would swallow it.
     "ops/monitor_live_shadow_evidence.py",
+    # Both publication stages. A failed feed that did not fail the job would
+    # let the page stage run, and the thing that makes the page stage safe is
+    # that it is never reached after a feed that did not publish. A failed
+    # page readback that did not fail the job would report a published page
+    # nobody proved a reader can fetch.
+    "ops/run_wizardofodds_publication.py",
 )
 
 #: ``--strict`` makes the shadow entry point propagate its own failures. It is
@@ -165,15 +178,26 @@ BLOCKING_ENTRY_POINTS: tuple[str, ...] = (
 #: lifecycle, where it would let a candidate failure fail production.
 FORBIDDEN_SHADOW_FLAG = "--strict"
 
-#: Publishing activation, in the terms the frozen switch itself states. Taken
-#: from research/game_latent_state/shadow/shadow_publishing_switch.json and
-#: the publisher script name, so this list is not a guess about what turning
-#: publishing on would look like.
+#: Publishing activation, in the terms the frozen switches themselves state.
+#: Taken from research/game_latent_state/shadow/shadow_publishing_switch.json,
+#: ops/wizardofodds_publishing_switch.json and the publisher script name, so
+#: this list is not a guess about what turning publishing on would look like.
+#:
+#: The WizardOfOdds pair matters more than the shadow pair now that the
+#: lifecycle publishes a feed and a page on every production day. Those two
+#: variables plus the committed switch are the whole of the live gate, and a
+#: scheduled workflow carrying either of them would make every scheduled run
+#: an activation nobody reviewed. The canary stages the lifecycle does run
+#: need none of them: the canary is enabled in the committed switch and asks
+#: the environment for nothing.
 PUBLISHING_ACTIVATION_TOKENS: tuple[str, ...] = (
     "NBA_PROP_SHADOW_PUBLISH",
     "NBA_PROP_SHADOW_PUBLISH_APPROVAL",
+    "NBA_PROP_WOO_PUBLISH",
+    "NBA_PROP_WOO_PUBLISH_APPROVAL",
     "19_build_wizardofodds_runtime_bundle.py",
     "--publish",
+    "--mode live",
 )
 
 EXIT_OK = 0

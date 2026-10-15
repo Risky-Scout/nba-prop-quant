@@ -301,6 +301,78 @@ jobs:
             --frozen-bundle-root "$FROZEN_RUNTIME_BUNDLE_ROOT" \
             --summary-path "$GITHUB_STEP_SUMMARY"
 
+      # Publishes what the step above just served. Nothing automated did this
+      # before: the publisher and the page builder both worked and both were
+      # run by hand, over SSH, by an operator who had to remember the order.
+      #
+      # Two steps, and the order between them is the whole point. The feed
+      # publishes the release and then reads back what the destination is
+      # actually serving, which is where the publication contract version is
+      # established; the page is pinned to that exact release. A page built
+      # from "whatever is current" would have rendered, verified and reported
+      # success while showing a slate from before, and the remote canary spent
+      # weeks serving a contract-1 release that would have done exactly that.
+      #
+      # Canary mode. The destination is the real host and the real path, and
+      # it is non-live by construction: every path it can address resolves
+      # beneath the canary subpath, so the served feed root and the live page
+      # one directory up are not expressible from here. Live publication is a
+      # separate reviewed decision and the committed switch refuses it.
+      #
+      # No continue-on-error, on purpose, and gated on MODE alone for the same
+      # reason serving is: publishing tonight's slate has nothing to do with
+      # whether a candidate was refitted this morning. A day with no games is
+      # a recorded no-op decided by the entry point, which reads the serving
+      # receipt rather than guessing from an exit code.
+      - name: Publish the served slate to the WizardOfOdds feed
+        if: env.MODE == 'production'
+        env:
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+          # The deployment key, by name. Never printed, never written to a
+          # receipt, and read only by the transport that needs it.
+          NBA_WOO_SSH_PRIVATE_KEY: ${{ secrets.NBA_WOO_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          python ops/run_wizardofodds_publication.py \
+            --stage feed \
+            --mode canary \
+            --slate-date "$slate" \
+            --data-root "$NBA_PROP_DATA_DIR" \
+            --serving-receipt "$RUNNER_TEMP/run/incumbent_serving.json" \
+            --receipt-path "$RUNNER_TEMP/run/wizardofodds_feed.json" \
+            --summary-path "$GITHUB_STEP_SUMMARY"
+
+      # Builds the page from the release the step above published, and
+      # publishes it. One invocation because the page builder renders, writes
+      # both files, reads them back through the transport and fetches them
+      # over HTTPS as one operation; a failure anywhere in it publishes
+      # nothing.
+      #
+      # --feed-receipt is the dependency, expressed as a file rather than as a
+      # step name: the entry point refuses unless that receipt records a
+      # successful contract-2 publication of this same slate in this same
+      # mode, and pins the build to the release id and rows digest it names.
+      # So the ordering holds twice -- GitHub does not run this step when the
+      # one above failed, and this step would refuse to build from anything
+      # else if it ever did.
+      #
+      # The page lands under the preview prefix, which is where the approved
+      # non-live page is published. The live index one directory up is not
+      # addressable through this destination.
+      - name: Build and publish the WizardOfOdds player-props page
+        if: env.MODE == 'production'
+        env:
+          NBA_WOO_SSH_PRIVATE_KEY: ${{ secrets.NBA_WOO_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          python ops/run_wizardofodds_publication.py \
+            --stage page \
+            --mode canary \
+            --slate-date "$slate" \
+            --feed-receipt "$RUNNER_TEMP/run/wizardofodds_feed.json" \
+            --receipt-path "$RUNNER_TEMP/run/wizardofodds_page.json" \
+            --summary-path "$GITHUB_STEP_SUMMARY"
+
       # Grades the slate before this one against settled box scores. The cron
       # runs at 09:37 UTC, after every North American box score has settled,
       # so yesterday is the most recent slate whose outcomes exist; today's

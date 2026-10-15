@@ -48,6 +48,38 @@ ADAPTIVE_ENTRY_POINT = "ops/run_adaptive_daily_fit.py"
 
 ADAPTIVE_GATE_VARIABLE = "RUN_ADAPTIVE"
 
+# The publication chain, in the only order that is safe on a served slate.
+#
+# Serving produces the priced artifact and the receipt that provenances it;
+# the feed publishes those exact bytes; the page is built from the release the
+# feed just published. Each step depends on the one before it, and the
+# dependency that matters most is the last: a page built before its feed, or
+# from a release the feed did not publish, renders and verifies and reports
+# success while showing a slate from before.
+SERVING_ENTRY_POINT = "ops/run_incumbent_production_serving.py"
+
+PUBLICATION_ENTRY_POINT = "ops/run_wizardofodds_publication.py"
+
+FEED_STAGE_FLAG = "--stage feed"
+
+PAGE_STAGE_FLAG = "--stage page"
+
+# The page stage is handed the feed stage's receipt. Named here because that
+# argument is the dependency: without it the page would be built from whatever
+# the destination happened to be serving.
+PAGE_PIN_ARGUMENT = "--feed-receipt"
+
+# Live publication is a separate reviewed decision taken through the committed
+# switch and two environment variables. None of them belongs in a workflow
+# file: a schedule that carried the approval would make every scheduled run an
+# activation.
+PUBLICATION_ACTIVATION_TOKENS = (
+    "NBA_PROP_WOO_PUBLISH",
+    "NBA_PROP_WOO_PUBLISH_APPROVAL",
+    "--mode live",
+    "--stage live",
+)
+
 
 def load(path: Path) -> dict:
     payload = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -177,6 +209,8 @@ def production_problems(
 
     found += refresh_classification_problems(name, jobs)
 
+    found += publication_order_problems(name, jobs)
+
     for job_name, job in jobs.items():
         labels = runner_labels(job)
 
@@ -249,6 +283,100 @@ def refresh_classification_problems(name: str, jobs: dict) -> list[str]:
                     f"{name}: job {job_name} does not gate the adaptive "
                     f"daily fit on env.{ADAPTIVE_GATE_VARIABLE}, so it could "
                     "run after a refresh that produced no new state"
+                )
+
+    return found
+
+
+def publication_order_problems(name: str, jobs: dict) -> list[str]:
+    """Require the publication chain in the order that cannot publish a lie.
+
+    Checked here rather than left to review because step order in YAML is the
+    only thing that sequences these, and the failure it prevents is silent: a
+    page built before or beside its feed publishes successfully and shows the
+    wrong slate.
+
+    A workflow that publishes nothing is not held to any of this. Only one
+    does, and it is the one that serves.
+    """
+    found: list[str] = []
+
+    for job_name, job in jobs.items():
+        steps = job.get("steps") or []
+
+        commands = [str(step.get("run", "")) for step in steps]
+
+        if not any(PUBLICATION_ENTRY_POINT in command for command in commands):
+            continue
+
+        def index_of(fragment: str) -> int | None:
+            for position, command in enumerate(commands):
+                if fragment in command:
+                    return position
+
+            return None
+
+        serving = index_of(SERVING_ENTRY_POINT)
+        feed = index_of(FEED_STAGE_FLAG)
+        page = index_of(PAGE_STAGE_FLAG)
+
+        if serving is None:
+            found.append(
+                f"{name}: job {job_name} publishes without running "
+                f"{SERVING_ENTRY_POINT}, so it would publish an artifact this "
+                "run did not produce"
+            )
+
+        for label, position in (("feed", feed), ("page", page)):
+            if position is None:
+                found.append(
+                    f"{name}: job {job_name} runs {PUBLICATION_ENTRY_POINT} "
+                    f"without its {label} stage, so the publication chain is "
+                    "incomplete"
+                )
+
+        if serving is not None and feed is not None and feed < serving:
+            found.append(
+                f"{name}: job {job_name} publishes the feed before serving "
+                "the slate, so it would publish the previous run's artifact"
+            )
+
+        if feed is not None and page is not None and page < feed:
+            found.append(
+                f"{name}: job {job_name} builds the page before publishing "
+                "the feed, so the page would be built from whatever release "
+                "the destination was already serving"
+            )
+
+        for position, step in enumerate(steps):
+            run = str(step.get("run", ""))
+
+            if PUBLICATION_ENTRY_POINT not in run:
+                continue
+
+            if step.get("continue-on-error") is True:
+                found.append(
+                    f"{name}: job {job_name} step {step.get('name')!r} may "
+                    "fail without failing the job, so a later publication "
+                    "stage could claim success after an earlier one broke"
+                )
+
+            if PAGE_STAGE_FLAG in run and PAGE_PIN_ARGUMENT not in run:
+                found.append(
+                    f"{name}: job {job_name} builds the page without "
+                    f"{PAGE_PIN_ARGUMENT}, so it is not pinned to the release "
+                    "this run published"
+                )
+
+    text = (WORKFLOW_DIR / name).read_text(encoding="utf-8")
+
+    for token in PUBLICATION_ACTIVATION_TOKENS:
+        for number, line in enumerate(text.splitlines(), 1):
+            if token in line and not line.strip().startswith("#"):
+                found.append(
+                    f"{name}:{number}: names {token!r}, which is live "
+                    "publication activation material and belongs to a "
+                    "reviewed decision rather than to a schedule"
                 )
 
     return found

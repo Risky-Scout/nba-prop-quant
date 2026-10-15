@@ -143,36 +143,43 @@ commit, `NBA_PROP_WOO_PUBLISH` set to that same state, and
 `NBA_PROP_WOO_PUBLISH_APPROVAL` set to the switch's own approval token. No
 single mistake publishes.
 
-Even with all three, live publication refuses, and for a different reason:
-`ops/wizardofodds_destinations.json` carries `live: null`. What is missing is
-no longer the destination's address — the host, the transport, the credential's
-name and the public URL are all known now, and are recorded on the named
-canary destination below. What is missing is a decision, and the things that
-only follow one:
+Even with all three, live publication refuses — and it now refuses for the
+one reason that was always the real one. The address is no longer missing.
+Both live destinations are configured by name below, with the same host, user,
+credential variable and staging root the canary one directory below already
+proves. What is missing is a decision, and the two things that carry it:
 
 - the reviewed decision to publish the incumbent on wizardofodds.com at all,
   which no canary can stand in for;
 - the approval token that decision would set `modes.live.approval_token` to;
-- whether the live feed is served from the NBA target's root or from a subpath
-  beside the canary's;
-- whether it is addressed through a pointer the website reads, or by a fixed
-  filename it fetches;
-- the retention the website needs behind the live feed, which is a question
-  about its consumers;
 - a successful live proof against that path, which cannot exist before the
   decision above is taken.
 
-The refusal names them rather than saying "not configured", because the
-difference between a missing line of config and a missing agreement is the
-difference between finishing and being blocked.
+Three questions left that list when the live destinations were configured, and
+they left it by being answered rather than deferred: the live feed is served
+from the NBA target's own root, it is addressed through a current pointer
+exactly as the canary is, and two releases are retained so the rollback target
+survives. Those were facts about the address, and an address is something this
+repository can hold.
+
+The refusal names what remains rather than saying "not configured", because
+the difference between a missing line of config and a missing agreement is the
+difference between finishing and being blocked. An activation now supplies an
+approval. It writes no code and invents no destination.
 
 ### `canary` — ENABLED, and safe by construction
 
 A canary nobody can run proves nothing, so this mode is enabled. It is safe
-because of what exists rather than because of what is permitted: there is no
-live destination for it to reach, a canary whose destination resolves to the
-live one is refused by name, and a canary against the real host can only
-address paths beneath its own non-live subdirectory of that host's NBA target.
+because of what exists rather than because of what is permitted: a canary
+against the real host can only address paths beneath its own non-live
+subdirectory of that host's NBA target, and a canary whose destination
+resolves to *any* live destination's served root is refused by name.
+
+Configuring the live destinations changed none of that, and tightened one part
+of it. The refusal used to compare against the single unnamed live slot; it
+now compares against every live root the configuration declares, named ones
+included, so the arrival of a live address made the canary's own containment
+check stricter rather than looser.
 
 ## Destinations: one by mode, one by name
 
@@ -237,6 +244,41 @@ pages and feeds — `nba-props.html`, `nba-live-props.html`,
 the *parent* directory and are not expressible through this destination. A
 canary that is non-live because of where it *can* write is a stronger
 statement than one that is non-live because of what it was asked to write.
+
+### `wizardofodds_nba_live` and `wizardofodds_nba_player_props_page_live`
+
+Fully addressed, fully unreachable. These are the two destinations a reviewed
+activation would publish to: the feed at the NBA target's own root, and the
+NBA Player Props page at the directory a reader actually opens.
+
+| fact | live feed | live page |
+| --- | --- | --- |
+| served target | `/var/www/sportsodds/tools/odds-scanner/predictions/nba` | `/var/www/sportsodds/tools/odds-scanner/predictions/NBA/player-props` |
+| public URL | `…/predictions/nba/` | `…/predictions/NBA/player-props/` |
+| subpath | none — this *is* the served root | none |
+| transport | `ssh_rsync` | `ssh_rsync` |
+| user | `nba-prop-deploy` | `nba-prop-deploy` |
+| credential | `NBA_WOO_SSH_PRIVATE_KEY` | `NBA_WOO_SSH_PRIVATE_KEY` |
+| private staging | `/var/www/.nba-prop-quant-deploy` | `/var/www/.nba-prop-quant-deploy` |
+| retained releases | 2 | 2 |
+| reachable | **no** — `modes.live.state` is `DISABLED` | **no** |
+
+Every value in that table is the canary's value with the confinement removed,
+which is the point: the canary proves the transport, the credential, the
+staging directory and the public readback against the same host, so what an
+activation changes is which directory the identical bytes land in.
+
+**A live destination has no subpath, and that is enforced rather than
+conventional.** A subpath is required of a canary and *refused* of a live
+destination, because a live destination that published one directory below the
+served root would be activating somewhere other than the page or feed a
+reader fetches — a live publication nobody can see is a worse outcome than a
+refusal. `assert_live_destination_is_the_served_root` checks the resolved
+result, so the rule holds whichever way the record is written.
+
+The staging directories do not collide. A confined destination stages under
+its confinement and an unconfined one stages under its mode, so the live feed
+stages beside the canary feed rather than into the directory above both.
 
 ### How a remote release is written
 
@@ -366,11 +408,14 @@ appended to the destination's audit log.
 
 ## What this is not
 
-- It is **not** wired into `.github/workflows/nba_production_lifecycle.yml`.
-  The lifecycle serves, grades, shadows and monitors; publishing is a separate
-  decision with a separate record, and the scheduled workflow naming this
-  entry point would make running it the default rather than the decision. A
-  test pins that the workflow does not mention it or its two variables.
+- It is **not** an activation path, even though it is now wired into
+  `.github/workflows/nba_production_lifecycle.yml`. The lifecycle publishes a
+  canary feed and the page built from it on every production day, through
+  `ops/run_wizardofodds_publication.py` — see
+  `docs/wizardofodds/PRODUCTION_AUTOMATION.md` §13. It asks for the canary
+  mode by name, and a test pins that the workflow names neither of the two
+  activation variables nor a live mode anywhere, so no scheduled run can
+  become an activation nobody reviewed.
 - It is **not** a promotion path. The published authority is the incumbent and
   the candidate remains shadow-only, both recorded in the switch and asserted
   in the manifest of every release.
@@ -383,10 +428,11 @@ appended to the destination's audit log.
 
 In addition to the three switch conditions:
 
-1. the decisions listed above, taken by whoever owns the destination — the
-   transport and the credentials are no longer among them;
-2. a live destination configured from those decisions, which is a
-   `destinations.live` that is not null;
+1. the decision listed above, taken by whoever owns the destination — the
+   transport, the credentials and the addresses are no longer among them;
+2. ~~a live destination configured from those decisions~~ — **done**:
+   `wizardofodds_nba_live` and
+   `wizardofodds_nba_player_props_page_live` are configured by name;
 3. a canary against the real destination, with both the readback and the
    public readback verified there, whose `canary_attestation.json` is then
    handed to the activation. One has now been run: see the

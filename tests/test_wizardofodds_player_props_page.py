@@ -1529,22 +1529,82 @@ def test_a_path_that_climbs_out_of_the_page_canary_is_refused(relative):
     assert publisher._is_safe_remote_segment_path(page.PAGE_MANIFEST_NAME) is True
 
 
-def test_the_page_entry_point_has_no_live_mode():
-    """Case 17. There is no switch to flip here and no live path to take."""
-    source = (PROJECT / "ops" / "wizardofodds_player_props_page.py").read_text(
-        encoding="utf-8"
+def test_the_page_entry_points_live_mode_is_refused_by_the_feed_switch():
+    """Case 17. There is a live path, and the switch is what closes it.
+
+    This used to assert the entry point contained no live mode at all, which
+    was true and was the safest thing available while activation was a
+    question nobody had answered. It stopped being the right guarantee once
+    unattended operation was the goal: an activation that required editing
+    this file would be an activation reviewed as a code change, and the whole
+    point of the gate is that it is an approval instead.
+
+    So the live mode exists and is addressed, and what is asserted is that
+    taking it is refused -- by the feed publisher's own committed switch, read
+    through the same function the feed reads it through, so there is one
+    decision rather than two that could drift apart.
+    """
+    with pytest.raises(publisher.PublishingRefused, match="live publishing is"):
+        page.assert_mode_is_permitted(publisher.MODE_LIVE, project_root=PROJECT)
+
+    # And the canary is not waved through: it is permitted because the
+    # committed switch enables it, which is a fact that can change.
+    assert page.assert_mode_is_permitted(
+        publisher.MODE_CANARY, project_root=PROJECT
+    )["state"] == publisher.STATE_ENABLED
+
+    # The entry point itself takes the mode and nothing else decides it, so
+    # there is no second place a live run could be authorised from.
+    assert page._parser().parse_args([]).mode == publisher.MODE_CANARY
+
+    assert sorted(page.MODE_DESTINATIONS) == [
+        publisher.MODE_CANARY,
+        publisher.MODE_LIVE,
+    ]
+
+
+def test_the_live_page_is_addressed_without_being_reachable():
+    """Case 17. Fully configured, fully disabled: the two are different.
+
+    What a later activation must not have to invent, stated as the facts it
+    would otherwise have to supply: which feed the live page is built from,
+    which destination it is written to, and where in that destination it
+    lands. All three are committed; none of them is permission.
+    """
+    live = page.MODE_DESTINATIONS[publisher.MODE_LIVE]
+
+    assert live["source"] == "wizardofodds_nba_live"
+
+    assert live["page"] == "wizardofodds_nba_player_props_page_live"
+
+    # The served root, so index.html is where a reader asks for it.
+    assert live["prefix"] == ""
+
+    document = publisher.read_destinations(project_root=PROJECT)
+
+    destination = publisher.resolve_destination(
+        publisher.MODE_LIVE, document, name=live["page"]
     )
 
-    assert "MODE_LIVE" not in source
+    remote = destination.remote
 
-    assert "publisher.MODE_CANARY" in source
+    assert remote is not None
 
-    assert publisher.MODE_LIVE not in {
-        "canary"
-    }, "the mode constants changed under this test"
+    assert remote.published_root == remote.public_target
 
-    for forbidden in ("--live", "mode=publisher.MODE_LIVE", "STATE_ENABLED"):
-        assert forbidden not in source, forbidden
+    assert remote.published_root.endswith("/NBA/player-props")
+
+    assert remote.user == "nba-prop-deploy"
+
+    assert remote.credential_env == "NBA_WOO_SSH_PRIVATE_KEY"
+
+    # Resolvable and still unpublishable: the switch refuses before a
+    # destination is reached at all.
+    switch = publisher.read_publishing_switch(
+        publisher.MODE_LIVE, project_root=PROJECT
+    )
+
+    assert switch.state == publisher.STATE_DISABLED
 
 
 def test_live_publishing_is_still_disabled():
@@ -1558,7 +1618,8 @@ def test_live_publishing_is_still_disabled():
     assert switch.enabled is False
 
 
-def test_the_live_destination_is_still_unconfigured():
+def test_the_unnamed_live_destination_is_still_unconfigured():
+    """No mode resolves to a real host by default, live least of all."""
     document = publisher.read_destinations(project_root=PROJECT)
 
     assert document["destinations"]["live"] is None

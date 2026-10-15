@@ -441,6 +441,49 @@ class PageRefused(RuntimeError):
 
 
 @dataclass(frozen=True)
+class ExpectedRelease:
+    """The one release a build is allowed to read.
+
+    Without this, a build reads whatever the destination's current pointer
+    names, which is right for a human asking for the current page and wrong
+    for automation: the page is supposed to show the release the same run just
+    published, and "whatever is current" is only that release until something
+    else publishes. A pointer naming an older release is the failure that
+    looks most like success -- a page that renders, serves and verifies, about
+    a slate from before.
+
+    So automation states which release it means and the read refuses anything
+    else, rather than rendering first and comparing afterwards. Both halves
+    are checked because they answer different questions: the id says which
+    release, and the digest says those exact rows, which is what catches a
+    release republished under its own name with different bytes.
+    """
+
+    release_id: str
+    rows_sha256: str
+
+    @classmethod
+    def from_publication_receipt(cls, receipt: Mapping[str, Any]) -> ExpectedRelease:
+        """Read from the feed publisher's own receipt, with nothing inferred."""
+        release = receipt.get("release") or {}
+
+        release_id = str(release.get("release_id") or "")
+
+        rows_sha256 = str(release.get("rows_sha256") or "")
+
+        if not release_id or not rows_sha256:
+            raise PageRefused(
+                "the publication receipt names no release id and rows digest, "
+                "so there is no release this page could be pinned to"
+            )
+
+        return cls(release_id=release_id, rows_sha256=rows_sha256)
+
+    def payload(self) -> dict[str, str]:
+        return {"release_id": self.release_id, "rows_sha256": self.rows_sha256}
+
+
+@dataclass(frozen=True)
 class Publication:
     """One release at a destination, read back and cross-checked."""
 
@@ -480,13 +523,20 @@ def _pointer(transport: Any, relative: str, *, what: str) -> dict[str, Any]:
     return document
 
 
-def load_publication(transport: Any) -> Publication:
+def load_publication(
+    transport: Any, *, expected: ExpectedRelease | None = None
+) -> Publication:
     """The release the destination says it is serving, verified.
 
     Read in the order a consumer reads it and checked at every hop, because
     each hop is a way the destination could be mid-publication: a pointer at a
     release whose manifest is not there yet, a manifest at rows that are not,
     or rows that are there but are not the ones the manifest describes.
+
+    ``expected`` pins the read to one release. Checked at the pointer, before
+    the manifest is opened, so a destination serving a different release is
+    refused rather than read; and again at the rows digest, which is the fact
+    the page is actually about.
     """
     current = _pointer(
         transport, publisher.CURRENT_POINTER, what="current release"
@@ -500,6 +550,13 @@ def load_publication(transport: Any) -> Publication:
         raise PageRefused(
             f"{publisher.CURRENT_POINTER} names no release and manifest, so "
             "what the destination is serving is not settled"
+        )
+
+    if expected is not None and release_id != expected.release_id:
+        raise PageRefused(
+            f"{publisher.CURRENT_POINTER} names the release {release_id!r} "
+            f"and this page was built for {expected.release_id!r}, so the "
+            "destination is not serving the publication this run produced"
         )
 
     manifest = _pointer(transport, manifest_relative, what="release manifest")
@@ -547,6 +604,13 @@ def load_publication(transport: Any) -> Publication:
     rows_relative = str(manifest.get("rows_relative") or "")
 
     rows_sha256 = str(manifest.get("rows_sha256") or "")
+
+    if expected is not None and rows_sha256 != expected.rows_sha256:
+        raise PageRefused(
+            f"{manifest_relative} records the rows digest {rows_sha256!r} and "
+            f"this page was built for {expected.rows_sha256!r}, so the "
+            "release at the destination is not the bytes this run published"
+        )
 
     if not rows_relative or not transport.exists(rows_relative):
         raise PageRefused(
@@ -2200,6 +2264,7 @@ def build_page(
     registry: routing.AffiliateRegistry,
     fallback: fallback_destinations.FallbackDestinations | None = None,
     presentation: Presentation = CONSUMER_PREVIEW,
+    expected: ExpectedRelease | None = None,
 ) -> dict[str, Any]:
     """Read one publication and render the page and its manifest.
 
@@ -2213,11 +2278,15 @@ def build_page(
     ``presentation`` defaults to the consumer page. A caller wanting the QA
     page has to ask for it, so no ordinary build can acquire the routing
     vocabulary or the test-data banner by accident.
+
+    ``expected`` pins which release may be read. Defaults to none, which is
+    the human invocation: build the page for whatever is current. Automation
+    supplies it, because the release it means is the one it just published.
     """
     if fallback is None:
         fallback = fallback_destinations.FallbackDestinations.load()
 
-    publication = load_publication(transport)
+    publication = load_publication(transport, expected=expected)
 
     rows = page_rows(publication, registry=registry, fallback=fallback)
 
@@ -2255,6 +2324,7 @@ def publish_page(
     fallback: fallback_destinations.FallbackDestinations | None = None,
     presentation: Presentation = CONSUMER_PREVIEW,
     prefix: str = "",
+    expected: ExpectedRelease | None = None,
 ) -> dict[str, Any]:
     """Build the page from one publication and write it to the page canary.
 
@@ -2282,6 +2352,7 @@ def publish_page(
         registry=registry,
         fallback=fallback,
         presentation=presentation,
+        expected=expected,
     )
 
     relative = {
@@ -2323,11 +2394,23 @@ def publish_page(
                 "url": page_transport.public_url(target),
             }
 
+    publication = built["publication"]
+
     return {
         "generated_at": datetime.now(UTC).isoformat(),
         "manifest": built["manifest"],
         "prefix": prefix,
         "public_readback": readback,
+        # The release this page is about, named here rather than only inside
+        # the page manifest, so the caller that pinned the build can check the
+        # pin held without parsing the page's own record.
+        "source_release": {
+            "expected": expected.payload() if expected is not None else None,
+            "release_id": publication.release_id,
+            "rows_relative": publication.rows_relative,
+            "rows_sha256": publication.rows_sha256,
+            "slate_date": publication.slate_date,
+        },
         "written": sorted(relative.values()),
     }
 
@@ -2337,20 +2420,76 @@ def publish_page(
 # ----------------------------------------------------------------------
 
 
+#: The feed a page of each mode is built from, and the destination it is
+#: written to. Held here so that the difference between publishing a preview
+#: and publishing the page a reader fetches is a mode rather than four
+#: arguments somebody has to get right, which is what makes a later reviewed
+#: activation an approval instead of a change to this file.
+MODE_DESTINATIONS: Mapping[str, Mapping[str, str]] = MappingProxyType(
+    {
+        publisher.MODE_CANARY: MappingProxyType(
+            {
+                "source": "wizardofodds_nba_canary",
+                "page": "wizardofodds_nba_player_props_page_canary",
+                "prefix": PREVIEW_PREFIX,
+            }
+        ),
+        publisher.MODE_LIVE: MappingProxyType(
+            {
+                "source": "wizardofodds_nba_live",
+                "page": "wizardofodds_nba_player_props_page_live",
+                # The served root: index.html where a reader asks for it.
+                "prefix": "",
+            }
+        ),
+    }
+)
+
+
+def assert_mode_is_permitted(mode: str, *, project_root: Path) -> dict[str, Any]:
+    """Whether this process may publish a page in this mode at all.
+
+    The feed publisher's switch, unchanged and read the same way. The page is
+    the same claim about the same numbers at the same host, so it is gated by
+    the same committed decision rather than by a second one that could drift
+    away from it -- and live is DISABLED there, which is what keeps this entry
+    point's live mode a configured path rather than an available one.
+
+    The canary is read too, rather than waved through, so a repository that
+    disabled canary publishing stops publishing previews as well as releases.
+    """
+    switch = publisher.read_publishing_switch(mode, project_root=project_root)
+
+    publisher.assert_mode_enabled(switch)
+
+    return switch.payload()
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Build the WizardOfOdds NBA player-props page from a published "
-            "incumbent release. Canary only: this entry point has no live "
-            "mode and the page destinations it accepts write beneath a canary "
-            "subpath."
+            "incumbent release. The mode decides which feed it is built from "
+            "and which destination it is written to, and live is refused by "
+            "the publishing switch, not by this entry point lacking one."
         )
     )
 
     parser.add_argument(
+        "--mode",
+        choices=sorted(MODE_DESTINATIONS),
+        default=publisher.MODE_CANARY,
+        help="canary builds from the feed canary and writes the preview. "
+        "live builds from the live feed and writes the page a reader fetches; "
+        "it is refused unless the committed switch, the publish variable and "
+        "the approval token all say so.",
+    )
+
+    parser.add_argument(
         "--source-destination-name",
-        default="wizardofodds_nba_canary",
-        help="named destination the published release is read from",
+        default=None,
+        help="named destination the published release is read from. Defaults "
+        "to the feed of this mode.",
     )
 
     parser.add_argument(
@@ -2361,8 +2500,9 @@ def _parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "--page-destination-name",
-        default="wizardofodds_nba_player_props_page_canary",
-        help="named destination the page is written to",
+        default=None,
+        help="named destination the page is written to. Defaults to the page "
+        "destination of this mode.",
     )
 
     parser.add_argument(
@@ -2373,13 +2513,27 @@ def _parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "--prefix",
-        default=PREVIEW_PREFIX,
+        default=None,
         help=(
             "directory below the page destination the page is written to. "
-            "Defaults to the preview directory, so the ordinary invocation "
-            "publishes a preview and does not write over anything already "
-            "published beside it."
+            "Defaults to the preview directory for a canary, so the ordinary "
+            "invocation publishes a preview and does not write over anything "
+            "already published beside it, and to the served root for live."
         ),
+    )
+
+    parser.add_argument(
+        "--expect-release-id",
+        default=None,
+        help="refuse unless the destination is serving this release. Supplied "
+        "by automation, which means the release it just published rather than "
+        "whatever is current by the time the page is built.",
+    )
+
+    parser.add_argument(
+        "--expect-rows-sha256",
+        default=None,
+        help="refuse unless that release's rows are these exact bytes",
     )
 
     parser.add_argument(
@@ -2392,13 +2546,13 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _transport_for(
-    *, name: str | None, root: str | None, project_root: Path
+    *, mode: str, name: str | None, root: str | None, project_root: Path
 ) -> Any:
     if root is not None:
         return publisher.LocalDirectoryTransport(Path(root))
 
     destination = publisher.resolve_destination(
-        publisher.MODE_CANARY,
+        mode,
         publisher.read_destinations(project_root=project_root),
         name=name,
     )
@@ -2406,23 +2560,60 @@ def _transport_for(
     return publisher.build_transport(destination)
 
 
+def expected_release_from(arguments: argparse.Namespace) -> ExpectedRelease | None:
+    """The pin the arguments describe, or none, and never half of one.
+
+    Half a pin is worse than none: a run that supplied only the id would
+    accept the right release republished with different bytes, while looking
+    from the outside like it had pinned the build.
+    """
+    release_id = arguments.expect_release_id
+
+    rows_sha256 = arguments.expect_rows_sha256
+
+    if release_id is None and rows_sha256 is None:
+        return None
+
+    if not release_id or not rows_sha256:
+        raise PageRefused(
+            "--expect-release-id and --expect-rows-sha256 are supplied "
+            "together or not at all: one without the other pins which "
+            "release without pinning which bytes of it"
+        )
+
+    return ExpectedRelease(release_id=release_id, rows_sha256=rows_sha256)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
 
     root = Path(arguments.project_root or PROJECT_ROOT)
+
+    defaults = MODE_DESTINATIONS[arguments.mode]
+
+    try:
+        switch = assert_mode_is_permitted(arguments.mode, project_root=root)
+
+        expected = expected_release_from(arguments)
+    except (PageRefused, publisher.PublishingRefused) as error:
+        print(json.dumps({"outcome": "REFUSED", "reason": str(error)}, indent=2))
+
+        return publisher.EXIT_REFUSED
 
     registry = routing.AffiliateRegistry.load(project_root=root)
 
     fallback = fallback_destinations.FallbackDestinations.load(project_root=root)
 
     source = _transport_for(
-        name=arguments.source_destination_name,
+        mode=arguments.mode,
+        name=arguments.source_destination_name or defaults["source"],
         root=arguments.source_destination_root,
         project_root=root,
     )
 
     page = _transport_for(
-        name=arguments.page_destination_name,
+        mode=arguments.mode,
+        name=arguments.page_destination_name or defaults["page"],
         root=arguments.page_destination_root,
         project_root=root,
     )
@@ -2434,7 +2625,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             registry=registry,
             fallback=fallback,
             presentation=CONSUMER_PREVIEW,
-            prefix=arguments.prefix,
+            prefix=(
+                arguments.prefix
+                if arguments.prefix is not None
+                else defaults["prefix"]
+            ),
+            expected=expected,
         )
     except (
         PageRefused,
@@ -2450,7 +2646,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         page.close()
 
-    print(json.dumps(receipt, indent=2, sort_keys=True))
+    print(json.dumps({**receipt, "mode": arguments.mode, "switch": switch}, indent=2, sort_keys=True))
 
     return publisher.EXIT_OK
 

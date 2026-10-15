@@ -232,17 +232,36 @@ def test_live_publishing_with_every_approval_still_has_nowhere_to_go(tmp_path: P
     for fact in ("reviewed decision", "approval token", "live proof"):
         assert fact in message, f"the refusal does not name the missing {fact}"
 
-    # The canary being real is not an argument that live is configured: no
-    # named destination is a live one either.
+    # The named live destinations are now complete, and that is not permission
+    # either. This is the distinction the test is about, from the other side:
+    # an address being known is not a decision having been taken, so a run
+    # that names one is refused by the committed switch rather than reaching
+    # it. The switch here is the committed file, not the enabled one above.
     named = json.loads(
         (PROJECT / publisher.DESTINATIONS_RELATIVE).read_text(encoding="utf-8")
     )[publisher.NAMED_DESTINATIONS_KEY]
 
-    assert [
+    live = sorted(
         name
         for name, declared in named.items()
-        if declared.get("mode") != publisher.MODE_CANARY
-    ] == []
+        if declared.get("mode") == publisher.MODE_LIVE
+    )
+
+    assert live == [
+        "wizardofodds_nba_live",
+        "wizardofodds_nba_player_props_page_live",
+    ]
+
+    for name in live:
+        with pytest.raises(
+            publisher.PublishingRefused, match="live publishing is DISABLED"
+        ):
+            publish(
+                built,
+                mode=publisher.MODE_LIVE,
+                destination_name=name,
+                destination_root=None,
+            )
 
 
 def test_an_unreadable_switch_reads_as_disabled(tmp_path: Path):
@@ -668,20 +687,27 @@ def test_a_canary_pointed_at_the_live_destination_refuses(tmp_path: Path):
 
     destinations.write_text(json.dumps(document), encoding="utf-8")
 
-    with pytest.raises(publisher.PublishingRefused, match="is the live destination"):
+    with pytest.raises(publisher.PublishingRefused, match="is a live destination"):
         publish(
             built, destinations_path=destinations, destination_root=live_root
         )
 
 
-def test_the_committed_destinations_configure_no_live_target():
+def test_the_committed_destinations_configure_no_unnamed_live_target():
     """The state this change is required to leave behind, read off disk.
 
     Two transports now, and exactly two: a remote one was added because the
-    destination is real, and nothing else was. The live target is still null,
-    which is the fact this file is mostly about -- a real canary destination
-    and an enabled live destination are separate decisions, and only the first
-    one has been taken.
+    destination is real, and nothing else was. The unnamed live target is
+    still null, which is what keeps a mode from resolving to a real host by
+    default -- a remote destination is addressed by name, so reaching
+    wizardofodds.com is always something asked for explicitly.
+
+    The live *addresses* are no longer missing, and that is a separate fact
+    from permission. Automation needs them settled so that a later reviewed
+    activation supplies an approval rather than a destination, and the
+    publisher refuses live mode on the committed switch before it resolves a
+    destination at all, so a complete address buys nothing. What remains in
+    ``missing_external_facts`` is the decision and what follows from it.
     """
     document = json.loads(
         (PROJECT / publisher.DESTINATIONS_RELATIVE).read_text(encoding="utf-8")
@@ -692,7 +718,21 @@ def test_the_committed_destinations_configure_no_live_target():
         publisher.TRANSPORT_LOCAL_DIRECTORY,
         publisher.TRANSPORT_SSH_RSYNC,
     ]
-    assert len(document["missing_external_facts"]) >= 5
+
+    # Three, and every one a decision: the reviewed decision itself, the
+    # token it would set, and a live proof that cannot precede it.
+    assert len(document["missing_external_facts"]) == 3
+
+    for fact in ("reviewed decision", "approval token", "live proof"):
+        assert any(
+            fact in entry for entry in document["missing_external_facts"]
+        ), fact
+
+    # And nothing still claims an address is unknown.
+    for settled in ("whether the live feed", "the retention the website"):
+        assert not any(
+            settled in entry for entry in document["missing_external_facts"]
+        ), settled
 
     # The unnamed canary is still the local scratch directory, so a run that
     # named no destination cannot reach a host.
@@ -1795,13 +1835,19 @@ def test_the_entry_point_rolls_back(tmp_path: Path):
     assert outcome["restored_release_id"] == first["release"]["release_id"]
 
 
-def test_the_lifecycle_workflow_does_not_run_the_publisher():
+def test_the_lifecycle_workflow_cannot_publish_live():
     """Live activation is not a consequence of the scheduled lifecycle.
 
-    The lifecycle serves, grades, shadows and monitors. Publishing is a
-    separate decision with a separate record, and the scheduled workflow
-    naming this entry point would make running it the default rather than the
-    decision.
+    The lifecycle does publish now: a canary feed and the page built from it,
+    every production day, because an integration nobody runs unattended is
+    not an integration. What it cannot do is activate. It asks for the canary
+    mode by name, and the three things that would make a run live -- the two
+    approval variables and a live mode on the command line -- appear nowhere
+    in the file.
+
+    It reaches the publisher through ops/run_wizardofodds_publication.py
+    rather than naming this entry point directly, so the ordering between the
+    feed and the page is expressed once, in Python, rather than twice in YAML.
     """
     workflow = (
         PROJECT / ".github" / "workflows" / "nba_production_lifecycle.yml"
@@ -1810,14 +1856,23 @@ def test_the_lifecycle_workflow_does_not_run_the_publisher():
     assert "publish_incumbent_to_wizardofodds" not in workflow
     assert publisher.PUBLISH_ENV_VAR not in workflow
     assert publisher.PUBLISH_APPROVAL_ENV_VAR not in workflow
+    assert f"--mode {publisher.MODE_LIVE}" not in workflow
+
+    assert "ops/run_wizardofodds_publication.py" in workflow
+    assert f"--mode {publisher.MODE_CANARY}" in workflow
 
 
-def test_only_the_publisher_names_its_activation_variables():
-    """The two variables live in one module, and no script reads them.
+def test_only_the_publisher_reads_its_activation_variables():
+    """One module consults the two variables. The rest only forbid them.
 
     The same property the shadow switch is held to. Activation cannot be a
-    side effect of running some other entry point if only one module knows the
-    variables' names.
+    side effect of running some other entry point if only one module consults
+    the variables.
+
+    The two static validators name them as well, in the lists of tokens a
+    workflow may not contain. That is the opposite of consulting one: a
+    validator that finds the name fails the workflow rather than publishing
+    from it, and neither validator reads the environment at all.
     """
     bearers = {
         path.relative_to(PROJECT).as_posix()
@@ -1829,7 +1884,19 @@ def test_only_the_publisher_names_its_activation_variables():
         if publisher.PUBLISH_ENV_VAR in path.read_text(encoding="utf-8")
     }
 
-    assert bearers == {"ops/publish_incumbent_to_wizardofodds.py"}
+    entry_point = "ops/publish_incumbent_to_wizardofodds.py"
+
+    assert bearers == {
+        entry_point,
+        "ops/validate_main_scheduler_role.py",
+        "ops/validate_workflows.py",
+    }
+
+    for name in sorted(bearers - {entry_point}):
+        source = (PROJECT / name).read_text(encoding="utf-8")
+
+        assert "os.environ" not in source, name
+        assert "getenv" not in source, name
 
 
 def test_the_serving_module_still_publishes_nothing():
