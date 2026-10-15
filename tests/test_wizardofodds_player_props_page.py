@@ -1081,7 +1081,7 @@ def test_untrusted_text_is_escaped(tmp_path):
 
     assert "<b>book</b>" not in html
 
-    assert html.count("</script>") == 2
+    assert html.count("</script>") == 3
 
 
 def test_the_embedded_json_cannot_close_its_own_element(published):
@@ -1790,7 +1790,7 @@ def test_the_page_manifest_records_what_a_check_needs(with_affiliates):
 
     manifest = built["manifest"]
 
-    assert manifest["contract_version"] == 4
+    assert manifest["contract_version"] == 5
 
     assert manifest["mode"] == publisher.MODE_CANARY
 
