@@ -30,6 +30,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import os
 import re
 import shutil
 import sys
@@ -651,6 +652,78 @@ def test_17_the_iframe_contract_is_unchanged(rendered: dict, rendered_html: str)
         ],
         "wrapper_id": "app-root",
     }
+
+
+# ======================================================================
+# the first natural slate, whenever it arrives
+# ======================================================================
+
+
+#: Where a real priced slate would be, if one had been served here. The env
+#: var lets an operator point this at an artifact outside the configured data
+#: root without editing anything.
+NATURAL_PRICED_ROOTS: tuple[Path, ...] = (
+    Path(os.environ.get("NBA_PROP_NATURAL_PRICED_DIR", "")),
+    PROJECT / "data" / publisher.PRICED_MARKETS_RELATIVE,
+    Path(os.environ.get("NBA_PROP_WORK_DIR", "/nonexistent"))
+    / "data"
+    / publisher.PRICED_MARKETS_RELATIVE,
+)
+
+
+def natural_priced_artifacts() -> list[Path]:
+    """Every real priced slate this checkout can see. Usually none.
+
+    "Real" means served from the live API rather than from the fixture, and
+    the fixture never writes into these roots -- it is handed a temporary one
+    per run. So anything found here was produced by an actual slate.
+    """
+    found: list[Path] = []
+
+    for root in NATURAL_PRICED_ROOTS:
+        if not root or not root.is_dir():
+            continue
+
+        found.extend(sorted(root.glob("*.parquet")))
+
+    return found
+
+
+def test_a_natural_priced_slate_names_every_player():
+    """The read-only check on real data, which skips until there is any.
+
+    Nothing here writes, and nothing here manufactures a slate to check: a
+    fabricated "natural" artifact would prove less than the real-path fixture
+    test above already does. This exists so that the proof arrives by itself
+    the first time a real slate is served into this checkout.
+    """
+    artifacts = natural_priced_artifacts()
+
+    if not artifacts:
+        pytest.skip(
+            "no natural priced slate in this checkout; the identity lineage "
+            "is proven on the real serving path from the fixture roster above"
+        )
+
+    checked = 0
+
+    players: set = set()
+
+    for path in artifacts:
+        frame = pd.read_parquet(path)
+
+        assert "player_name" in frame.columns, path
+
+        for value in frame["player_name"].tolist():
+            assert publisher.player_name_problem(value) is None, (path, value)
+
+            players.add(value)
+
+            checked += 1
+
+    assert checked > 0
+
+    assert players
 
 
 # ======================================================================
