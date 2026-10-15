@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from datetime import date, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -226,6 +227,26 @@ def assert_history_precedes_slate(
         )
 
     return latest
+
+
+def _token(value: Any) -> str | None:
+    """One schedule string, or ``None`` when the payload does not carry it.
+
+    Team abbreviations and tip timestamps arrive as text and are published as
+    text. Kept as the exact characters the schedule supplied rather than
+    parsed: a tip time rebuilt through a timestamp loses its offset on the way
+    to JSON, and a team abbreviation has no normal form worth imposing. The
+    empty string is absence, not a team called "".
+    """
+    if value is None or value is pd.NaT:
+        return None
+
+    if isinstance(value, float) and math.isnan(value):
+        return None
+
+    text = str(value).strip()
+
+    return text or None
 
 
 def slate_date_of_upcoming_games(upcoming_games: pd.DataFrame) -> pd.Timestamp:
@@ -712,10 +733,27 @@ def build_upcoming_slate_features(
         home_team_id = int(game["home_team_id"])
         visitor_team_id = int(game["visitor_team_id"])
 
+        # The schedule payload names both teams and says when they tip. Those
+        # are the only human-readable facts about the game anywhere on this
+        # path, and they were being dropped here: every stage downstream had
+        # two integers and a date, so a page could say who was playing only by
+        # inventing a team list of its own. Carried verbatim, and None when the
+        # payload is silent, because a missing abbreviation is a fact about the
+        # schedule and not something to fill in.
+        home_abbreviation = _token(game.get("home_team_abbreviation"))
+        visitor_abbreviation = _token(game.get("visitor_team_abbreviation"))
+        tip_off_utc = _token(game.get("datetime"))
+
         for team_id, opponent_id, is_home in [
             (home_team_id, visitor_team_id, 1),
             (visitor_team_id, home_team_id, 0),
         ]:
+            # Which side the player is on, decided by the same branch that
+            # already decides team_id and opponent_id rather than by a second
+            # rule that could disagree with it.
+            player_abbreviation = (
+                home_abbreviation if is_home else visitor_abbreviation
+            )
             roster = active_players[
                 pd.to_numeric(active_players["current_team_id"], errors="coerce").eq(team_id)
             ]
@@ -749,6 +787,10 @@ def build_upcoming_slate_features(
                     "home_team_id": home_team_id,
                     "visitor_team_id": visitor_team_id,
                     "is_home": is_home,
+                    "home_team_abbreviation": home_abbreviation,
+                    "visitor_team_abbreviation": visitor_abbreviation,
+                    "player_team_abbreviation": player_abbreviation,
+                    "tip_off_utc": tip_off_utc,
                     "postseason": int(bool(game.get("postseason", False))),
                     "days_since_prev": days_since_prev,
                     "days_rest": np.clip(days_since_prev - 1, 0, 14)

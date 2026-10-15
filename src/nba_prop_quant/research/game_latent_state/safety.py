@@ -136,12 +136,24 @@ SERVING_SOURCE_EXEMPT_FUNCTIONS: tuple[str, ...] = (
 #: added statement has to name one of these, so widening what an exempt
 #: function may do means adding a name here and having that reviewed, rather
 #: than it following silently from the function already being exempt.
+#: ``model_projection`` and the three abbreviations are publication plumbing
+#: rather than model plumbing: each one carries a quantity some earlier stage
+#: already produced to a stage that was not being given it. The pricing script
+#: copies the mean its own existing call priced the line against, and the
+#: slate builder copies the two team names and the tip time the schedule
+#: payload arrives with. Nothing here computes a projection or decides a
+#: matchup, and neither name buys anything beyond carrying one forward.
 DECLARED_SERVING_PLUMBING_NAMES: tuple[str, ...] = (
     "frozen_bundle_root",
     "history_games",
     "context",
     "flags",
     "season_progress",
+    "model_projection",
+    "home_abbreviation",
+    "visitor_abbreviation",
+    "player_abbreviation",
+    "tip_off_utc",
 )
 
 #: The two registries under ``models/`` that record what serving runs, rather
@@ -342,26 +354,117 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: are files this lineage introduced -- so touching either again requires
 #: declaring it again.
 #:
-#: This branch declares one path, owned, and additive within the page it
-#: already owns: the renderer gains the site's iframe height handshake and the
-#: wrapper that handshake measures.
+#: The iframe-handshake branch's one entry was retired in turn when it landed,
+#: for the reason that entry itself gave: the renderer is owned below, so
+#: touching it again requires declaring it again.
+#:
+#: This branch declares nine paths and widens nothing. The published page
+#: could state neither what the model projects nor who a player is playing,
+#: because the publication carried neither -- and both quantities already
+#: existed upstream and were simply being dropped on the way through. So the
+#: declarations are the two serving stages that stop dropping them, under the
+#: additive-only rule and nothing more; the two serving-source registries
+#: those two require relocking, one of which records the other's digest; the
+#: publisher and the renderer, both owned, which carry and show them; the
+#: routing-proof builder, which has to carry the new columns as nulls or stop
+#: being publishable at all; and the two documents that record the contract.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
+        "src/nba_prop_quant/slate.py": (
+            "carrying game context forward, additively. normalize_games "
+            "already produces the schedule's own home and visitor "
+            "abbreviations and keeps its tip timestamp, and the live builder "
+            "already copies the games frame whole -- and then assembled each "
+            "row from a dict that kept none of the three, so every stage "
+            "after it held two team integers and a date. A page could say who "
+            "was playing only by inventing a team list or calling a second "
+            "schedule API, which is why it said nothing. The builder now "
+            "carries all three forward verbatim, plus the player's own side "
+            "chosen by the same is_home branch that already chooses team_id "
+            "and opponent_id, and None wherever the payload is silent. No "
+            "feature, prior, window, leakage guard or slate-date rule is "
+            "touched and no value any model is fit on changes"
+        ),
+        "scripts/15_price_markets.py": (
+            "naming the projection the price already used, additively. The "
+            "priced feed had no single column for the model's central "
+            "forecast of the player's statistic, so a consumer had to know "
+            "which per-target mean each prop is priced from. main copies the "
+            "column its own existing pricing call priced the line against to "
+            "model_projection, and writes null for a combo prop, which is "
+            "priced from a joint distribution with no central forecast of the "
+            "combined total anywhere on this path. A copy: no probability, "
+            "price, edge, EV, quantile, line, calibration or routing "
+            "computation is touched, and the feed's schema version literal is "
+            "deliberately not edited, because the additive-only rule this "
+            "declaration is granted under forbids it and the publisher's own "
+            "column-presence check already refuses a feed without the field"
+        ),
+        "models/frozen_manifests/"
+        "nba_prop_quant_v2_adaptive_serving_source_contract.json": (
+            "the relock the two changes above require, and nothing else. "
+            "Moves current_sha256 for those two files only and enumerates the "
+            "divergence each one adds, which is what this contract's own "
+            "purpose asks for. Every historical_reference_sha256, the "
+            "architecture reference and the historical contract hash are "
+            "untouched, and no locked file is dropped"
+        ),
+        "models/frozen_manifests/"
+        "nba_prop_quant_v2_adaptive_update_protocol.json": (
+            "one hash, following the relock above. This file records the "
+            "digest of the serving source contract, and the production "
+            "preflight derives that digest from the tree and refuses the run "
+            "on a mismatch -- so a relock that did not land here would fail "
+            "the lifecycle before any model was loaded. Nothing else in it "
+            "moves: the architecture contract digest, the protocol version "
+            "and every rule it states are untouched"
+        ),
+        "ops/publish_incumbent_to_wizardofodds.py": (
+            "five source columns added to the published field list and the "
+            "record's own contract_version moved from 1 to 2. The two team "
+            "abbreviations and the player's side are published under away, "
+            "home and player names because a slate is read away side first; "
+            "the tip time and the projection are published under the names "
+            "they already have. Still a projection of the runtime's own "
+            "cells: every value is copied, the fail-closed rules are "
+            "unchanged, and nothing is computed, selected or recalibrated "
+            "here"
+        ),
         "ops/wizardofodds_player_props_page.py": (
-            "embedding only. The site serves a predictions page by framing it "
-            "and sizing the frame from a message the page sends, so the page "
-            "now sends it: the same handshake, the same measured wrapper and "
-            "the same message key the football index and every other embedded "
-            "predictions page on the site already use, carried as a constant "
-            "so the consumer page and the QA page cannot drift apart. Nothing "
-            "a reader is shown changes -- same columns, same numbers, same "
-            "ordering, same two outbound link classes, byte-identical in "
-            "destination, rel and verb -- and nothing is selected, priced or "
-            "computed here. The only departure from the copies on the site is "
-            "that the height is addressed to both hosts the site serves from "
-            "rather than one, because a target origin that does not match the "
-            "embedding page is not an error: the message is silently not "
-            "delivered, and the frame keeps the wrong height."
+            "two columns the page already knew how to draw and had no data "
+            "for. Matchup renders the two published sides as AWAY @ HOME and "
+            "Model Proj renders the published projection; the player's side "
+            "and the tip time are shown compactly beside the name and the "
+            "matchup. Every number is still copied out of the publication, "
+            "the CTA presentation, the affiliate and fallback routing, the "
+            "sort options, the filters and the iframe handshake are all "
+            "untouched, and the renderer still refuses a publication whose "
+            "contract version is not the one it was written against"
+        ),
+        "ops/wizardofodds_routing_proof.py": (
+            "five columns added to the proof slate, all of them null, and "
+            "nothing else. The publication now carries who is playing and "
+            "what the model projects, and the publisher refuses a feed that "
+            "does not carry the fields it reads -- so this page could not be "
+            "built at all without them. Null rather than invented: this "
+            "slate's teams are two integers nothing has ever named, its "
+            "probabilities are declared constants rather than a model's "
+            "output and it has no schedule, so the page omits both new "
+            "columns and looks exactly as it did. No routing semantics, "
+            "sportsbook, price, tie order or label moves"
+        ),
+        "docs/WIZARDOFODDS_INTEGRATION.md": (
+            "the contract the two feed changes above are part of: which "
+            "column model_projection copies per prop and why a combo line "
+            "carries null, where the four game-context fields come from, why "
+            "the tip time is a string, and why neither feed's schema version "
+            "moved. Documentation only: no code reads it"
+        ),
+        "docs/wizardofodds/INCUMBENT_PUBLISHER.md": (
+            "the five added fields in the published record, the two renames "
+            "and the record's own version moving to 2, including why a "
+            "consumer must compare that version for equality rather than as "
+            "a floor. Documentation only: no code reads it"
         ),
     }
 )

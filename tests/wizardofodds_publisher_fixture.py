@@ -58,6 +58,18 @@ QUOTES: tuple[tuple[int, int, int, str, float, str], ...] = (
     (7004, 9902, 2201, "threes", 1.5, "fixturebook"),
 )
 
+#: What the schedule calls each of the two teams. Three letters, because that
+#: is what ``normalize_games`` carries out of the game payload.
+ABBREVIATION: dict[int, str] = {11: "HOM", 22: "AWY"}
+
+#: When each game tips, as a string. The publisher renders a timestamp as a
+#: date, so a fixture carrying this as a ``pd.Timestamp`` would publish a tip
+#: time with no time of day in it and prove nothing.
+TIP_OFF: dict[int, str] = {
+    9901: "2026-10-20T23:00:00+00:00",
+    9902: "2026-10-21T01:30:00+00:00",
+}
+
 
 def priced_frame() -> pd.DataFrame:
     """One row per quote, carrying every column the publisher reads."""
@@ -68,6 +80,16 @@ def priced_frame() -> pd.DataFrame:
     ):
         over = 0.46 + (index / 100.0)
 
+        team_id = 11 if player_id < 2000 else 22
+        opponent_id = 22 if player_id < 2000 else 11
+        is_home = 1 if player_id < 2000 else 0
+
+        # Derived from the one fact the row already states rather than listed
+        # again, so the fixture cannot name a home side that disagrees with
+        # its own ``is_home``.
+        home_team_id = team_id if is_home else opponent_id
+        visitor_team_id = opponent_id if is_home else team_id
+
         rows.append(
             {
                 "id": quote_id,
@@ -76,11 +98,20 @@ def priced_frame() -> pd.DataFrame:
                 "date": pd.Timestamp(SLATE_DATE),
                 "player_id": player_id,
                 "player_name": f"P{player_id} Fixture",
-                "team_id": 11 if player_id < 2000 else 22,
-                "opponent_id": 22 if player_id < 2000 else 11,
-                "is_home": 1 if player_id < 2000 else 0,
+                "team_id": team_id,
+                "opponent_id": opponent_id,
+                "is_home": is_home,
+                "home_team_abbreviation": ABBREVIATION[home_team_id],
+                "visitor_team_abbreviation": ABBREVIATION[visitor_team_id],
+                "player_team_abbreviation": ABBREVIATION[team_id],
+                "tip_off_utc": TIP_OFF[game_id],
                 "prop_type": prop,
                 "line_value": line,
+                # Not the line, and not a function of the price: the same
+                # distance above it for every row, so a test that confused
+                # the projection with the line or the midpoint would read a
+                # different number.
+                "model_projection": line + 0.4,
                 "market_type": "over_under",
                 "over_odds": -110,
                 "under_odds": -110,

@@ -144,7 +144,11 @@ EMBED_WRAPPER_ID = "app-root"
 EMBED_MESSAGE_KEY = "frameHeight"
 
 #: The published document's contract this renderer was written against.
-SUPPORTED_ROWS_CONTRACT = 1
+#: Checked for equality rather than a floor: 2 is the release that states what
+#: the model projects and who is playing, and reading a release from before
+#: those fields existed would draw a page with two empty columns rather than
+#: refusing.
+SUPPORTED_ROWS_CONTRACT = 2
 
 #: The authority a publication must record to be renderable. A page is a
 #: public claim about the incumbent, so a publication claiming anything else
@@ -236,11 +240,10 @@ SIDE_FAIR_ODDS: Mapping[str, str] = {
     routing.SIDE_UNDER: "calibrated_fair_under_american",
 }
 
-#: The names a published projection would arrive under. None of them is in
-#: the current contract, which is why the page has no projection column. The
-#: page looks and finds nothing rather than asserting the absence, so the
-#: column appears by itself the day the field is published, and in the
-#: meantime nothing here turns a probability into a projected number.
+#: The names a published projection may arrive under, in the order they are
+#: preferred. ``model_projection`` is the one the contract now carries: the
+#: mean the line was priced against. The page reads it and renders it; it
+#: computes no projection of its own and never turns a probability into one.
 PROJECTION_FIELDS: tuple[str, ...] = (
     "model_projection",
     "projected_value",
@@ -248,15 +251,26 @@ PROJECTION_FIELDS: tuple[str, ...] = (
     "projection",
 )
 
-#: Where a human-readable matchup would come from. The contract carries
-#: ``team_id`` and ``opponent_id`` and no names at all, and two integers are
-#: not a matchup: rendering "Team 71 vs Team 72" tells a reader nothing and
-#: makes a finished page look like a fixture dump. So the column is omitted
-#: until names are published, and no schedule lookup is added here to
-#: manufacture them.
+#: Where a human-readable matchup comes from. ``away_team`` and ``home_team``
+#: are the schedule's own abbreviations, published for exactly this. The older
+#: names are still read because a matchup stated outright, or a pair of team
+#: names, is also an answer -- but ``team_id`` and ``opponent_id`` are not:
+#: two integers are not a matchup, "Team 71 vs Team 72" tells a reader
+#: nothing, and nothing here looks up a schedule to manufacture one.
 MATCHUP_FIELD = "matchup"
 
+MATCHUP_SIDE_FIELDS: tuple[str, str] = ("away_team", "home_team")
+
 MATCHUP_NAME_FIELDS: tuple[str, str] = ("team_name", "opponent_name")
+
+#: The player's own side, shown beside the name so a reader knows whose team
+#: the projection belongs to without reading the matchup twice.
+PLAYER_TEAM_FIELD = "player_team"
+
+#: When the game starts, if the schedule said. Rendered beside the matchup and
+#: nowhere else: it is not a column, it is not sortable, and the page does no
+#: timezone arithmetic on it -- the published string is UTC and says so.
+TIP_OFF_FIELD = "tip_off_utc"
 
 #: How a selected offer may be described, by tier. A fallback selection is the
 #: best price in the whole universe by construction -- it is only reached when
@@ -283,8 +297,8 @@ TIER_LABEL: Mapping[str, str] = {
 #: value is computed at the price in the row beside it, so the one number that
 #: tells a reader whether to bet is the one that is unambiguous.
 COLUMNS: tuple[tuple[str, str, bool], ...] = (
-    ("player", "Player", False),
     ("matchup", "Matchup", False),
+    ("player", "Player", False),
     ("prop", "Prop", False),
     ("pick", "Pick", False),
     ("projection", "Model Proj", True),
@@ -676,9 +690,10 @@ class PageRow:
     def projection(self) -> Any:
         """The model's projected number, if the publication publishes one.
 
-        It does not, today. The page looks anyway, so the column appears of
-        its own accord when the field lands, and so that its absence is a fact
-        about the data rather than an opinion held in the renderer.
+        Read, never derived. A combo line has none -- it is priced from a
+        joint distribution with no published central forecast of the total --
+        so this returns nothing for those rows and the cell stays empty rather
+        than being filled with the sum of something.
         """
         for name in PROJECTION_FIELDS:
             value = self.row.get(name)
@@ -692,17 +707,23 @@ class PageRow:
     def matchup(self) -> str | None:
         """Who is playing, in words, or ``None``.
 
-        The publication carries ``team_id`` and ``opponent_id`` and no names.
-        Two integers are not a matchup -- "Team 71 vs Team 72" tells a reader
-        nothing and makes a finished page look unfinished -- so this returns
-        nothing at all and the column disappears. ``is_home`` decides the
-        direction if names ever arrive, which is the one thing about the
-        matchup the published fields already settle.
+        Always away before home, which is how a slate is read everywhere else,
+        and taken from the two published sides rather than assembled from the
+        player's own team and ``is_home`` -- those would give the same two
+        teams in an order that changes row by row for the same game.
+
+        ``None`` when the schedule published no names. Two integers are not a
+        matchup, and nothing here looks one up.
         """
         stated = self.row.get(MATCHUP_FIELD)
 
         if stated not in (None, ""):
             return str(stated)
+
+        away, home = (self.row.get(name) for name in MATCHUP_SIDE_FIELDS)
+
+        if away not in (None, "") and home not in (None, ""):
+            return f"{away} @ {home}"
 
         team, opponent = (self.row.get(name) for name in MATCHUP_NAME_FIELDS)
 
@@ -712,6 +733,20 @@ class PageRow:
         joiner = "vs" if _truthy(self.row.get("is_home")) else "@"
 
         return f"{team} {joiner} {opponent}"
+
+    @property
+    def player_team(self) -> str | None:
+        """The player's own side, or ``None``."""
+        value = self.row.get(PLAYER_TEAM_FIELD)
+
+        return None if value in (None, "") else str(value)
+
+    @property
+    def tip_off(self) -> str | None:
+        """When the game starts, as the schedule published it, or ``None``."""
+        value = self.row.get(TIP_OFF_FIELD)
+
+        return None if value in (None, "") else str(value)
 
     @property
     def stable_order(self) -> tuple[str, str, str, str, str]:
@@ -987,6 +1022,19 @@ def _minute(value: Any) -> str:
     return moment.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
 
+def _clock(value: Any) -> str:
+    """A published tip time, to the minute, in UTC and labelled as such.
+
+    Without the date: every row on a page is one slate, and the slate's date
+    is already in the line above the table. Without a local conversion too --
+    the page would have to guess a reader's zone, and a guessed tip time is
+    worse than an honest one.
+    """
+    text = _minute(value)
+
+    return text.split(" ", 1)[1] if text.count(" ") == 2 else text
+
+
 def _json_for_html(payload: Any) -> str:
     """JSON safe to embed in a script element.
 
@@ -1104,6 +1152,14 @@ STYLE = """
 .wf-table tbody tr:nth-child(even){background:#fafafb}
 .wf-table tbody tr:nth-child(even):hover{background:#f6f8fa}
 .c-player{font-weight:600;white-space:nowrap}
+.c-matchup{white-space:nowrap}
+/* The player's own side and the tip time: present, and quieter than the name
+   and the matchup they hang off, because neither is what a reader scans for. */
+.wf-side{font-weight:400;font-size:11.5px;color:var(--wf-muted)}
+.wf-tip{
+  display:block;font-size:11px;color:var(--wf-muted);
+  font-variant-numeric:tabular-nums;
+}
 .c-prop{white-space:nowrap;color:var(--wf-muted)}
 .c-pick{font-weight:700;white-space:nowrap}
 .c-pick .over{color:var(--wf-win)}
@@ -1175,7 +1231,14 @@ STYLE = """
     content:attr(data-label);display:block;font-size:10px;font-weight:700;
     text-transform:uppercase;letter-spacing:.04em;color:var(--wf-muted);
   }
-  .wf-table tbody td.c-player::before,.wf-table tbody td.c-pick::before{content:none}
+  .wf-table tbody td.c-player::before,.wf-table tbody td.c-pick::before,
+  .wf-table tbody td.c-matchup::before{content:none}
+  /* The matchup heads the card instead of being one more labelled field: it
+     is the same for every prop in a game and it is what tells a reader which
+     game they are looking at. The tip time sits on the same line here, where
+     a card has less room to spare than a table cell. */
+  .c-matchup{grid-column:1/-1;font-size:12px;color:var(--wf-muted)}
+  .c-matchup .wf-tip{display:inline;margin-left:6px}
   .c-player{grid-column:1/-1;font-size:15px}
   .c-prop{grid-column:1/-1;font-size:12px}
   .c-pick{grid-column:1/-1;font-size:15px;margin-bottom:4px}
@@ -1508,13 +1571,13 @@ def _cta(page_row: PageRow) -> str:
 def visible_columns(rows: Sequence[PageRow]) -> tuple[str, ...]:
     """Which columns this publication can actually fill.
 
-    Three of them depend on fields the published contract does not currently
-    carry, and the page asks rather than assumes. A projection has no field at
-    all, so the column is absent; team names have no field either, so the
-    matchup column is absent rather than showing two integers and calling them
-    a fixture. Fair odds *are* published, so they are shown. If a projection
-    or a team name is published later the column appears on its own, and
-    nothing here will have invented one in the meantime.
+    Three of them depend on fields a release may or may not carry, and the
+    page asks rather than assumes. The contract now publishes a projection and
+    both team names, so on an ordinary slate all three appear. A slate of
+    nothing but combo lines has no projection to show, and a schedule that
+    named no teams has no matchup, and in both cases the column is absent
+    rather than full of dashes -- an absence that is a fact about the release
+    and not an opinion held here.
     """
     return tuple(
         key
@@ -1551,10 +1614,24 @@ def _cell(page_row: PageRow, key: str) -> tuple[str, str]:
     row = page_row.row
 
     if key == "player":
-        return escape(str(row.get("player_name") or "")), "c-player"
+        name = escape(str(row.get("player_name") or ""))
+
+        team = page_row.player_team
+
+        if team:
+            name += f' <span class="wf-side">{escape(team)}</span>'
+
+        return name, "c-player"
 
     if key == "matchup":
-        return escape(page_row.matchup or ""), "c-matchup"
+        text = escape(page_row.matchup or "")
+
+        tip = page_row.tip_off
+
+        if text and tip:
+            text += f'<span class="wf-tip">{escape(_clock(tip))}</span>'
+
+        return text, "c-matchup"
 
     if key == "prop":
         return escape(prop_label(row.get("prop_type"))), "c-prop"

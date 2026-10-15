@@ -227,7 +227,12 @@ REMOTE_MISSING = "MISSING"
 #: The published record's own version. Independent of the two feed versions:
 #: this names the shape of what is written to the destination, not the shape
 #: of what was read from the runtime.
-PUBLICATION_CONTRACT_VERSION = 1
+#:
+#: 2 publishes what the model projects and who is playing. The reader of this
+#: record checks the version for equality, not for a floor, precisely because
+#: a renderer written against the wider shape would otherwise read fields a
+#: narrower release does not have and quietly show a page with holes in it.
+PUBLICATION_CONTRACT_VERSION = 2
 
 RELEASES_DIRECTORY = "releases"
 ROWS_NAME = "rows.json"
@@ -315,8 +320,22 @@ PUBLISHED_FIELDS: tuple[tuple[str, str], ...] = (
     ("team_id", "team_id"),
     ("opponent_id", "opponent_id"),
     ("is_home", "is_home"),
+    # Who is playing, in words. The two integers above identify the teams and
+    # describe them to nobody; these are the schedule's own abbreviations,
+    # carried from the game payload the slate is built from. Published under
+    # away/home names rather than the upstream visitor/home ones because the
+    # order a reader expects is the away side first.
+    ("visitor_team_abbreviation", "away_team"),
+    ("home_team_abbreviation", "home_team"),
+    ("player_team_abbreviation", "player_team"),
+    ("tip_off_utc", "tip_off_utc"),
     ("prop_type", "prop_type"),
     ("line_value", "line_value"),
+    # What the model projects for the stat: the mean the line was priced
+    # against, so the number a reader sees is the one that produced the
+    # probability beside it. Null on a combo line, which is priced from a
+    # joint distribution with no published central forecast of the total.
+    ("model_projection", "model_projection"),
     ("market_type", "market_type"),
     ("over_odds", "over_odds"),
     ("under_odds", "under_odds"),

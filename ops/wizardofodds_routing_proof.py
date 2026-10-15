@@ -257,6 +257,20 @@ def priced_frame(*, switch: Any | None = None) -> pd.DataFrame:
                 "team_id": 71,
                 "opponent_id": 72,
                 "is_home": 1,
+                # Present and empty, which is the honest answer for this
+                # slate. The publication now carries who is playing and what
+                # the model projects, and this page has neither: its teams are
+                # two integers nothing has ever named, its probabilities are
+                # declared constants rather than a model's output, and it has
+                # no schedule. Naming a team or a projection here would put
+                # invented numbers on a page whose whole purpose is to be
+                # visibly test data. Published as null, so the page omits both
+                # columns rather than showing a fixture as a fixture list.
+                "home_team_abbreviation": None,
+                "visitor_team_abbreviation": None,
+                "player_team_abbreviation": None,
+                "tip_off_utc": None,
+                "model_projection": None,
                 "prop_type": case["prop_type"],
                 "line_value": case["line_value"],
                 "market_type": "over_under",
