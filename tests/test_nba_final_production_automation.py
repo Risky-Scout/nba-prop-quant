@@ -381,7 +381,10 @@ def test_11_a_receipt_for_another_slate_refuses(tmp_path: Path):
         )
 
 
-def test_12_a_slate_with_no_games_publishes_nothing_and_succeeds(tmp_path: Path):
+@pytest.mark.parametrize("outcome", automation.NO_OP_OUTCOMES)
+def test_12_a_slate_with_no_games_publishes_nothing_and_succeeds(
+    tmp_path: Path, outcome: str
+):
     """Case 12. A no-op is a success, as it is everywhere else in the run.
 
     An off day and a preseason day both reach the publication stages, and
@@ -393,7 +396,7 @@ def test_12_a_slate_with_no_games_publishes_nothing_and_succeeds(tmp_path: Path)
 
     receipt = json.loads(built["receipt_path"].read_text())
 
-    receipt["outcome"] = serving.OUTCOME_NO_GAMES_ON_SLATE
+    receipt["outcome"] = outcome
 
     write_receipt(built["receipt_path"], receipt)
 
@@ -411,6 +414,31 @@ def test_12_a_slate_with_no_games_publishes_nothing_and_succeeds(tmp_path: Path)
 
     assert built_page["outcome"] == automation.OUTCOME_NOT_SERVED
     assert list((tmp_path / "page").rglob("*.html")) == []
+
+
+def test_12a_a_failed_serving_run_is_not_a_no_op(tmp_path: Path):
+    """Case 12a. A broken serving step produced no artifact either.
+
+    Treating that like an off day would leave yesterday's page up while the
+    run reported success, which is the one way a fail-closed chain can fail
+    open. So only the two recorded no-ops are no-ops, and everything else --
+    including a serving failure and an outcome nobody has heard of -- refuses.
+    """
+    for outcome in (serving.OUTCOME_FAILED, "SOMETHING_NEW"):
+        built = serve(tmp_path / outcome)
+
+        receipt = json.loads(built["receipt_path"].read_text())
+
+        receipt["outcome"] = outcome
+
+        write_receipt(built["receipt_path"], receipt)
+
+        with pytest.raises(
+            automation.PublicationStageFailed, match="is unknown and nothing"
+        ):
+            feed_stage(built, tmp_path / outcome / "feed")
+
+    assert serving.OUTCOME_FAILED not in automation.NO_OP_OUTCOMES
 
 
 def test_13_a_refused_feed_stage_stops_the_page_stage(tmp_path: Path):
@@ -867,5 +895,10 @@ def test_28_the_orchestrator_computes_nothing(published):
         assert forbidden not in source, forbidden
 
     assert automation.SERVED_OUTCOME == serving.OUTCOME_SERVED
+
+    assert automation.NO_OP_OUTCOMES == (
+        serving.OUTCOME_NO_PRODUCTION_SLATE,
+        serving.OUTCOME_NO_GAMES_ON_SLATE,
+    )
 
     assert sorted(automation.FEED_DESTINATIONS) == sorted(page.MODE_DESTINATIONS)
