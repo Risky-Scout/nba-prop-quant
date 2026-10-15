@@ -341,13 +341,26 @@ def test_the_two_presentations_cannot_be_confused_for_each_other(
 
 
 def test_no_internal_identifier_is_dressed_up_as_a_matchup(consumer, consumer_html):
-    """Case 5. No "Team 71 vs Team 72", and no matchup column at all."""
-    assert "matchup" not in page.visible_columns(consumer["rows"])
+    """Case 5. The matchup is the published team names, never two integers.
 
-    assert "Matchup" not in consumer_html
+    The column was absent while the publication carried nothing but
+    ``team_id`` and ``opponent_id``, because "Team 71 vs Team 72" tells a
+    reader nothing. It now carries the schedule's own abbreviations, so the
+    column is drawn -- and what Case 5 was really about still holds: no
+    internal identifier reaches the page as a matchup, and the renderer does
+    not assemble one from anything but the two published sides.
+    """
+    assert "matchup" in page.visible_columns(consumer["rows"])
+
+    assert "Matchup" in consumer_html
 
     for page_row in consumer["rows"]:
-        assert page_row.matchup is None
+        away = page_row.row["away_team"]
+        home = page_row.row["home_team"]
+
+        assert page_row.matchup == f"{away} @ {home}"
+
+        assert escape(page_row.matchup) in consumer_html
 
         for field in ("game_id", "team_id", "opponent_id"):
             identifier = page_row.row.get(field)
@@ -359,31 +372,43 @@ def test_no_internal_identifier_is_dressed_up_as_a_matchup(consumer, consumer_ht
 
             assert f"Game {identifier}" not in consumer_html
 
+            # Not merely unlabelled: the integer must not be the matchup cell
+            # at all, under any wording.
+            assert str(identifier) not in page_row.matchup
+
     assert not re.search(r"Team \d+ (?:vs|@) Team \d+", consumer_html)
 
 
-def test_a_projection_is_absent_rather_than_invented_and_fair_odds_are_shown(
+def test_the_projection_is_the_published_one_and_fair_odds_are_shown(
     consumer, consumer_html
 ):
     """Case 5's other half: a column exists when a field does, not before.
 
-    The published contract carries no projection, so the column is gone; it
-    does carry fair odds on both sides, so those are rendered. Both are facts
-    about the release rather than opinions in the renderer, which is why
-    ``visible_columns`` is asked rather than told.
+    The contract now publishes the mean each line was priced against, so the
+    column is drawn and the number in it is that field, copied. It is not the
+    line, not the midpoint of the thresholds on the slate and not derived
+    from the price or the probability -- a renderer that turned a probability
+    into a projected number would be inventing the one figure a reader is
+    most likely to take literally.
     """
     columns = page.visible_columns(consumer["rows"])
 
-    assert "projection" not in columns
+    assert "projection" in columns
 
-    assert "Model Proj" not in consumer_html
+    assert "Model Proj" in consumer_html
 
     assert "fair" in columns
 
     assert "Fair Odds" in consumer_html
 
     for page_row in consumer["rows"]:
-        assert page_row.projection is None
+        published = page_row.row["model_projection"]
+
+        assert page_row.projection == published
+
+        assert published != page_row.wager.line_value
+
+        assert page.number_text(published) in consumer_html
 
         assert page_row.fair_odds is not None
 
@@ -425,20 +450,38 @@ def test_no_ambiguous_market_probability_column_is_rendered(consumer_html):
 # ======================================================================
 
 
-def test_every_row_leads_with_the_player_the_prop_and_the_pick(
+def test_every_row_leads_with_the_game_the_player_the_prop_and_the_pick(
     consumer, consumer_html
 ):
-    """Case 7. The three things a bettor reads first, in that order."""
+    """Case 7. What a bettor reads first, in that order.
+
+    The matchup joined the front of the row when the publication started
+    carrying it: which game this is comes before who is in it. Everything
+    after is unchanged, and the projection sits with the pick rather than
+    among the prices, because it is what the model says and not what a
+    sportsbook says.
+    """
     columns = page.visible_columns(consumer["rows"])
 
-    assert columns[:4] == ("player", "prop", "pick", "win")
+    assert columns == (
+        "matchup",
+        "player",
+        "prop",
+        "pick",
+        "projection",
+        "win",
+        "fair",
+        "market",
+        "ev",
+        "book",
+    )
 
     for page_row in consumer["rows"]:
         row = row_for(consumer_html, page_row)
 
         cells = re.findall(r'<td class="([^"]+)"', row)
 
-        assert cells[:3] == ["c-player", "c-prop", "c-pick"]
+        assert cells[:4] == ["c-matchup", "c-player", "c-prop", "c-pick"]
 
         assert str(page_row.row["player_name"]) in row
 

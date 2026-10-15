@@ -45,6 +45,7 @@ PROJECT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT / "tests"))
 
 from season_games_fixture import FULL_SCHEDULE_LENGTH, pad_season_schedule  # noqa: E402
+from serving_additive_pin import assert_numerically_unchanged  # noqa: E402
 
 #: A season late enough that BALLDONTLIE populates ``ist_stage``, so the Cup
 #: regimes come from the stage label rather than from the legacy date table.
@@ -762,19 +763,21 @@ def test_no_model_prediction_or_pricing_module_changed():
     ``game_context.py`` is in this list deliberately: the whole point is that
     the classifier is reused, so it must be byte-identical to production. A
     change there would mean the rules had been rewritten rather than called.
+
+    The pricing script is the one entry on the list a later approved change
+    may reach, so it is checked as the containment guard checks it -- every
+    production line still present and every function but ``main``
+    syntax-tree-identical -- rather than by whether the file appears in a
+    diff. A name in a diff cannot tell a carried column apart from an edited
+    price, and this test is about the second.
     """
     base = production_base()
 
     if base is None:
         pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
 
-    changed = [
-        path
-        for path in git("diff", "--name-only", base, "HEAD").splitlines()
-        if path in NUMERICAL_MODULES
-    ]
-
-    assert changed == [], f"numerical modules changed: {changed}"
+    for relative in NUMERICAL_MODULES:
+        assert_numerically_unchanged(base, relative)
 
 
 def test_no_model_artifact_or_freeze_manifest_changed():

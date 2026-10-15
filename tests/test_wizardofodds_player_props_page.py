@@ -301,8 +301,14 @@ def zero_row_destination(tmp_path: Path) -> Path:
 
     manifest_relative = f"releases/{release_id}/manifest.json"
 
+    # The publisher's own constant rather than a literal, so an empty release
+    # stays readable by the renderer when the contract moves.
     rows_bytes = publisher.serialise(
-        {"contract_version": 1, "rows": [], "slate_date": "2026-10-20"}
+        {
+            "contract_version": publisher.PUBLICATION_CONTRACT_VERSION,
+            "rows": [],
+            "slate_date": "2026-10-20",
+        }
     )
 
     transport.write_bytes(rows_relative, rows_bytes)
@@ -310,7 +316,7 @@ def zero_row_destination(tmp_path: Path) -> Path:
     manifest = {
         "approved_freeze_id": fixture.FREEZE_ID,
         "candidate_authority": page.REQUIRED_CANDIDATE_AUTHORITY,
-        "contract_version": 1,
+        "contract_version": publisher.PUBLICATION_CONTRACT_VERSION,
         "mode": publisher.MODE_CANARY,
         "model_authority": publisher.MODEL_AUTHORITY,
         "provenance": {

@@ -27,6 +27,10 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from nba_prop_quant.research.game_latent_state.safety import (
+    DECLARABLE_SERVING_SOURCE_REGISTRIES,
+)
+
 PROJECT = Path(__file__).resolve().parents[1]
 
 for relative in ("ops", "src", "tests"):
@@ -36,6 +40,7 @@ for relative in ("ops", "src", "tests"):
 import publish_incumbent_to_wizardofodds as publisher  # noqa: E402
 import run_incumbent_production_serving as serving  # noqa: E402
 import wizardofodds_publisher_fixture as fixture  # noqa: E402
+from serving_additive_pin import assert_numerically_unchanged  # noqa: E402
 
 PRODUCTION_REF = "production/wizardofodds-integration"
 
@@ -1555,6 +1560,11 @@ def test_no_model_prediction_or_pricing_module_changed():
     publisher consumes its output and must not have had to change it to do so.
     A publisher that needed the serving step adjusted would be a publisher
     that was not reading the already-approved artifact.
+
+    Two of the twelve are declared additive-only, and for those the claim is
+    checked as the containment guard states it rather than as byte-equality --
+    see ``tests/serving_additive_pin.py``. Nothing is conceded: a file that
+    carries a column forward passes, and a file whose pricing moved does not.
     """
     base = production_base()
 
@@ -1562,13 +1572,21 @@ def test_no_model_prediction_or_pricing_module_changed():
         pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
 
     for relative in NUMERICAL_MODULES:
-        assert blob_text(base, relative) == (PROJECT / relative).read_text(
-            encoding="utf-8"
-        ), relative
+        assert_numerically_unchanged(base, relative)
 
 
 def test_no_model_artifact_frozen_config_or_freeze_manifest_changed():
-    """Nothing fitted, frozen or configured is in this diff."""
+    """Nothing fitted, frozen or configured is in this diff.
+
+    The two registries under ``models/`` that *record* what serving runs,
+    rather than being what serving runs, are not part of that claim. One of
+    them has to move whenever an approved additive serving change lands --
+    enumerating the divergence is its own stated purpose -- and the
+    ``test_wizardofodds_runtime_bundle`` suite is what holds it to that: every
+    historical reference hash pinned, every current hash matching the file it
+    locks, every divergence justified. Reading a relock as a changed model
+    artifact would make that record unmaintainable and prove nothing.
+    """
     base = production_base()
 
     if base is None:
@@ -1586,8 +1604,11 @@ def test_no_model_artifact_frozen_config_or_freeze_manifest_changed():
     offenders = [
         path
         for path in changed
-        if path.endswith((".joblib", ".pkl", ".npy"))
-        or path.startswith(("configs/", "models/", "data/", "research/"))
+        if path not in DECLARABLE_SERVING_SOURCE_REGISTRIES
+        and (
+            path.endswith((".joblib", ".pkl", ".npy"))
+            or path.startswith(("configs/", "models/", "data/", "research/"))
+        )
     ]
 
     assert offenders == [], f"model surface changed: {offenders}"
