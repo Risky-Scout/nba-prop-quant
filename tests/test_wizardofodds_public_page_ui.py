@@ -683,10 +683,19 @@ def test_the_sportsbook_filter_says_what_it_actually_filters(consumer_html):
 
 
 def test_there_is_no_game_time_control_of_any_kind(consumer_html):
-    """Case 13. No tip-off field is published, so no ordering claims one."""
+    """Case 13. The tip-off is shown; no control claims to order by it.
+
+    The publication carries the tip-off now, so the old reason for this -- no
+    such field exists -- no longer holds and is no longer what the page says.
+    What survives is the control's absence, and the distinction is worth
+    keeping sharp: a reader is told when the game starts and is not offered an
+    ordering by it.
+    """
     assert "game time" not in consumer_html.lower()
 
-    assert "tip-off" not in consumer_html.lower().split("does not have")[0]
+    assert 'class="wf-tip"' in consumer_html
+
+    assert "Tip-off times are not in the published release" not in consumer_html
 
     assert 'value="game"' not in consumer_html
 
@@ -710,10 +719,10 @@ def test_there_is_no_game_time_control_of_any_kind(consumer_html):
         {},
         {"prop": "points"},
         {"prop": "rebounds"},
-        {"search": "P1101"},
-        {"search": "fixture"},
+        {"search": "alpha"},
+        {"search": "example"},
         {"search": "zzzznothing"},
-        {"prop": "points", "search": "P1101"},
+        {"prop": "points", "search": "alpha"},
         {"sort": "win"},
         {"sort": "player"},
         {"sort": "player", "prop": "points"},

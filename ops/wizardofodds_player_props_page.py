@@ -615,6 +615,19 @@ def load_publication(transport: Any) -> Publication:
                 "and is not rendered"
             )
 
+        # The publisher refuses this too, which is where it is meant to be
+        # caught. Checked again here because this page reads a release it did
+        # not write: a name is the one published field a reader identifies the
+        # wager by, and the Player cell has no fallback, so a release that lost
+        # one would render a row about nobody rather than fail.
+        name_problem = publisher.player_name_problem(row.get("player_name"))
+
+        if name_problem:
+            raise PageRefused(
+                f"row {index} of {rows_relative}: {name_problem}, so the "
+                "prediction is not rendered under an identifier"
+            )
+
     return Publication(
         release_id=release_id,
         slate_date=slate_date,
@@ -755,8 +768,9 @@ class PageRow:
         Slate date, game, player, prop, line: identifiers, in a fixed order,
         used only after edge and expected value have failed to separate two
         cards. It is not a time and it is not offered to a reader as one.
-        Tip-off timestamps are not in the published feed, so the page has no
-        game-time ordering at all rather than one standing in for it.
+        The published feed does carry a tip-off timestamp, and the page shows
+        it beside the matchup; what it does not offer is an ordering by it,
+        which is a product decision rather than a missing field.
         """
         return (
             str(self.row.get("date") or ""),
@@ -1860,11 +1874,13 @@ selected, never before.</p>
 <h3>Affiliate disclosure</h3>
 <p>{escape(AFFILIATE_DISCLOSURE)}</p>
 <h3>What this page does not have</h3>
-<p>Tip-off times are not in the published release, so they are not shown and
-there is no ordering by start time. Team names are not published either, so no
-matchup is shown rather than one assembled out of internal identifiers. Model
-numbers here are copied from the release: this page computes no probability, no
-fair price and no expected value of its own.</p>
+<p>Each game's tip-off is published and is shown beside the matchup, but
+there is no ordering by start time: the cards are ordered by the model's
+expected value and by nothing else that pretends to be a schedule. Model
+numbers here are copied from the release: this page computes no probability,
+no fair price and no expected value of its own, and every player is named by
+the active-player record the prediction was made from rather than by anything
+a sportsbook called them.</p>
 <h3>Full provenance</h3>
 {_full_provenance(publication)}
 </details>"""

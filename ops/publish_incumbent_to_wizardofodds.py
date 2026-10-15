@@ -157,6 +157,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -1632,6 +1633,58 @@ def _finite_probability(value: Any) -> bool:
     return math.isfinite(number) and 0.0 <= number <= 1.0
 
 
+#: Names that are an identifier wearing a person's slot, or an admission that
+#: the identity was never resolved. The slate builds the public name from the
+#: active-player record's own ``first_name`` and ``last_name`` and from nothing
+#: else, so none of these can arise from a roster that answered -- each one
+#: means the join found no player and something downstream filled the gap, or
+#: the roster itself returned a placeholder. Either way it is a source-data
+#: problem, and publishing it would put a row number on a page where a person
+#: belongs.
+IDENTIFIER_SHAPED_NAMES: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^\d+$"),
+    re.compile(r"^p ?\d+$"),
+    re.compile(r"^player ?\d+$"),
+    re.compile(r"^player ?id ?\d*$"),
+    re.compile(r"^id ?\d+$"),
+    re.compile(r"^unknown( player)?$"),
+    re.compile(r"^(none|nan|null|n/a)$"),
+)
+
+
+def player_name_problem(value: Any) -> str | None:
+    """Why this published name is not a person's name, or ``None``.
+
+    Read on the publishing side rather than built there: the name itself is
+    the active-player record's, assembled once in the prediction step, and
+    this only decides whether what arrived can be shown to a reader.
+    """
+    if value is None or value is pd.NaT:
+        return "player_name is missing"
+
+    if isinstance(value, float) and math.isnan(value):
+        return "player_name is missing"
+
+    text = str(value).strip()
+
+    if not text:
+        return f"player_name is {value!r}, which names nobody"
+
+    # Collapsed so that one rule covers "player_id 12345", "player-id 12345"
+    # and "PlayerID 12345": the shape is what disqualifies the name, not the
+    # punctuation somebody happened to join it with.
+    collapsed = re.sub(r"[\s_\-]+", " ", text).strip().lower()
+
+    for pattern in IDENTIFIER_SHAPED_NAMES:
+        if pattern.match(collapsed):
+            return (
+                f"player_name is {text!r}, which is an identifier rather "
+                "than a person"
+            )
+
+    return None
+
+
 def assert_input_is_not_a_candidate_frame(frame: pd.DataFrame) -> None:
     present = [name for name in CANDIDATE_SOURCE_COLUMNS if name in frame.columns]
 
@@ -1714,6 +1767,11 @@ def row_violations(
             broken.append("availability_out is 1")
     except (TypeError, ValueError):
         broken.append("availability_out is not readable")
+
+    name_problem = player_name_problem(row.get("player_name"))
+
+    if name_problem:
+        broken.append(name_problem)
 
     for column in PUBLISHED_PROBABILITY_FIELDS:
         if not _finite_probability(row.get(column)):

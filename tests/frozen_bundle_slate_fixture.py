@@ -23,7 +23,8 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from types import MappingProxyType
+from typing import Any, Mapping
 
 import pandas as pd
 
@@ -65,6 +66,43 @@ ROSTER: tuple[tuple[int, int, str, int], ...] = (
     (2204, AWAY_TEAM_ID, "F", 2022),
     (2205, AWAY_TEAM_ID, "C", 2019),
 )
+
+#: The active-player record's own name fields, per player. The production path
+#: builds the public name out of exactly these two and nothing else, so a test
+#: that wants to prove the identity lineage states the roster's answer here and
+#: asserts what comes out the other end.
+#:
+#: They are obviously invented, and they are shaped like names on purpose. A
+#: fixture named ``P1101 Fixture`` cannot tell a page that renders the player
+#: apart from a page that renders the player's id, which is the one thing the
+#: Player column has to get right -- and it would make the published preview
+#: look, to anybody reading it, exactly like the defect.
+PLAYER_NAMES: Mapping[int, tuple[str, str]] = MappingProxyType(
+    {
+        1101: ("Alpha", "Example"),
+        1102: ("Beta", "Example"),
+        1103: ("Gamma", "Example"),
+        1104: ("Delta", "Example"),
+        1105: ("Epsilon", "Example"),
+        2201: ("Zeta", "Example"),
+        2202: ("Eta", "Example"),
+        2203: ("Theta", "Example"),
+        2204: ("Iota", "Example"),
+        2205: ("Kappa", "Example"),
+    }
+)
+
+
+def full_name(player_id: int) -> str:
+    """The name the production path should publish for this player.
+
+    Stated the way the roster states it -- two fields, joined -- rather than
+    by reading the convention out of the prediction script, so that the two
+    agreeing is something a test can find rather than assume.
+    """
+    first, last = PLAYER_NAMES[int(player_id)]
+
+    return f"{first} {last}"
 
 #: Quotes on props the frozen calibration policy covers, deliberately none of
 #: them a Gate 3 changed prop. ``assists``, ``points_assists`` and
@@ -311,8 +349,8 @@ def write_capture(snapshot_root: Path) -> str:
     active_players = [
         {
             "id": player_id,
-            "first_name": f"P{player_id}",
-            "last_name": "Fixture",
+            "first_name": PLAYER_NAMES[player_id][0],
+            "last_name": PLAYER_NAMES[player_id][1],
             "position": position,
             "draft_year": draft_year,
             "team": {"id": team_id},

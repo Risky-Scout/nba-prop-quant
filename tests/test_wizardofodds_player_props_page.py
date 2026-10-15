@@ -1282,12 +1282,17 @@ def test_the_controls_the_page_requires_are_all_present(published):
     assert "Win probability (highest first)" in html
 
 
-def test_there_is_no_game_time_sort_because_there_are_no_tip_off_times(published):
-    """A sort the data cannot support is absent rather than approximated.
+def test_there_is_no_game_time_sort_and_the_page_no_longer_blames_the_feed(
+    published,
+):
+    """The sort stays absent; the reason given for it is now the true one.
 
-    The publication carries no tip-off timestamp, so ordering cards by
-    anything and calling it game time would be a false label. The control is
-    gone, the script has no branch for it, and the page says why instead.
+    It was absent because the publication carried no tip-off timestamp. The
+    publication carries one now, and the page shows it, so a page still
+    saying tip-off times are not published would be stating something its own
+    table disproves two columns to the left. The control is still gone and the
+    script still has no branch for it -- that part was a product decision, not
+    a data limitation, and only the explanation had to change.
     """
     built = build(published)
 
@@ -1313,7 +1318,9 @@ def test_there_is_no_game_time_sort_because_there_are_no_tip_off_times(published
 
     assert "mode === 'game'" not in html
 
-    assert "Tip-off times are not in the published release" in html
+    assert "Tip-off times are not in the published release" not in html
+
+    assert "Team names are not published either" not in html
 
     assert "there is no ordering by start time" in html
 

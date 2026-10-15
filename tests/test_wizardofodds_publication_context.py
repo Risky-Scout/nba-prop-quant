@@ -849,11 +849,14 @@ NON_REGRESSION_FIELDS: dict[str, tuple[str, ...]] = {
         "model_preferred_edge",
         "model_preferred_ev",
     ),
+    # ``player_name`` is checked separately, below: the two refs are given
+    # different rosters on purpose, so its literal value differs by input
+    # rather than by code and an equality test would read that as a
+    # regression.
     "vendor and identity": (
         "vendor",
         "game_id",
         "player_id",
-        "player_name",
         "prop_type",
         "team_id",
         "opponent_id",
@@ -956,3 +959,41 @@ def test_15_to_22_nothing_a_bettor_is_shown_moved(
                 mismatches.append(f"{column}[{index}]: {was!r} -> {now!r}")
 
     assert mismatches == [], f"{family} changed: {mismatches}"
+
+
+def test_the_published_name_is_still_a_person_on_both_refs(
+    served: dict, production_priced: pd.DataFrame
+):
+    """The one identity field whose literal value is allowed to differ.
+
+    The fixture's roster was renamed deliberately: it used to answer
+    ``P1101 Fixture``, which no page could distinguish from a page rendering
+    the player's id, so it could not prove the Player column right. Comparing
+    the two refs' names for equality would therefore report the fixture's
+    input change as a code regression.
+
+    What has to hold across both is the property, not the string: every row
+    carries a name, it is a person's rather than an identifier's, and the two
+    runs agree on exactly which players are in the slate. The hop-by-hop
+    lineage from the roster to the rendered cell is pinned in
+    ``test_wizardofodds_player_identity.py``.
+    """
+    key = ["vendor", "game_id", "player_id", "prop_type", "line_value"]
+
+    before = production_priced.set_index(key).sort_index()
+
+    after = served["priced"].set_index(key).sort_index()
+
+    assert before.index.tolist() == after.index.tolist()
+
+    for frame in (before, after):
+        names = frame["player_name"].tolist()
+
+        assert len(names) == len(slate_fixture.QUOTED_PROPS) > 0
+
+        for name in names:
+            assert publisher.player_name_problem(name) is None, name
+
+    assert sorted(before.reset_index()["player_id"].unique()) == sorted(
+        after.reset_index()["player_id"].unique()
+    )
