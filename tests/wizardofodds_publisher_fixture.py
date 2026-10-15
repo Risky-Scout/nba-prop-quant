@@ -62,6 +62,16 @@ QUOTES: tuple[tuple[int, int, int, str, float, str], ...] = (
 #: is what ``normalize_games`` carries out of the game payload.
 ABBREVIATION: dict[int, str] = {11: "HOM", 22: "AWY"}
 
+#: The public name of each player, shaped like a name. The publisher refuses a
+#: name that is an identifier wearing a person's slot, and a fixture named
+#: after its own player id would be exercising that refusal rather than the
+#: happy path every other test here is about.
+PLAYER_NAME: dict[int, str] = {
+    1101: "Alpha Example",
+    1102: "Beta Example",
+    2201: "Zeta Example",
+}
+
 #: When each game tips, as a string. The publisher renders a timestamp as a
 #: date, so a fixture carrying this as a ``pd.Timestamp`` would publish a tip
 #: time with no time of day in it and prove nothing.
@@ -97,7 +107,7 @@ def priced_frame() -> pd.DataFrame:
                 "game_id": game_id,
                 "date": pd.Timestamp(SLATE_DATE),
                 "player_id": player_id,
-                "player_name": f"P{player_id} Fixture",
+                "player_name": PLAYER_NAME[player_id],
                 "team_id": team_id,
                 "opponent_id": opponent_id,
                 "is_home": is_home,

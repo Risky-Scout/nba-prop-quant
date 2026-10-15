@@ -116,6 +116,21 @@ Beyond the contract's own list, the publisher also refuses:
   `prop_type`, `line_value`);
 - an empty priced file, which is not a publication.
 
+### `player_name`
+
+`player_name` is the authoritative active-player record's `first_name` and
+`last_name`, joined once in `scripts/10_predict_slate.py` and merged forward
+by the pricing step. The publisher reads it and never builds it.
+
+It is not a sportsbook's spelling of the player, and it could not be:
+`normalize_props` carries `player_id` and no name, so there is no vendor text
+in the frame at all. It is also never derived from the identifier — a name
+that is missing, null, blank, whitespace-only, or shaped like an identifier
+(`12345`, `P12345`, `Player 12345`, `player_id 12345`, `Unknown Player`)
+refuses the publication. None of those shapes can come from a roster that
+answered, so one appearing means the identity was never resolved, and a row
+number is not a person.
+
 ## Modes
 
 Two, switched independently in `ops/wizardofodds_publishing_switch.json`.
