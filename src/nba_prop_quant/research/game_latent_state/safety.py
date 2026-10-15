@@ -358,14 +358,16 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: for the reason that entry itself gave: the renderer is owned below, so
 #: touching it again requires declaring it again.
 #:
-#: This branch declares seven paths and widens nothing. The published page
+#: This branch declares eight paths and widens nothing. The published page
 #: could state neither what the model projects nor who a player is playing,
 #: because the publication carried neither -- and both quantities already
 #: existed upstream and were simply being dropped on the way through. So the
 #: declarations are the two serving stages that stop dropping them, under the
 #: additive-only rule and nothing more; the serving-source registry relock
 #: those two require; the publisher and the renderer, both owned, which carry
-#: and show them; and the two documents that record the contract.
+#: and show them; the routing-proof builder, which has to carry the new
+#: columns as nulls or stop being publishable at all; and the two documents
+#: that record the contract.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
         "src/nba_prop_quant/slate.py": (
@@ -428,6 +430,18 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
             "sort options, the filters and the iframe handshake are all "
             "untouched, and the renderer still refuses a publication whose "
             "contract version is not the one it was written against"
+        ),
+        "ops/wizardofodds_routing_proof.py": (
+            "five columns added to the proof slate, all of them null, and "
+            "nothing else. The publication now carries who is playing and "
+            "what the model projects, and the publisher refuses a feed that "
+            "does not carry the fields it reads -- so this page could not be "
+            "built at all without them. Null rather than invented: this "
+            "slate's teams are two integers nothing has ever named, its "
+            "probabilities are declared constants rather than a model's "
+            "output and it has no schedule, so the page omits both new "
+            "columns and looks exactly as it did. No routing semantics, "
+            "sportsbook, price, tie order or label moves"
         ),
         "docs/WIZARDOFODDS_INTEGRATION.md": (
             "the contract the two feed changes above are part of: which "
