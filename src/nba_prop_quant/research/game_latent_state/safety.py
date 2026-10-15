@@ -365,54 +365,150 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: any of them again requires declaring it again. The other five are owned
 #: below, which is why this branch declares the two of them it touches.
 #:
-#: This branch declares four paths and widens nothing. It changes no serving
-#: stage at all: the public player name is already built from the authoritative
-#: active-player record in the prediction step, and is already carried, already
-#: published and already rendered, so there was nothing to plumb. What was
-#: missing was a guarantee. The fixtures were named after their own player ids,
-#: so a page rendering the id instead of the name produced identical bytes, and
-#: nothing refused a publication that could not name the player. So the
-#: declarations are the publisher, which gains that refusal; the renderer,
-#: which gains it again at its own trust boundary and loses two sentences of
-#: copy the previous branch made false; and the two documents that record the
-#: contract.
+#: The player-identity branch's four entries were retired in turn when they
+#: landed. All four are owned below, so touching any of them again requires
+#: declaring it again, which is why this branch declares the three of them it
+#: touches.
+#:
+#: This branch declares eleven paths and widens nothing. It computes nothing,
+#: predicts nothing, prices nothing and publishes no number that was not
+#: already published; what it changes is who runs the publication. The feed
+#: publisher and the page renderer already worked and were already proven
+#: against the real host, but only by hand, so the published page could only
+#: ever be as current as somebody's last terminal session.
+#:
+#: Eight of the eleven are owned below. The workflow gains two steps and
+#: loses none -- it is additive-only, and the branch-safety test that compares
+#: line sets holds that regardless of this declaration. The publisher gains
+#: one generalisation: a subpath was required of every remote destination,
+#: which structurally prevented any destination from addressing a served
+#: root, so it is now required of a canary and refused of a live one, with two
+#: checks added that make the result net-tighter than before. The renderer
+#: gains a release pin and a mode. The two JSON records gain the live
+#: addresses and lose two sentences this branch makes false. The two static
+#: validators gain the rules that hold the new ordering. The three that are
+#: not owned are the preflight, which gains one optional secret name, and the
+#: two documents that record the lifecycle and the publisher.
+#:
+#: The new entry point is the eleventh. It is a publication orchestrator and
+#: nothing else: it serves nothing, fits nothing, grades nothing and promotes
+#: nothing, and the only two things it can do are the two the lifecycle asks
+#: it for.
+#:
+#: Live publication is configured and remains disabled. Nothing here touches
+#: the switch state, the approval token or the authority contract.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
+        ".github/workflows/nba_production_lifecycle.yml": (
+            "two added steps, every pre-existing step unchanged. One "
+            "publishes the slate the step above it just served to the "
+            "WizardOfOdds feed canary; one builds and publishes the "
+            "player-props page from that exact release. Both ask for the "
+            "canary mode by name, neither is continue-on-error because a "
+            "publication that failed silently is a stale public page, and "
+            "neither the two activation variables nor a live mode appears "
+            "anywhere in the file. No existing step, gate, condition, "
+            "trigger, runner label, permission or concurrency rule moves"
+        ),
+        "ops/run_wizardofodds_publication.py": (
+            "the new publication orchestrator, and the only file this branch "
+            "adds. It reads the serving receipt, asks the existing publisher "
+            "for the feed release, verifies the promoted release back off the "
+            "transport, then pins that release's id and rows digest and asks "
+            "the existing renderer for the page. It computes no projection, "
+            "price, probability or edge, imports no model, copula, "
+            "calibration or pricing path, and cannot fit, serve, grade, "
+            "promote or activate. Its live mode exists and is refused by the "
+            "committed switch before any destination is resolved"
+        ),
         "ops/publish_incumbent_to_wizardofodds.py": (
-            "one fail-closed rule added to the contract it already enforces: "
-            "a row whose player_name is missing, null, blank, whitespace-only "
-            "or an identifier wearing a person's slot refuses the whole "
-            "publication. Read-only on the name itself -- the active-player "
-            "record's own first and last name, joined once in the prediction "
-            "step, is the only source and this builds nothing and substitutes "
-            "nothing. The published field list, every published value, the "
-            "record's contract version and all the other fail-closed rules "
-            "are untouched"
+            "one generalisation and two compensating checks, no change to "
+            "any published value. A canary subpath was required of every "
+            "remote destination, which meant no destination could address a "
+            "served root and so no live destination could be configured at "
+            "all; it is now required of a canary and refused of a live "
+            "destination. Against that, a live destination must resolve to "
+            "the served root itself, and the refusal that keeps a canary off "
+            "the live path now compares against every live root the "
+            "configuration declares rather than the single unnamed slot. The "
+            "published field list, every published value, the contract "
+            "version, the release identity, the retention and all the "
+            "fail-closed and authority rules are untouched"
         ),
         "ops/wizardofodds_player_props_page.py": (
-            "the same refusal at the renderer's own boundary, and the removal "
-            "of two sentences that are no longer true. The page reads a "
-            "release it did not write and its Player cell has no fallback, so "
-            "a release that lost a name would render a row about nobody "
-            "rather than fail. The copy said tip-off times and team names "
-            "were unpublished; both are published now and both are shown, so "
-            "a page still saying it would be contradicted by its own table. "
-            "The absent game-time sort stays absent -- that was a product "
-            "decision, not a data limitation, and only the explanation "
-            "changed. No column, number, CTA, route, filter, sort option or "
-            "iframe behaviour moves"
+            "a release pin and a mode. The renderer could previously be "
+            "asked only for whatever release was current at the source, "
+            "which is how a page gets built from yesterday's feed; it now "
+            "takes an expected release id and rows digest and refuses at the "
+            "current pointer and again at the manifest, before any row is "
+            "read. The mode selects the already-configured source and page "
+            "destinations instead of their names being passed in, and live "
+            "is refused by the feed publisher's own switch rather than by a "
+            "second gate of its own. No column, number, copy string, CTA, "
+            "route, filter, sort option or iframe behaviour moves, and the "
+            "supported rows contract is still exactly 2"
         ),
-        "docs/WIZARDOFODDS_INTEGRATION.md": (
-            "the player-identity rule in the fail-closed section, stating "
-            "where the public name comes from and what shapes of it are "
-            "refused, and the correction of the same stale tip-off claim the "
-            "page carried. Documentation only: no code reads it"
+        "ops/wizardofodds_destinations.json": (
+            "the two live destinations, by name: the feed at the NBA "
+            "target's served root and the player-props page at the directory "
+            "a reader opens. Every value is the corresponding canary's with "
+            "the confinement removed -- same host, user, credential variable "
+            "and staging root -- so this records an address and grants no "
+            "permission. The unnamed live slot stays null, both canary "
+            "destinations are untouched, and three of the six missing "
+            "external facts are removed because they were questions about "
+            "the address and are now answered"
+        ),
+        "ops/wizardofodds_publishing_switch.json": (
+            "two stale reasons corrected and nothing else. The canary's "
+            "reason claimed no live destination was configured for the "
+            "publisher to reach, and the live one claimed the destination, "
+            "transport and credentials were facts this repository does not "
+            "hold; both stopped being true in this branch. Every state, "
+            "approval token, authority and approved version is byte-for-byte "
+            "what it was: live is DISABLED and canary is ENABLED"
+        ),
+        "ops/validate_workflows.py": (
+            "one new static rule, applied only to a workflow that publishes: "
+            "the serving entry point must be invoked, the feed stage must "
+            "follow it, the page stage must follow the feed stage, neither "
+            "stage may be continue-on-error, the page stage must be given "
+            "the feed stage's receipt, and no publishing activation token may "
+            "appear. Every pre-existing rule is unchanged, and this module "
+            "still reads no environment variable and executes no workflow"
+        ),
+        "ops/validate_main_scheduler_role.py": (
+            "the two new steps added to the required-step list, the new "
+            "entry point added to the required, ungated and blocking lists, "
+            "and the two WizardOfOdds activation variables added to the "
+            "tokens a scheduler copy may not name. All additions: no check "
+            "is removed or weakened, and the byte-identity check between "
+            "main and production is untouched"
+        ),
+        "ops/production_lifecycle_preflight.py": (
+            "one name added to the optional secrets, so the deployment key "
+            "the publication stages need is reported by the preflight and is "
+            "bound in the workflow as a GitHub secret and nothing else. "
+            "Optional rather than required because a validate-only run "
+            "reaches no remote and the transport refuses itself when the key "
+            "is absent. No required secret, durability rule, frozen-contract "
+            "check or exit code changes, and no secret value is read"
+        ),
+        "docs/wizardofodds/PRODUCTION_AUTOMATION.md": (
+            "the daily sequence brought up to what the lifecycle actually "
+            "runs, and a new section on the two publication stages: the "
+            "ordering and why it is expressed in Python as well as in YAML, "
+            "the fail-closed table, the idempotency argument, and the "
+            "division between a configured destination and a reviewed "
+            "activation. Documentation only: no code reads it"
         ),
         "docs/wizardofodds/INCUMBENT_PUBLISHER.md": (
-            "what player_name is and is not: the active-player record's two "
-            "fields joined in the prediction step, never a sportsbook's "
-            "spelling and never derived from the id. Documentation only: no "
-            "code reads it"
+            "the two live destinations documented, the three now-answered "
+            "missing facts removed from the list of what activation waits "
+            "on, and the correction of two claims this branch makes false -- "
+            "that the publisher is not wired into the lifecycle, and that "
+            "the canary is safe because no live destination exists. "
+            "Documentation only: no code reads it"
         ),
     }
 )
@@ -615,6 +711,16 @@ SHADOW_OWNED_PRODUCTION_PATHS: Mapping[str, str] = MappingProxyType(
             "model, pricing or calibration code and calls no serving entry "
             "point, so nothing it produces can reach the feed canary or the "
             "live page"
+        ),
+        "ops/run_wizardofodds_publication.py": (
+            "the publication orchestrator the lifecycle runs twice a day: "
+            "publish the served slate to the feed, then build the page from "
+            "that exact release and publish it. It is the one place the "
+            "ordering between the two is expressed, which is why it exists "
+            "rather than the workflow calling the publisher and the renderer "
+            "directly. It reads a serving receipt and writes only "
+            "publication receipts; it cannot fit, serve, grade, price, "
+            "promote or activate"
         ),
     }
 )

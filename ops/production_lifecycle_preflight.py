@@ -47,7 +47,13 @@ AUTHORITATIVE_PRODUCTION_BRANCH = "production/wizardofodds-integration"
 # a secret's value and never prints one.
 REQUIRED_PRODUCTION_SECRETS = ("BDL_API_KEY",)
 
-OPTIONAL_PRODUCTION_SECRETS = ("ODDS_API_KEY",)
+# Optional here means the preflight reports absence instead of stopping the
+# run. NBA_WOO_SSH_PRIVATE_KEY is the WizardOfOdds deployment key: the
+# publication stages cannot reach the remote without it, but they refuse
+# themselves when it is unset rather than needing this check to do it, and a
+# validate-only run reaches no remote at all. Naming it here binds the
+# workflow to supply it as a GitHub secret and nothing else.
+OPTIONAL_PRODUCTION_SECRETS = ("NBA_WOO_SSH_PRIVATE_KEY", "ODDS_API_KEY")
 
 # Environment variables that must point at durable, run-to-run storage.
 STATE_BACKEND_VARIABLES = (

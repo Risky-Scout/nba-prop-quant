@@ -1274,7 +1274,7 @@ def test_the_transport_refuses_to_address_anything_outside_its_subpath(
 @pytest.mark.parametrize(
     ("subpath", "expected"),
     [
-        ("", "without canary_subpath"),
+        ("", "canary subpath"),
         ("/", "canary subpath"),
         ("..", "canary subpath"),
         ("canary/../..", "canary subpath"),
@@ -1286,9 +1286,14 @@ def test_a_destination_without_a_usable_subpath_is_refused(
 ):
     """The subpath is the confinement, so there is no permissive reading of it.
 
-    An absent one and an unusable one are different defects and are refused
-    separately: the first is a destination nobody finished describing, the
-    second is one that describes somewhere it must not reach.
+    Absent and unusable are both refused, and now in the same terms. The
+    distinction they used to be refused in -- a required field nobody filled
+    in, against a field describing somewhere it must not reach -- stopped
+    being available when the field became required of a canary rather than of
+    every remote destination, because a live destination is the one that
+    correctly has none. Which defect it is matters less than that neither
+    produces a canary: an empty subpath would resolve this destination to the
+    served root, and that is the whole thing confinement rules out.
     """
     document = json.loads(
         (PROJECT / publisher.DESTINATIONS_RELATIVE).read_text(encoding="utf-8")
