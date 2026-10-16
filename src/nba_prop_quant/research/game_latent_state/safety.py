@@ -378,22 +378,58 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: document, are pre-existing production files that lineage changed rather
 #: than introduced and are recorded nowhere.
 #:
-#: This branch declares one path and widens nothing. The feed stage read "not
-#: SERVED" as "nothing to publish", which made a serving step that *failed*
-#: indistinguishable from an off day: the run would have published nothing,
-#: reported success and left the previous page up. The two recorded no-ops are
-#: now enumerated and every other outcome refuses. Strictly a tightening, and
-#: unreachable from the scheduled lifecycle, which stops at the failed serving
-#: step before either publication stage runs.
+#: The no-op fail-closed branch's one entry was retired in turn when it
+#: landed, for the reason that entry itself gave: the orchestrator is owned
+#: below, so touching it again requires declaring it again.
+#:
+#: This branch declares six paths and widens nothing. Five of the six are
+#: owned below; the sixth is the distribution stage it introduces, which is
+#: recorded as owned below for the same reason the publisher and the renderer
+#: are. What the branch does is expose distributions the pricing path already
+#: computes. The pricing script is deliberately not declared, because it is
+#: deliberately not touched: the new stage reads the priced parquet the
+#: unchanged script already writes, calls the frozen marginal, convolution and
+#: copula routines that priced those same rows, and writes what they return
+#: next to the digest of the parquet it read. Nothing fits, nothing is
+#: re-priced, no projection, probability, edge or expected value moves, and
+#: the serving path is byte-identical to production.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
+        "ops/nba_distribution_publication.py": (
+            "the distribution stage the lifecycle runs between serving and "
+            "publication. It reads the priced parquet, asks the frozen "
+            "pricing engines for the distribution each of those prices came "
+            "out of, and writes them beside the digest of the parquet it "
+            "read. It defines no probability mathematics of its own and it "
+            "cannot fit, serve, price, promote, route or activate"
+        ),
+        "ops/publish_incumbent_to_wizardofodds.py": (
+            "the published contract carries the distributions additively at "
+            "version 3, and the feed refuses a release whose distributions "
+            "do not provenance to the priced frame it is publishing. No "
+            "existing field is removed or recomputed"
+        ),
         "ops/run_wizardofodds_publication.py": (
-            "one refusal added to the feed stage: a serving receipt whose "
-            "outcome is neither a served slate nor one of the two recorded "
-            "no-ops publishes nothing and fails, where it previously "
-            "published nothing and succeeded. No other behaviour changes -- "
-            "no destination, mode, pin, digest check, contract check or "
-            "receipt field moves -- and nothing is computed here"
+            "the orchestrator reads the distribution document, checks its "
+            "digest against the priced frame and reports it. Still nothing "
+            "is computed here"
+        ),
+        "ops/wizardofodds_player_props_page.py": (
+            "the renderer writes each published price in all three notations "
+            "at build time and renders the published distribution as a "
+            "table. Both are presentation of numbers the release already "
+            "carries: no quantity is computed, and the page's own script "
+            "only chooses which pre-rendered notation is visible"
+        ),
+        "ops/wizardofodds_routing_proof.py": (
+            "the QA proof page carries declared fixture distributions so the "
+            "publisher's new provenance check has something to check. Still "
+            "fixture arithmetic only: it reaches no model and no engine"
+        ),
+        ".github/workflows/nba_production_lifecycle.yml": (
+            "one step appended between serving and publication, running the "
+            "distribution stage for the slate that was just served. Every "
+            "pre-existing step survives unchanged"
         ),
     }
 )
@@ -606,6 +642,17 @@ SHADOW_OWNED_PRODUCTION_PATHS: Mapping[str, str] = MappingProxyType(
             "directly. It reads a serving receipt and writes only "
             "publication receipts; it cannot fit, serve, grade, price, "
             "promote or activate"
+        ),
+        "ops/nba_distribution_publication.py": (
+            "the distribution stage the lifecycle runs between serving and "
+            "publication. The distributions it writes are the ones the "
+            "frozen engines produced for the prices already in the priced "
+            "parquet: it calls those engines and reports what they return, "
+            "so the page can show a bettor the forecast behind a price "
+            "without any part of the stack recomputing it. It reads the "
+            "priced frame and the frozen marginals and writes one JSON "
+            "document; it cannot fit, serve, grade, price, promote, route or "
+            "activate"
         ),
     }
 )

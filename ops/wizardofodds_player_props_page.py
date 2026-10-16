@@ -1,10 +1,11 @@
 """The WizardOfOdds NBA player-props page, built from a published release.
 
-A renderer and nothing more. Every number on the page is copied out of the
-incumbent's own publication; this module decides layout, ordering and which
-sportsbook a reader is pointed at, and it computes no probability, no fair
-price, no edge and no expected value. There is no second pricing system here
-and no opinion of its own to have.
+A renderer and nothing more. Every quantity on the page is copied out of the
+incumbent's own publication; this module decides layout, ordering, which
+sportsbook a reader is pointed at and what notation a price is written in,
+and it computes no probability, no price, no edge, no expected value and no
+distribution. There is no second pricing system here and no opinion of its
+own to have.
 
 WHAT IT READS
 -------------
@@ -22,28 +23,58 @@ WHAT A BETTOR SEES
 ------------------
 
 A dense light table in the site's own predictions styling, one row per wager:
-player, prop, the pick, the model's win probability, the model's fair price,
-the price the featured sportsbook is posting, the expected value at that
-price, and a button. That is the whole hierarchy, and everything that is not
-one of those things has been moved below it or into one collapsed section --
-the full affiliate disclosure, how a sportsbook comes to be the featured one,
-and the release's complete provenance.
+the matchup, the player, the prop, the pick, the model's projection, the
+model's own price, the price the featured sportsbook is posting, the expected
+value at that price, a button, and a toggle that opens the model's whole
+forecast for the stat. That is the whole hierarchy, and everything that is
+not one of those things has been moved below it or into one collapsed
+section -- the full affiliate disclosure, how a sportsbook comes to be the
+featured one, and the release's complete provenance.
 
-Two published columns are deliberately not in that table. The published
-market probability is the devigged pair implied by a book's two prices, which
-is *not* the implied probability of the single price shown beside it; a column
-labelled "Market Probability" next to a price invites a comparison that does
-not mean what it looks like. Edge is that same quantity subtracted from the
-model's, so it inherits the ambiguity. Both are still published, still in
-every row this page reads, and still in the page manifest; they are simply
-not offered to a reader as the headline. Expected value is computed at the
-price in its own row, so it says the same thing unambiguously.
+TWO PRICES, THREE NOTATIONS
+---------------------------
+
+Each row carries exactly two prices, and a reader chooses which notation both
+are written in: American, decimal, or probability. One control at the top
+switches all of them at once.
+
+The switch is notation and nothing else, which is why it is not a conversion
+performed in the browser. Every row is rendered with all three renderings of
+both of its prices already in the HTML; the control sets one attribute on the
+page and the stylesheet shows one rendering and hides two. No number is
+computed, re-fetched or rewritten while a reader is reading, so no rendering
+can drift from the published value it came from, and the page is as correct
+with scripting off as with it on -- it simply shows American.
+
+The model's price is the published calibrated probability that the pick wins,
+excluding pushes, written three ways. The sportsbook's price is the exact
+American price of the exact offer the row points at; its probability form is
+what that single price implies, margin included, and is deliberately *not*
+the release's devigged market probability, which is a different quantity
+answering a different question. Expected value is published, is computed at
+the price in its own row, and is identical in all three notations because it
+is not a price.
 
 Columns whose fields the release does not carry are absent rather than
-invented. There is no projection field, so there is no projection column.
-There are no team names -- only ``team_id`` and ``opponent_id`` -- so there is
-no matchup column, because two integers are not a matchup. Fair odds *are*
-published, so they are shown.
+invented. No projection field means no projection column; no team names means
+no matchup column, because two integers are not a matchup; no published
+distribution for a wager means no toggle on its row.
+
+WHAT THE DISTRIBUTION TOGGLE SHOWS
+----------------------------------
+
+The probability of every outcome of the stat, as the model forecasts it,
+copied out of the release exactly as the prices are. It is published by
+:mod:`nba_distribution_publication`, which re-derives it from the frozen
+engines that priced the slate; this page does not reconstruct a distribution
+from a mean and a probability, and could not, because those two numbers do
+not determine one. The remaining mass above the last listed outcome is one
+labelled bucket, so the probabilities a reader is shown add to 100%.
+
+The bars are table cells with a width, so there is no chart library, no
+external request and no canvas; the number is printed beside every bar, and
+the highlighted range is both tinted and bold, so nothing depends on seeing
+colour.
 
 TWO KINDS OF OUTBOUND LINK
 --------------------------
@@ -92,6 +123,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -144,11 +176,46 @@ EMBED_WRAPPER_ID = "app-root"
 EMBED_MESSAGE_KEY = "frameHeight"
 
 #: The published document's contract this renderer was written against.
-#: Checked for equality rather than a floor: 2 is the release that states what
-#: the model projects and who is playing, and reading a release from before
-#: those fields existed would draw a page with two empty columns rather than
-#: refusing.
-SUPPORTED_ROWS_CONTRACT = 2
+#: Checked for equality rather than a floor: 3 is the release that carries the
+#: outcome distribution behind each price, and reading a release from before
+#: those existed would draw a page whose distribution panels were all empty
+#: rather than refusing.
+SUPPORTED_ROWS_CONTRACT = 3
+
+#: The odds formats a reader may choose between, in the order they appear in
+#: the control, with the first as the default. American first because that is
+#: what a North American sportsbook posts and what the prices in the release
+#: are published as.
+#:
+#: Every format is rendered into the document for every price. Choosing one
+#: shows what is already there and hides the rest: nothing is fetched, no
+#: probability is recomputed, no wager is repriced, no sportsbook selection
+#: changes and no expected value moves. A reader on a page whose script never
+#: ran sees the default.
+ODDS_FORMAT_AMERICAN = "american"
+ODDS_FORMAT_DECIMAL = "decimal"
+ODDS_FORMAT_PROBABILITY = "probability"
+
+ODDS_FORMATS: tuple[tuple[str, str], ...] = (
+    (ODDS_FORMAT_AMERICAN, "American (-110)"),
+    (ODDS_FORMAT_DECIMAL, "Decimal (1.91)"),
+    (ODDS_FORMAT_PROBABILITY, "Probability (52.4%)"),
+)
+
+DEFAULT_ODDS_FORMAT = ODDS_FORMATS[0][0]
+
+#: Where the reader's choice is remembered, and nowhere else. One key in this
+#: browser's ``localStorage``, namespaced to this page, read on load and
+#: written on change. It is never sent anywhere: it is not a query parameter,
+#: not a cookie, not a field in any receipt, and the page makes no request of
+#: any kind when it changes.
+ODDS_FORMAT_STORAGE_KEY = "wf.nba.playerProps.oddsFormat"
+
+#: The attribute the whole document's active format lives in, on the embed
+#: wrapper. One attribute and a stylesheet rule per format, so switching is
+#: one assignment and the browser repaints: no element is rewritten, so no
+#: rendered number can differ from the number that was published.
+ODDS_FORMAT_ATTRIBUTE = "data-odds-format"
 
 #: The authority a publication must record to be renderable. A page is a
 #: public claim about the incumbent, so a publication claiming anything else
@@ -251,6 +318,49 @@ PROJECTION_FIELDS: tuple[str, ...] = (
     "projection",
 )
 
+#: Where the release keeps the outcome distributions, and how a wager's own
+#: record is found in them. One record per game, player and stat: the three
+#: fields a forecast belongs to, which is not the same as the quote it is
+#: shown beside. Six books pricing the same player's points share one
+#: forecast, and the panel under each of those rows draws that one.
+DISTRIBUTIONS_KEY = publisher.DISTRIBUTIONS_KEY
+
+DISTRIBUTION_KEY_FIELDS: tuple[str, str, str] = publisher.DISTRIBUTION_KEY_FIELDS
+
+#: The fields of a distribution record this page draws. Required, because a
+#: panel missing one of them would render a chart with a gap in it rather
+#: than refusing, and a distribution with a gap in it is not a distribution.
+DISTRIBUTION_FIELDS: tuple[str, ...] = publisher.REQUIRED_DISTRIBUTION_FIELDS
+
+#: How close to one a published distribution's mass has to be before this page
+#: will draw it. Not a tolerance for sloppiness: the stage that produces these
+#: sums an exactly-normalised array and states the remainder as one bucket, so
+#: the only error is the floating-point addition, and a release off by more
+#: than this is one whose arithmetic went wrong somewhere the page cannot see.
+DISTRIBUTION_MASS_TOLERANCE = 1e-9
+
+#: What the panel says about the relationship between the chart and the
+#: probability in the row above it. They are related and not identical: the
+#: chart is the model's forecast of the outcomes, and the probability for the
+#: wager is the betting probability, which carries the historical calibration
+#: the release publishes. Saying so plainly, in the panel, rather than leaving
+#: a reader to find a discrepancy and conclude one of the two is wrong.
+DISTRIBUTION_NOTE = (
+    "The distribution shows the model's underlying forecast of the possible "
+    "outcomes for this statistic. The Model Probability shown for the wager "
+    "above may include historical calibration, so the two are related but "
+    "not identical."
+)
+
+#: How the panel describes the range it highlights. The rule, not an
+#: adjective: the narrowest run of consecutive outcomes holding at least this
+#: much of the distribution. Nothing on this page calls an outcome likely,
+#: safe or probable, because those are opinions and this is an interval.
+DISTRIBUTION_RANGE_NOTE = (
+    "Highlighted: the narrowest run of consecutive outcomes holding at least "
+    "{target} of the distribution."
+)
+
 #: Where a human-readable matchup comes from. ``away_team`` and ``home_team``
 #: are the schedule's own abbreviations, published for exactly this. The older
 #: names are still read because a matchup stated outright, or a pair of team
@@ -292,31 +402,73 @@ TIER_LABEL: Mapping[str, str] = {
 #: probability of the single price shown beside it, and a column labelled
 #: "Market Probability" showing the first while a price shows the second
 #: invites exactly the wrong arithmetic. Edge is that same quantity
-#: subtracted from the model's, so it inherits the ambiguity. Win %, fair
-#: odds, the price and expected value say the same thing without it: expected
-#: value is computed at the price in the row beside it, so the one number that
-#: tells a reader whether to bet is the one that is unambiguous.
+#: subtracted from the model's, so it inherits the ambiguity.
+#:
+#: Nor are there three model columns. The model's probability and the model's
+#: odds are one quantity written two ways, and a grid showing both beside a
+#: format selector would offer a reader the same number three times and
+#: invite them to look for a difference between them. There is one model
+#: price column and one sportsbook price column, and the selector decides
+#: which form of each is shown and what each is called.
+COLUMN_MODEL = "model"
+COLUMN_SPORTSBOOK = "sportsbook"
+COLUMN_DISTRIBUTION = "distribution"
+
 COLUMNS: tuple[tuple[str, str, bool], ...] = (
     ("matchup", "Matchup", False),
     ("player", "Player", False),
     ("prop", "Prop", False),
     ("pick", "Pick", False),
-    ("projection", "Model Proj", True),
-    ("win", "Win %", True),
-    ("fair", "Fair Odds", True),
-    ("market", "Market Odds", True),
+    ("projection", "Model Projection", True),
+    (COLUMN_MODEL, "Model Price", True),
+    (COLUMN_SPORTSBOOK, "Sportsbook Price", True),
     ("ev", "EV", True),
     ("book", "Sportsbook", False),
+    (COLUMN_DISTRIBUTION, "Distribution", False),
+)
+
+#: What each price column is called in each format. The header has to change
+#: with the selector: a column of decimal prices under a heading that says
+#: American is a worse defect than either number alone, and "Sportsbook
+#: Implied Probability" is a different claim from "Sportsbook Odds" and has
+#: to be named as one.
+#:
+#: The sportsbook probability is the implied probability of the one price in
+#: the cell beside it -- that price, converted -- and not the devigged pair
+#: the release also publishes. Two books quoting the same wager have
+#: different holds, and a column labelled as this one is labelled has to be
+#: the price the reader would actually be taking.
+COLUMN_FORMAT_LABEL: Mapping[str, Mapping[str, str]] = MappingProxyType(
+    {
+        COLUMN_MODEL: MappingProxyType(
+            {
+                ODDS_FORMAT_AMERICAN: "Model Odds",
+                ODDS_FORMAT_DECIMAL: "Model Odds",
+                ODDS_FORMAT_PROBABILITY: "Model Probability",
+            }
+        ),
+        COLUMN_SPORTSBOOK: MappingProxyType(
+            {
+                ODDS_FORMAT_AMERICAN: "Sportsbook Odds",
+                ODDS_FORMAT_DECIMAL: "Sportsbook Odds",
+                ODDS_FORMAT_PROBABILITY: "Sportsbook Implied Probability",
+            }
+        ),
+    }
 )
 
 #: Columns rendered only when the publication carries the field behind them.
-CONDITIONAL_COLUMNS: tuple[str, ...] = ("matchup", "projection", "fair")
+CONDITIONAL_COLUMNS: tuple[str, ...] = (
+    "matchup",
+    "projection",
+    COLUMN_DISTRIBUTION,
+)
 
 #: Columns a wager nobody prices cannot honestly fill. A price nobody is
 #: offering is not a price, and an expected value at a price that does not
 #: exist is not an expected value, so the section for those wagers does not
 #: have the columns rather than having them full of dashes.
-UNOFFERED_COLUMNS: tuple[str, ...] = ("market", "ev")
+UNOFFERED_COLUMNS: tuple[str, ...] = (COLUMN_SPORTSBOOK, "ev")
 
 COLUMN_LABEL: Mapping[str, str] = MappingProxyType(
     {key: label for key, label, _ in COLUMNS}
@@ -415,6 +567,31 @@ CONSUMER_PREVIEW = Presentation(
     show_routing_reason=False,
 )
 
+#: A consumer-shaped build of a slate whose player names are not real people.
+#:
+#: The renderer substitutes this for ``CONSUMER_PREVIEW`` whenever it is asked
+#: to draw a consumer page over constructed names. A functional test canary is
+#: worth publishing -- it is how the real page's layout, selector, routing and
+#: forecasts get checked in public -- but a page that says "these are the
+#: predictions the current release carries" over ``Alpha Example`` is a page
+#: that looks like the product and is not, and that is the one thing a
+#: pre-launch preview must never be. Labelling it rather than renaming the
+#: rows: the names are the published data, and a renderer that rewrote them
+#: would be the invented-name implementation this must not become.
+TEST_DATA_PREVIEW = Presentation(
+    banner="TEST DATA — NOT LIVE BETTING PICKS",
+    detail=(
+        "The player names on this page are constructed test data, not real "
+        "players, and the predictions beside them are not betting picks. This "
+        "is the NBA player props page being checked in public before launch: "
+        "the layout, the odds formats, the sportsbook selection and the "
+        "distributions are the real ones, run over a test slate. The live "
+        "page will carry real players from the published slate."
+    ),
+    tone="err",
+    show_routing_reason=False,
+)
+
 #: The routing QA page. The slate behind it is constructed so that every
 #: sportsbook-selection outcome is visible at once, which makes it useful
 #: evidence and makes it something nobody should ever bet.
@@ -429,6 +606,80 @@ ROUTING_PROOF_QA = Presentation(
     tone="err",
     show_routing_reason=True,
 )
+
+
+#: Words a published ``player_name`` carries only because somebody built the
+#: slate rather than played in it.
+#:
+#: Matched on the name as published, in lower case. These are the shapes every
+#: constructed slate in this project uses -- ``Alpha Example``, ``P1101
+#: Fixture``, ``Routing Proof A`` -- and they are safe to match on because no
+#: NBA player is named any of them. Deliberately not a roster check: the page
+#: has no roster, a page that asked one for permission to render would be a
+#: second player-identity implementation, and the real guarantee that the live
+#: page carries real names is upstream of here, where the names come from the
+#: active-player roster in the first place. This is the backstop that keeps a
+#: test slate from *looking* like the product, not the thing that decides
+#: whether the product is real.
+SYNTHETIC_NAME_MARKERS: tuple[str, ...] = (
+    "example",
+    "fixture",
+    "routing proof",
+    "placeholder",
+    "sample player",
+    "test player",
+    "lorem",
+)
+
+
+def synthetic_name(value: Any) -> bool:
+    """Whether one published name is plainly not a person's."""
+    text = str(value or "").strip().lower()
+
+    if not text:
+        return True
+
+    if any(marker in text for marker in SYNTHETIC_NAME_MARKERS):
+        return True
+
+    # ``Player 12345``: a name that is an identifier with a noun in front of
+    # it, which is what a renderer that fell back to the id would produce.
+    parts = text.split()
+
+    return len(parts) == 2 and parts[0] == "player" and parts[1].isdigit()
+
+
+def synthetic_names(rows: Sequence[PageRow]) -> tuple[str, ...]:
+    """Every published name on this slate that is plainly not a person's."""
+    found: list[str] = []
+
+    for page_row in rows:
+        name = str(page_row.row.get("player_name") or "")
+
+        if synthetic_name(name) and name not in found:
+            found.append(name)
+
+    return tuple(found)
+
+
+def presented_as(
+    presentation: Presentation, rows: Sequence[PageRow]
+) -> Presentation:
+    """The presentation this slate may actually be drawn in.
+
+    A consumer build over constructed names is relabelled as test data. Done
+    here rather than left to the caller because the caller that gets it wrong
+    is the one that publishes a page which looks like the product -- and that
+    page is indistinguishable from the real thing by eye, which is exactly why
+    it cannot be a matter of remembering a flag.
+
+    A build that already says it is test data is left alone, and a build over
+    real names is left alone.
+    """
+    if presentation.show_routing_reason or not synthetic_names(rows):
+        return presentation
+
+    return TEST_DATA_PREVIEW
 
 
 class PageRefused(RuntimeError):
@@ -497,6 +748,14 @@ class Publication:
     rows_sha256: str
     promoted_at: str
     mode: str
+
+    #: The release's own distributions, keyed by game, player and stat. Read
+    #: from the same document as the rows and not from anywhere else, so the
+    #: forecast a panel draws and the price the row shows came out of one
+    #: release and one digest.
+    distributions: Mapping[str, Mapping[str, Any]] = field(
+        default_factory=dict, repr=False
+    )
 
 
 def _pointer(transport: Any, relative: str, *, what: str) -> dict[str, Any]:
@@ -658,6 +917,8 @@ def load_publication(
             f"{rows_relative} does not carry a list of row objects"
         )
 
+    distributions = read_distributions(document, relative=rows_relative)
+
     slate_date = str(manifest.get("slate_date") or "")
 
     approved_freeze = str(manifest.get("approved_freeze_id") or "")
@@ -703,7 +964,235 @@ def load_publication(
         rows_sha256=rows_sha256,
         promoted_at=str(current.get("promoted_at") or ""),
         mode=str(manifest.get("mode") or current.get("mode") or ""),
+        distributions=distributions,
     )
+
+
+def read_distributions(
+    document: Mapping[str, Any], *, relative: str
+) -> dict[str, Mapping[str, Any]]:
+    """The release's distributions, checked for the shape a panel draws.
+
+    Every record is checked rather than the first, and checked here rather
+    than when a panel is rendered, so a release with one malformed forecast
+    publishes no page instead of publishing one good page with a silent hole
+    in it. The publisher refuses the same defects where the bytes enter the
+    contract; this page reads a release it did not write.
+
+    What is not checked is the arithmetic that produced a record. That is the
+    pricing engine's, and the stage that published it derives every number
+    through that engine's own functions. What this looks at is whether the
+    record it is about to draw is a distribution at all: the two arrays the
+    same length, every probability finite and non-negative, the listed mass
+    and the tail bucket summing to one, and the outcomes in ascending order
+    with no repeats.
+    """
+    records = document.get(DISTRIBUTIONS_KEY)
+
+    if not isinstance(records, dict):
+        raise PageRefused(
+            f"{relative} carries no {DISTRIBUTIONS_KEY} object, so the "
+            "forecasts behind its prices are not in the release this page "
+            "would be built from"
+        )
+
+    checked: dict[str, Mapping[str, Any]] = {}
+
+    for key in sorted(records):
+        record = records[key]
+
+        if not isinstance(record, dict):
+            raise PageRefused(
+                f"the distribution for {key} in {relative} is not an object"
+            )
+
+        missing = [name for name in DISTRIBUTION_FIELDS if name not in record]
+
+        if missing:
+            raise PageRefused(
+                f"the distribution for {key} in {relative} is missing fields "
+                "this page draws: " + ", ".join(missing)
+            )
+
+        problem = distribution_problem(record)
+
+        if problem:
+            raise PageRefused(
+                f"the distribution for {key} in {relative} is not one this "
+                f"page can draw: {problem}"
+            )
+
+        checked[key] = record
+
+    return checked
+
+
+def distribution_problem(record: Mapping[str, Any]) -> str:
+    """What is wrong with one published distribution, or ``""``.
+
+    Separated from the loop above so a test can state each defect by name
+    against one record rather than having to assemble a whole release to
+    exercise it.
+    """
+    support = record.get("distribution_support")
+
+    probability = record.get("distribution_probability")
+
+    if not isinstance(support, list) or not isinstance(probability, list):
+        return "its support and probabilities are not both lists"
+
+    if not support:
+        return "it lists no outcomes"
+
+    if len(support) != len(probability):
+        return (
+            f"it lists {len(support)} outcomes and {len(probability)} "
+            "probabilities"
+        )
+
+    outcomes: list[int] = []
+
+    for value in support:
+        if not isinstance(value, int) or isinstance(value, bool):
+            return f"the outcome {value!r} is not a whole number"
+
+        outcomes.append(value)
+
+    if any(value < 0 for value in outcomes):
+        return "an outcome is negative, and a count cannot be"
+
+    if any(
+        later <= earlier
+        for earlier, later in zip(outcomes, outcomes[1:])
+    ):
+        return "its outcomes are not in ascending order without repeats"
+
+    weights: list[float] = []
+
+    for value in probability:
+        number = _finite(value)
+
+        if number is None:
+            return f"the probability {value!r} is not a finite number"
+
+        if number < 0.0:
+            return f"the probability {number!r} is negative"
+
+        weights.append(number)
+
+    tail = _finite(record.get("distribution_tail_probability"))
+
+    if tail is None or tail < 0.0:
+        return "its tail probability is not a finite non-negative number"
+
+    outcome = record.get("distribution_tail_outcome")
+
+    if outcome is not None:
+        if not isinstance(outcome, int) or isinstance(outcome, bool):
+            return "its tail bucket is not labelled by a whole outcome"
+
+        if outcome <= outcomes[-1]:
+            return "its tail bucket starts at or below a listed outcome"
+
+    elif tail > 0.0:
+        return "it states tail mass without saying which outcome it is above"
+
+    mass = sum(weights) + tail
+
+    if abs(mass - 1.0) > DISTRIBUTION_MASS_TOLERANCE:
+        return f"its probabilities and tail bucket sum to {mass!r} and not one"
+
+    low = record.get("distribution_most_likely_low")
+
+    high = record.get("distribution_most_likely_high")
+
+    if not isinstance(low, int) or not isinstance(high, int):
+        return "its highlighted range is not a pair of whole outcomes"
+
+    if low > high:
+        return "its highlighted range runs backwards"
+
+    return ""
+
+
+def _finite(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+
+    return number if math.isfinite(number) else None
+
+
+# ----------------------------------------------------------------------
+# odds formats
+# ----------------------------------------------------------------------
+#
+# Four conversions, all of them total functions of one published number, and
+# all of them applied here rather than in the browser. The published
+# probability is the exact one the release carries: it is converted at full
+# precision and only the printed string is rounded, so a reader switching
+# formats is shown two renderings of one number rather than two numbers.
+
+
+def model_decimal(probability: Any) -> float | None:
+    """What the model's probability is worth as a decimal price."""
+    number = _finite(probability)
+
+    if number is None or not 0.0 < number <= 1.0:
+        return None
+
+    return 1.0 / number
+
+
+def model_american(probability: Any) -> int | None:
+    """What the model's probability is worth as an American price.
+
+    The sign convention a sportsbook uses: a favourite is negative and the
+    number is the stake that wins 100, an underdog is positive and the number
+    is what 100 wins. An even-money forecast is rendered ``+100``, which is
+    the form a reader is shown everywhere else; ``-100`` is the same price and
+    is not what anybody writes.
+    """
+    number = _finite(probability)
+
+    if number is None or not 0.0 < number < 1.0:
+        return None
+
+    if number == 0.5:
+        return 100
+
+    if number > 0.5:
+        return int(round(-100.0 * number / (1.0 - number)))
+
+    return int(round(100.0 * (1.0 - number) / number))
+
+
+def sportsbook_decimal(odds: Any) -> float | None:
+    """One posted American price as a decimal price."""
+    number = _finite(odds)
+
+    if number is None or number == 0.0:
+        return None
+
+    if number > 0.0:
+        return 1.0 + number / 100.0
+
+    return 1.0 + 100.0 / abs(number)
+
+
+def sportsbook_implied_probability(odds: Any) -> float | None:
+    """What one posted price implies, including the sportsbook's hold.
+
+    The implied probability of *this* price and nothing else. The release also
+    publishes a devigged pair, which is a different quantity: it is the two
+    prices with the hold divided out, it does not correspond to either price
+    on its own, and it is not what a reader is being offered. This page never
+    shows it under a sportsbook heading.
+    """
+    decimal = sportsbook_decimal(odds)
+
+    return None if decimal is None else 1.0 / decimal
 
 
 # ----------------------------------------------------------------------
@@ -733,9 +1222,19 @@ class PageRow:
     #: -- and whenever no destination is proven for the book.
     direct_url: str | None = None
 
+    #: The release's forecast for this player's stat in this game, or ``None``
+    #: when the release published none. Read, never derived: the panel draws
+    #: this record's own numbers and nothing on this page turns a probability,
+    #: a mean or a line back into a distribution.
+    distribution: Mapping[str, Any] | None = field(default=None, repr=False)
+
     @property
     def side(self) -> str:
         return self.wager.side
+
+    @property
+    def distribution_key(self) -> str:
+        return distribution_key(self.row)
 
     @property
     def model_probability(self) -> Any:
@@ -852,6 +1351,16 @@ def _truthy(value: Any) -> bool:
     return bool(value)
 
 
+def distribution_key(row: Mapping[str, Any]) -> str:
+    """Which distribution a published row's wager is forecast by.
+
+    The publisher's own three fields in the publisher's own order, read from
+    it rather than restated, so a key written by one side and looked up by the
+    other cannot be two different keys.
+    """
+    return "|".join(str(row.get(name)) for name in DISTRIBUTION_KEY_FIELDS)
+
+
 def page_rows(
     publication: Publication,
     *,
@@ -908,13 +1417,18 @@ def page_rows(
             routing.offers_for(publication.rows, wager), registry=registry
         )
 
+        quoting = _quoting_row(ordered, routed=routed)
+
         built.append(
             PageRow(
                 wager=wager,
                 routed=routed,
-                row=_quoting_row(ordered, routed=routed),
+                row=quoting,
                 quotes=ordered,
                 direct_url=_direct_url(routed, fallback=fallback),
+                distribution=publication.distributions.get(
+                    distribution_key(quoting)
+                ),
             )
         )
 
@@ -1068,14 +1582,39 @@ def prop_label(prop_type: Any) -> str:
     return PROP_LABEL.get(key, key.replace("_", " ").title())
 
 
-def number_text(value: Any) -> str:
-    """A published number, printed as published rather than rounded away."""
+#: Digits after the decimal point in a displayed Model Projection. Two,
+#: everywhere a bettor meets one, because the published value carries the
+#: model's full precision and a bettor reading ``24.368217392`` learns
+#: nothing from the last seven digits that ``24.37`` did not already say.
+PROJECTION_PLACES = 2
+
+
+def projection_text(value: Any) -> str:
+    """A Model Projection as a bettor reads it: exactly two decimals.
+
+    Display only. The published ``model_projection`` keeps every digit it was
+    served with, nothing downstream of this function exists, and no price,
+    probability, expected value or distribution is computed from the string
+    this returns -- the page converts the published number and prints this
+    beside it.
+
+    Two decimals always, including trailing zeros: ``8.2`` prints ``8.20``,
+    because a column where some projections carry two decimals and others
+    carry one is a column a reader has to align by eye.
+
+    The rounding is Python's own ``format``, which is round-half-even over the
+    binary value actually published. That matters only for a value whose
+    decimal form looks like an exact half: ``1.005`` is stored as slightly
+    less than one and five thousandths and therefore prints ``1.00``. Stated
+    rather than corrected, because the alternative is a second rounding
+    convention that disagrees with every other number on the page.
+    """
     try:
         number = float(value)
     except (TypeError, ValueError):
         return "—"
 
-    return f"{number:g}"
+    return f"{number:.{PROJECTION_PLACES}f}"
 
 
 def _minute(value: Any) -> str:
@@ -1281,6 +1820,111 @@ STYLE = """
 .wf-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:6px 16px;margin:6px 0 0}
 .wf-facts dt{font-size:11px;color:var(--wf-muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin:0}
 .wf-facts dd{margin:0 0 4px;font-size:12px;color:var(--wf-text);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+/* The odds format selector, and the three renderings it chooses between.
+   Every price is in the document three times and the attribute on the wrapper
+   decides which one paints: no element is rewritten, so what a reader sees in
+   any format is the number that was published. The default rule comes first
+   so a reader whose script never ran sees American rather than nothing. */
+.of{display:none}
+.of-american{display:inline}
+[data-odds-format="american"] .of-american{display:inline}
+[data-odds-format="american"] .of-decimal,
+[data-odds-format="american"] .of-probability{display:none}
+[data-odds-format="decimal"] .of-decimal{display:inline}
+[data-odds-format="decimal"] .of-american,
+[data-odds-format="decimal"] .of-probability{display:none}
+[data-odds-format="probability"] .of-probability{display:inline}
+[data-odds-format="probability"] .of-american,
+[data-odds-format="probability"] .of-decimal{display:none}
+/* the distribution disclosure and its panel */
+.c-dist{white-space:nowrap}
+.wf .wf-dist-toggle{
+  padding:5px 10px;border-radius:5px;border:1px solid var(--wf-border);
+  background:var(--wf-bg2);color:var(--wf-text);font-size:11.5px;font-weight:700;
+  letter-spacing:.03em;text-transform:uppercase;cursor:pointer;min-height:30px;
+  white-space:nowrap;
+}
+.wf .wf-dist-toggle:hover{background:var(--wf-bg3)}
+.wf .wf-dist-toggle[aria-expanded="true"]{background:var(--wf-bg3)}
+.wf-dist-row > td{background:var(--wf-bg2);padding:0}
+.wf-dist-row[hidden]{display:none}
+.wf-dist-panel{padding:12px 14px 14px}
+.wf-dist-panel h3{margin:0 0 6px;font-size:13.5px}
+.wf-dist-facts{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+  gap:4px 16px;margin:0 0 8px;
+}
+.wf-dist-facts dt{
+  font-size:10px;color:var(--wf-muted);font-weight:700;text-transform:uppercase;
+  letter-spacing:.04em;margin:0;
+}
+.wf-dist-facts dd{
+  margin:0;font-size:13px;color:var(--wf-text);font-variant-numeric:tabular-nums;
+}
+.wf-dist-kind{
+  margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.04em;color:var(--wf-muted);
+}
+.wf-dist-table{border-collapse:collapse;width:100%;max-width:46em;font-size:12.5px}
+.wf-dist-table caption{
+  caption-side:top;text-align:left;font-size:11.5px;color:var(--wf-muted);
+  padding:0 0 6px;
+}
+.wf-dist-table th,.wf-dist-table td{
+  padding:2px 8px 2px 0;border:0;text-align:left;font-weight:400;
+  font-variant-numeric:tabular-nums;
+}
+.wf-dist-table thead th{
+  font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
+  color:var(--wf-muted);
+}
+.wf-dist-table th[scope="row"]{width:5em;font-weight:600}
+.wf-dist-table td.num,.wf-dist-table th.num{width:6em;text-align:right}
+/* The highlighted run is marked by weight as well as by tint, because a
+   reader who cannot distinguish the tint still has to be able to see it. */
+.wf-dist-table tbody tr.likely{background:#eef3f8}
+.wf-dist-table tbody tr.likely th[scope="row"],
+.wf-dist-table tbody tr.likely td.num{font-weight:700}
+/* The histogram. A fixed-height box the chart is drawn at its own pixel size
+   inside: a support too wide for the box scrolls within these borders rather
+   than widening the panel, the table or the page around it. */
+.wf-dist-chart{margin:0;max-width:100%}
+.wf-hist-scroll{
+  max-width:100%;overflow-x:auto;overflow-y:hidden;
+  -webkit-overflow-scrolling:touch;
+}
+.wf-hist{display:block;max-width:none}
+.wf-hist-grid{stroke:var(--wf-border);stroke-width:1}
+.wf-hist-base{stroke:var(--wf-text);stroke-width:1}
+.wf-hist-tick{font-size:9.5px;fill:var(--wf-muted);font-variant-numeric:tabular-nums}
+.wf-hist-axis{font-size:9.5px;fill:var(--wf-muted);font-weight:700;
+  text-transform:uppercase;letter-spacing:.04em}
+/* A bar outside the highlighted run is a plain fill; one inside it is the
+   same fill with an outline drawn round it. An outline is a shape and not a
+   hue, so the run is still distinguishable in greyscale, to a reader with any
+   colour vision, and in a printout -- and it is named in words under the axis
+   as well, which is the part that does not depend on seeing the chart. */
+.wf-hist-bar{fill:#9fb6cc}
+.wf-hist-bar.likely{fill:var(--wf-gold);stroke:#30455c;stroke-width:.75}
+.wf-hist-bar.tail{fill:#c3cedb;stroke:#6d7d8e;stroke-width:.75;stroke-dasharray:2 2}
+.wf-hist-bar.tail.likely{fill:var(--wf-gold)}
+.wf-hist-span{fill:none;stroke:#30455c;stroke-width:1.25}
+.wf-hist-span-label{font-size:9.5px;fill:var(--wf-text);font-weight:700}
+/* The posted line, drawn across the plot so a reader can see which side of it
+   the mass sits on. Presentation of a published number: it marks the line, it
+   does not divide the probabilities. */
+.wf-hist-line{stroke:#b3261e;stroke-width:1.25;stroke-dasharray:4 3}
+.wf-hist-line-label{font-size:10px;fill:#b3261e;font-weight:700}
+.wf-dist-exact{margin:8px 0 0;font-size:12px}
+.wf-dist-exact summary{
+  cursor:pointer;font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.04em;color:var(--wf-muted);
+}
+.wf-dist-exact .wf-dist-table{margin-top:6px;max-width:26em}
+.wf-dist-chart figcaption{
+  margin:6px 0 0;font-size:11.5px;color:var(--wf-muted);max-width:60em;
+}
+.wf-dist-note{margin:8px 0 0;font-size:11.5px;color:var(--wf-muted);max-width:60em}
 .wf-foot{
   margin-top:18px;padding-top:10px;border-top:1px solid var(--wf-border);
   font-size:12px;color:var(--wf-muted);
@@ -1296,7 +1940,13 @@ STYLE = """
 @media (max-width:720px){
   .wf{padding:10px 12px 20px}
   .wf-tablewrap{overflow-x:visible;border-radius:6px}
-  .wf-table{font-size:13.5px}
+  /* table-layout:fixed is load-bearing, not tidiness. The rows below are
+     blocks inside a box that is still a table, so the engine wraps them in
+     anonymous cells that size to their widest content -- and a wide
+     distribution chart would then stretch the table, and with it the page,
+     past the viewport. Fixed layout sizes the column from the table's own
+     width instead, which leaves the chart to scroll inside its own box. */
+  .wf-table{font-size:13.5px;table-layout:fixed}
   .wf-table thead{display:none}
   .wf-table tbody tr{
     display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 12px;
@@ -1321,8 +1971,18 @@ STYLE = """
   .c-prop{grid-column:1/-1;font-size:12px}
   .c-pick{grid-column:1/-1;font-size:15px;margin-bottom:4px}
   .c-book{grid-column:1/-1;margin-top:6px}
+  .c-dist{grid-column:1/-1;margin-top:6px}
   .wf .wf-bo-btn{padding:11px 16px;font-size:12.5px;min-height:44px}
+  .wf .wf-dist-toggle{padding:10px 14px;font-size:12px;min-height:44px;width:100%}
   .wf-bo-note{max-width:none}
+  /* The panel is a card of its own on a narrow screen rather than a cell
+     inside the card above it, so the grid that reflows every other row has
+     to be switched off for this one. */
+  .wf-table tbody tr.wf-dist-row{display:block;padding:0}
+  .wf-table tbody tr.wf-dist-row > td{display:block;padding:0}
+  .wf-table tbody tr.wf-dist-row > td::before{content:none}
+  .wf-dist-panel{padding:10px 12px 12px}
+  .wf-dist-table{font-size:12px}
 }
 """
 
@@ -1345,6 +2005,99 @@ SCRIPT = """
   };
   var offered = rows.filter(function (row) {
     return row.getAttribute('data-offer') === 'yes';
+  });
+
+  /* The odds format. Display only: it sets one attribute on the wrapper and
+     the stylesheet shows the matching rendering of every price. Nothing is
+     fetched, no probability is recomputed, no wager is repriced, no
+     sportsbook selection changes and no expected value moves -- all three
+     renderings of every price are already in the document.
+
+     The preference is remembered in this browser and nowhere else. It is not
+     a query parameter, not a cookie and not in any request: a storage that
+     refuses to write, as a private window may, costs the reader the memory
+     and nothing else. */
+  var FORMAT_KEY = __FORMAT_KEY__;
+  var FORMATS = __FORMATS__;
+  var DEFAULT_FORMAT = __DEFAULT_FORMAT__;
+  var wrapper = document.getElementById('__WRAPPER__');
+  var formatInput = document.getElementById('f-odds');
+
+  function known(name) {
+    return FORMATS.indexOf(name) !== -1;
+  }
+
+  function remembered() {
+    try {
+      var stored = window.localStorage.getItem(FORMAT_KEY);
+      return known(stored) ? stored : DEFAULT_FORMAT;
+    } catch (error) {
+      return DEFAULT_FORMAT;
+    }
+  }
+
+  function remember(name) {
+    try {
+      window.localStorage.setItem(FORMAT_KEY, name);
+    } catch (error) {
+      /* A reader who has blocked storage still gets the format they chose
+         for as long as this page is open. */
+    }
+  }
+
+  function applyFormat(name, persist) {
+    var chosen = known(name) ? name : DEFAULT_FORMAT;
+    if (wrapper) {
+      wrapper.setAttribute('data-odds-format', chosen);
+    }
+    if (formatInput && formatInput.value !== chosen) {
+      formatInput.value = chosen;
+    }
+    if (persist) {
+      remember(chosen);
+    }
+  }
+
+  if (formatInput) {
+    formatInput.addEventListener('change', function () {
+      applyFormat(formatInput.value, true);
+    });
+  }
+
+  applyFormat(remembered(), false);
+
+  /* The distribution panels. Each one is a row that is already in the
+     document, carrying the published forecast; the button beside it shows
+     and hides that row. The panels start open for a reader with no script,
+     because the button cannot work for them, and this closes them and
+     reveals the buttons as the first thing it does. */
+  var toggles = Array.prototype.slice.call(
+    document.querySelectorAll('[data-dist-toggle]')
+  );
+
+  function panelOf(row) {
+    var id = row.getAttribute('data-panel');
+    return id ? document.getElementById(id) : null;
+  }
+
+  function openPanel(panel, open) {
+    if (!panel) return;
+    panel.hidden = !open;
+    panel.style.display = open ? '' : 'none';
+  }
+
+  toggles.forEach(function (button) {
+    var panel = document.getElementById(
+      button.getAttribute('aria-controls')
+    );
+    button.hidden = false;
+    openPanel(panel, false);
+    button.setAttribute('aria-expanded', 'false');
+    button.addEventListener('click', function () {
+      var open = button.getAttribute('aria-expanded') !== 'true';
+      button.setAttribute('aria-expanded', open ? 'true' : 'false');
+      openPanel(panel, open);
+    });
   });
 
   function value(row, name) {
@@ -1390,6 +2143,20 @@ SCRIPT = """
     rows.forEach(function (row) {
       var ok = matches(row, needle, prop, book);
       show(row, ok);
+      /* A hidden prediction's panel is hidden with it. Left visible it would
+         be a forecast with no row above it saying whose it was. Shown again,
+         it returns closed rather than remembering: the button beside it says
+         closed, and the two must not disagree. */
+      var panel = panelOf(row);
+      if (panel) {
+        openPanel(panel, false);
+        var button = document.querySelector(
+          '[aria-controls="' + panel.id + '"]'
+        );
+        if (button) {
+          button.setAttribute('aria-expanded', 'false');
+        }
+      }
       if (!ok) {
         return;
       }
@@ -1402,7 +2169,7 @@ SCRIPT = """
 
     var mode = choice('sort');
     var ordered = offered.slice().sort(function (a, b) {
-      var key = mode === 'win' ? 'data-win' : 'data-ev';
+      var key = mode === 'model' ? 'data-model-p' : 'data-ev';
       if (mode === 'player') {
         return a.getAttribute('data-sortname')
           .localeCompare(b.getAttribute('data-sortname'));
@@ -1413,7 +2180,15 @@ SCRIPT = """
         );
     });
     if (picks) {
-      ordered.forEach(function (row) { picks.appendChild(row); });
+      ordered.forEach(function (row) {
+        picks.appendChild(row);
+        /* Immediately after its own row, every time, so reordering cannot
+           leave a panel under somebody else's prediction. */
+        var panel = panelOf(row);
+        if (panel) {
+          picks.appendChild(panel);
+        }
+      });
     }
 
     if (count) {
@@ -1439,7 +2214,15 @@ SCRIPT = """
 
   apply();
 })();
-"""
+""".replace(
+    "__FORMAT_KEY__", json.dumps(ODDS_FORMAT_STORAGE_KEY)
+).replace(
+    "__FORMATS__", json.dumps([key for key, _ in ODDS_FORMATS])
+).replace(
+    "__DEFAULT_FORMAT__", json.dumps(DEFAULT_ODDS_FORMAT)
+).replace(
+    "__WRAPPER__", EMBED_WRAPPER_ID
+)
 
 #: The site's own iframe height handshake, as it already runs on the football
 #: index and the other embedded predictions pages. Kept recognisably identical
@@ -1508,8 +2291,12 @@ EMBED_SCRIPT = """
 )
 
 
-def _option(value: str, label: str) -> str:
-    return f'<option value="{escape(value)}">{escape(label)}</option>'
+def _option(value: str, label: str, *, selected: bool = False) -> str:
+    mark = " selected" if selected else ""
+
+    return (
+        f'<option value="{escape(value)}"{mark}>{escape(label)}</option>'
+    )
 
 
 def _select(
@@ -1518,8 +2305,20 @@ def _select(
     options: Sequence[tuple[str, str]],
     *,
     klass: str = "",
+    selected: str | None = None,
 ) -> str:
-    rendered = "".join(_option(value, text) for value, text in options)
+    """One labelled control.
+
+    ``selected`` marks the option the served document is already in, which is
+    only the odds format: the filters and the sort start at their first option
+    because that is what no filtering and the default order *are*, while the
+    format is a state the document is rendered in and the control has to agree
+    with it before any script runs.
+    """
+    rendered = "".join(
+        _option(value, text, selected=value == selected)
+        for value, text in options
+    )
 
     classes = f' class="{klass}"' if klass else ""
 
@@ -1672,8 +2471,8 @@ def _has_column(page_row: PageRow, key: str) -> bool:
     if key == "projection":
         return page_row.projection is not None
 
-    if key == "fair":
-        return page_row.fair_odds is not None
+    if key == COLUMN_DISTRIBUTION:
+        return page_row.distribution is not None
 
     return True
 
@@ -1684,6 +2483,87 @@ def _pick(page_row: PageRow) -> str:
     return (
         f'<span class="{escape(side)}">{escape(side.upper())} '
         f'{escape(line_text(page_row.row.get("line_value")))}</span>'
+    )
+
+
+def _formats(rendered: Mapping[str, str]) -> str:
+    """One price, written three ways, with the stylesheet choosing.
+
+    All three are in the document. The selector sets one attribute on the
+    wrapper and a rule hides the two that are not chosen, so switching format
+    neither rewrites an element nor asks anything of the network, and a reader
+    whose browser ran no script sees the default rather than an empty cell.
+
+    The two that are hidden are hidden from assistive technology as well.
+    Otherwise a screen reader would read every price three times, in three
+    formats, with no indication that two of them are not on screen.
+    """
+    return "".join(
+        f'<span class="of of-{key}" data-odds-format-value="{escape(key)}"'
+        f'{"" if key == DEFAULT_ODDS_FORMAT else " aria-hidden=\"true\""}>'
+        f"{escape(text)}</span>"
+        for key, _ in ODDS_FORMATS
+        for text in (rendered[key],)
+    )
+
+
+def decimal_odds(value: Any, *, places: int = 2) -> str:
+    """A decimal price, to two places, which is how every book writes one."""
+    number = _finite(value)
+
+    return "—" if number is None else f"{number:.{places}f}"
+
+
+def _distribution_toggle(page_row: PageRow) -> str:
+    """The control that opens one wager's forecast.
+
+    A real button with ``aria-expanded``     and ``aria-controls``, naming the
+    panel row it governs, rather than a styled span: the panel is a disclosure
+    and the platform already has one. Rendered ``hidden`` for a reader whose
+    script never ran, because the button would then do nothing and offering a
+    dead control is worse than not offering it -- the panel row itself stays
+    in the document and visible in that case, which is the no-script reading
+    of the same information.
+
+    It is therefore rendered expanded, because in the document as served it
+    is: the state the attribute reports and the state of the row it points at
+    are the same state, and the script closes both together or neither.
+    """
+    if page_row.distribution is None:
+        return ""
+
+    panel = _panel_id(page_row)
+
+    return (
+        f'<button type="button" class="wf-dist-toggle" data-dist-toggle'
+        f' aria-expanded="true" aria-controls="{escape(panel)}" hidden>'
+        "View Distribution</button>"
+    )
+
+
+def _panel_id(page_row: PageRow) -> str:
+    """A document-unique id for one wager's panel.
+
+    Derived from the wager rather than from a counter, so two builds of one
+    release produce the same ids and the published bytes are a function of the
+    release.
+    """
+    return "dist-" + "-".join(
+        _slug(part)
+        for part in (
+            page_row.row.get("game_id"),
+            page_row.row.get("player_id"),
+            page_row.row.get("prop_type"),
+            page_row.row.get("line_value"),
+            page_row.side,
+        )
+    )
+
+
+def _slug(value: Any) -> str:
+    return "".join(
+        character if character.isalnum() else "_"
+        for character in str(value if value is not None else "")
     )
 
 
@@ -1718,21 +2598,49 @@ def _cell(page_row: PageRow, key: str) -> tuple[str, str]:
         return _pick(page_row), "c-pick"
 
     if key == "projection":
-        return escape(number_text(page_row.projection)), "c-proj num"
+        return escape(projection_text(page_row.projection)), "c-proj num"
 
-    if key == "win":
-        return escape(percent(page_row.model_probability)), "c-win num"
-
-    if key == "fair":
-        return escape(american(page_row.fair_odds)), "c-fair num"
-
-    if key == "market":
-        offer = page_row.routed.offer
+    if key == COLUMN_MODEL:
+        probability = page_row.model_probability
 
         return (
-            escape(american(offer.american_odds)) if offer is not None else "—",
-            "c-market num",
+            _formats(
+                {
+                    ODDS_FORMAT_AMERICAN: american(model_american(probability)),
+                    ODDS_FORMAT_DECIMAL: decimal_odds(
+                        model_decimal(probability)
+                    ),
+                    ODDS_FORMAT_PROBABILITY: percent(probability),
+                }
+            ),
+            "c-model num",
         )
+
+    if key == COLUMN_SPORTSBOOK:
+        offer = page_row.routed.offer
+
+        if offer is None:
+            return "—", "c-book-price num"
+
+        posted = offer.american_odds
+
+        return (
+            _formats(
+                {
+                    ODDS_FORMAT_AMERICAN: american(posted),
+                    ODDS_FORMAT_DECIMAL: decimal_odds(
+                        sportsbook_decimal(posted)
+                    ),
+                    ODDS_FORMAT_PROBABILITY: percent(
+                        sportsbook_implied_probability(posted)
+                    ),
+                }
+            ),
+            "c-book-price num",
+        )
+
+    if key == COLUMN_DISTRIBUTION:
+        return _distribution_toggle(page_row), "c-dist"
 
     if key == "ev":
         value = page_row.expected_value
@@ -1748,6 +2656,505 @@ def _cell(page_row: PageRow, key: str) -> tuple[str, str]:
         )
 
     return _cta(page_row), "c-book"
+
+
+def _distribution_rows(record: Mapping[str, Any]) -> tuple[
+    tuple[str, float, bool], ...
+]:
+    """The published distribution as the rows the panel draws.
+
+    The listed outcomes under their own labels, then the tail bucket under
+    the label the release gave it, which is the one row that stands for more
+    than one outcome and says so by being called ``N+``. Nothing is dropped
+    and nothing is merged: these rows are the record, and their probabilities
+    sum to one because the record's do.
+    """
+    support = list(record["distribution_support"])
+
+    probability = list(record["distribution_probability"])
+
+    low = int(record["distribution_most_likely_low"])
+
+    high = int(record["distribution_most_likely_high"])
+
+    rows = [
+        (str(outcome), float(weight), low <= index <= high)
+        for index, (outcome, weight) in enumerate(zip(support, probability))
+    ]
+
+    tail = _finite(record.get("distribution_tail_probability")) or 0.0
+
+    outcome = record.get("distribution_tail_outcome")
+
+    if outcome is not None:
+        label = str(record.get("distribution_tail_label") or f"{outcome}+")
+
+        rows.append((label, tail, low <= len(support) <= high))
+
+    return tuple(rows)
+
+
+# ----------------------------------------------------------------------
+# the histogram
+# ----------------------------------------------------------------------
+#
+# A probability mass function drawn the way one is drawn: the statistic's
+# outcomes along the horizontal axis in their published order, probability up
+# the vertical axis, and a bar per outcome rising from the axis. The previous
+# panel laid the same numbers out as one table row per outcome with a bar
+# whose *width* was the probability, which reads as a ranking rather than as a
+# shape and made a points line a panel taller than the screen it was on.
+#
+# Inline SVG in a fixed pixel box. No chart library, no CDN, no canvas, no
+# request of any kind: the markup is the chart. Nothing here computes a
+# probability -- every function below turns a published outcome and its
+# published probability into a position and a length, and the published
+# numbers are printed verbatim in the table under the chart.
+
+#: The plot's own height, in SVG user units, which are CSS pixels because the
+#: chart is sized in pixels rather than scaled to its container.
+CHART_PLOT_HEIGHT = 200
+
+#: Room above the plot for the current-line label, and below it for the tick
+#: labels and the most-likely bracket.
+CHART_PAD_TOP = 22
+CHART_AXIS_HEIGHT = 52
+
+#: Room at the left for the axis title and the probability labels, and at the
+#: right so the last bar is not flush against the edge.
+CHART_PAD_LEFT = 54
+CHART_PAD_RIGHT = 12
+
+#: Total height, and therefore the whole panel's claim on the page: a points
+#: distribution and a blocks distribution are the same height, and neither is
+#: taller than a screen.
+CHART_HEIGHT = CHART_PAD_TOP + CHART_PLOT_HEIGHT + CHART_AXIS_HEIGHT
+
+#: The width the chart prefers not to exceed on a desktop, and the slot a
+#: single outcome gets. Wide supports shrink the slot rather than lose a bar;
+#: below the floor the chart gets wider than this and scrolls inside its own
+#: box, because dropping outcomes would be dropping probability mass.
+CHART_MAX_WIDTH = 760
+CHART_SLOT_MAX = 26.0
+CHART_SLOT_MIN = 8.0
+
+#: How much of its slot a bar fills, leaving the rest as the gap that makes
+#: one bar readable as one outcome.
+CHART_BAR_SHARE = 0.72
+
+#: The narrowest spacing a tick label is legible at. A support too wide for a
+#: label under every bar gets labels at this spacing instead -- every bar is
+#: still drawn, only some go unlabelled, and the table below names them all.
+CHART_LABEL_SPACING = 26.0
+
+#: The tops the probability axis is allowed to take, smallest first. A fixed
+#: ladder rather than the largest probability itself, so the axis reads in
+#: round numbers; both the top and its midpoint are exact at one decimal.
+CHART_SCALE_TOPS: tuple[float, ...] = (
+    0.01,
+    0.02,
+    0.04,
+    0.05,
+    0.1,
+    0.2,
+    0.25,
+    0.3,
+    0.4,
+    0.5,
+    0.6,
+    0.8,
+    1.0,
+)
+
+
+def chart_slot_width(count: int) -> float:
+    """The horizontal room one outcome gets, for a support of ``count``."""
+    if count <= 0:
+        return CHART_SLOT_MAX
+
+    room = CHART_MAX_WIDTH - CHART_PAD_LEFT - CHART_PAD_RIGHT
+
+    return max(CHART_SLOT_MIN, min(CHART_SLOT_MAX, room / count))
+
+
+def chart_width(count: int) -> float:
+    """The chart's pixel width for a support of ``count``."""
+    return CHART_PAD_LEFT + count * chart_slot_width(count) + CHART_PAD_RIGHT
+
+
+def chart_scale_top(peak: float) -> float:
+    """The probability the vertical axis tops out at.
+
+    The smallest rung of the ladder that still holds the largest published
+    probability, so the tallest bar is most of the plot whether the peak is
+    six percent or sixty.
+    """
+    for top in CHART_SCALE_TOPS:
+        if peak <= top + 1e-12:
+            return top
+
+    return 1.0
+
+
+def chart_label_indices(count: int) -> tuple[int, ...]:
+    """Which outcomes get a printed tick label, by position.
+
+    Every ``step``-th outcome, where the step is the fewest that keeps the
+    labels a legible distance apart, plus the last position always: that is
+    the tail bucket when there is one, and the tail is the label a reader most
+    needs because it is the only one standing for more than one outcome.
+    """
+    if count <= 0:
+        return ()
+
+    slot = chart_slot_width(count)
+
+    step = max(1, math.ceil(CHART_LABEL_SPACING / slot))
+
+    marks = list(range(0, count, step))
+
+    last = count - 1
+
+    if last not in marks:
+        while marks and last - marks[-1] < step:
+            marks.pop()
+
+        marks.append(last)
+
+    return tuple(marks)
+
+
+def chart_line_offset(
+    outcomes: Sequence[Any], line: Any, *, count: int
+) -> float | None:
+    """Where the posted line falls along the horizontal axis, in pixels.
+
+    Presentation of the published ``line_value`` and nothing else: no
+    probability is read, nothing is recomputed, and a line the chart cannot
+    place returns ``None`` rather than a guess.
+
+    A half-point line sits on the boundary between the two outcomes it
+    separates -- ``14.5`` between the ``14`` bar and the ``15`` bar -- because
+    that is what it means: every outcome left of the marker is an under and
+    every outcome right of it is an over. A whole-number line sits on the
+    centre of its own bar instead, because that outcome is neither side: it is
+    the push, and the marker has to point at it rather than at a boundary it
+    does not have.
+    """
+    value = _finite(line)
+
+    if value is None or count <= 0:
+        return None
+
+    slot = chart_slot_width(count)
+
+    left = CHART_PAD_LEFT
+
+    right = left + count * slot
+
+    position = {
+        int(outcome): index
+        for index, outcome in enumerate(outcomes)
+        if outcome is not None and float(outcome).is_integer()
+    }
+
+    if value.is_integer() and int(value) in position:
+        return left + (position[int(value)] + 0.5) * slot
+
+    below = math.floor(value)
+
+    above = math.ceil(value)
+
+    if below in position and above in position:
+        return left + position[above] * slot
+
+    if below in position:
+        return min(left + (position[below] + 1) * slot, right)
+
+    if above in position:
+        return left + position[above] * slot
+
+    first = next((int(o) for o in outcomes if o is not None), None)
+
+    if first is None:
+        return None
+
+    return left if value < first else right
+
+
+def _chart_outcomes(record: Mapping[str, Any]) -> tuple[Any, ...]:
+    """The outcome behind each slot, listed support then the tail bucket.
+
+    The tail's own outcome stands for the slot that draws it, so a line at or
+    beyond the last listed outcome still has somewhere to be marked.
+    """
+    outcomes = list(record["distribution_support"])
+
+    tail = record.get("distribution_tail_outcome")
+
+    if tail is not None:
+        outcomes.append(tail)
+
+    return tuple(outcomes)
+
+
+def _histogram(page_row: PageRow, record: Mapping[str, Any]) -> str:
+    """The published forecast as a vertical bar chart.
+
+    Built in the orientation it is read in. Each bar's height is its
+    published probability over the axis top times the plot height, so the
+    bars are in proportion to one another and to the axis beside them, and
+    the only arithmetic in this function is that one scaling.
+    """
+    rows = _distribution_rows(record)
+
+    if not rows:
+        return ""
+
+    count = len(rows)
+
+    slot = chart_slot_width(count)
+
+    width = chart_width(count)
+
+    top = chart_scale_top(max(weight for _, weight, _ in rows))
+
+    bar = slot * CHART_BAR_SHARE
+
+    plot_left = CHART_PAD_LEFT
+
+    plot_right = plot_left + count * slot
+
+    base = CHART_PAD_TOP + CHART_PLOT_HEIGHT
+
+    # Every attribute value below is quoted. An unquoted one is a real trap
+    # here and not a style preference: HTML's tokeniser reads the ``/`` of a
+    # self-closing tag as part of an unquoted value, so ``<line y2=22/>``
+    # leaves the element open and the rest of the chart becomes its children.
+    middle = CHART_PAD_TOP + CHART_PLOT_HEIGHT / 2.0
+
+    pieces: list[str] = [
+        f'<text class="wf-hist-axis" x="11" y="{middle:.1f}" '
+        f'text-anchor="middle" transform="rotate(-90 11 {middle:.1f})">'
+        "Probability</text>"
+    ]
+
+    for fraction in (1.0, 0.5, 0.0):
+        y = CHART_PAD_TOP + (1.0 - fraction) * CHART_PLOT_HEIGHT
+
+        pieces.append(
+            f'<line class="wf-hist-grid" x1="{plot_left:.1f}" y1="{y:.1f}" '
+            f'x2="{plot_right:.1f}" y2="{y:.1f}"/>'
+        )
+
+        pieces.append(
+            f'<text class="wf-hist-tick" x="{plot_left - 6:.1f}" '
+            f'y="{y + 3.5:.1f}" text-anchor="end">'
+            f"{escape(percent(top * fraction, places=1))}</text>"
+        )
+
+    tail_slot = (
+        count - 1
+        if record.get("distribution_tail_outcome") is not None
+        else -1
+    )
+
+    for index, (label, weight, likely) in enumerate(rows):
+        height = weight / top * CHART_PLOT_HEIGHT
+
+        classes = "wf-hist-bar"
+
+        if likely:
+            classes += " likely"
+
+        if index == tail_slot:
+            classes += " tail"
+
+        pieces.append(
+            f'<rect class="{classes}" '
+            f'x="{plot_left + index * slot + (slot - bar) / 2.0:.2f}" '
+            f'y="{base - height:.2f}" width="{bar:.2f}" '
+            f'height="{height:.2f}" data-outcome="{escape(label)}">'
+            f"<title>{escape(label)} — "
+            f"{escape(percent(weight, places=2))}</title></rect>"
+        )
+
+    pieces.append(
+        f'<line class="wf-hist-base" x1="{plot_left:.1f}" y1="{base}" '
+        f'x2="{plot_right:.1f}" y2="{base}"/>'
+    )
+
+    for index in chart_label_indices(count):
+        pieces.append(
+            f'<text class="wf-hist-tick" '
+            f'x="{plot_left + (index + 0.5) * slot:.2f}" y="{base + 15}" '
+            f'text-anchor="middle">{escape(rows[index][0])}</text>'
+        )
+
+    low = int(record["distribution_most_likely_low"])
+
+    high = min(int(record["distribution_most_likely_high"]), count - 1)
+
+    if 0 <= low <= high:
+        span_left = plot_left + low * slot
+
+        span_right = plot_left + (high + 1) * slot
+
+        bracket = base + 27
+
+        centre = min(
+            max((span_left + span_right) / 2.0, plot_left + 40),
+            plot_right - 40,
+        )
+
+        pieces.append(
+            f'<path class="wf-hist-span" d="M{span_left:.2f} {bracket - 4}'
+            f'V{bracket}H{span_right:.2f}V{bracket - 4}"/>'
+        )
+
+        pieces.append(
+            f'<text class="wf-hist-span-label" x="{centre:.2f}" '
+            f'y="{bracket + 13}" text-anchor="middle">Most likely '
+            f"{escape(rows[low][0])}&#8211;{escape(rows[high][0])}</text>"
+        )
+
+    line = page_row.row.get("line_value")
+
+    offset = chart_line_offset(_chart_outcomes(record), line, count=count)
+
+    if offset is not None:
+        anchor = "middle"
+
+        label_x = offset
+
+        if offset < plot_left + 52:
+            anchor, label_x = "start", 0.0
+        elif offset > width - 52:
+            anchor, label_x = "end", width
+
+        pieces.append(
+            f'<line class="wf-hist-line" x1="{offset:.2f}" '
+            f'y1="{CHART_PAD_TOP}" x2="{offset:.2f}" y2="{base}"/>'
+        )
+
+        pieces.append(
+            f'<text class="wf-hist-line-label" x="{label_x:.2f}" '
+            f'y="{CHART_PAD_TOP - 8}" text-anchor="{anchor}">Current Line '
+            f"{escape(line_text(line))}</text>"
+        )
+
+    described = (
+        f'{prop_label(page_row.row.get("prop_type"))} outcomes along the '
+        "horizontal axis, probability up the vertical axis, one bar per "
+        "outcome"
+    )
+
+    return (
+        '<div class="wf-hist-scroll">'
+        # No ``xmlns``: the HTML parser puts this element in the SVG namespace
+        # on its own, and the declaration would be the one absolute URL in a
+        # page whose whole claim is that it references nothing off-site.
+        f'<svg class="wf-hist" '
+        f'width="{width:.0f}" height="{CHART_HEIGHT}" '
+        f'viewBox="0 0 {width:.0f} {CHART_HEIGHT}" role="img" '
+        f'style="width:{width:.0f}px;height:{CHART_HEIGHT}px" '
+        f'aria-label="{escape(described)}" '
+        f'data-scale-top="{top!r}" data-plot-height="{CHART_PLOT_HEIGHT}">'
+        + "".join(pieces)
+        + "</svg></div>"
+    )
+
+
+def _distribution_panel(page_row: PageRow, *, columns: Sequence[str]) -> str:
+    """One wager's forecast: the facts, the histogram, the exact numbers.
+
+    In that order, because that is the order a reader wants them in. The facts
+    say which wager this is and what the model thinks of it. The histogram is
+    the shape of the forecast, drawn vertically and bounded in height so a
+    points line and a blocks line cost the same room. The exact probabilities
+    follow in a disclosure, which is what makes the chart safe to read as a
+    chart: every number it draws is one expansion away in text, reachable by
+    keyboard, by a screen reader and by anything checking the page.
+
+    Nothing in here derives a probability. The histogram scales published
+    probabilities into lengths and the table prints them.
+    """
+    record = page_row.distribution
+
+    if record is None:
+        return ""
+
+    rows = _distribution_rows(record)
+
+    drawn = "".join(
+        f'<tr{" class=likely" if likely else ""}>'
+        f'<th scope=row>{escape(label)}</th>'
+        f'<td class=num>{escape(percent(weight, places=2))}</td>'
+        "</tr>"
+        for label, weight, likely in rows
+    )
+
+    line = page_row.row.get("line_value")
+
+    facts = [
+        ("Model Projection", projection_text(page_row.projection))
+        if page_row.projection is not None
+        else None,
+        ("Current Line", line_text(line)),
+        (
+            "Model Probability (Over)",
+            percent(page_row.row.get(SIDE_MODEL_PROBABILITY[routing.SIDE_OVER])),
+        ),
+        (
+            "Model Probability (Under)",
+            percent(
+                page_row.row.get(SIDE_MODEL_PROBABILITY[routing.SIDE_UNDER])
+            ),
+        ),
+    ]
+
+    push = _finite(page_row.row.get("calibrated_p_push"))
+
+    if push:
+        facts.append(("Push", percent(push)))
+
+    summary = "".join(
+        f"<div><dt>{escape(label)}</dt><dd>{escape(value)}</dd></div>"
+        for item in facts
+        if item is not None
+        for label, value in (item,)
+    )
+
+    target = percent(
+        record.get("distribution_most_likely_target_mass"), places=0
+    )
+
+    return (
+        f'<tr class="wf-dist-row" id="{escape(_panel_id(page_row))}">'
+        f'<td colspan="{len(columns)}">'
+        '<section class="wf-dist-panel">'
+        f'<h3>{escape(str(page_row.row.get("player_name") or ""))} — '
+        f'{escape(prop_label(page_row.row.get("prop_type")))}</h3>'
+        f'<dl class="wf-dist-facts">{summary}</dl>'
+        f'<p class="wf-dist-kind">'
+        f'{escape(str(record.get("distribution_label") or ""))}</p>'
+        '<figure class="wf-dist-chart">'
+        + _histogram(page_row, record)
+        + "<figcaption>"
+        f'{escape(prop_label(page_row.row.get("prop_type")))} '
+        "— probability of each outcome. "
+        f"{escape(DISTRIBUTION_RANGE_NOTE.format(target=target))}"
+        "</figcaption></figure>"
+        '<details class="wf-dist-exact">'
+        "<summary>Exact probabilities</summary>"
+        '<table class="wf-dist-table">'
+        '<thead><tr><th scope="col">Outcome</th>'
+        '<th scope="col" class="num">Probability</th></tr></thead>'
+        f"<tbody>{drawn}</tbody>"
+        "</table></details>"
+        f'<p class="wf-dist-note">{escape(DISTRIBUTION_NOTE)}</p>'
+        "</section></td></tr>"
+    )
 
 
 def _search_text(page_row: PageRow) -> str:
@@ -1834,28 +3241,53 @@ def _row(
         else ""
     )
 
+    panel = (
+        _distribution_panel(page_row, columns=columns)
+        if COLUMN_DISTRIBUTION in columns
+        else ""
+    )
+
     return (
         "<tr data-row"
         f' data-offer="{"yes" if offered else "no"}"'
         f' data-prop="{escape(str(page_row.row.get("prop_type")))}"'
         f' data-book="{escape(book_key)}"'
         f' data-ev="{escape(str(page_row.expected_value))}"'
-        f' data-win="{escape(str(page_row.model_probability))}"'
+        f' data-model-p="{escape(str(page_row.model_probability))}"'
         f' data-sortname="{escape(str(page_row.row.get("player_name") or ""))}"'
         f' data-stable="{escape("|".join(page_row.stable_order))}"'
         f' data-tier="{escape(routed.tier)}"'
-        f' data-search="{escape(_search_text(page_row))}">'
+        + (f' data-panel="{escape(_panel_id(page_row))}"' if panel else "")
+        + f' data-search="{escape(_search_text(page_row))}">'
         + "".join(cells)
         + "</tr>"
+        + panel
     )
+
+
+def _header_cell(key: str) -> str:
+    """One column heading, in every format it has a name in.
+
+    A price column's heading changes with the selector, because "Sportsbook
+    Implied Probability" and "Sportsbook Odds" are different claims and a
+    column of one under the heading of the other is a worse defect than
+    either number on its own. Every other column has one name.
+    """
+    classes = "num" if COLUMN_NUMERIC[key] else ""
+
+    labels = COLUMN_FORMAT_LABEL.get(key)
+
+    inner = (
+        _formats({form: labels[form] for form, _ in ODDS_FORMATS})
+        if labels is not None
+        else escape(COLUMN_LABEL[key])
+    )
+
+    return f'<th scope="col" class="{classes}">{inner}</th>'
 
 
 def _head(columns: Sequence[str]) -> str:
-    cells = "".join(
-        f'<th scope="col" class="{"num" if COLUMN_NUMERIC[key] else ""}">'
-        f"{escape(COLUMN_LABEL[key])}</th>"
-        for key in columns
-    )
+    cells = "".join(_header_cell(key) for key in columns)
 
     return f"<thead><tr>{cells}</tr></thead>"
 
@@ -1876,26 +3308,36 @@ def _methodology(
         "pick": (
             "The side and line the model prefers on this prop, as published."
         ),
-        "win": (
-            "The model's probability that the pick wins, excluding pushes."
+        COLUMN_MODEL: (
+            "The model's own price for the pick, in the odds format you have "
+            "chosen. As Model Probability it is the published probability "
+            "that the pick wins, excluding pushes; as Model Odds it is that "
+            "same probability written as the price at which it would break "
+            "even. Switching format changes how the number is written and "
+            "nothing else."
         ),
-        "fair": (
-            "The American price at which the model's probability would break "
-            "even. Compare it against the market odds beside it: a market "
-            "price better than fair is the whole point of the page."
-        ),
-        "market": (
+        COLUMN_SPORTSBOOK: (
             "The price the featured sportsbook is posting on this exact "
-            "wager, as published in the release below."
+            "wager, as published in the release below, in the odds format you "
+            "have chosen. As Sportsbook Implied Probability it is what that "
+            "one price implies, including the sportsbook's margin, so a "
+            "sportsbook's two sides add up to more than 100%."
         ),
         "ev": (
             "Expected value at that posted price, as published. It is "
             "computed at the price in the same row, so it is the number that "
-            "answers whether the bet is worth taking."
+            "answers whether the bet is worth taking. It does not change with "
+            "the odds format."
         ),
         "projection": (
             "The model's projected number for the stat, where the release "
             "publishes one."
+        ),
+        COLUMN_DISTRIBUTION: (
+            "Opens the model's full forecast for the statistic: the "
+            "probability of every outcome, with the remaining mass above the "
+            "last listed outcome shown as one bucket, so the probabilities "
+            "add up to 100%."
         ),
         "matchup": "Who is playing, where the release publishes team names.",
     }
@@ -1940,11 +3382,12 @@ selected, never before.</p>
 <h3>What this page does not have</h3>
 <p>Each game's tip-off is published and is shown beside the matchup, but
 there is no ordering by start time: the cards are ordered by the model's
-expected value and by nothing else that pretends to be a schedule. Model
-numbers here are copied from the release: this page computes no probability,
-no fair price and no expected value of its own, and every player is named by
-the active-player record the prediction was made from rather than by anything
-a sportsbook called them.</p>
+expected value and by nothing else that pretends to be a schedule. Every
+model number here is copied from the release: this page fits nothing,
+forecasts nothing and prices nothing of its own. The odds format control
+rewrites published numbers into another notation and changes no quantity, and
+every player is named by the active-player record the prediction was made
+from rather than by anything a sportsbook called them.</p>
 <h3>Full provenance</h3>
 {_full_provenance(publication)}
 </details>"""
@@ -2005,11 +3448,17 @@ def render(
                 [("all", "All sportsbooks")] + [(key, name) for key, name in books],
             ),
             _select(
+                "f-odds",
+                "Odds format",
+                list(ODDS_FORMATS),
+                selected=DEFAULT_ODDS_FORMAT,
+            ),
+            _select(
                 "f-sort",
                 "Sort",
                 [
                     ("ev", "Expected value (highest first)"),
-                    ("win", "Win probability (highest first)"),
+                    ("model", "Model Probability (highest first)"),
                     ("player", "Player (A–Z)"),
                 ],
                 klass="sort",
@@ -2083,9 +3532,12 @@ them, not as betting opportunities.</p>
     embedded = {
         "note": (
             "Every value here is copied from the published release named "
-            "below. This page computes no probability, fair price, edge or "
-            "expected value."
+            "below. This page computes no probability, distribution, edge or "
+            "expected value. It converts a published probability and a "
+            "published price into the odds format a reader chose, which "
+            "changes how a number is written and not what it is."
         ),
+        "odds_formats": [key for key, _ in ODDS_FORMATS],
         "release_id": publication.release_id,
         "rows_sha256": publication.rows_sha256,
         "slate_date": publication.slate_date,
@@ -2099,16 +3551,16 @@ them, not as betting opportunities.</p>
 <meta name="robots" content="noindex,nofollow">
 <meta name="referrer" content="no-referrer-when-downgrade">
 <title>NBA Player Props Predictions | WizardOfOdds</title>
-<meta name="description" content="NBA player prop predictions for {escape(publication.slate_date)}: model win probability, fair odds, the best sportsbook price on each exact wager and its expected value.">
+<meta name="description" content="NBA player prop predictions for {escape(publication.slate_date)}: model probability, model odds, the best sportsbook price on each exact wager, its expected value and the model's full outcome distribution.">
 <style>{STYLE}</style>
 </head>
 <body class="wf-body">
-<div id="{EMBED_WRAPPER_ID}">
+<div id="{EMBED_WRAPPER_ID}" {ODDS_FORMAT_ATTRIBUTE}="{escape(DEFAULT_ODDS_FORMAT)}">
 <div class="wf">
 <main>
 <p class="wf-note {escape(presentation.tone)}"><b>{escape(presentation.banner)}</b><span>{escape(presentation.detail)}</span></p>
 <h1 class="wf-h1">NBA Player Props Predictions</h1>
-<p class="wf-lead">Model projections against live sportsbook prices for the {escape(publication.slate_date)} slate: {len(offered)} wager{'' if len(offered) == 1 else 's'} a sportsbook is pricing, with the model's win probability, its fair odds and the expected value at the posted price.</p>
+<p class="wf-lead">Model projections against live sportsbook prices for the {escape(publication.slate_date)} slate: {len(offered)} wager{'' if len(offered) == 1 else 's'} a sportsbook is pricing, with the model's probability, the model's own odds, the expected value at the posted price, and the full distribution of outcomes each probability came out of. Prices are shown in the odds format you choose.</p>
 {_header_provenance(publication)}
 <section class="wf-controls" aria-label="Filter and sort">{controls}</section>
 <p class="wf-count" id="count" aria-live="polite">Showing {len(offered)} of {len(offered)} prediction{'' if len(offered) == 1 else 's'}</p>
@@ -2289,6 +3741,8 @@ def build_page(
     publication = load_publication(transport, expected=expected)
 
     rows = page_rows(publication, registry=registry, fallback=fallback)
+
+    presentation = presented_as(presentation, rows)
 
     html = render(
         publication, rows, registry=registry, presentation=presentation

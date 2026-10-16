@@ -28,6 +28,7 @@ PROJECT = Path(__file__).resolve().parents[1]
 if str(PROJECT / "ops") not in sys.path:
     sys.path.insert(0, str(PROJECT / "ops"))
 
+import nba_distribution_publication as distributions  # noqa: E402
 import publish_incumbent_to_wizardofodds as publisher  # noqa: E402
 
 SLATE_DATE = "2026-10-20"
@@ -79,6 +80,82 @@ TIP_OFF: dict[int, str] = {
     9901: "2026-10-20T23:00:00+00:00",
     9902: "2026-10-21T01:30:00+00:00",
 }
+
+
+def distribution_for(line: float) -> dict[str, Any]:
+    """A small complete distribution over the line, in the published shape.
+
+    Built as a ``PublishedDistribution`` and rendered by the same call the
+    distribution stage makes, so the fixture's record carries exactly the
+    fields a real one does and a field added there has to be added here too.
+    The numbers are not a model's output -- deriving them would make every
+    publisher test depend on the 386MB of frozen artifacts -- but they are a
+    real distribution: four listed outcomes and a tail bucket, summing to one,
+    straddling the line.
+    """
+    first = int(line) - 1
+    probability = (0.2, 0.3, 0.3, 0.19)
+
+    return distributions.PublishedDistribution(
+        kind=distributions.KIND_MARGINAL,
+        support=tuple(range(first, first + len(probability))),
+        probability=probability,
+        tail_outcome=first + len(probability),
+        tail_probability=0.01,
+        mean=line + 0.4,
+        most_likely_low=first + 1,
+        most_likely_high=first + 2,
+        most_likely_mass=0.6,
+    ).payload()
+
+
+def distributions_document(
+    priced_path: Path, *, slate_date: str = SLATE_DATE
+) -> dict[str, Any]:
+    """The document ``ops/nba_distribution_publication.py`` would have written.
+
+    One record per wager rather than per quote, keyed the way that stage keys
+    them, and provenanced by the digest of the parquet on disk -- which the
+    publisher checks against the serving receipt, so a fixture that digested
+    something else would exercise that refusal rather than the happy path.
+
+    Read back off the parquet rather than built from :data:`QUOTES`, because
+    several suites publish a frame of their own: a document enumerated from
+    the fixture's own slate would be missing their wagers and every one of
+    those tests would see the publisher's refusal instead of the page it was
+    about.
+    """
+    priced = pd.read_parquet(priced_path)
+
+    records: dict[str, dict[str, Any]] = {}
+
+    for _, row in priced.iterrows():
+        try:
+            key = distributions.distribution_key(
+                row["game_id"], row["player_id"], row["prop_type"]
+            )
+
+            record = distribution_for(float(row["line_value"]))
+        except (TypeError, ValueError):
+            # A suite that deliberately corrupted an identifier or a line is
+            # about the publisher's refusal, and it has to reach the publisher
+            # to see it. Skipping the row here leaves that release short a
+            # distribution, which is a refusal the publisher also makes -- so
+            # either way the test sees a refusal, and the one it asserts on is
+            # the one it broke the frame to provoke.
+            continue
+
+        records.setdefault(key, record)
+
+    return {
+        "combo_simulations": distributions.DEFAULT_COMBO_SIMULATIONS,
+        "contract_version": distributions.DOCUMENT_CONTRACT_VERSION,
+        "distributions": records,
+        "priced_relative": priced_path.name,
+        "priced_sha256": publisher.sha256_file(priced_path),
+        "seed": distributions.DEFAULT_SEED,
+        "slate_date": slate_date,
+    }
 
 
 def priced_frame() -> pd.DataFrame:
@@ -223,6 +300,15 @@ def build(
         priced_path, index=False
     )
 
+    distributions_file = publisher.distributions_path(data_root, slate_date)
+
+    distributions_file.parent.mkdir(parents=True, exist_ok=True)
+
+    distributions.write_document(
+        distributions_file,
+        distributions_document(priced_path, slate_date=slate_date),
+    )
+
     receipt = receipt_for(priced_path, slate_date=slate_date)
 
     if receipt_changes:
@@ -243,6 +329,7 @@ def build(
     return {
         "data_root": data_root,
         "destination_root": Path(root) / "destination",
+        "distributions_path": distributions_file,
         "priced_path": priced_path,
         "receipt": receipt,
         "receipt_path": receipt_path,

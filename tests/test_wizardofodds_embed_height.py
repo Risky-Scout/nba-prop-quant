@@ -66,6 +66,13 @@ SITE_MESSAGE_KEY = "frameHeight"
 
 SITE_WRAPPER_ID = "app-root"
 
+#: The wrapper's opening tag, up to its own attributes. The element is the one
+#: the site measures and has to stay that element; what else it carries is the
+#: page's business -- the odds format a reader chose is set on it, because the
+#: stylesheet needs one ancestor to switch every price at once -- and asserting
+#: on the whole tag would turn that into an embed failure.
+WRAPPER_OPEN = f'<div id="{SITE_WRAPPER_ID}"'
+
 SITE_ORIGINS = ("https://wizardofodds.com", "https://dev.wizardofodds.com")
 
 
@@ -123,11 +130,11 @@ def test_the_content_is_wrapped_in_the_element_the_site_measures(consumer_html):
     describe the frame rather than the page, and the frame would be sized to
     the size it already had.
     """
-    assert f'<div id="{SITE_WRAPPER_ID}">' in consumer_html
+    assert WRAPPER_OPEN in consumer_html
 
     body = consumer_html.split('<body class="wf-body">', 1)[1]
 
-    wrapper = body.split(f'<div id="{SITE_WRAPPER_ID}">', 1)[1]
+    wrapper = body.split(WRAPPER_OPEN, 1)[1]
 
     content = wrapper.rsplit("</div>", 1)[0]
 
@@ -137,11 +144,11 @@ def test_the_content_is_wrapped_in_the_element_the_site_measures(consumer_html):
 
 def test_the_wrapper_holds_the_whole_page_and_not_a_part_of_it(consumer_html):
     """A wrapper around half the page measures half the page."""
-    opened = consumer_html.count(f'<div id="{SITE_WRAPPER_ID}">')
+    opened = consumer_html.count(WRAPPER_OPEN)
 
     assert opened == 1
 
-    wrapper = consumer_html.split(f'<div id="{SITE_WRAPPER_ID}">', 1)[1]
+    wrapper = consumer_html.split(WRAPPER_OPEN, 1)[1]
 
     # Everything after the wrapper closes is script, not content.
     tail = wrapper.rsplit("</div>", 1)[1]
@@ -331,7 +338,7 @@ def test_the_routing_proof_page_is_embeddable_on_the_same_terms(
 
     assert result["origins"] == list(SITE_ORIGINS)
 
-    assert f'<div id="{SITE_WRAPPER_ID}">' in proof_html
+    assert WRAPPER_OPEN in proof_html
 
     for entry in result["at_load"]:
         assert entry["message"] == {SITE_MESSAGE_KEY: 1200}

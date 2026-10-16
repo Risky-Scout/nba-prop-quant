@@ -582,7 +582,11 @@ def test_14_there_is_still_no_game_time_sort(rendered_html: str):
 
     assert sorts is not None
 
-    assert re.findall(r'value="([^"]+)"', sorts.group(1)) == ["ev", "win", "player"]
+    assert re.findall(r'value="([^"]+)"', sorts.group(1)) == [
+        "ev",
+        "model",
+        "player",
+    ]
 
 
 # ======================================================================
@@ -716,6 +720,12 @@ def test_a_natural_priced_slate_names_every_player():
 
         for value in frame["player_name"].tolist():
             assert publisher.player_name_problem(value) is None, (path, value)
+
+            # And it is a person rather than a constructed stand-in, which is
+            # the claim the launch rests on: the first real slate served here
+            # renders real players, so the page it builds is the consumer
+            # page rather than the relabelled test-data one.
+            assert not page.synthetic_name(value), (path, value)
 
             players.add(value)
 

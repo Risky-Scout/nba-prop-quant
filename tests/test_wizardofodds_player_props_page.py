@@ -306,6 +306,11 @@ def zero_row_destination(tmp_path: Path) -> Path:
     rows_bytes = publisher.serialise(
         {
             "contract_version": publisher.PUBLICATION_CONTRACT_VERSION,
+            # Present and empty, which is what no rows means: a release with
+            # nothing in it has no forecasts, and the key missing entirely is
+            # a different thing -- a release whose forecasts were never
+            # published -- which the renderer refuses.
+            publisher.DISTRIBUTIONS_KEY: {},
             "rows": [],
             "slate_date": "2026-10-20",
         }
@@ -1272,14 +1277,16 @@ def test_the_controls_the_page_requires_are_all_present(published):
 
     for option in (
         'value="ev"',
-        'value="win"',
+        'value="model"',
         'value="player"',
     ):
         assert option in html, option
 
     assert "Expected value (highest first)" in html
 
-    assert "Win probability (highest first)" in html
+    assert "Model Probability (highest first)" in html
+
+    assert 'id="f-odds"' in html
 
 
 def test_there_is_no_game_time_sort_and_the_page_no_longer_blames_the_feed(
@@ -1310,7 +1317,7 @@ def test_there_is_no_game_time_sort_and_the_page_no_longer_blames_the_feed(
 
     assert re.findall(r'value="([^"]+)"', sorts.group(1)) == [
         "ev",
-        "win",
+        "model",
         "player",
     ]
 
@@ -1353,7 +1360,7 @@ def test_every_card_carries_what_the_filters_and_sorts_read(published):
             "data-prop=",
             "data-book=",
             "data-ev=",
-            "data-win=",
+            "data-model-p=",
             "data-sortname=",
             "data-stable=",
             "data-tier=",

@@ -34,9 +34,12 @@ for relative in ("ops", "src", "tests"):
         sys.path.insert(0, str(PROJECT / relative))
 
 import frozen_bundle_slate_fixture as slate_fixture  # noqa: E402
+import nba_distribution_publication as distribution_stage  # noqa: E402
 import production_lifecycle_preflight as preflight  # noqa: E402
 import publish_incumbent_to_wizardofodds as publisher  # noqa: E402
 import run_incumbent_production_serving as serving  # noqa: E402
+import wizardofodds_player_props_page as page  # noqa: E402
+from test_wizardofodds_player_props_page import REGISTRY  # noqa: E402
 from test_real_slate_serving_root import (  # noqa: E402
     installed_bundle,
     serve_the_fixture,
@@ -156,6 +159,25 @@ def serve_and_provenance(bundle: Path, root: Path, *, production_sha: str) -> di
 
     receipt_path.write_text(
         json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+    # The stage the lifecycle runs between serving and publication, here for
+    # the same reason the receipt is built by serving's own builder: the
+    # publisher is handed what production hands it. It reads the parquet the
+    # serving run just wrote and the bundle that priced it, so the forecasts
+    # these suites publish are the frozen engines' own and not a fixture's.
+    assert (
+        distribution_stage.main(
+            [
+                "--date",
+                slate_fixture.SLATE_DATE,
+                "--data-root",
+                str(root / "data"),
+                "--model-dir",
+                str(bundle / "models"),
+            ]
+        )
+        == 0
     )
 
     return {"receipt": receipt, "served": served}
@@ -394,3 +416,106 @@ def test_republishing_the_same_served_slate_is_a_no_op(
     assert second["promotion"]["promoted"] is False
     assert transport.listing() == listing
     assert not transport.exists(publisher.PREVIOUS_POINTER)
+
+
+def test_the_canary_preview_carries_the_forecasts_and_renders_them(
+    frozen_bundle: Path, tmp_path: Path
+):
+    """What the canary is for: the preview a reviewer opens is the real one.
+
+    The three things a reviewer cannot check by reading a receipt. That the
+    release the canary published carries a forecast for every wager in it,
+    that the page built from that exact release draws one panel per wager out
+    of those published numbers, and that the odds control is in the document
+    with every notation already rendered -- so the page a reviewer is looking
+    at is the page, and not a page that would need a round trip to say what a
+    price is.
+    """
+    root = tmp_path / "run"
+
+    serve_and_provenance(frozen_bundle, root, production_sha=checkout_sha())
+
+    destination = tmp_path / "canary"
+
+    receipt = publisher.publish(
+        mode=publisher.MODE_CANARY,
+        slate_date=slate_fixture.SLATE_DATE,
+        data_root=root / "data",
+        project_root=PROJECT,
+        destination_root=destination,
+    )
+
+    assert receipt["outcome"] == publisher.OUTCOME_PUBLISHED
+
+    published = json.loads(
+        (destination / receipt["release"]["rows_relative"]).read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert published["contract_version"] == publisher.PUBLICATION_CONTRACT_VERSION
+
+    distributions = published[publisher.DISTRIBUTIONS_KEY]
+
+    wagers = {publisher.distribution_key(row) for row in published["rows"]}
+
+    manifest = json.loads(
+        (destination / receipt["release"]["manifest_relative"]).read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert set(distributions) == wagers
+    assert manifest["distribution_count"] == len(wagers) > 0
+
+    built = page.build_page(
+        publisher.LocalDirectoryTransport(destination), registry=REGISTRY
+    )
+
+    document = built["files"][page.PAGE_NAME].decode("utf-8")
+
+    # One panel per wager, each with a real button disclosing it.
+    assert document.count('<tr class="wf-dist-row"') == len(built["rows"])
+    assert (
+        document.count('<button type="button" class="wf-dist-toggle"')
+        == len(built["rows"])
+    )
+
+    # The published probabilities are in the panel a reviewer would open.
+    for page_row in built["rows"][:3]:
+        record = distributions[publisher.distribution_key(page_row.row)]
+
+        start = document.index(
+            f'<tr class="wf-dist-row" id="{page._panel_id(page_row)}">'
+        )
+
+        panel = document[start : document.index("</section></td></tr>", start)]
+
+        for outcome, weight in list(
+            zip(
+                record["distribution_support"],
+                record["distribution_probability"],
+            )
+        )[:8]:
+            if weight >= 0.0005:
+                assert f">{outcome}</th>" in panel
+                assert page.percent(weight, places=2) in panel
+
+        assert record["distribution_tail_label"] in panel
+        assert record["distribution_label"] in panel
+
+    # The selector, with all three notations already written out.
+    assert 'id="f-odds"' in document
+
+    # Two prices a row, each already written in every notation, so switching
+    # notation is a stylesheet rule rather than a request.
+    for value, _ in page.ODDS_FORMATS:
+        assert document.count(f'data-odds-format-value="{value}"') >= 2 * len(
+            built["rows"]
+        ), value
+
+    assert f'{page.ODDS_FORMAT_ATTRIBUTE}="{page.DEFAULT_ODDS_FORMAT}"' in document
+
+    # Nothing the page does to change notation leaves the document.
+    assert "fetch(" not in document
+    assert "XMLHttpRequest" not in document

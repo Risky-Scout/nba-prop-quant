@@ -301,6 +301,35 @@ jobs:
             --frozen-bundle-root "$FROZEN_RUNTIME_BUNDLE_ROOT" \
             --summary-path "$GITHUB_STEP_SUMMARY"
 
+      # The outcome distribution behind every price the step above produced.
+      # A reader is shown the model's probability for a wager; this is the
+      # forecast that probability came out of, published so the page can draw
+      # it rather than guess it from a mean and a line.
+      #
+      # Its own step rather than part of either neighbour. The pricing script
+      # is byte-pinned in the adaptive serving source contract and a module it
+      # imports stops being declarable, so producing this there would mean
+      # relocking the frozen pricing path for a display panel; and the
+      # publication entry point is pinned to import no model, copula or
+      # pricing code at all. So it reads what pricing wrote, with the same
+      # frozen model directory the serving step priced from, and writes one
+      # JSON document recording the digest of the parquet it was derived from.
+      #
+      # No continue-on-error, for the same reason serving has none: the feed
+      # publisher refuses a release whose rows have no forecasts behind them,
+      # so a failure here is a day with no page rather than a page with empty
+      # panels, and it must go red.
+      - name: Derive the distributions behind the served prices
+        if: env.MODE == 'production'
+        env:
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+        run: |
+          set -euo pipefail
+          python ops/nba_distribution_publication.py \
+            --date "$slate" \
+            --data-root "$NBA_PROP_DATA_DIR" \
+            --model-dir "$FROZEN_RUNTIME_MODEL_DIR"
+
       # Publishes what the step above just served. Nothing automated did this
       # before: the publisher and the page builder both worked and both were
       # run by hand, over SSH, by an operator who had to remember the order.

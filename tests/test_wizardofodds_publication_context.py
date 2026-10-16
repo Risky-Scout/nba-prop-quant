@@ -43,6 +43,7 @@ for relative in ("ops", "src", "tests"):
         sys.path.insert(0, str(PROJECT / relative))
 
 import frozen_bundle_slate_fixture as slate_fixture  # noqa: E402
+import nba_distribution_publication as distribution_stage  # noqa: E402
 import publish_incumbent_to_wizardofodds as publisher  # noqa: E402
 import wizardofodds_player_props_page as page  # noqa: E402
 import wizardofodds_affiliate_routing as routing  # noqa: E402
@@ -665,6 +666,24 @@ def republish(frame: pd.DataFrame, served: dict, root: Path) -> Path:
         json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
 
+    # Re-derived rather than copied, for the same reason the receipt is
+    # re-provenanced: the publisher refuses a distributions document that
+    # digests a different parquet, and the one the fixture's own serving run
+    # produced digests the frame this helper just replaced.
+    assert (
+        distribution_stage.main(
+            [
+                "--date",
+                slate_fixture.SLATE_DATE,
+                "--data-root",
+                str(data_root),
+                "--model-dir",
+                receipt["serving_model_dir"],
+            ]
+        )
+        == 0
+    )
+
     destination = root / "destination"
 
     publisher.publish(
@@ -780,15 +799,15 @@ def test_the_chain_carries_both_facts_from_the_schedule_to_the_screen(
         assert row["model_projection"] == float(source["model_projection"])
 
     for page_row in rendered["rows"]:
-        rendered_row = published[
-            (
-                page_row.row["vendor"],
-                page_row.row["game_id"],
-                page_row.row["player_id"],
-                page_row.row["prop_type"],
-                page_row.row["line_value"],
-            )
-        ]
+        key = (
+            page_row.row["vendor"],
+            page_row.row["game_id"],
+            page_row.row["player_id"],
+            page_row.row["prop_type"],
+            page_row.row["line_value"],
+        )
+
+        rendered_row = published[key]
 
         assert page_row.matchup == (
             f"{rendered_row['away_team']} @ {rendered_row['home_team']}"
@@ -800,7 +819,20 @@ def test_the_chain_carries_both_facts_from_the_schedule_to_the_screen(
 
         assert page_row.tip_off == rendered_row["tip_off_utc"]
 
-        assert page.number_text(page_row.projection) in rendered_html
+        # The whole chain, end to end: the served projection reaches the
+        # release at full precision, reaches the renderer at full precision,
+        # and is *shown* at two decimals. Rounding is the last thing that
+        # happens to it and it happens only to the string.
+        assert page_row.projection == float(sourced[key]["model_projection"])
+
+        shown = page.projection_text(page_row.projection)
+
+        assert shown == f"{page_row.projection:.2f}"
+
+        assert (
+            f'<td class="c-proj num" data-label="Model Projection">{shown}</td>'
+            in rendered_html
+        )
 
     assert set(page.visible_columns(rendered["rows"])) >= {
         "matchup",

@@ -174,8 +174,64 @@ def test_the_proof_module_runs_no_model_or_pricing_code():
         "run_serving",
         "serving.main",
         "serve_slate",
+        "nba_distribution_publication",
     ):
         assert forbidden not in source, forbidden
+
+
+def test_the_proof_fixture_restates_the_renderers_rule_and_not_another_one():
+    """The distributions are declared; the words put on them are not invented.
+
+    This module may not import the stage that produces the real records, so
+    the narrowest-range rule and the two names a record is published under are
+    restated in it. Restated is only safe if it is pinned, which is what this
+    does: the same answers as the stage's own function over distributions of
+    different shapes, and the stage's own two label constants.
+    """
+    distributions = pytest.importorskip("nba_distribution_publication")
+
+    assert proof.PROOF_RANGE_MASS == distributions.MOST_LIKELY_MASS
+
+    assert proof.PROOF_DISTRIBUTION_TYPE == distributions.KIND_MARGINAL
+
+    assert proof.PROOF_DISTRIBUTION_LABEL == distributions.ANALYTICAL_LABEL
+
+    assert proof.PROOF_DISTRIBUTION_LABEL != distributions.SIMULATION_LABEL
+
+    shapes = (
+        [0.1, 0.2, 0.4, 0.2, 0.1],
+        [0.5, 0.5],
+        [1.0],
+        [0.02, 0.03, 0.05, 0.1, 0.2, 0.3, 0.2, 0.1],
+        [0.9, 0.05, 0.05],
+        [0.25, 0.25, 0.25, 0.25],
+        [0.05] * 20,
+    )
+
+    for weights in shapes:
+        assert proof.narrowest_range(
+            weights, mass=proof.PROOF_RANGE_MASS
+        ) == distributions.most_likely_range(weights, mass=proof.PROOF_RANGE_MASS), (
+            weights
+        )
+
+
+def test_every_proof_distribution_is_one_the_page_agrees_to_draw():
+    """The renderer's own validator, over each declared fixture record.
+
+    The fixture weights are hand-written, so the thing worth checking is that
+    dividing them by their total really does produce a distribution: whole
+    ascending outcomes, finite non-negative probabilities, a tail bucket above
+    the last listed outcome and a mass of one.
+    """
+    for name in proof.PROOF_WEIGHTS:
+        record = proof.distribution_record(name)
+
+        assert page.distribution_problem(record) == "", name
+
+        assert set(publisher.REQUIRED_DISTRIBUTION_FIELDS) <= set(record), name
+
+        assert record["distribution_most_likely_mass"] >= proof.PROOF_RANGE_MASS
 
 
 def test_the_proof_page_is_published_beneath_its_own_directory(tmp_path):
@@ -504,7 +560,7 @@ def test_the_proof_page_has_no_secondary_tier_and_no_game_time_sort(html):
 
     assert re.findall(r'value="([^"]+)"', sorts.group(1)) == [
         "ev",
-        "win",
+        "model",
         "player",
     ]
 

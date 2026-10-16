@@ -200,6 +200,12 @@ DESTINATIONS_RELATIVE = Path("ops") / "wizardofodds_destinations.json"
 PRICED_MARKETS_RELATIVE = Path("processed") / "priced_markets"
 SERVING_RECEIPTS_RELATIVE = Path("processed") / "incumbent_serving"
 
+#: Where ``ops/nba_distribution_publication.py`` leaves the forecasts behind
+#: one slate's prices. Beside the priced markets rather than inside them: the
+#: priced parquet is digested by the serving receipt, and a stage that rewrote
+#: it to add a display panel would invalidate that provenance.
+DISTRIBUTIONS_RELATIVE = Path("processed") / "nba_distributions"
+
 TRANSPORT_LOCAL_DIRECTORY = "local_directory"
 TRANSPORT_SSH_RSYNC = "ssh_rsync"
 
@@ -229,11 +235,50 @@ REMOTE_MISSING = "MISSING"
 #: this names the shape of what is written to the destination, not the shape
 #: of what was read from the runtime.
 #:
-#: 2 publishes what the model projects and who is playing. The reader of this
+#: 2 publishes what the model projects and who is playing. 3 adds the outcome
+#: distribution each price came out of, as its own keyed block beside the rows
+#: rather than repeated on every quote of the same wager. The reader of this
 #: record checks the version for equality, not for a floor, precisely because
 #: a renderer written against the wider shape would otherwise read fields a
-#: narrower release does not have and quietly show a page with holes in it.
-PUBLICATION_CONTRACT_VERSION = 2
+#: narrower release does not have and quietly show a page with holes in it --
+#: which is exactly what a contract-2 release handed to a renderer that draws
+#: distributions would do.
+PUBLICATION_CONTRACT_VERSION = 3
+
+#: Where the distributions live in the published rows document, and what keys
+#: them. One record per player, stat and game: a wager six sportsbooks price
+#: has six rows and one distribution, and putting it on the rows would publish
+#: the same several-hundred-number record six times.
+DISTRIBUTIONS_KEY = "distributions"
+
+#: The fields a distribution's key is built from, in order. Named here rather
+#: than imported from the stage that produces them because this module imports
+#: no model, pricing or calibration code and a test pins that. A test also
+#: pins that these are the stage's own three fields in the stage's own order,
+#: so the two cannot drift into keying the same wager differently.
+DISTRIBUTION_KEY_FIELDS: tuple[str, str, str] = (
+    "game_id",
+    "player_id",
+    "prop_type",
+)
+
+#: What a distribution record must carry to be published. The publisher does
+#: not compute these and does not check the arithmetic -- the pricing path
+#: that produced them did, and a test reprices it -- but a record missing a
+#: field the page draws would render an empty panel, so the shape is checked
+#: where the bytes enter the contract.
+REQUIRED_DISTRIBUTION_FIELDS: tuple[str, ...] = (
+    "distribution_analytical",
+    "distribution_label",
+    "distribution_mass",
+    "distribution_mean",
+    "distribution_most_likely_high",
+    "distribution_most_likely_low",
+    "distribution_probability",
+    "distribution_support",
+    "distribution_tail_probability",
+    "distribution_type",
+)
 
 RELEASES_DIRECTORY = "releases"
 ROWS_NAME = "rows.json"
@@ -1617,6 +1662,42 @@ def priced_markets_path(data_root: Path, slate_date: str) -> Path:
     return Path(data_root) / PRICED_MARKETS_RELATIVE / f"{slate_date}.parquet"
 
 
+def distributions_path(data_root: Path, slate_date: str) -> Path:
+    return Path(data_root) / DISTRIBUTIONS_RELATIVE / f"{slate_date}.json"
+
+
+def read_distributions_document(path: Path) -> dict[str, Any]:
+    """What the distribution stage wrote for this slate, as JSON.
+
+    Read here rather than imported from the stage, which imports the pricing
+    engine and the fitted marginals. This module imports no model, pricing or
+    calibration code -- a test pins that -- so what crosses between them is a
+    file and a digest, which is also what makes the provenance check in
+    :func:`published_distributions` possible at all.
+    """
+    path = Path(path)
+
+    if not path.exists():
+        raise PublishingRefused(
+            f"{path} does not exist, so the distributions behind this slate's "
+            "prices have not been produced and the release would publish "
+            "prices with no forecast behind them"
+        )
+
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as error:
+        raise PublishingRefused(
+            f"{path} is not readable JSON ({error}), so the distributions "
+            "behind this slate's prices are not published"
+        ) from error
+
+    if not isinstance(document, dict):
+        raise PublishingRefused(f"{path} is not a JSON object")
+
+    return document
+
+
 def verify_receipt(
     receipt: dict[str, Any], *, slate_date: str, priced_path: Path
 ) -> dict[str, Any]:
@@ -1990,6 +2071,89 @@ def _duplicate_keys(rows: list[dict[str, Any]]) -> list[str]:
     ]
 
 
+def distribution_key(source: Any) -> str:
+    """The published key of the wager a row prices.
+
+    A game, a player and a stat, which is what a distribution is of. The
+    sportsbook and the line are deliberately not in it: six books quoting six
+    lines on the same player's points are six prices out of one forecast.
+    """
+    return "|".join(str(source.get(name)) for name in DISTRIBUTION_KEY_FIELDS)
+
+
+def published_distributions(
+    document: dict[str, Any],
+    *,
+    rows: list[dict[str, Any]],
+    priced_sha256: str,
+) -> dict[str, dict[str, Any]]:
+    """The outcome distributions behind the published rows, one per wager.
+
+    ``document`` is what ``ops/nba_distribution_publication.py`` wrote for this
+    slate. That stage reads the priced parquet and the frozen marginals and
+    copula, and derives every record through the pricing engine's own
+    functions; a test reprices both sides and compares. What this function is
+    responsible for is that the document in front of it describes *this* slate.
+
+    Which is what ``priced_sha256`` is for. The serving receipt digests the
+    priced parquet, and a distributions document derived from a different
+    parquet is refused rather than published: the failure it prevents is a
+    stale file from an earlier run being served as the forecast behind today's
+    prices, which is invisible in every other way.
+    """
+    recorded = str(document.get("priced_sha256") or "")
+
+    if recorded != priced_sha256:
+        raise PublishingRefused(
+            f"the distributions were derived from priced markets digesting "
+            f"{recorded or 'nothing'} and this publication is of "
+            f"{priced_sha256}, so they are a different slate's forecasts and "
+            "are not published beside these prices"
+        )
+
+    source = document.get(DISTRIBUTIONS_KEY)
+
+    if not isinstance(source, dict):
+        raise PublishingRefused(
+            f"the distributions document carries no {DISTRIBUTIONS_KEY} object, "
+            f"so it cannot satisfy contract {PUBLICATION_CONTRACT_VERSION}"
+        )
+
+    wanted = {distribution_key(row) for row in rows}
+
+    records = {
+        key: record
+        for key, record in source.items()
+        if key in wanted and isinstance(record, dict)
+    }
+
+    missing = sorted(wanted - set(records))
+
+    if missing:
+        raise PublishingRefused(
+            f"{len(missing)} of {len(wanted)} published wagers carry no "
+            "distribution, and a published price with no forecast behind it is "
+            "a hole in the page rather than a thinner feed: "
+            + "; ".join(missing[:5])
+        )
+
+    incomplete: list[str] = []
+
+    for key in sorted(records):
+        absent = sorted(set(REQUIRED_DISTRIBUTION_FIELDS) - set(records[key]))
+
+        if absent:
+            incomplete.append(f"{key} is missing " + ", ".join(absent))
+
+    if incomplete:
+        raise PublishingRefused(
+            f"{len(incomplete)} distributions do not carry every field the "
+            "page draws: " + "; ".join(incomplete[:5])
+        )
+
+    return records
+
+
 # ----------------------------------------------------------------------
 # the release
 # ----------------------------------------------------------------------
@@ -2010,6 +2174,7 @@ class Release:
 def build_release(
     *,
     rows: list[dict[str, Any]],
+    distributions: dict[str, dict[str, Any]],
     provenance: dict[str, Any],
     switch: PublishingSwitch,
     destination: Destination,
@@ -2020,10 +2185,13 @@ def build_release(
     The release id is derived from the payload digest rather than from a clock,
     which is what makes a rerun idempotent: the same rows produce the same id,
     so the second run recognises its own release instead of stacking a new one
-    beside it.
+    beside it. The distributions are inside the digest for the same reason the
+    rows are: a release that changed a forecast and kept its name would be
+    served from a cache that believed it had already seen it.
     """
     payload = {
         "contract_version": PUBLICATION_CONTRACT_VERSION,
+        DISTRIBUTIONS_KEY: distributions,
         "rows": rows,
         "slate_date": slate_date,
     }
@@ -2047,6 +2215,10 @@ def build_release(
         "approved_projection_schema_version": (
             switch.approved_projection_schema_version
         ),
+        # How many forecasts the rows were priced out of. Stated here so a
+        # canary can assert that distributions were published without reading
+        # and parsing the whole rows document to count them.
+        "distribution_count": len(distributions),
         "provenance": provenance,
         "release_id": release_id,
         "row_count": len(rows),
@@ -2839,6 +3011,7 @@ def publish(
     destinations_path: Path | None = None,
     receipt_path: Path | None = None,
     priced_path: Path | None = None,
+    distributions_file: Path | None = None,
     canary_attestation: Path | None = None,
     destination_name: str | None = None,
     environment: dict[str, str] | None = None,
@@ -2921,6 +3094,17 @@ def publish(
 
     release = build_release(
         rows=rows,
+        distributions=published_distributions(
+            read_distributions_document(
+                distributions_file
+                if distributions_file is not None
+                else distributions_path(data_root, slate_date)
+            ),
+            rows=rows,
+            priced_sha256=str(
+                provenance.get("priced_market_artifact_sha256") or ""
+            ),
+        ),
         provenance=provenance,
         switch=switch,
         destination=destination,

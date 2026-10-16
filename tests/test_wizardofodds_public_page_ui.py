@@ -47,6 +47,7 @@ import publish_incumbent_to_wizardofodds as publisher  # noqa: E402
 import wizardofodds_affiliate_routing as routing  # noqa: E402
 import wizardofodds_fallback_destinations as fallback  # noqa: E402
 import wizardofodds_player_props_page as page  # noqa: E402
+import wizardofodds_publisher_fixture as fixture  # noqa: E402
 import wizardofodds_routing_proof as proof  # noqa: E402
 from test_wizardofodds_player_props_page import (  # noqa: E402
     REGISTRY,
@@ -299,12 +300,101 @@ def test_the_consumer_page_carries_no_qa_vocabulary(consumer_html, phrase):
 
 
 def test_the_consumer_page_announces_itself_as_a_preview(consumer_html):
-    """Case 3's other half: it says what it is, and it is not live yet."""
+    """Case 3's other half: it says what it is, and it is not live yet.
+
+    Over a constructed slate it has to say more than that. The fixture's
+    players are ``Alpha Example`` and ``Beta Example``, so the page a bettor
+    would meet is relabelled as test data and says in its first sentence that
+    the names are not real players -- a page that looked exactly like the
+    product while naming nobody is the one thing a public pre-launch preview
+    must not be.
+    """
     assert page.CONSUMER_PREVIEW.banner == "CANARY PREVIEW — NOT YET LIVE"
 
-    assert "CANARY PREVIEW — NOT YET LIVE" in consumer_html
+    assert page.TEST_DATA_PREVIEW.banner == "TEST DATA — NOT LIVE BETTING PICKS"
 
-    assert 'class="wf-note warn"' in consumer_html
+    assert "TEST DATA — NOT LIVE BETTING PICKS" in consumer_html
+
+    assert "not real players" in consumer_html
+
+    assert "not betting picks" in consumer_html
+
+    assert 'class="wf-note err"' in consumer_html
+
+    assert "CANARY PREVIEW — NOT YET LIVE" not in consumer_html
+
+
+#: Names used only to show that the relabelling is driven by the declared
+#: markers and not by the fact that a slate came from a fixture.
+#:
+#: Deliberately nobody: typing real NBA players into a fixture is the thing
+#: this correction forbids, because a fixture that carries real names is one
+#: copy-paste away from a public page that claims to be picking for them. The
+#: live guarantee is not in this file -- it is that ``player_name`` comes off
+#: the active-player roster on the serving path, which the identity suite
+#: proves hop by hop, and which the natural-slate gate re-proves on the first
+#: real slate served into a checkout.
+UNMARKED_NAMES: dict[int, str] = {
+    1101: "Kwm Vosburgh",
+    1102: "Rjt Ellicott",
+    2201: "Pbn Mallender",
+}
+
+
+def test_a_slate_without_the_markers_keeps_the_ordinary_preview_banner(
+    tmp_path,
+):
+    """The relabelling is about the names, and only about the names.
+
+    The same release, the same renderer, names carrying none of the declared
+    markers: the ordinary preview banner comes back. So the test-data wording
+    is not something a consumer build carries unconditionally, and the first
+    natural production run -- whose names come off the active-player roster --
+    gets the page the launch is for.
+    """
+    frame = fixture.priced_frame()
+
+    frame = frame.assign(
+        player_name=[
+            UNMARKED_NAMES[int(value)] for value in frame["player_id"]
+        ]
+    )
+
+    state = publish(tmp_path, frame=frame)
+
+    built = page.build_page(state["transport"], registry=REGISTRY)
+
+    html = built["files"][page.PAGE_NAME].decode("utf-8")
+
+    assert page.synthetic_names(built["rows"]) == ()
+
+    assert "CANARY PREVIEW — NOT YET LIVE" in html
+
+    assert 'class="wf-note warn"' in html
+
+    assert page.TEST_DATA_PREVIEW.banner not in html
+
+    for name in set(UNMARKED_NAMES.values()):
+        assert name in html
+
+
+@pytest.mark.parametrize(
+    "name",
+    (
+        "P1101 Fixture",
+        "P2205 Fixture",
+        "Alpha Example",
+        "Beta Example",
+        "Routing Proof A",
+        "Routing Proof D",
+        "Player 12345",
+        "",
+        "   ",
+    ),
+)
+def test_every_stand_in_name_the_correction_names_is_detected(name: str):
+    """The exact list the correction forbids a consumer page from wearing."""
+    assert page.synthetic_name(name) is True
 
 
 def test_the_routing_proof_page_is_still_labelled_as_test_data(proof_html):
@@ -379,7 +469,7 @@ def test_no_internal_identifier_is_dressed_up_as_a_matchup(consumer, consumer_ht
     assert not re.search(r"Team \d+ (?:vs|@) Team \d+", consumer_html)
 
 
-def test_the_projection_is_the_published_one_and_fair_odds_are_shown(
+def test_the_projection_is_the_published_one_and_the_model_price_is_shown(
     consumer, consumer_html
 ):
     """Case 5's other half: a column exists when a field does, not before.
@@ -390,6 +480,10 @@ def test_the_projection_is_the_published_one_and_fair_odds_are_shown(
     from the price or the probability -- a renderer that turned a probability
     into a projected number would be inventing the one figure a reader is
     most likely to take literally.
+
+    The model's own price is one column with three renderings rather than the
+    two columns this page used to carry, and all three come out of the one
+    published probability.
     """
     columns = page.visible_columns(consumer["rows"])
 
@@ -397,9 +491,11 @@ def test_the_projection_is_the_published_one_and_fair_odds_are_shown(
 
     assert "Model Proj" in consumer_html
 
-    assert "fair" in columns
+    assert page.COLUMN_MODEL in columns
 
-    assert "Fair Odds" in consumer_html
+    assert "Model Probability" in consumer_html
+
+    assert "Model Odds" in consumer_html
 
     for page_row in consumer["rows"]:
         published = page_row.row["model_projection"]
@@ -408,30 +504,44 @@ def test_the_projection_is_the_published_one_and_fair_odds_are_shown(
 
         assert published != page_row.wager.line_value
 
-        assert page.number_text(published) in consumer_html
+        # Shown at two decimals, and the published field it was shown from
+        # still carries every digit it was served with.
+        assert (
+            f'<td class="c-proj num" data-label="Model Projection">'
+            f"{page.projection_text(published)}</td>" in consumer_html
+        )
 
-        assert page_row.fair_odds is not None
+        assert page.projection_text(published) == f"{float(published):.2f}"
 
-        assert page.american(page_row.fair_odds) in consumer_html
+        probability = page_row.model_probability
+
+        assert page.percent(probability) in consumer_html
+
+        assert page.american(page.model_american(probability)) in consumer_html
+
+        assert page.decimal_odds(page.model_decimal(probability)) in consumer_html
 
 
-def test_no_ambiguous_market_probability_column_is_rendered(consumer_html):
+def test_the_devigged_pair_is_never_what_the_page_calls_implied(
+    consumer, consumer_html
+):
     """Case 6. The devigged pair is not the price's own probability.
 
     ``market_devig_q_over`` and ``market_devig_q_under`` are the pair implied
     by a book's two prices together, not the probability implied by the single
-    price the row displays, and edge inherits that ambiguity. Both fields stay
-    published and untouched; neither is given a column, because a column
-    labelled Market Probability next to one price would be read as that
-    price's probability. Win %, fair odds, market odds and EV say everything
-    the reader needs and each is unambiguous.
+    price the row displays, and edge inherits that ambiguity. All three stay
+    published and untouched, and none of them is rendered: the probability
+    rendering of the sportsbook column is derived from that row's own posted
+    American price and from nothing else, which is the only reading under
+    which the words "Sportsbook Implied Probability" are true.
     """
     lowered = visible_text(consumer_html).lower()
 
     for ambiguous in (
         "market probability",
         "market prob",
-        "implied probability",
+        "fair odds",
+        "win %",
         "devig",
         "model edge",
         "edge",
@@ -440,9 +550,24 @@ def test_no_ambiguous_market_probability_column_is_rendered(consumer_html):
 
     assert "data-edge=" not in consumer_html
 
-    assert "Win %" in consumer_html
+    assert "Sportsbook Implied Probability" in consumer_html
 
-    assert "Market Odds" in consumer_html
+    for page_row in consumer["rows"]:
+        row = row_for(consumer_html, page_row)
+
+        posted = page_row.routed.offer.american_odds
+
+        shown = page.sportsbook_implied_probability(posted)
+
+        assert page.percent(shown) in row
+
+        devigged = float(page_row.row[page.SIDE_MARKET_PROBABILITY[page_row.side]])
+
+        # The margin is what separates them, so the devigged value is strictly
+        # the smaller of the two whenever the book is charging one.
+        assert devigged < shown
+
+        assert page.percent(devigged) not in row
 
 
 # ======================================================================
@@ -460,6 +585,11 @@ def test_every_row_leads_with_the_game_the_player_the_prop_and_the_pick(
     after is unchanged, and the projection sits with the pick rather than
     among the prices, because it is what the model says and not what a
     sportsbook says.
+
+    There are two prices and not four. The model's probability and the model's
+    odds are one number in two notations, and so were the market's: showing
+    all of them at once was three model columns competing to be the headline.
+    The distribution toggle closes the row.
     """
     columns = page.visible_columns(consumer["rows"])
 
@@ -469,11 +599,11 @@ def test_every_row_leads_with_the_game_the_player_the_prop_and_the_pick(
         "prop",
         "pick",
         "projection",
-        "win",
-        "fair",
-        "market",
+        "model",
+        "sportsbook",
         "ev",
         "book",
+        "distribution",
     )
 
     for page_row in consumer["rows"]:
@@ -492,8 +622,14 @@ def test_every_row_leads_with_the_game_the_player_the_prop_and_the_pick(
         assert str(page_row.wager.line_value) in row
 
 
-def test_the_four_numbers_on_a_row_are_the_published_ones(consumer, consumer_html):
-    """Case 8. Win %, fair odds, market odds and EV, copied not computed."""
+def test_the_numbers_on_a_row_are_the_published_ones(consumer, consumer_html):
+    """Case 8. The model's price, the sportsbook's price and EV.
+
+    Each in all three notations for the two that are prices, and each notation
+    a function of one published number: the model's probability, and the
+    posted American odds of the exact offer the row points at. EV is published
+    and appears once, because it is not a price and has no notations.
+    """
     for page_row in consumer["rows"]:
         row = row_for(consumer_html, page_row)
 
@@ -501,11 +637,21 @@ def test_the_four_numbers_on_a_row_are_the_published_ones(consumer, consumer_htm
 
         source = page_row.row
 
-        assert page.percent(source[page.SIDE_MODEL_PROBABILITY[side]]) in row
+        probability = source[page.SIDE_MODEL_PROBABILITY[side]]
 
-        assert page.american(source[page.SIDE_FAIR_ODDS[side]]) in row
+        assert page.percent(probability) in row
 
-        assert page.american(page_row.routed.offer.american_odds) in row
+        assert page.american(page.model_american(probability)) in row
+
+        assert page.decimal_odds(page.model_decimal(probability)) in row
+
+        posted = page_row.routed.offer.american_odds
+
+        assert page.american(posted) in row
+
+        assert page.decimal_odds(page.sportsbook_decimal(posted)) in row
+
+        assert page.percent(page.sportsbook_implied_probability(posted)) in row
 
         assert page.signed_percent(source[page.SIDE_EXPECTED_VALUE[side]]) in row
 
@@ -703,7 +849,7 @@ def test_there_is_no_game_time_control_of_any_kind(consumer_html):
 
     assert re.findall(r'value="([^"]+)"', sorts.group(1)) == [
         "ev",
-        "win",
+        "model",
         "player",
     ]
 
@@ -1045,15 +1191,21 @@ def test_the_preview_is_published_only_beneath_its_own_subpath(tmp_path):
 
 
 def test_the_manifest_records_the_presentation_and_the_columns(consumer):
-    """Case 23. A check can read what was rendered without parsing HTML."""
+    """Case 23. A check can read what was rendered without parsing HTML.
+
+    The presentation recorded is the one actually rendered, not the one the
+    caller asked for: this build asked for the consumer preview over a
+    constructed slate and got the test-data labelling, and the manifest is
+    where a checker reads that without parsing the page.
+    """
     manifest = consumer["manifest"]
 
     assert manifest["contract_version"] == 5
 
     assert manifest["presentation"] == {
-        "banner": page.CONSUMER_PREVIEW.banner,
+        "banner": page.TEST_DATA_PREVIEW.banner,
         "routing_reason_shown": False,
-        "tone": "warn",
+        "tone": "err",
     }
 
     rendered = manifest["rendered"]

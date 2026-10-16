@@ -120,6 +120,47 @@ CASES: Mapping[str, dict[str, Any]] = {
     },
 }
 
+#: Case -> the first outcome listed, the relative weight of each consecutive
+#: outcome from there, and the weight of everything above the last one.
+#:
+#: Declared, like every other number in this file. This module reaches no
+#: model and no pricing engine -- that is the whole point of it, and a test
+#: pins it by scanning this source for the imports that would -- so there is
+#: nothing here to derive a distribution from and these are counts in a bucket
+#: rather than a fitted forecast. They are divided by their own total below,
+#: which is what makes the published record a distribution: non-negative,
+#: ascending over whole outcomes, and summing to one including the tail.
+#:
+#: The resulting distribution therefore does not reproduce the case's declared
+#: probability, and must not be made to. Those probabilities are stated
+#: constants standing in for a calibrated output, and a calibrated probability
+#: is not the integral of the forecast it was calibrated from. That is the one
+#: thing about this fixture worth having be faithful, because it is the
+#: relationship the real page's panel discloses in words.
+PROOF_WEIGHTS: Mapping[str, tuple[int, tuple[int, ...], int]] = {
+    "A": (16, (1, 3, 7, 13, 21, 29, 34, 34, 29, 21, 13, 7, 3), 2),
+    "B": (3, (2, 5, 11, 19, 27, 30, 27, 19, 11, 5, 2), 1),
+    "C": (0, (14, 26, 28, 19, 9, 3), 1),
+    "D": (1, (3, 8, 16, 25, 29, 25, 16, 8, 3), 1),
+}
+
+#: How much of the distribution the highlighted range has to hold, and the
+#: rule for which range that is. Both restated from the renderer rather than
+#: imported from the stage that produces the real records, for the same reason
+#: the weights above are declared: importing that stage would import the
+#: pricing engine into a module whose guarantee is that it cannot reach it. A
+#: test holds this function and the stage's to the same answers so the two
+#: cannot drift into describing different intervals with the same sentence.
+PROOF_RANGE_MASS = 0.80
+
+#: What the published record calls this kind of distribution. Restated for the
+#: same reason as the rule above, and pinned against the stage's own two
+#: constants by the same test: a fixture that called a declared forecast
+#: simulation-based, or that invented a third name for one, would be putting a
+#: word on this page that the real page's records never carry.
+PROOF_DISTRIBUTION_TYPE = "analytical_marginal_pmf"
+PROOF_DISTRIBUTION_LABEL = "Model Distribution"
+
 #: Case -> (vendor, price on the model's side, price on the other side).
 #: ``None`` is a book that does not price that side at all.
 QUOTES: Mapping[str, tuple[tuple[str, Any, Any], ...]] = {
@@ -351,6 +392,124 @@ def wagers() -> Mapping[str, routing.Wager]:
     }
 
 
+def narrowest_range(probabilities: Sequence[float], *, mass: float) -> tuple[int, int, float]:
+    """The narrowest run of consecutive outcomes holding ``mass`` or more.
+
+    Index positions, not outcomes; the caller adds the first outcome. Ties go
+    to the lower start so the answer is a function of the weights and not of
+    iteration order, and the whole range is returned when nothing reaches the
+    target, which here would mean the tail bucket holds more than a fifth of
+    the distribution.
+    """
+    weights = [float(value) for value in probabilities]
+
+    best: tuple[int, int, float] | None = None
+    total = 0.0
+    low = 0
+
+    for high, weight in enumerate(weights):
+        total += weight
+
+        while low < high and total - weights[low] >= mass:
+            total -= weights[low]
+            low += 1
+
+        if total >= mass and (best is None or high - low < best[1] - best[0]):
+            best = (low, high, total)
+
+    if best is None:
+        return 0, len(weights) - 1, math.fsum(weights)
+
+    return best
+
+
+def distribution_record(name: str) -> dict[str, Any]:
+    """One fixture wager's distribution, under the published contract's names.
+
+    Arithmetic over :data:`PROOF_WEIGHTS` and nothing else. The weights are
+    divided by their own total, including the tail's, so the record is a
+    distribution by construction rather than by a hand-written list of numbers
+    that happens to add up; the mean and the highlighted range are then read
+    off that distribution.
+
+    The label says simulation-based for no case, because nothing here was
+    simulated. It says what it is: a declared forecast on a page whose every
+    other number is declared too.
+    """
+    first, weights, tail_weight = PROOF_WEIGHTS[name]
+
+    total = float(sum(weights) + tail_weight)
+
+    probability = [weight / total for weight in weights]
+
+    tail = tail_weight / total
+
+    support = [first + offset for offset in range(len(weights))]
+
+    tail_outcome = first + len(weights)
+
+    low, high, held = narrowest_range(probability, mass=PROOF_RANGE_MASS)
+
+    mean = math.fsum(
+        outcome * weight for outcome, weight in zip(support, probability)
+    ) + tail_outcome * tail
+
+    return {
+        "distribution_type": PROOF_DISTRIBUTION_TYPE,
+        "distribution_label": PROOF_DISTRIBUTION_LABEL,
+        "distribution_analytical": True,
+        "distribution_support": support,
+        "distribution_probability": probability,
+        "distribution_tail_outcome": tail_outcome,
+        "distribution_tail_label": f"{tail_outcome}+",
+        "distribution_tail_probability": tail,
+        "distribution_mass": math.fsum(probability) + tail,
+        "distribution_mean": mean,
+        "distribution_most_likely_low": first + low,
+        "distribution_most_likely_high": first + high,
+        "distribution_most_likely_mass": held,
+        "distribution_most_likely_target_mass": PROOF_RANGE_MASS,
+    }
+
+
+def distributions_document(priced_path: Path) -> dict[str, Any]:
+    """The distribution document for the four fixture wagers.
+
+    The real stage reads the priced parquet and the frozen marginals and asks
+    the engines that priced each row for the forecast behind it. Nothing on
+    this slate was priced by a model and this module may not reach one, so
+    what it publishes is a declared forecast, keyed and shaped exactly as the
+    real one is.
+
+    It carries the priced parquet's digest for the same reason the real
+    document does, so the publisher's provenance check is exercised by this
+    page rather than bypassed for it.
+    """
+    records = {
+        publisher.distribution_key(
+            {
+                "game_id": GAME_ID,
+                "player_id": case["player_id"],
+                "prop_type": case["prop_type"],
+            }
+        ): {
+            "game_id": GAME_ID,
+            "player_id": int(case["player_id"]),
+            "prop_type": str(case["prop_type"]),
+            **distribution_record(name),
+        }
+        for name, case in CASES.items()
+    }
+
+    return {
+        "contract_version": publisher.PUBLICATION_CONTRACT_VERSION,
+        publisher.DISTRIBUTIONS_KEY: records,
+        "priced_relative": priced_path.name,
+        "priced_sha256": publisher.sha256_file(priced_path),
+        "slate_date": SLATE_DATE,
+    }
+
+
 def build_receipt(priced_path: Path, *, production_sha: str) -> dict[str, Any]:
     """The receipt the serving run would have written for this slate.
 
@@ -412,6 +571,16 @@ def publish_locally(root: Path, *, production_sha: str) -> Any:
     priced_path.parent.mkdir(parents=True, exist_ok=True)
 
     priced_frame().to_parquet(priced_path, index=False)
+
+    distributions_file = publisher.distributions_path(data_root, SLATE_DATE)
+
+    distributions_file.parent.mkdir(parents=True, exist_ok=True)
+
+    distributions_file.write_text(
+        json.dumps(distributions_document(priced_path), indent=2, sort_keys=True)
+        + "\n",
+        encoding="utf-8",
+    )
 
     receipt_path = publisher.serving_receipt_path(data_root, SLATE_DATE)
 
