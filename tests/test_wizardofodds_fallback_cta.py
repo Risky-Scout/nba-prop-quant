@@ -751,7 +751,7 @@ def test_the_game_time_sort_is_still_absent(tmp_path):
 
     assert re.findall(r'value="([^"]+)"', sorts.group(1)) == [
         "ev",
-        "win",
+        "model",
         "player",
     ]
 

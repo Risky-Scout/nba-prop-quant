@@ -379,7 +379,7 @@ def test_no_internal_identifier_is_dressed_up_as_a_matchup(consumer, consumer_ht
     assert not re.search(r"Team \d+ (?:vs|@) Team \d+", consumer_html)
 
 
-def test_the_projection_is_the_published_one_and_fair_odds_are_shown(
+def test_the_projection_is_the_published_one_and_the_model_price_is_shown(
     consumer, consumer_html
 ):
     """Case 5's other half: a column exists when a field does, not before.
@@ -390,6 +390,10 @@ def test_the_projection_is_the_published_one_and_fair_odds_are_shown(
     from the price or the probability -- a renderer that turned a probability
     into a projected number would be inventing the one figure a reader is
     most likely to take literally.
+
+    The model's own price is one column with three renderings rather than the
+    two columns this page used to carry, and all three come out of the one
+    published probability.
     """
     columns = page.visible_columns(consumer["rows"])
 
@@ -397,9 +401,11 @@ def test_the_projection_is_the_published_one_and_fair_odds_are_shown(
 
     assert "Model Proj" in consumer_html
 
-    assert "fair" in columns
+    assert page.COLUMN_MODEL in columns
 
-    assert "Fair Odds" in consumer_html
+    assert "Model Probability" in consumer_html
+
+    assert "Model Odds" in consumer_html
 
     for page_row in consumer["rows"]:
         published = page_row.row["model_projection"]
@@ -410,28 +416,35 @@ def test_the_projection_is_the_published_one_and_fair_odds_are_shown(
 
         assert page.number_text(published) in consumer_html
 
-        assert page_row.fair_odds is not None
+        probability = page_row.model_probability
 
-        assert page.american(page_row.fair_odds) in consumer_html
+        assert page.percent(probability) in consumer_html
+
+        assert page.american(page.model_american(probability)) in consumer_html
+
+        assert page.decimal_odds(page.model_decimal(probability)) in consumer_html
 
 
-def test_no_ambiguous_market_probability_column_is_rendered(consumer_html):
+def test_the_devigged_pair_is_never_what_the_page_calls_implied(
+    consumer, consumer_html
+):
     """Case 6. The devigged pair is not the price's own probability.
 
     ``market_devig_q_over`` and ``market_devig_q_under`` are the pair implied
     by a book's two prices together, not the probability implied by the single
-    price the row displays, and edge inherits that ambiguity. Both fields stay
-    published and untouched; neither is given a column, because a column
-    labelled Market Probability next to one price would be read as that
-    price's probability. Win %, fair odds, market odds and EV say everything
-    the reader needs and each is unambiguous.
+    price the row displays, and edge inherits that ambiguity. All three stay
+    published and untouched, and none of them is rendered: the probability
+    rendering of the sportsbook column is derived from that row's own posted
+    American price and from nothing else, which is the only reading under
+    which the words "Sportsbook Implied Probability" are true.
     """
     lowered = visible_text(consumer_html).lower()
 
     for ambiguous in (
         "market probability",
         "market prob",
-        "implied probability",
+        "fair odds",
+        "win %",
         "devig",
         "model edge",
         "edge",
@@ -440,9 +453,24 @@ def test_no_ambiguous_market_probability_column_is_rendered(consumer_html):
 
     assert "data-edge=" not in consumer_html
 
-    assert "Win %" in consumer_html
+    assert "Sportsbook Implied Probability" in consumer_html
 
-    assert "Market Odds" in consumer_html
+    for page_row in consumer["rows"]:
+        row = row_for(consumer_html, page_row)
+
+        posted = page_row.routed.offer.american_odds
+
+        shown = page.sportsbook_implied_probability(posted)
+
+        assert page.percent(shown) in row
+
+        devigged = float(page_row.row[page.SIDE_MARKET_PROBABILITY[page_row.side]])
+
+        # The margin is what separates them, so the devigged value is strictly
+        # the smaller of the two whenever the book is charging one.
+        assert devigged < shown
+
+        assert page.percent(devigged) not in row
 
 
 # ======================================================================
@@ -460,6 +488,11 @@ def test_every_row_leads_with_the_game_the_player_the_prop_and_the_pick(
     after is unchanged, and the projection sits with the pick rather than
     among the prices, because it is what the model says and not what a
     sportsbook says.
+
+    There are two prices and not four. The model's probability and the model's
+    odds are one number in two notations, and so were the market's: showing
+    all of them at once was three model columns competing to be the headline.
+    The distribution toggle closes the row.
     """
     columns = page.visible_columns(consumer["rows"])
 
@@ -469,11 +502,11 @@ def test_every_row_leads_with_the_game_the_player_the_prop_and_the_pick(
         "prop",
         "pick",
         "projection",
-        "win",
-        "fair",
-        "market",
+        "model",
+        "sportsbook",
         "ev",
         "book",
+        "distribution",
     )
 
     for page_row in consumer["rows"]:
@@ -492,8 +525,14 @@ def test_every_row_leads_with_the_game_the_player_the_prop_and_the_pick(
         assert str(page_row.wager.line_value) in row
 
 
-def test_the_four_numbers_on_a_row_are_the_published_ones(consumer, consumer_html):
-    """Case 8. Win %, fair odds, market odds and EV, copied not computed."""
+def test_the_numbers_on_a_row_are_the_published_ones(consumer, consumer_html):
+    """Case 8. The model's price, the sportsbook's price and EV.
+
+    Each in all three notations for the two that are prices, and each notation
+    a function of one published number: the model's probability, and the
+    posted American odds of the exact offer the row points at. EV is published
+    and appears once, because it is not a price and has no notations.
+    """
     for page_row in consumer["rows"]:
         row = row_for(consumer_html, page_row)
 
@@ -501,11 +540,21 @@ def test_the_four_numbers_on_a_row_are_the_published_ones(consumer, consumer_htm
 
         source = page_row.row
 
-        assert page.percent(source[page.SIDE_MODEL_PROBABILITY[side]]) in row
+        probability = source[page.SIDE_MODEL_PROBABILITY[side]]
 
-        assert page.american(source[page.SIDE_FAIR_ODDS[side]]) in row
+        assert page.percent(probability) in row
 
-        assert page.american(page_row.routed.offer.american_odds) in row
+        assert page.american(page.model_american(probability)) in row
+
+        assert page.decimal_odds(page.model_decimal(probability)) in row
+
+        posted = page_row.routed.offer.american_odds
+
+        assert page.american(posted) in row
+
+        assert page.decimal_odds(page.sportsbook_decimal(posted)) in row
+
+        assert page.percent(page.sportsbook_implied_probability(posted)) in row
 
         assert page.signed_percent(source[page.SIDE_EXPECTED_VALUE[side]]) in row
 
@@ -703,7 +752,7 @@ def test_there_is_no_game_time_control_of_any_kind(consumer_html):
 
     assert re.findall(r'value="([^"]+)"', sorts.group(1)) == [
         "ev",
-        "win",
+        "model",
         "player",
     ]
 

@@ -118,16 +118,39 @@ def distributions_document(
     them, and provenanced by the digest of the parquet on disk -- which the
     publisher checks against the serving receipt, so a fixture that digested
     something else would exercise that refusal rather than the happy path.
+
+    Read back off the parquet rather than built from :data:`QUOTES`, because
+    several suites publish a frame of their own: a document enumerated from
+    the fixture's own slate would be missing their wagers and every one of
+    those tests would see the publisher's refusal instead of the page it was
+    about.
     """
+    priced = pd.read_parquet(priced_path)
+
+    records: dict[str, dict[str, Any]] = {}
+
+    for _, row in priced.iterrows():
+        try:
+            key = distributions.distribution_key(
+                row["game_id"], row["player_id"], row["prop_type"]
+            )
+
+            record = distribution_for(float(row["line_value"]))
+        except (TypeError, ValueError):
+            # A suite that deliberately corrupted an identifier or a line is
+            # about the publisher's refusal, and it has to reach the publisher
+            # to see it. Skipping the row here leaves that release short a
+            # distribution, which is a refusal the publisher also makes -- so
+            # either way the test sees a refusal, and the one it asserts on is
+            # the one it broke the frame to provoke.
+            continue
+
+        records.setdefault(key, record)
+
     return {
         "combo_simulations": distributions.DEFAULT_COMBO_SIMULATIONS,
         "contract_version": distributions.DOCUMENT_CONTRACT_VERSION,
-        "distributions": {
-            distributions.distribution_key(game_id, player_id, prop): (
-                distribution_for(line)
-            )
-            for _, game_id, player_id, prop, line, _ in QUOTES
-        },
+        "distributions": records,
         "priced_relative": priced_path.name,
         "priced_sha256": publisher.sha256_file(priced_path),
         "seed": distributions.DEFAULT_SEED,
