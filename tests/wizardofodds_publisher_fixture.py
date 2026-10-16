@@ -30,6 +30,11 @@ if str(PROJECT / "ops") not in sys.path:
 
 import publish_incumbent_to_wizardofodds as publisher  # noqa: E402
 
+from nba_prop_quant.distribution_publication import (  # noqa: E402
+    KIND_MARGINAL,
+    PublishedDistribution,
+)
+
 SLATE_DATE = "2026-10-20"
 HISTORY_DATE = "2026-10-18"
 
@@ -81,6 +86,36 @@ TIP_OFF: dict[int, str] = {
 }
 
 
+def distribution_for(line: float) -> str:
+    """A small complete distribution over the line, as the pricing path writes it.
+
+    Built as a ``PublishedDistribution`` and serialised by the same call the
+    pricing path makes, so the fixture's record carries exactly the fields a
+    real one does and a field added there has to be added here too. The
+    numbers are not a model's output -- fitting one would make every publisher
+    test depend on the frozen artifacts -- but they are a real distribution:
+    four outcomes and a tail bucket, summing to one, straddling the line.
+    """
+    first = int(line) - 1
+    probability = (0.2, 0.3, 0.3, 0.19)
+
+    return json.dumps(
+        PublishedDistribution(
+            kind=KIND_MARGINAL,
+            support=tuple(range(first, first + len(probability))),
+            probability=probability,
+            tail_outcome=first + len(probability),
+            tail_probability=0.01,
+            mean=line + 0.4,
+            most_likely_low=first + 1,
+            most_likely_high=first + 2,
+            most_likely_mass=0.6,
+        ).payload(),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
 def priced_frame() -> pd.DataFrame:
     """One row per quote, carrying every column the publisher reads."""
     rows: list[dict[str, Any]] = []
@@ -122,6 +157,9 @@ def priced_frame() -> pd.DataFrame:
                 # the projection with the line or the midpoint would read a
                 # different number.
                 "model_projection": line + 0.4,
+                # Carried on every quote of the wager, which is what the
+                # publisher collapses back to one record per player and stat.
+                "distribution_json": distribution_for(line),
                 "market_type": "over_under",
                 "over_odds": -110,
                 "under_odds": -110,

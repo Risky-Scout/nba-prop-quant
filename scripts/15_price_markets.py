@@ -22,6 +22,10 @@ import pandas as pd
 from rich.console import Console
 
 from nba_prop_quant.api import BDLClient
+from nba_prop_quant.distribution_publication import (
+    attach_distribution_column,
+    published_distribution_records,
+)
 from nba_prop_quant.normalize import (
     normalize_props,
 )
@@ -1149,6 +1153,47 @@ def main() -> None:
         ]
     )
 
+    # The distributions the prices above came out of, published so the page
+    # can draw them instead of inferring them from a probability and a mean.
+    # Produced here because this is where the frozen marginals and the frozen
+    # copula are already loaded and already chosen: every record below comes
+    # from the same engine, the same frozen parameters and -- for the one
+    # combination the frozen policy prices under dependence -- the same seed
+    # and the same draw count as the price beside it.
+    #
+    # Nothing downstream computes a distribution. The publisher collapses
+    # these to one record per wager and copies the bytes; the page draws them.
+    distribution_records = published_distribution_records(
+        priced,
+        marginals=marginals,
+        mu_columns=mu_columns,
+        copula=copula,
+        dependence_lambdas={
+            prop_type: float(
+                entry[
+                    "production_lambda"
+                ]
+            )
+            for prop_type, entry in dependence_policy[
+                "combos"
+            ].items()
+        },
+        simulations=args.combo_simulations,
+        combo_seed=(
+            lambda game_id, player_id, prop_type: stable_event_seed(
+                game_id,
+                player_id,
+                prop_type,
+                args.seed,
+            )
+        ),
+    )
+
+    priced = attach_distribution_column(
+        priced,
+        distribution_records,
+    )
+
     out_dir = (
         settings.processed_dir
         / "priced_markets"
@@ -1204,6 +1249,11 @@ def main() -> None:
     console.print(
         f"Maximum pricing mass error: "
         f"{max_mass_error:.3e}"
+    )
+
+    console.print(
+        f"Published distributions: "
+        f"{len(distribution_records):,}"
     )
 
     console.print(

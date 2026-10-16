@@ -229,11 +229,51 @@ REMOTE_MISSING = "MISSING"
 #: this names the shape of what is written to the destination, not the shape
 #: of what was read from the runtime.
 #:
-#: 2 publishes what the model projects and who is playing. The reader of this
+#: 2 publishes what the model projects and who is playing. 3 adds the outcome
+#: distribution each price came out of, as its own keyed block beside the rows
+#: rather than repeated on every quote of the same wager. The reader of this
 #: record checks the version for equality, not for a floor, precisely because
 #: a renderer written against the wider shape would otherwise read fields a
-#: narrower release does not have and quietly show a page with holes in it.
-PUBLICATION_CONTRACT_VERSION = 2
+#: narrower release does not have and quietly show a page with holes in it --
+#: which is exactly what a contract-2 release handed to a renderer that draws
+#: distributions would do.
+PUBLICATION_CONTRACT_VERSION = 3
+
+#: Where the distributions live in the published rows document, and what keys
+#: them. One record per player, stat and game: a wager six sportsbooks price
+#: has six rows and one distribution, and putting it on the rows would publish
+#: the same several-hundred-number record six times.
+DISTRIBUTIONS_KEY = "distributions"
+
+#: The priced frame's column the records arrive in, and the fields the key is
+#: built from. Both are ``distribution_publication``'s own, named here rather
+#: than imported because this module imports no model, pricing or calibration
+#: code and a test pins that.
+DISTRIBUTION_SOURCE_COLUMN = "distribution_json"
+
+DISTRIBUTION_KEY_FIELDS: tuple[str, str, str] = (
+    "game_id",
+    "player_id",
+    "prop_type",
+)
+
+#: What a distribution record must carry to be published. The publisher does
+#: not compute these and does not check the arithmetic -- the pricing path
+#: that produced them did, and a test reprices it -- but a record missing a
+#: field the page draws would render an empty panel, so the shape is checked
+#: where the bytes enter the contract.
+REQUIRED_DISTRIBUTION_FIELDS: tuple[str, ...] = (
+    "distribution_analytical",
+    "distribution_label",
+    "distribution_mass",
+    "distribution_mean",
+    "distribution_most_likely_high",
+    "distribution_most_likely_low",
+    "distribution_probability",
+    "distribution_support",
+    "distribution_tail_probability",
+    "distribution_type",
+)
 
 RELEASES_DIRECTORY = "releases"
 ROWS_NAME = "rows.json"
@@ -1799,7 +1839,11 @@ def assert_input_is_not_a_candidate_frame(frame: pd.DataFrame) -> None:
 
 
 def assert_schema_is_publishable(frame: pd.DataFrame) -> None:
-    required = {name for name, _ in PUBLISHED_FIELDS} | set(SCREENED_COLUMNS)
+    required = (
+        {name for name, _ in PUBLISHED_FIELDS}
+        | set(SCREENED_COLUMNS)
+        | {DISTRIBUTION_SOURCE_COLUMN}
+    )
 
     missing = sorted(required - set(frame.columns))
 
@@ -1990,6 +2034,118 @@ def _duplicate_keys(rows: list[dict[str, Any]]) -> list[str]:
     ]
 
 
+def distribution_key(source: Any) -> str:
+    """The published key of the wager a row prices.
+
+    A game, a player and a stat, which is what a distribution is of. The
+    sportsbook and the line are deliberately not in it: six books quoting six
+    lines on the same player's points are six prices out of one forecast.
+    """
+    return "|".join(str(source.get(name)) for name in DISTRIBUTION_KEY_FIELDS)
+
+
+def published_distributions(
+    frame: pd.DataFrame, *, rows: list[dict[str, Any]]
+) -> dict[str, dict[str, Any]]:
+    """The outcome distributions behind the published rows, one per wager.
+
+    The priced frame carries each record on every quote of the same wager,
+    because a column is the only way a row-shaped file can carry it. This
+    collapses that back to one record per key and refuses the two ways the
+    collapse can be a lie: a wager whose quotes disagree about its own
+    distribution, and a published row with no distribution behind it at all.
+
+    No arithmetic happens here and none is checked beyond shape. The pricing
+    path that built these records derived them from the same frozen marginals
+    and the same seeded joint simulation that produced the probabilities
+    beside them, and a test reprices both and compares. What this function is
+    responsible for is that what reaches the contract is one record per wager
+    and that the page's fields are in it.
+    """
+    if DISTRIBUTION_SOURCE_COLUMN not in frame.columns:
+        raise PublishingRefused(
+            f"the priced markets do not carry {DISTRIBUTION_SOURCE_COLUMN}, so "
+            f"they cannot satisfy contract {PUBLICATION_CONTRACT_VERSION}, "
+            "which publishes the distribution each price came out of"
+        )
+
+    wanted = {distribution_key(row) for row in rows}
+
+    records: dict[str, dict[str, Any]] = {}
+
+    disagreements: set[str] = set()
+
+    for position, (_, source) in enumerate(frame.iterrows()):
+        key = distribution_key(source)
+
+        if key not in wanted:
+            continue
+
+        raw = source.get(DISTRIBUTION_SOURCE_COLUMN)
+
+        if raw is None or (isinstance(raw, float) and math.isnan(raw)):
+            continue
+
+        text = str(raw)
+
+        if not text:
+            continue
+
+        try:
+            record = json.loads(text)
+        except ValueError as error:
+            raise PublishingRefused(
+                f"row {position} carries a {DISTRIBUTION_SOURCE_COLUMN} that is "
+                f"not readable JSON ({error}), so the distribution for {key} is "
+                "not published"
+            ) from error
+
+        if not isinstance(record, dict):
+            raise PublishingRefused(
+                f"row {position} carries a {DISTRIBUTION_SOURCE_COLUMN} holding "
+                f"{type(record).__name__} rather than one distribution record, "
+                f"so the distribution for {key} is not published"
+            )
+
+        if key in records and records[key] != record:
+            disagreements.add(key)
+
+        records[key] = record
+
+    if disagreements:
+        raise PublishingRefused(
+            f"{len(disagreements)} wagers carry more than one distribution "
+            "across their own quotes, so which one the model forecast is not a "
+            "fact this feed holds: " + "; ".join(sorted(disagreements)[:5])
+        )
+
+    missing = sorted(wanted - set(records))
+
+    if missing:
+        raise PublishingRefused(
+            f"{len(missing)} of {len(wanted)} published wagers carry no "
+            "distribution, and a published price with no forecast behind it is "
+            "a hole in the page rather than a thinner feed: "
+            + "; ".join(missing[:5])
+        )
+
+    incomplete: list[str] = []
+
+    for key in sorted(records):
+        absent = sorted(set(REQUIRED_DISTRIBUTION_FIELDS) - set(records[key]))
+
+        if absent:
+            incomplete.append(f"{key} is missing " + ", ".join(absent))
+
+    if incomplete:
+        raise PublishingRefused(
+            f"{len(incomplete)} distributions do not carry every field the "
+            "page draws: " + "; ".join(incomplete[:5])
+        )
+
+    return records
+
+
 # ----------------------------------------------------------------------
 # the release
 # ----------------------------------------------------------------------
@@ -2010,6 +2166,7 @@ class Release:
 def build_release(
     *,
     rows: list[dict[str, Any]],
+    distributions: dict[str, dict[str, Any]],
     provenance: dict[str, Any],
     switch: PublishingSwitch,
     destination: Destination,
@@ -2020,10 +2177,13 @@ def build_release(
     The release id is derived from the payload digest rather than from a clock,
     which is what makes a rerun idempotent: the same rows produce the same id,
     so the second run recognises its own release instead of stacking a new one
-    beside it.
+    beside it. The distributions are inside the digest for the same reason the
+    rows are: a release that changed a forecast and kept its name would be
+    served from a cache that believed it had already seen it.
     """
     payload = {
         "contract_version": PUBLICATION_CONTRACT_VERSION,
+        DISTRIBUTIONS_KEY: distributions,
         "rows": rows,
         "slate_date": slate_date,
     }
@@ -2047,6 +2207,10 @@ def build_release(
         "approved_projection_schema_version": (
             switch.approved_projection_schema_version
         ),
+        # How many forecasts the rows were priced out of. Stated here so a
+        # canary can assert that distributions were published without reading
+        # and parsing the whole rows document to count them.
+        "distribution_count": len(distributions),
         "provenance": provenance,
         "release_id": release_id,
         "row_count": len(rows),
@@ -2915,12 +3079,13 @@ def publish(
         receipt, slate_date=slate_date, priced_path=priced
     )
 
-    rows = published_rows(
-        pd.read_parquet(priced), switch=switch, slate_date=slate_date
-    )
+    priced_frame = pd.read_parquet(priced)
+
+    rows = published_rows(priced_frame, switch=switch, slate_date=slate_date)
 
     release = build_release(
         rows=rows,
+        distributions=published_distributions(priced_frame, rows=rows),
         provenance=provenance,
         switch=switch,
         destination=destination,
