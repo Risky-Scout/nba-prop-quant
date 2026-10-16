@@ -1762,8 +1762,16 @@ STYLE = """
 .wf-dist-table tbody tr.likely{background:#eef3f8}
 .wf-dist-table tbody tr.likely th[scope="row"],
 .wf-dist-table tbody tr.likely td.num{font-weight:700}
-.wf-bar{
-  height:9px;border-radius:2px;background:var(--wf-gold);min-width:1px;
+/* Each bar is the cell it sits in, filled to the width the cell declares. A
+   gradient with no transition rather than a nested element: there are tens of
+   thousands of these on a full slate, and an element each is pages of markup
+   spent on a rectangle. */
+.wf-dist-table td.bar{
+  background-image:linear-gradient(
+    to right,var(--wf-gold) var(--w,0%),transparent var(--w,0%)
+  );
+  background-repeat:no-repeat;background-position:0 50%;
+  background-size:100% 9px;
 }
 .wf-dist-note{margin:8px 0 0;font-size:11.5px;color:var(--wf-muted);max-width:60em}
 .wf-foot{
@@ -2126,8 +2134,12 @@ EMBED_SCRIPT = """
 )
 
 
-def _option(value: str, label: str) -> str:
-    return f'<option value="{escape(value)}">{escape(label)}</option>'
+def _option(value: str, label: str, *, selected: bool = False) -> str:
+    mark = " selected" if selected else ""
+
+    return (
+        f'<option value="{escape(value)}"{mark}>{escape(label)}</option>'
+    )
 
 
 def _select(
@@ -2136,8 +2148,20 @@ def _select(
     options: Sequence[tuple[str, str]],
     *,
     klass: str = "",
+    selected: str | None = None,
 ) -> str:
-    rendered = "".join(_option(value, text) for value, text in options)
+    """One labelled control.
+
+    ``selected`` marks the option the served document is already in, which is
+    only the odds format: the filters and the sort start at their first option
+    because that is what no filtering and the default order *are*, while the
+    format is a state the document is rendered in and the control has to agree
+    with it before any script runs.
+    """
+    rendered = "".join(
+        _option(value, text, selected=value == selected)
+        for value, text in options
+    )
 
     classes = f' class="{klass}"' if klass else ""
 
@@ -2517,11 +2541,15 @@ def _distribution_panel(page_row: PageRow, *, columns: Sequence[str]) -> str:
     """One wager's forecast, as a table that is also the chart.
 
     Every outcome's probability is printed as a number *and* drawn as a bar in
-    the same cell, so the chart is not a second representation that could
+    the same row, so the chart is not a second representation that could
     disagree with the table and the information does not depend on being able
-    to see a colour or a length. The bars are a width in a ``div``: no chart
-    library, no external script, no additional request, and nothing to fail to
-    load.
+    to see a colour or a length. A bar is one custom property on the cell it
+    fills, which the stylesheet turns into a gradient with no transition in
+    it: no chart library, no external script, no additional request, and
+    nothing to fail to load. Written that way rather than as an element per
+    outcome because a slate has
+    hundreds of wagers and tens of outcomes each, and the shortest honest
+    markup for one outcome is the difference between a page and a download.
 
     The widths are relative to the largest probability in this distribution
     rather than to one, because a bar scaled to one is invisible for every
@@ -2538,11 +2566,11 @@ def _distribution_panel(page_row: PageRow, *, columns: Sequence[str]) -> str:
     peak = max((weight for _, weight, _ in rows), default=0.0) or 1.0
 
     drawn = "".join(
-        f'<tr{" class=\"likely\"" if likely else ""}>'
-        f'<th scope="row">{escape(label)}</th>'
-        f'<td class="num">{escape(percent(weight, places=2))}</td>'
-        f'<td class="bar"><div class="wf-bar" style="width:'
-        f'{max(weight / peak * 100.0, 0.4):.2f}%"></div></td>'
+        f'<tr{" class=likely" if likely else ""}>'
+        f'<th scope=row>{escape(label)}</th>'
+        f'<td class=num>{escape(percent(weight, places=2))}</td>'
+        f'<td class=bar style="--w:'
+        f'{max(weight / peak * 100.0, 0.4):.1f}%"></td>'
         "</tr>"
         for label, weight, likely in rows
     )
@@ -2901,6 +2929,7 @@ def render(
                 "f-odds",
                 "Odds format",
                 list(ODDS_FORMATS),
+                selected=DEFAULT_ODDS_FORMAT,
             ),
             _select(
                 "f-sort",
