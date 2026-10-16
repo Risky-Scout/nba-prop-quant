@@ -1693,6 +1693,16 @@ def test_39_a_wide_support_scrolls_inside_the_chart_and_not_the_page(
 
     assert ".wf-tabletbodytr.wf-dist-row{display:block" in narrow
 
+    # And the table it sits in is laid out from its own width rather than
+    # from its contents. Without this the box is capped at 100% of a column
+    # that grew to fit the chart, the cap buys nothing, and a 760px chart
+    # drags the whole document sideways. Measured in a browser at 420px:
+    # the document's scrollWidth is the viewport's with this rule and 797
+    # without it.
+    assert "table-layout:fixed" in narrow.split(".wf-table{", 1)[1].split(
+        "}", 1
+    )[0]
+
     # The widest chart on this slate is wider than a phone, which is what
     # makes the scroll box load-bearing rather than decorative.
     widest = max(

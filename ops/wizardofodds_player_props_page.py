@@ -1940,7 +1940,13 @@ STYLE = """
 @media (max-width:720px){
   .wf{padding:10px 12px 20px}
   .wf-tablewrap{overflow-x:visible;border-radius:6px}
-  .wf-table{font-size:13.5px}
+  /* table-layout:fixed is load-bearing, not tidiness. The rows below are
+     blocks inside a box that is still a table, so the engine wraps them in
+     anonymous cells that size to their widest content -- and a wide
+     distribution chart would then stretch the table, and with it the page,
+     past the viewport. Fixed layout sizes the column from the table's own
+     width instead, which leaves the chart to scroll inside its own box. */
+  .wf-table{font-size:13.5px;table-layout:fixed}
   .wf-table thead{display:none}
   .wf-table tbody tr{
     display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 12px;
