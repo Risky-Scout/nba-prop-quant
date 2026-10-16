@@ -230,6 +230,40 @@ def read_serving_receipt(
     }
 
 
+def read_distributions(*, slate_date: str, data_root: Path) -> dict[str, Any]:
+    """The forecasts the serving step derived behind this slate's prices.
+
+    Read, not derived. The serving step runs the distribution stage with the
+    incumbent's own model directory, immediately after pricing, so that the
+    forecasts a reader is shown come out of the artifacts that produced the
+    prices beside them. This module computes nothing and loads no model -- a
+    test reads this file and fails if the pricing path appears in it at all.
+
+    What is checked here is that the document is this run's. It records the
+    digest of the priced parquet it was derived from, and the caller compares
+    that against the serving receipt's, so a document left over from a run
+    against different prices is refused rather than published.
+    """
+    path = publisher.distributions_path(Path(data_root), slate_date)
+
+    if not path.exists():
+        raise PublicationStageFailed(
+            f"{path} does not exist, so the serving step derived no forecasts "
+            f"behind the prices for {slate_date} and nothing is published: a "
+            "release of prices with no distributions behind them would render "
+            "a page with empty panels"
+        )
+
+    document = publisher.read_distributions_document(path)
+
+    return {
+        "distribution_count": len(document.get("distributions") or {}),
+        "path": str(path),
+        "priced_sha256": str(document.get("priced_sha256") or ""),
+        "sha256": publisher.sha256_file(path),
+    }
+
+
 # ----------------------------------------------------------------------
 # stage one: the feed
 # ----------------------------------------------------------------------
@@ -367,6 +401,17 @@ def publish_feed(
             "stage": STAGE_FEED,
         }
 
+    derived = read_distributions(slate_date=slate_date, data_root=Path(data_root))
+
+    if derived["priced_sha256"] != served["priced_market_artifact_sha256"]:
+        raise PublicationStageFailed(
+            f"the distributions at {derived['path']} were derived from priced "
+            f"markets digesting {derived['priced_sha256'] or 'nothing'} and "
+            f"the serving receipt records "
+            f"{served['priced_market_artifact_sha256']}, so they are not the "
+            "forecasts behind the prices this run would publish"
+        )
+
     name = (
         destination_name
         if destination_name is not None
@@ -422,6 +467,7 @@ def publish_feed(
         "attestation": publication.get("attestation"),
         "contract_version": promoted["contract_version"],
         "destination": publication["destination"],
+        "distributions": derived,
         "generated_at": _utc_now(),
         "live_publishing": publication.get("live_publishing"),
         "mode": mode,

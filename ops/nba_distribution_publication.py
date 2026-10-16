@@ -74,18 +74,26 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Callable, Mapping, Sequence
 
-import joblib
-import numpy as np
-import pandas as pd
+_PROJECT = Path(__file__).resolve().parents[1]
 
-from nba_prop_quant.copula import GaussianCopula
-from nba_prop_quant.distributions import FittedMarginal
-from nba_prop_quant.pricing import (
+# Run as a script by the serving step, so the package it reads the pricing
+# engine out of has to be importable without the caller having arranged it.
+if str(_PROJECT / "src") not in sys.path:
+    sys.path.insert(0, str(_PROJECT / "src"))
+
+import joblib  # noqa: E402
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+
+from nba_prop_quant.copula import GaussianCopula  # noqa: E402
+from nba_prop_quant.distributions import FittedMarginal  # noqa: E402
+from nba_prop_quant.pricing import (  # noqa: E402
     COMBO_COMPONENTS,
     PROP_TO_TARGET,
     _marginal_pmf_for_row,
@@ -95,7 +103,7 @@ from nba_prop_quant.pricing import (
     simulate_combo_values,
 )
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = _PROJECT
 
 #: The pricing entry point, loaded for its seed function and nothing else.
 PRICING_ENTRY_POINT = "scripts/15_price_markets.py"
@@ -852,10 +860,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     if not priced_path.is_file():
-        raise DistributionRefused(
-            f"{priced_path} does not exist, so no slate has been priced for "
-            f"{args.date} and there is nothing to publish a distribution for"
+        # A recorded no-op rather than a failure, the way the serving and
+        # publication steps either side of this one treat the same day. A
+        # date before opening day or with no games on it is priced by nobody
+        # and has no forecasts behind nothing. A day that *was* served and has
+        # no distributions is caught downstream, where the publisher is
+        # holding a serving receipt that says it was served.
+        print(
+            f"no priced markets at {priced_path}, so nothing was priced for "
+            f"{args.date} and no distributions are derived"
         )
+
+        return 0
 
     document = build_document(
         priced_path=priced_path,
