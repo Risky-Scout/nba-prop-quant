@@ -799,15 +799,15 @@ def test_the_chain_carries_both_facts_from_the_schedule_to_the_screen(
         assert row["model_projection"] == float(source["model_projection"])
 
     for page_row in rendered["rows"]:
-        rendered_row = published[
-            (
-                page_row.row["vendor"],
-                page_row.row["game_id"],
-                page_row.row["player_id"],
-                page_row.row["prop_type"],
-                page_row.row["line_value"],
-            )
-        ]
+        key = (
+            page_row.row["vendor"],
+            page_row.row["game_id"],
+            page_row.row["player_id"],
+            page_row.row["prop_type"],
+            page_row.row["line_value"],
+        )
+
+        rendered_row = published[key]
 
         assert page_row.matchup == (
             f"{rendered_row['away_team']} @ {rendered_row['home_team']}"
@@ -819,7 +819,20 @@ def test_the_chain_carries_both_facts_from_the_schedule_to_the_screen(
 
         assert page_row.tip_off == rendered_row["tip_off_utc"]
 
-        assert page.number_text(page_row.projection) in rendered_html
+        # The whole chain, end to end: the served projection reaches the
+        # release at full precision, reaches the renderer at full precision,
+        # and is *shown* at two decimals. Rounding is the last thing that
+        # happens to it and it happens only to the string.
+        assert page_row.projection == float(sourced[key]["model_projection"])
+
+        shown = page.projection_text(page_row.projection)
+
+        assert shown == f"{page_row.projection:.2f}"
+
+        assert (
+            f'<td class="c-proj num" data-label="Model Projection">{shown}</td>'
+            in rendered_html
+        )
 
     assert set(page.visible_columns(rendered["rows"])) >= {
         "matchup",

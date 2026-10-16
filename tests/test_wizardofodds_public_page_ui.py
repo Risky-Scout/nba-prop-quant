@@ -47,6 +47,7 @@ import publish_incumbent_to_wizardofodds as publisher  # noqa: E402
 import wizardofodds_affiliate_routing as routing  # noqa: E402
 import wizardofodds_fallback_destinations as fallback  # noqa: E402
 import wizardofodds_player_props_page as page  # noqa: E402
+import wizardofodds_publisher_fixture as fixture  # noqa: E402
 import wizardofodds_routing_proof as proof  # noqa: E402
 from test_wizardofodds_player_props_page import (  # noqa: E402
     REGISTRY,
@@ -299,12 +300,101 @@ def test_the_consumer_page_carries_no_qa_vocabulary(consumer_html, phrase):
 
 
 def test_the_consumer_page_announces_itself_as_a_preview(consumer_html):
-    """Case 3's other half: it says what it is, and it is not live yet."""
+    """Case 3's other half: it says what it is, and it is not live yet.
+
+    Over a constructed slate it has to say more than that. The fixture's
+    players are ``Alpha Example`` and ``Beta Example``, so the page a bettor
+    would meet is relabelled as test data and says in its first sentence that
+    the names are not real players -- a page that looked exactly like the
+    product while naming nobody is the one thing a public pre-launch preview
+    must not be.
+    """
     assert page.CONSUMER_PREVIEW.banner == "CANARY PREVIEW — NOT YET LIVE"
 
-    assert "CANARY PREVIEW — NOT YET LIVE" in consumer_html
+    assert page.TEST_DATA_PREVIEW.banner == "TEST DATA — NOT LIVE BETTING PICKS"
 
-    assert 'class="wf-note warn"' in consumer_html
+    assert "TEST DATA — NOT LIVE BETTING PICKS" in consumer_html
+
+    assert "not real players" in consumer_html
+
+    assert "not betting picks" in consumer_html
+
+    assert 'class="wf-note err"' in consumer_html
+
+    assert "CANARY PREVIEW — NOT YET LIVE" not in consumer_html
+
+
+#: Names used only to show that the relabelling is driven by the declared
+#: markers and not by the fact that a slate came from a fixture.
+#:
+#: Deliberately nobody: typing real NBA players into a fixture is the thing
+#: this correction forbids, because a fixture that carries real names is one
+#: copy-paste away from a public page that claims to be picking for them. The
+#: live guarantee is not in this file -- it is that ``player_name`` comes off
+#: the active-player roster on the serving path, which the identity suite
+#: proves hop by hop, and which the natural-slate gate re-proves on the first
+#: real slate served into a checkout.
+UNMARKED_NAMES: dict[int, str] = {
+    1101: "Kwm Vosburgh",
+    1102: "Rjt Ellicott",
+    2201: "Pbn Mallender",
+}
+
+
+def test_a_slate_without_the_markers_keeps_the_ordinary_preview_banner(
+    tmp_path,
+):
+    """The relabelling is about the names, and only about the names.
+
+    The same release, the same renderer, names carrying none of the declared
+    markers: the ordinary preview banner comes back. So the test-data wording
+    is not something a consumer build carries unconditionally, and the first
+    natural production run -- whose names come off the active-player roster --
+    gets the page the launch is for.
+    """
+    frame = fixture.priced_frame()
+
+    frame = frame.assign(
+        player_name=[
+            UNMARKED_NAMES[int(value)] for value in frame["player_id"]
+        ]
+    )
+
+    state = publish(tmp_path, frame=frame)
+
+    built = page.build_page(state["transport"], registry=REGISTRY)
+
+    html = built["files"][page.PAGE_NAME].decode("utf-8")
+
+    assert page.synthetic_names(built["rows"]) == ()
+
+    assert "CANARY PREVIEW — NOT YET LIVE" in html
+
+    assert 'class="wf-note warn"' in html
+
+    assert page.TEST_DATA_PREVIEW.banner not in html
+
+    for name in set(UNMARKED_NAMES.values()):
+        assert name in html
+
+
+@pytest.mark.parametrize(
+    "name",
+    (
+        "P1101 Fixture",
+        "P2205 Fixture",
+        "Alpha Example",
+        "Beta Example",
+        "Routing Proof A",
+        "Routing Proof D",
+        "Player 12345",
+        "",
+        "   ",
+    ),
+)
+def test_every_stand_in_name_the_correction_names_is_detected(name: str):
+    """The exact list the correction forbids a consumer page from wearing."""
+    assert page.synthetic_name(name) is True
 
 
 def test_the_routing_proof_page_is_still_labelled_as_test_data(proof_html):
@@ -414,7 +504,14 @@ def test_the_projection_is_the_published_one_and_the_model_price_is_shown(
 
         assert published != page_row.wager.line_value
 
-        assert page.number_text(published) in consumer_html
+        # Shown at two decimals, and the published field it was shown from
+        # still carries every digit it was served with.
+        assert (
+            f'<td class="c-proj num" data-label="Model Projection">'
+            f"{page.projection_text(published)}</td>" in consumer_html
+        )
+
+        assert page.projection_text(published) == f"{float(published):.2f}"
 
         probability = page_row.model_probability
 
@@ -1094,15 +1191,21 @@ def test_the_preview_is_published_only_beneath_its_own_subpath(tmp_path):
 
 
 def test_the_manifest_records_the_presentation_and_the_columns(consumer):
-    """Case 23. A check can read what was rendered without parsing HTML."""
+    """Case 23. A check can read what was rendered without parsing HTML.
+
+    The presentation recorded is the one actually rendered, not the one the
+    caller asked for: this build asked for the consumer preview over a
+    constructed slate and got the test-data labelling, and the manifest is
+    where a checker reads that without parsing the page.
+    """
     manifest = consumer["manifest"]
 
     assert manifest["contract_version"] == 5
 
     assert manifest["presentation"] == {
-        "banner": page.CONSUMER_PREVIEW.banner,
+        "banner": page.TEST_DATA_PREVIEW.banner,
         "routing_reason_shown": False,
-        "tone": "warn",
+        "tone": "err",
     }
 
     rendered = manifest["rendered"]

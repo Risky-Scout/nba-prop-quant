@@ -250,6 +250,70 @@ def panel_for(document: str, page_row) -> str:
     return document[start:end]
 
 
+#: One bar of the histogram, read back out of the markup. Matched as a whole
+#: element rather than searched for attribute by attribute, so a bar with a
+#: missing geometry attribute is a bar this does not find.
+BAR = re.compile(
+    r'<rect class="(?P<classes>[^"]*)" x="(?P<x>[-\d.]+)" '
+    r'y="(?P<y>[-\d.]+)" width="(?P<width>[-\d.]+)" '
+    r'height="(?P<height>[-\d.]+)" data-outcome="(?P<outcome>[^"]*)">'
+    r"<title>(?P<title>[^<]*)</title></rect>"
+)
+
+
+def chart_for(panel: str) -> str:
+    """The histogram inside one panel."""
+    found = re.search(r'<svg class="wf-hist".*?</svg>', panel, re.S)
+
+    assert found is not None, "panel has no histogram"
+
+    return found.group(0)
+
+
+def bars(chart: str) -> list[dict[str, str]]:
+    """Every bar of one histogram, in document order."""
+    return [match.groupdict() for match in BAR.finditer(chart)]
+
+
+def chart_scale(chart: str) -> tuple[float, float]:
+    """The probability the chart's vertical axis tops out at, and its height."""
+    top = re.search(r'data-scale-top="([-\d.e]+)"', chart)
+
+    plot = re.search(r'data-plot-height="(\d+)"', chart)
+
+    assert top is not None and plot is not None
+
+    return float(top.group(1)), float(plot.group(1))
+
+
+def chart_label(chart: str) -> str:
+    """What the chart tells a screen reader it is."""
+    found = re.search(r'aria-label="([^"]*)"', chart)
+
+    assert found is not None
+
+    return found.group(1)
+
+
+def chart_size(chart: str) -> tuple[float, float]:
+    """The chart's own pixel width and height."""
+    found = re.search(r'width="([\d.]+)" height="([\d.]+)"', chart)
+
+    assert found is not None
+
+    return float(found.group(1)), float(found.group(2))
+
+
+def published_weights(record) -> list[float]:
+    """The record's probabilities, listed outcomes then the tail bucket."""
+    weights = [float(value) for value in record["distribution_probability"]]
+
+    if record["distribution_tail_outcome"] is not None:
+        weights.append(float(record["distribution_tail_probability"]))
+
+    return weights
+
+
 def run_script(document: str, tmp_path: Path, **controls) -> dict:
     """What the page's own script does to the page, with these controls set."""
     if shutil.which("node") is None:  # pragma: no cover - CI has node
@@ -848,10 +912,10 @@ def test_21_the_panel_is_the_published_record_and_nothing_else(
     """Case 10's substance. The page copies the forecast; it derives none.
 
     Every listed outcome, its printed probability, the tail bucket's label and
-    its probability, and the highlighted range -- all read back off the panel
-    and required to be the published record's. The page cannot reconstruct a
-    distribution from a mean and a probability and this is what says it did
-    not try.
+    its probability, and the highlighted range -- all read back off the
+    panel's exact-probabilities table and required to be the published
+    record's. The page cannot reconstruct a distribution from a mean and a
+    probability and this is what says it did not try.
     """
     for page_row in release["rows"]:
         record = page_row.distribution
@@ -882,10 +946,6 @@ def test_21_the_panel_is_the_published_record_and_nothing_else(
 
         assert printed == weights
 
-        # The bar is a width on the cell, so every row has one and the number
-        # beside it is the probability rather than the width.
-        assert body.count("--w:") == len(outcomes)
-
 
 def test_22_the_panel_states_the_wager_the_projection_and_both_probabilities(
     release: dict, html: str
@@ -903,7 +963,7 @@ def test_22_the_panel_states_the_wager_the_projection_and_both_probabilities(
         assert page.line_text(page_row.row["line_value"]) in panel
 
         for side in (routing.SIDE_OVER, routing.SIDE_UNDER):
-            assert f"Model Probability ({side})" in panel
+            assert f"Model Probability ({side.capitalize()})" in panel
 
             assert page.percent(
                 page_row.row[page.SIDE_MODEL_PROBABILITY[side]]
@@ -912,7 +972,7 @@ def test_22_the_panel_states_the_wager_the_projection_and_both_probabilities(
         if page_row.projection is not None:
             assert "Model Projection" in panel
 
-            assert page.number_text(page_row.projection) in panel
+            assert page.projection_text(page_row.projection) in panel
 
         # And the disclosure that the wager's probability is not the integral
         # of this forecast.
@@ -955,9 +1015,12 @@ def test_24_the_highlighted_range_is_stated_and_not_only_coloured(
 ):
     """Cases 19 and 24. An interval and the mass it holds, no adjectives.
 
-    The rule is printed in the caption, the rows in the range are marked by
-    weight as well as by tint, and no word like "likely" or "safe" is used as
-    a judgement about a wager.
+    The rule is printed in the caption. In the table the rows in the range
+    are marked by weight as well as by tint. In the chart the bars in the
+    range are outlined as well as filled -- an outline is a shape and not a
+    hue -- and the range is named in words under the axis, which is the part
+    that does not depend on seeing the chart at all. No word like "likely" or
+    "safe" is used as a judgement about a wager.
     """
     style = re.search(r"<style>(.*?)</style>", html, re.S).group(1)
 
@@ -969,6 +1032,11 @@ def test_24_the_highlighted_range_is_stated_and_not_only_coloured(
     assert "tr.likelyth[scope=\"row\"],.wf-dist-tabletbodytr.likely" in compact
 
     assert "td.num{font-weight:700}" in compact
+
+    # Fill and outline, for the same reason.
+    assert ".wf-hist-bar.likely{fill:var(--wf-gold);stroke:" in compact
+
+    assert "stroke-width:" in compact.split(".wf-hist-bar.likely{", 1)[1]
 
     for page_row in release["rows"]:
         record = page_row.distribution
@@ -988,6 +1056,25 @@ def test_24_the_highlighted_range_is_stated_and_not_only_coloured(
         )
 
         assert marked == expected
+
+        # And said in words, with the published endpoints in it.
+        drawn = bars(chart_for(panel))
+
+        low = record["distribution_most_likely_low"]
+
+        high = record["distribution_most_likely_high"]
+
+        named = re.search(
+            r'<text class="wf-hist-span-label"[^>]*>Most likely '
+            r"([^&]+)&#8211;([^<]+)</text>",
+            panel,
+        )
+
+        assert named is not None
+
+        assert named.group(1) == drawn[low]["outcome"]
+
+        assert named.group(2) == drawn[high]["outcome"]
 
     readable = visible_text(html).lower()
 
@@ -1019,12 +1106,24 @@ def test_25_the_panel_needs_no_network_and_no_library(html):
             "<script",
             "<canvas",
             "<iframe",
+            "<img",
             "http://",
             "https://",
             "src=",
-            "chart",
+            "chart.js",
+            "chartjs",
+            "highcharts",
+            "plotly",
+            "d3.",
+            "echarts",
+            "apexcharts",
+            "require(",
+            "import(",
         ):
             assert forbidden not in panel.lower(), forbidden
+
+        # The chart is markup. Inline SVG and nothing else draws it.
+        assert '<svg class="wf-hist"' in panel
 
 
 # ======================================================================
@@ -1136,4 +1235,617 @@ def test_28_the_iframe_handshake_is_the_sites_existing_one(html):
 
     wrapper = html.split(f'<div id="{page.EMBED_WRAPPER_ID}"', 1)[1]
 
-    assert '<tr class="wf-dist-row"' in wrapper.rsplit("</div>", 1)[0]
+    inside = wrapper.rsplit("</div>", 1)[0]
+
+    assert '<tr class="wf-dist-row"' in inside
+
+    # Including the exact-probabilities disclosure, whose own expansion is
+    # another height change the measured element has to carry.
+    assert '<details class="wf-dist-exact">' in inside
+
+
+# ======================================================================
+# 29-39: the forecast drawn as a histogram
+# ======================================================================
+#
+# What a bettor was shown before this section existed was one table row per
+# outcome with a bar whose *width* was the probability. That reads as a league
+# table rather than as a distribution, and for a points line it was a panel
+# taller than the screen it was on. The eleven tests below are the
+# presentation the correction requires, and each one is about the drawing
+# rather than about the numbers: the numbers are tests 20 to 24's subject and
+# they have not moved.
+
+
+def test_29_there_is_one_vertical_bar_per_published_outcome(
+    release: dict, html: str
+):
+    """One bar per listed outcome plus one for the tail, and they stand up.
+
+    Standing up is checked rather than described: every bar in a chart has the
+    same width and they differ in height, and every bar's foot is on the same
+    baseline with its head above it. A bar chart laid on its side fails all
+    three.
+    """
+    for page_row in release["rows"]:
+        record = page_row.distribution
+
+        chart = chart_for(panel_for(html, page_row))
+
+        drawn = bars(chart)
+
+        assert len(drawn) == len(published_weights(record))
+
+        widths = {bar["width"] for bar in drawn}
+
+        assert len(widths) == 1, "bars differ in width"
+
+        feet = {round(float(bar["y"]) + float(bar["height"]), 2) for bar in drawn}
+
+        assert len(feet) == 1, "bars do not share a baseline"
+
+        for bar in drawn:
+            assert float(bar["height"]) >= 0.0
+
+        # And the shape has more than one height in it, so "vertical" is not
+        # being satisfied by drawing every bar the same.
+        assert len({bar["height"] for bar in drawn}) > 1
+
+
+def test_30_a_bars_height_is_its_published_probability(release: dict, html: str):
+    """The one piece of arithmetic in the renderer, checked against the record.
+
+    Height is probability over the axis top times the plot height. Nothing
+    else: no floor that would make a one-in-a-thousand outcome look like a
+    one-in-fifty, no per-bar rescaling, and no clamping.
+    """
+    for page_row in release["rows"]:
+        record = page_row.distribution
+
+        chart = chart_for(panel_for(html, page_row))
+
+        top, plot = chart_scale(chart)
+
+        drawn = bars(chart)
+
+        weights = published_weights(record)
+
+        assert top in page.CHART_SCALE_TOPS
+
+        assert max(weights) <= top
+
+        for bar, weight in zip(drawn, weights, strict=True):
+            assert float(bar["height"]) == pytest.approx(
+                round(weight / top * plot, 2), abs=5e-3
+            )
+
+        # Ratios between bars are the ratios between probabilities, which is
+        # the property a reader actually reads off a chart.
+        tallest = max(range(len(weights)), key=weights.__getitem__)
+
+        for index, weight in enumerate(weights):
+            if weights[tallest] <= 0.0:
+                continue
+
+            assert float(drawn[index]["height"]) / float(
+                drawn[tallest]["height"]
+            ) == pytest.approx(weight / weights[tallest], abs=2e-3)
+
+
+def test_31_the_tail_bucket_is_drawn_and_labelled_as_one(release: dict, html: str):
+    """The remainder is a bar too, marked as the one that is not a single
+    outcome.
+
+    It is the only bar standing for more than one outcome, so it is drawn with
+    its own marking and carries the published ``N+`` label -- and its label is
+    always printed under the axis, however wide the support is.
+    """
+    seen = 0
+
+    for page_row in release["rows"]:
+        record = page_row.distribution
+
+        if record["distribution_tail_outcome"] is None:
+            continue
+
+        seen += 1
+
+        chart = chart_for(panel_for(html, page_row))
+
+        drawn = bars(chart)
+
+        tail = drawn[-1]
+
+        assert "tail" in tail["classes"].split()
+
+        assert tail["outcome"] == record["distribution_tail_label"]
+
+        assert page.percent(
+            record["distribution_tail_probability"], places=2
+        ) in tail["title"]
+
+        # No other bar is marked as the tail.
+        assert [
+            bar for bar in drawn if "tail" in bar["classes"].split()
+        ] == [tail]
+
+        # And the tail is one of the labels printed under the axis.
+        ticks = re.findall(
+            r'<text class="wf-hist-tick"[^>]*text-anchor="middle">([^<]*)</text>',
+            chart,
+        )
+
+        assert record["distribution_tail_label"] in ticks
+
+    assert seen == len(release["rows"])
+
+
+def test_32_the_horizontal_axis_is_the_support_in_order(release: dict, html: str):
+    """Outcomes along the bottom, in the order they were published.
+
+    Left to right, ascending, one slot each, no gaps and no reordering -- and
+    the tick labels that are printed are a subset of those outcomes in the
+    same order.
+    """
+    for page_row in release["rows"]:
+        record = page_row.distribution
+
+        chart = chart_for(panel_for(html, page_row))
+
+        drawn = bars(chart)
+
+        expected = [
+            str(outcome) for outcome in record["distribution_support"]
+        ]
+
+        if record["distribution_tail_outcome"] is not None:
+            expected.append(record["distribution_tail_label"])
+
+        assert [bar["outcome"] for bar in drawn] == expected
+
+        positions = [float(bar["x"]) for bar in drawn]
+
+        assert positions == sorted(positions)
+
+        gaps = [
+            positions[index + 1] - positions[index]
+            for index in range(len(positions) - 1)
+        ]
+
+        # One slot each, to the precision the markup is written at.
+        assert max(gaps) - min(gaps) < 0.02, "outcomes are not evenly spaced"
+
+        assert min(gaps) == pytest.approx(
+            page.chart_slot_width(len(drawn)), abs=0.02
+        )
+
+        ticks = re.findall(
+            r'<text class="wf-hist-tick"[^>]*text-anchor="middle">([^<]*)</text>',
+            chart,
+        )
+
+        assert ticks
+
+        assert [tick for tick in expected if tick in ticks] == ticks
+
+        # The vertical axis says what it is measuring, in words.
+        assert '>Probability</text>' in chart
+
+        assert page.prop_label(page_row.row["prop_type"]) in chart_label(chart)
+
+
+def test_33_the_posted_line_is_marked_where_it_falls(release: dict, html: str):
+    """Case 7. The published line, drawn, and nothing recomputed to draw it."""
+    for page_row in release["rows"]:
+        record = page_row.distribution
+
+        panel = panel_for(html, page_row)
+
+        chart = chart_for(panel)
+
+        drawn = bars(chart)
+
+        line = page_row.row["line_value"]
+
+        marker = re.search(
+            r'<line class="wf-hist-line" x1="([\d.]+)" y1="(\d+)" '
+            r'x2="([\d.]+)" y2="(\d+)"/>',
+            chart,
+        )
+
+        assert marker is not None
+
+        assert marker.group(1) == marker.group(3), "the marker is not vertical"
+
+        expected = page.chart_line_offset(
+            page._chart_outcomes(record), line, count=len(drawn)
+        )
+
+        assert float(marker.group(1)) == pytest.approx(expected, abs=5e-3)
+
+        assert f"Current Line {page.line_text(line)}" in chart
+
+        # A half-point line separates two outcomes, so it is drawn on the
+        # boundary between their two slots rather than through either bar.
+        slot = page.chart_slot_width(len(drawn))
+
+        edges = [
+            page.CHART_PAD_LEFT + index * slot
+            for index in range(len(drawn) + 1)
+        ]
+
+        centres = [edge + slot / 2.0 for edge in edges[:-1]]
+
+        # To the precision the marker is written at, which is two decimals.
+        on_edge = any(
+            abs(float(marker.group(1)) - edge) < 0.01 for edge in edges
+        )
+
+        on_centre = any(
+            abs(float(marker.group(1)) - centre) < 0.01 for centre in centres
+        )
+
+        if float(line).is_integer():
+            assert on_centre, (line, marker.group(1))
+        else:
+            assert on_edge, (line, marker.group(1))
+
+
+@pytest.mark.parametrize(
+    "line,expected_index,on_boundary",
+    (
+        (14.5, 5, True),
+        (14.0, 4, False),
+        (10.5, 1, True),
+        (10.0, 0, False),
+        (20.0, 10, False),
+        (19.5, 10, True),
+    ),
+)
+def test_34_the_line_marker_handles_half_points_and_integers(
+    line: float, expected_index: int, on_boundary: bool
+):
+    """The marker's placement rule, on a support stated here.
+
+    ``14.5`` sits on the boundary that separates the ``14`` bar from the ``15``
+    bar: everything to its left is an under and everything to its right is an
+    over. ``14`` sits on the centre of the ``14`` bar, because that outcome is
+    neither side of the line -- it is the push, and a marker on a boundary
+    would be claiming it belonged to one of its neighbours.
+    """
+    outcomes = list(range(10, 21))
+
+    count = len(outcomes)
+
+    slot = page.chart_slot_width(count)
+
+    offset = page.chart_line_offset(outcomes, line, count=count)
+
+    edge = page.CHART_PAD_LEFT + expected_index * slot
+
+    assert offset == pytest.approx(edge if on_boundary else edge + slot / 2.0)
+
+
+def test_35_the_highlighted_run_is_the_published_pair(release: dict, html: str):
+    """Case 8. The bars inside the published range, and no others."""
+    for page_row in release["rows"]:
+        record = page_row.distribution
+
+        drawn = bars(chart_for(panel_for(html, page_row)))
+
+        marked = [
+            index
+            for index, bar in enumerate(drawn)
+            if "likely" in bar["classes"].split()
+        ]
+
+        assert marked == list(
+            range(
+                int(record["distribution_most_likely_low"]),
+                int(record["distribution_most_likely_high"]) + 1,
+            )
+        )
+
+
+def test_36_the_exact_probabilities_are_still_in_text(release: dict, html: str):
+    """Case 9. The chart is a second reading of a table that is still there.
+
+    Every outcome and its probability, in a real disclosure a keyboard can
+    open and a screen reader can read, inside the panel and under the chart.
+    Nothing is hidden permanently and nothing is only a rectangle.
+    """
+    for page_row in release["rows"]:
+        record = page_row.distribution
+
+        panel = panel_for(html, page_row)
+
+        assert '<details class="wf-dist-exact">' in panel
+
+        assert "<summary>Exact probabilities</summary>" in panel
+
+        # The chart comes first and the numbers follow it.
+        assert panel.index('<svg class="wf-hist"') < panel.index(
+            '<details class="wf-dist-exact">'
+        )
+
+        exact = panel.split('<details class="wf-dist-exact">', 1)[1]
+
+        printed = re.findall(r"<td class=num>([^<]+)</td>", exact)
+
+        assert printed == [
+            page.percent(weight, places=2)
+            for weight in published_weights(record)
+        ]
+
+        listed = re.findall(r"<th scope=row>([^<]+)</th>", exact)
+
+        assert listed == [
+            bar["outcome"] for bar in bars(chart_for(panel))
+        ]
+
+        # Not hidden from anything: a disclosure, not a display rule.
+        assert "wf-dist-exact{display:none" not in html.replace(" ", "")
+
+
+def test_37_the_chart_computes_no_probability_of_its_own(release: dict, html: str):
+    """Every probability the chart states is one the release published.
+
+    The percentages in a chart are its bar titles and its axis labels, and
+    this reads all of them back: a title has to be a published probability at
+    two decimals, an axis label has to be a rung of the fixed ladder or its
+    midpoint. A renderer that smoothed, renormalised or re-derived anything
+    would state a number that is neither.
+    """
+    for page_row in release["rows"]:
+        record = page_row.distribution
+
+        chart = chart_for(panel_for(html, page_row))
+
+        weights = published_weights(record)
+
+        top, _ = chart_scale(chart)
+
+        allowed = {page.percent(weight, places=2) for weight in weights} | {
+            page.percent(top * fraction, places=1)
+            for fraction in (1.0, 0.5, 0.0)
+        }
+
+        stated = set(re.findall(r"[\d.]+%", chart))
+
+        assert stated <= allowed, stated - allowed
+
+        # And every published probability is one of the stated ones, so the
+        # chart drops nothing to make itself fit.
+        titles = {bar["title"] for bar in bars(chart)}
+
+        for outcome, weight in zip(
+            [bar["outcome"] for bar in bars(chart)], weights, strict=True
+        ):
+            assert (
+                f"{outcome} — {page.percent(weight, places=2)}" in titles
+            )
+
+
+def test_38_the_chart_is_the_same_bounded_height_whatever_the_support(
+    release: dict, html: str
+):
+    """Case 5. A points distribution costs the same room as a blocks one.
+
+    The height is a constant of the renderer rather than a function of how
+    many outcomes there are, and the constant is inside the band the
+    correction names. Width is what grows, and it grows inside a box that
+    scrolls rather than pushing the page out.
+    """
+    heights = set()
+
+    widths = set()
+
+    for page_row in release["rows"]:
+        chart = chart_for(panel_for(html, page_row))
+
+        width, height = chart_size(chart)
+
+        heights.add(height)
+
+        widths.add(width)
+
+        assert f'height:{height:.0f}px' in chart
+
+    assert heights == {float(page.CHART_HEIGHT)}
+
+    assert 260 <= page.CHART_HEIGHT <= 320
+
+    # The slate carries supports of several sizes, so the constant height is
+    # being observed over a real range rather than over one shape.
+    assert len(widths) > 1
+
+    style = re.search(r"<style>(.*?)</style>", html, re.S).group(1)
+
+    compact = style.replace(" ", "").replace("\n", "")
+
+    assert "max-height" not in compact.split(".wf-hist{", 1)[1].split("}", 1)[0]
+
+
+def test_39_a_wide_support_scrolls_inside_the_chart_and_not_the_page(
+    release: dict, html: str
+):
+    """Case 6. The chart gets its own sideways scroll; the page gets none.
+
+    Checked as the three things that make that true: the chart's box is
+    capped at the width of whatever contains it and scrolls horizontally, the
+    chart itself is not capped and so can be wider than the box, and the
+    panel is still a block on a narrow screen rather than a cell in the grid
+    the other rows reflow into.
+    """
+    style = re.search(r"<style>(.*?)</style>", html, re.S).group(1)
+
+    compact = style.replace(" ", "").replace("\n", "")
+
+    scroll = compact.split(".wf-hist-scroll{", 1)[1].split("}", 1)[0]
+
+    assert "max-width:100%" in scroll
+
+    assert "overflow-x:auto" in scroll
+
+    assert "max-width:none" in compact.split(".wf-hist{", 1)[1].split("}", 1)[0]
+
+    narrow = compact.split("@media(max-width:720px)", 1)[1]
+
+    assert ".wf-tabletbodytr.wf-dist-row{display:block" in narrow
+
+    # The widest chart on this slate is wider than a phone, which is what
+    # makes the scroll box load-bearing rather than decorative.
+    widest = max(
+        chart_size(chart_for(panel_for(html, page_row)))[0]
+        for page_row in release["rows"]
+    )
+
+    assert widest > 420
+
+    # And no chart is wide because of empty space: the width is the support.
+    for page_row in release["rows"]:
+        chart = chart_for(panel_for(html, page_row))
+
+        width, _ = chart_size(chart)
+
+        assert width == pytest.approx(
+            page.chart_width(len(bars(chart))), abs=0.5
+        )
+
+
+# ======================================================================
+# 40-41: the projection, and whose name is on the row
+# ======================================================================
+
+
+@pytest.mark.parametrize(
+    "value,shown",
+    (
+        (24.368217392, "24.37"),
+        (8.2, "8.20"),
+        # 1.005 is not a half in binary -- it is stored as very slightly less
+        # than one and five thousandths -- so Python's own formatting, which
+        # is what the page uses everywhere, rounds it down. Recorded as the
+        # project's convention rather than corrected: the alternative is a
+        # second rounding rule that disagrees with every other number shown.
+        (1.005, "1.00"),
+        (1.015, "1.01"),
+        (0.0, "0.00"),
+        (0.455388890, "0.46"),
+        (1.049282, "1.05"),
+    ),
+)
+def test_40_a_projection_is_shown_at_two_decimals(value: float, shown: str):
+    """Case 1's vectors, and the untouched value behind them."""
+    assert page.projection_text(value) == shown
+
+    assert page.projection_text(value) == f"{value:.2f}"
+
+    # Display only: formatting the value does not change the value, and the
+    # full-precision number is still what everything else is a function of.
+    assert float(value) == value
+
+
+def test_41_the_projection_column_is_the_published_field_at_two_decimals(
+    release: dict, html: str
+):
+    """Case 1. Both places a bettor meets a projection, from one source."""
+    seen = 0
+
+    for page_row in release["rows"]:
+        published = page_row.row["model_projection"]
+
+        if published is None:
+            # A combo line has no single-statistic projection to show, and the
+            # panel says nothing rather than inventing one.
+            assert "<dt>Model Projection</dt>" not in panel_for(html, page_row)
+
+            continue
+
+        seen += 1
+
+        shown = page.projection_text(published)
+
+        assert shown == f"{float(published):.2f}"
+
+        assert (
+            f'<td class="c-proj num" data-label="Model Projection">{shown}</td>'
+            in row_for(html, page_row)
+        )
+
+        panel = panel_for(html, page_row)
+
+        assert f"<dt>Model Projection</dt><dd>{shown}</dd>" in panel
+
+        # The release still carries the number at full precision, so nothing
+        # downstream of the page inherits the rounding.
+        source = next(
+            row
+            for row in release["document"]["rows"]
+            if (
+                row["game_id"],
+                row["player_id"],
+                row["prop_type"],
+                row["line_value"],
+                row["vendor"],
+            )
+            == (
+                page_row.row["game_id"],
+                page_row.row["player_id"],
+                page_row.row["prop_type"],
+                page_row.row["line_value"],
+                page_row.row["vendor"],
+            )
+        )
+
+        assert source["model_projection"] == published
+
+        assert float(source["model_projection"]) == float(published)
+
+    assert seen > 0
+
+
+def test_42_the_player_column_is_the_published_name_with_no_fallback(
+    release: dict, html: str
+):
+    """Case 2. The name a reader sees is the published ``player_name``.
+
+    Read off the cell rather than searched for in the row, and required to be
+    the published field exactly. Then the renderer's own source is read: the
+    player cell is built from that field and from nothing else, and in
+    particular there is no ``or player_id`` behind it -- a fallback to an
+    identifier is how ``Player 12345`` reaches a consumer page.
+    """
+    import inspect
+
+    for page_row in release["rows"]:
+        name = str(page_row.row["player_name"])
+
+        assert name.strip()
+
+        cell = re.search(
+            r'<td class="c-player"[^>]*>(.*?)</td>', row_for(html, page_row), re.S
+        )
+
+        assert cell is not None
+
+        # The team abbreviation rides along in its own span; the name is the
+        # text before it.
+        assert cell.group(1).startswith(escape(name))
+
+        assert str(page_row.row["player_id"]) not in cell.group(1)
+
+        assert f"<h3>{escape(name)} — " in panel_for(html, page_row)
+
+    source = inspect.getsource(page._cell)
+
+    player = source.split('if key == "player":', 1)[1].split(
+        'if key == "matchup":', 1
+    )[0]
+
+    assert 'row.get("player_name")' in player
+
+    assert "player_id" not in player
+
+    for invented in ("first_name", "last_name", "Player ", "format(", "%s"):
+        assert invented not in player, invented

@@ -567,6 +567,31 @@ CONSUMER_PREVIEW = Presentation(
     show_routing_reason=False,
 )
 
+#: A consumer-shaped build of a slate whose player names are not real people.
+#:
+#: The renderer substitutes this for ``CONSUMER_PREVIEW`` whenever it is asked
+#: to draw a consumer page over constructed names. A functional test canary is
+#: worth publishing -- it is how the real page's layout, selector, routing and
+#: forecasts get checked in public -- but a page that says "these are the
+#: predictions the current release carries" over ``Alpha Example`` is a page
+#: that looks like the product and is not, and that is the one thing a
+#: pre-launch preview must never be. Labelling it rather than renaming the
+#: rows: the names are the published data, and a renderer that rewrote them
+#: would be the invented-name implementation this must not become.
+TEST_DATA_PREVIEW = Presentation(
+    banner="TEST DATA — NOT LIVE BETTING PICKS",
+    detail=(
+        "The player names on this page are constructed test data, not real "
+        "players, and the predictions beside them are not betting picks. This "
+        "is the NBA player props page being checked in public before launch: "
+        "the layout, the odds formats, the sportsbook selection and the "
+        "distributions are the real ones, run over a test slate. The live "
+        "page will carry real players from the published slate."
+    ),
+    tone="err",
+    show_routing_reason=False,
+)
+
 #: The routing QA page. The slate behind it is constructed so that every
 #: sportsbook-selection outcome is visible at once, which makes it useful
 #: evidence and makes it something nobody should ever bet.
@@ -581,6 +606,80 @@ ROUTING_PROOF_QA = Presentation(
     tone="err",
     show_routing_reason=True,
 )
+
+
+#: Words a published ``player_name`` carries only because somebody built the
+#: slate rather than played in it.
+#:
+#: Matched on the name as published, in lower case. These are the shapes every
+#: constructed slate in this project uses -- ``Alpha Example``, ``P1101
+#: Fixture``, ``Routing Proof A`` -- and they are safe to match on because no
+#: NBA player is named any of them. Deliberately not a roster check: the page
+#: has no roster, a page that asked one for permission to render would be a
+#: second player-identity implementation, and the real guarantee that the live
+#: page carries real names is upstream of here, where the names come from the
+#: active-player roster in the first place. This is the backstop that keeps a
+#: test slate from *looking* like the product, not the thing that decides
+#: whether the product is real.
+SYNTHETIC_NAME_MARKERS: tuple[str, ...] = (
+    "example",
+    "fixture",
+    "routing proof",
+    "placeholder",
+    "sample player",
+    "test player",
+    "lorem",
+)
+
+
+def synthetic_name(value: Any) -> bool:
+    """Whether one published name is plainly not a person's."""
+    text = str(value or "").strip().lower()
+
+    if not text:
+        return True
+
+    if any(marker in text for marker in SYNTHETIC_NAME_MARKERS):
+        return True
+
+    # ``Player 12345``: a name that is an identifier with a noun in front of
+    # it, which is what a renderer that fell back to the id would produce.
+    parts = text.split()
+
+    return len(parts) == 2 and parts[0] == "player" and parts[1].isdigit()
+
+
+def synthetic_names(rows: Sequence[PageRow]) -> tuple[str, ...]:
+    """Every published name on this slate that is plainly not a person's."""
+    found: list[str] = []
+
+    for page_row in rows:
+        name = str(page_row.row.get("player_name") or "")
+
+        if synthetic_name(name) and name not in found:
+            found.append(name)
+
+    return tuple(found)
+
+
+def presented_as(
+    presentation: Presentation, rows: Sequence[PageRow]
+) -> Presentation:
+    """The presentation this slate may actually be drawn in.
+
+    A consumer build over constructed names is relabelled as test data. Done
+    here rather than left to the caller because the caller that gets it wrong
+    is the one that publishes a page which looks like the product -- and that
+    page is indistinguishable from the real thing by eye, which is exactly why
+    it cannot be a matter of remembering a flag.
+
+    A build that already says it is test data is left alone, and a build over
+    real names is left alone.
+    """
+    if presentation.show_routing_reason or not synthetic_names(rows):
+        return presentation
+
+    return TEST_DATA_PREVIEW
 
 
 class PageRefused(RuntimeError):
@@ -1483,14 +1582,39 @@ def prop_label(prop_type: Any) -> str:
     return PROP_LABEL.get(key, key.replace("_", " ").title())
 
 
-def number_text(value: Any) -> str:
-    """A published number, printed as published rather than rounded away."""
+#: Digits after the decimal point in a displayed Model Projection. Two,
+#: everywhere a bettor meets one, because the published value carries the
+#: model's full precision and a bettor reading ``24.368217392`` learns
+#: nothing from the last seven digits that ``24.37`` did not already say.
+PROJECTION_PLACES = 2
+
+
+def projection_text(value: Any) -> str:
+    """A Model Projection as a bettor reads it: exactly two decimals.
+
+    Display only. The published ``model_projection`` keeps every digit it was
+    served with, nothing downstream of this function exists, and no price,
+    probability, expected value or distribution is computed from the string
+    this returns -- the page converts the published number and prints this
+    beside it.
+
+    Two decimals always, including trailing zeros: ``8.2`` prints ``8.20``,
+    because a column where some projections carry two decimals and others
+    carry one is a column a reader has to align by eye.
+
+    The rounding is Python's own ``format``, which is round-half-even over the
+    binary value actually published. That matters only for a value whose
+    decimal form looks like an exact half: ``1.005`` is stored as slightly
+    less than one and five thousandths and therefore prints ``1.00``. Stated
+    rather than corrected, because the alternative is a second rounding
+    convention that disagrees with every other number on the page.
+    """
     try:
         number = float(value)
     except (TypeError, ValueError):
         return "—"
 
-    return f"{number:g}"
+    return f"{number:.{PROJECTION_PLACES}f}"
 
 
 def _minute(value: Any) -> str:
@@ -1756,22 +1880,49 @@ STYLE = """
 }
 .wf-dist-table th[scope="row"]{width:5em;font-weight:600}
 .wf-dist-table td.num,.wf-dist-table th.num{width:6em;text-align:right}
-.wf-dist-table td.bar,.wf-dist-table th.bar{width:auto;padding-left:10px}
 /* The highlighted run is marked by weight as well as by tint, because a
    reader who cannot distinguish the tint still has to be able to see it. */
 .wf-dist-table tbody tr.likely{background:#eef3f8}
 .wf-dist-table tbody tr.likely th[scope="row"],
 .wf-dist-table tbody tr.likely td.num{font-weight:700}
-/* Each bar is the cell it sits in, filled to the width the cell declares. A
-   gradient with no transition rather than a nested element: there are tens of
-   thousands of these on a full slate, and an element each is pages of markup
-   spent on a rectangle. */
-.wf-dist-table td.bar{
-  background-image:linear-gradient(
-    to right,var(--wf-gold) var(--w,0%),transparent var(--w,0%)
-  );
-  background-repeat:no-repeat;background-position:0 50%;
-  background-size:100% 9px;
+/* The histogram. A fixed-height box the chart is drawn at its own pixel size
+   inside: a support too wide for the box scrolls within these borders rather
+   than widening the panel, the table or the page around it. */
+.wf-dist-chart{margin:0;max-width:100%}
+.wf-hist-scroll{
+  max-width:100%;overflow-x:auto;overflow-y:hidden;
+  -webkit-overflow-scrolling:touch;
+}
+.wf-hist{display:block;max-width:none}
+.wf-hist-grid{stroke:var(--wf-border);stroke-width:1}
+.wf-hist-base{stroke:var(--wf-text);stroke-width:1}
+.wf-hist-tick{font-size:9.5px;fill:var(--wf-muted);font-variant-numeric:tabular-nums}
+.wf-hist-axis{font-size:9.5px;fill:var(--wf-muted);font-weight:700;
+  text-transform:uppercase;letter-spacing:.04em}
+/* A bar outside the highlighted run is a plain fill; one inside it is the
+   same fill with an outline drawn round it. An outline is a shape and not a
+   hue, so the run is still distinguishable in greyscale, to a reader with any
+   colour vision, and in a printout -- and it is named in words under the axis
+   as well, which is the part that does not depend on seeing the chart. */
+.wf-hist-bar{fill:#9fb6cc}
+.wf-hist-bar.likely{fill:var(--wf-gold);stroke:#30455c;stroke-width:.75}
+.wf-hist-bar.tail{fill:#c3cedb;stroke:#6d7d8e;stroke-width:.75;stroke-dasharray:2 2}
+.wf-hist-bar.tail.likely{fill:var(--wf-gold)}
+.wf-hist-span{fill:none;stroke:#30455c;stroke-width:1.25}
+.wf-hist-span-label{font-size:9.5px;fill:var(--wf-text);font-weight:700}
+/* The posted line, drawn across the plot so a reader can see which side of it
+   the mass sits on. Presentation of a published number: it marks the line, it
+   does not divide the probabilities. */
+.wf-hist-line{stroke:#b3261e;stroke-width:1.25;stroke-dasharray:4 3}
+.wf-hist-line-label{font-size:10px;fill:#b3261e;font-weight:700}
+.wf-dist-exact{margin:8px 0 0;font-size:12px}
+.wf-dist-exact summary{
+  cursor:pointer;font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.04em;color:var(--wf-muted);
+}
+.wf-dist-exact .wf-dist-table{margin-top:6px;max-width:26em}
+.wf-dist-chart figcaption{
+  margin:6px 0 0;font-size:11.5px;color:var(--wf-muted);max-width:60em;
 }
 .wf-dist-note{margin:8px 0 0;font-size:11.5px;color:var(--wf-muted);max-width:60em}
 .wf-foot{
@@ -2441,7 +2592,7 @@ def _cell(page_row: PageRow, key: str) -> tuple[str, str]:
         return _pick(page_row), "c-pick"
 
     if key == "projection":
-        return escape(number_text(page_row.projection)), "c-proj num"
+        return escape(projection_text(page_row.projection)), "c-proj num"
 
     if key == COLUMN_MODEL:
         probability = page_row.model_probability
@@ -2537,24 +2688,390 @@ def _distribution_rows(record: Mapping[str, Any]) -> tuple[
     return tuple(rows)
 
 
+# ----------------------------------------------------------------------
+# the histogram
+# ----------------------------------------------------------------------
+#
+# A probability mass function drawn the way one is drawn: the statistic's
+# outcomes along the horizontal axis in their published order, probability up
+# the vertical axis, and a bar per outcome rising from the axis. The previous
+# panel laid the same numbers out as one table row per outcome with a bar
+# whose *width* was the probability, which reads as a ranking rather than as a
+# shape and made a points line a panel taller than the screen it was on.
+#
+# Inline SVG in a fixed pixel box. No chart library, no CDN, no canvas, no
+# request of any kind: the markup is the chart. Nothing here computes a
+# probability -- every function below turns a published outcome and its
+# published probability into a position and a length, and the published
+# numbers are printed verbatim in the table under the chart.
+
+#: The plot's own height, in SVG user units, which are CSS pixels because the
+#: chart is sized in pixels rather than scaled to its container.
+CHART_PLOT_HEIGHT = 200
+
+#: Room above the plot for the current-line label, and below it for the tick
+#: labels and the most-likely bracket.
+CHART_PAD_TOP = 22
+CHART_AXIS_HEIGHT = 52
+
+#: Room at the left for the axis title and the probability labels, and at the
+#: right so the last bar is not flush against the edge.
+CHART_PAD_LEFT = 54
+CHART_PAD_RIGHT = 12
+
+#: Total height, and therefore the whole panel's claim on the page: a points
+#: distribution and a blocks distribution are the same height, and neither is
+#: taller than a screen.
+CHART_HEIGHT = CHART_PAD_TOP + CHART_PLOT_HEIGHT + CHART_AXIS_HEIGHT
+
+#: The width the chart prefers not to exceed on a desktop, and the slot a
+#: single outcome gets. Wide supports shrink the slot rather than lose a bar;
+#: below the floor the chart gets wider than this and scrolls inside its own
+#: box, because dropping outcomes would be dropping probability mass.
+CHART_MAX_WIDTH = 760
+CHART_SLOT_MAX = 26.0
+CHART_SLOT_MIN = 8.0
+
+#: How much of its slot a bar fills, leaving the rest as the gap that makes
+#: one bar readable as one outcome.
+CHART_BAR_SHARE = 0.72
+
+#: The narrowest spacing a tick label is legible at. A support too wide for a
+#: label under every bar gets labels at this spacing instead -- every bar is
+#: still drawn, only some go unlabelled, and the table below names them all.
+CHART_LABEL_SPACING = 26.0
+
+#: The tops the probability axis is allowed to take, smallest first. A fixed
+#: ladder rather than the largest probability itself, so the axis reads in
+#: round numbers; both the top and its midpoint are exact at one decimal.
+CHART_SCALE_TOPS: tuple[float, ...] = (
+    0.01,
+    0.02,
+    0.04,
+    0.05,
+    0.1,
+    0.2,
+    0.25,
+    0.3,
+    0.4,
+    0.5,
+    0.6,
+    0.8,
+    1.0,
+)
+
+
+def chart_slot_width(count: int) -> float:
+    """The horizontal room one outcome gets, for a support of ``count``."""
+    if count <= 0:
+        return CHART_SLOT_MAX
+
+    room = CHART_MAX_WIDTH - CHART_PAD_LEFT - CHART_PAD_RIGHT
+
+    return max(CHART_SLOT_MIN, min(CHART_SLOT_MAX, room / count))
+
+
+def chart_width(count: int) -> float:
+    """The chart's pixel width for a support of ``count``."""
+    return CHART_PAD_LEFT + count * chart_slot_width(count) + CHART_PAD_RIGHT
+
+
+def chart_scale_top(peak: float) -> float:
+    """The probability the vertical axis tops out at.
+
+    The smallest rung of the ladder that still holds the largest published
+    probability, so the tallest bar is most of the plot whether the peak is
+    six percent or sixty.
+    """
+    for top in CHART_SCALE_TOPS:
+        if peak <= top + 1e-12:
+            return top
+
+    return 1.0
+
+
+def chart_label_indices(count: int) -> tuple[int, ...]:
+    """Which outcomes get a printed tick label, by position.
+
+    Every ``step``-th outcome, where the step is the fewest that keeps the
+    labels a legible distance apart, plus the last position always: that is
+    the tail bucket when there is one, and the tail is the label a reader most
+    needs because it is the only one standing for more than one outcome.
+    """
+    if count <= 0:
+        return ()
+
+    slot = chart_slot_width(count)
+
+    step = max(1, math.ceil(CHART_LABEL_SPACING / slot))
+
+    marks = list(range(0, count, step))
+
+    last = count - 1
+
+    if last not in marks:
+        while marks and last - marks[-1] < step:
+            marks.pop()
+
+        marks.append(last)
+
+    return tuple(marks)
+
+
+def chart_line_offset(
+    outcomes: Sequence[Any], line: Any, *, count: int
+) -> float | None:
+    """Where the posted line falls along the horizontal axis, in pixels.
+
+    Presentation of the published ``line_value`` and nothing else: no
+    probability is read, nothing is recomputed, and a line the chart cannot
+    place returns ``None`` rather than a guess.
+
+    A half-point line sits on the boundary between the two outcomes it
+    separates -- ``14.5`` between the ``14`` bar and the ``15`` bar -- because
+    that is what it means: every outcome left of the marker is an under and
+    every outcome right of it is an over. A whole-number line sits on the
+    centre of its own bar instead, because that outcome is neither side: it is
+    the push, and the marker has to point at it rather than at a boundary it
+    does not have.
+    """
+    value = _finite(line)
+
+    if value is None or count <= 0:
+        return None
+
+    slot = chart_slot_width(count)
+
+    left = CHART_PAD_LEFT
+
+    right = left + count * slot
+
+    position = {
+        int(outcome): index
+        for index, outcome in enumerate(outcomes)
+        if outcome is not None and float(outcome).is_integer()
+    }
+
+    if value.is_integer() and int(value) in position:
+        return left + (position[int(value)] + 0.5) * slot
+
+    below = math.floor(value)
+
+    above = math.ceil(value)
+
+    if below in position and above in position:
+        return left + position[above] * slot
+
+    if below in position:
+        return min(left + (position[below] + 1) * slot, right)
+
+    if above in position:
+        return left + position[above] * slot
+
+    first = next((int(o) for o in outcomes if o is not None), None)
+
+    if first is None:
+        return None
+
+    return left if value < first else right
+
+
+def _chart_outcomes(record: Mapping[str, Any]) -> tuple[Any, ...]:
+    """The outcome behind each slot, listed support then the tail bucket.
+
+    The tail's own outcome stands for the slot that draws it, so a line at or
+    beyond the last listed outcome still has somewhere to be marked.
+    """
+    outcomes = list(record["distribution_support"])
+
+    tail = record.get("distribution_tail_outcome")
+
+    if tail is not None:
+        outcomes.append(tail)
+
+    return tuple(outcomes)
+
+
+def _histogram(page_row: PageRow, record: Mapping[str, Any]) -> str:
+    """The published forecast as a vertical bar chart.
+
+    Built in the orientation it is read in. Each bar's height is its
+    published probability over the axis top times the plot height, so the
+    bars are in proportion to one another and to the axis beside them, and
+    the only arithmetic in this function is that one scaling.
+    """
+    rows = _distribution_rows(record)
+
+    if not rows:
+        return ""
+
+    count = len(rows)
+
+    slot = chart_slot_width(count)
+
+    width = chart_width(count)
+
+    top = chart_scale_top(max(weight for _, weight, _ in rows))
+
+    bar = slot * CHART_BAR_SHARE
+
+    plot_left = CHART_PAD_LEFT
+
+    plot_right = plot_left + count * slot
+
+    base = CHART_PAD_TOP + CHART_PLOT_HEIGHT
+
+    # Every attribute value below is quoted. An unquoted one is a real trap
+    # here and not a style preference: HTML's tokeniser reads the ``/`` of a
+    # self-closing tag as part of an unquoted value, so ``<line y2=22/>``
+    # leaves the element open and the rest of the chart becomes its children.
+    middle = CHART_PAD_TOP + CHART_PLOT_HEIGHT / 2.0
+
+    pieces: list[str] = [
+        f'<text class="wf-hist-axis" x="11" y="{middle:.1f}" '
+        f'text-anchor="middle" transform="rotate(-90 11 {middle:.1f})">'
+        "Probability</text>"
+    ]
+
+    for fraction in (1.0, 0.5, 0.0):
+        y = CHART_PAD_TOP + (1.0 - fraction) * CHART_PLOT_HEIGHT
+
+        pieces.append(
+            f'<line class="wf-hist-grid" x1="{plot_left:.1f}" y1="{y:.1f}" '
+            f'x2="{plot_right:.1f}" y2="{y:.1f}"/>'
+        )
+
+        pieces.append(
+            f'<text class="wf-hist-tick" x="{plot_left - 6:.1f}" '
+            f'y="{y + 3.5:.1f}" text-anchor="end">'
+            f"{escape(percent(top * fraction, places=1))}</text>"
+        )
+
+    tail_slot = (
+        count - 1
+        if record.get("distribution_tail_outcome") is not None
+        else -1
+    )
+
+    for index, (label, weight, likely) in enumerate(rows):
+        height = weight / top * CHART_PLOT_HEIGHT
+
+        classes = "wf-hist-bar"
+
+        if likely:
+            classes += " likely"
+
+        if index == tail_slot:
+            classes += " tail"
+
+        pieces.append(
+            f'<rect class="{classes}" '
+            f'x="{plot_left + index * slot + (slot - bar) / 2.0:.2f}" '
+            f'y="{base - height:.2f}" width="{bar:.2f}" '
+            f'height="{height:.2f}" data-outcome="{escape(label)}">'
+            f"<title>{escape(label)} — "
+            f"{escape(percent(weight, places=2))}</title></rect>"
+        )
+
+    pieces.append(
+        f'<line class="wf-hist-base" x1="{plot_left:.1f}" y1="{base}" '
+        f'x2="{plot_right:.1f}" y2="{base}"/>'
+    )
+
+    for index in chart_label_indices(count):
+        pieces.append(
+            f'<text class="wf-hist-tick" '
+            f'x="{plot_left + (index + 0.5) * slot:.2f}" y="{base + 15}" '
+            f'text-anchor="middle">{escape(rows[index][0])}</text>'
+        )
+
+    low = int(record["distribution_most_likely_low"])
+
+    high = min(int(record["distribution_most_likely_high"]), count - 1)
+
+    if 0 <= low <= high:
+        span_left = plot_left + low * slot
+
+        span_right = plot_left + (high + 1) * slot
+
+        bracket = base + 27
+
+        centre = min(
+            max((span_left + span_right) / 2.0, plot_left + 40),
+            plot_right - 40,
+        )
+
+        pieces.append(
+            f'<path class="wf-hist-span" d="M{span_left:.2f} {bracket - 4}'
+            f'V{bracket}H{span_right:.2f}V{bracket - 4}"/>'
+        )
+
+        pieces.append(
+            f'<text class="wf-hist-span-label" x="{centre:.2f}" '
+            f'y="{bracket + 13}" text-anchor="middle">Most likely '
+            f"{escape(rows[low][0])}&#8211;{escape(rows[high][0])}</text>"
+        )
+
+    line = page_row.row.get("line_value")
+
+    offset = chart_line_offset(_chart_outcomes(record), line, count=count)
+
+    if offset is not None:
+        anchor = "middle"
+
+        label_x = offset
+
+        if offset < plot_left + 52:
+            anchor, label_x = "start", 0.0
+        elif offset > width - 52:
+            anchor, label_x = "end", width
+
+        pieces.append(
+            f'<line class="wf-hist-line" x1="{offset:.2f}" '
+            f'y1="{CHART_PAD_TOP}" x2="{offset:.2f}" y2="{base}"/>'
+        )
+
+        pieces.append(
+            f'<text class="wf-hist-line-label" x="{label_x:.2f}" '
+            f'y="{CHART_PAD_TOP - 8}" text-anchor="{anchor}">Current Line '
+            f"{escape(line_text(line))}</text>"
+        )
+
+    described = (
+        f'{prop_label(page_row.row.get("prop_type"))} outcomes along the '
+        "horizontal axis, probability up the vertical axis, one bar per "
+        "outcome"
+    )
+
+    return (
+        '<div class="wf-hist-scroll">'
+        # No ``xmlns``: the HTML parser puts this element in the SVG namespace
+        # on its own, and the declaration would be the one absolute URL in a
+        # page whose whole claim is that it references nothing off-site.
+        f'<svg class="wf-hist" '
+        f'width="{width:.0f}" height="{CHART_HEIGHT}" '
+        f'viewBox="0 0 {width:.0f} {CHART_HEIGHT}" role="img" '
+        f'style="width:{width:.0f}px;height:{CHART_HEIGHT}px" '
+        f'aria-label="{escape(described)}" '
+        f'data-scale-top="{top!r}" data-plot-height="{CHART_PLOT_HEIGHT}">'
+        + "".join(pieces)
+        + "</svg></div>"
+    )
+
+
 def _distribution_panel(page_row: PageRow, *, columns: Sequence[str]) -> str:
-    """One wager's forecast, as a table that is also the chart.
+    """One wager's forecast: the facts, the histogram, the exact numbers.
 
-    Every outcome's probability is printed as a number *and* drawn as a bar in
-    the same row, so the chart is not a second representation that could
-    disagree with the table and the information does not depend on being able
-    to see a colour or a length. A bar is one custom property on the cell it
-    fills, which the stylesheet turns into a gradient with no transition in
-    it: no chart library, no external script, no additional request, and
-    nothing to fail to load. Written that way rather than as an element per
-    outcome because a slate has
-    hundreds of wagers and tens of outcomes each, and the shortest honest
-    markup for one outcome is the difference between a page and a download.
+    In that order, because that is the order a reader wants them in. The facts
+    say which wager this is and what the model thinks of it. The histogram is
+    the shape of the forecast, drawn vertically and bounded in height so a
+    points line and a blocks line cost the same room. The exact probabilities
+    follow in a disclosure, which is what makes the chart safe to read as a
+    chart: every number it draws is one expansion away in text, reachable by
+    keyboard, by a screen reader and by anything checking the page.
 
-    The widths are relative to the largest probability in this distribution
-    rather than to one, because a bar scaled to one is invisible for every
-    outcome of a blocks line. The printed numbers are the published
-    probabilities and are not scaled by anything.
+    Nothing in here derives a probability. The histogram scales published
+    probabilities into lengths and the table prints them.
     """
     record = page_row.distribution
 
@@ -2563,14 +3080,10 @@ def _distribution_panel(page_row: PageRow, *, columns: Sequence[str]) -> str:
 
     rows = _distribution_rows(record)
 
-    peak = max((weight for _, weight, _ in rows), default=0.0) or 1.0
-
     drawn = "".join(
         f'<tr{" class=likely" if likely else ""}>'
         f'<th scope=row>{escape(label)}</th>'
         f'<td class=num>{escape(percent(weight, places=2))}</td>'
-        f'<td class=bar style="--w:'
-        f'{max(weight / peak * 100.0, 0.4):.1f}%"></td>'
         "</tr>"
         for label, weight, likely in rows
     )
@@ -2578,16 +3091,16 @@ def _distribution_panel(page_row: PageRow, *, columns: Sequence[str]) -> str:
     line = page_row.row.get("line_value")
 
     facts = [
-        ("Model Projection", number_text(page_row.projection))
+        ("Model Projection", projection_text(page_row.projection))
         if page_row.projection is not None
         else None,
         ("Current Line", line_text(line)),
         (
-            "Model Probability (over)",
+            "Model Probability (Over)",
             percent(page_row.row.get(SIDE_MODEL_PROBABILITY[routing.SIDE_OVER])),
         ),
         (
-            "Model Probability (under)",
+            "Model Probability (Under)",
             percent(
                 page_row.row.get(SIDE_MODEL_PROBABILITY[routing.SIDE_UNDER])
             ),
@@ -2619,17 +3132,20 @@ def _distribution_panel(page_row: PageRow, *, columns: Sequence[str]) -> str:
         f'<dl class="wf-dist-facts">{summary}</dl>'
         f'<p class="wf-dist-kind">'
         f'{escape(str(record.get("distribution_label") or ""))}</p>'
-        '<table class="wf-dist-table">'
-        "<caption>"
+        '<figure class="wf-dist-chart">'
+        + _histogram(page_row, record)
+        + "<figcaption>"
         f'{escape(prop_label(page_row.row.get("prop_type")))} '
         "— probability of each outcome. "
         f"{escape(DISTRIBUTION_RANGE_NOTE.format(target=target))}"
-        "</caption>"
+        "</figcaption></figure>"
+        '<details class="wf-dist-exact">'
+        "<summary>Exact probabilities</summary>"
+        '<table class="wf-dist-table">'
         '<thead><tr><th scope="col">Outcome</th>'
-        '<th scope="col" class="num">Probability</th>'
-        '<th scope="col" class="bar">Share</th></tr></thead>'
+        '<th scope="col" class="num">Probability</th></tr></thead>'
         f"<tbody>{drawn}</tbody>"
-        "</table>"
+        "</table></details>"
         f'<p class="wf-dist-note">{escape(DISTRIBUTION_NOTE)}</p>'
         "</section></td></tr>"
     )
@@ -3219,6 +3735,8 @@ def build_page(
     publication = load_publication(transport, expected=expected)
 
     rows = page_rows(publication, registry=registry, fallback=fallback)
+
+    presentation = presented_as(presentation, rows)
 
     html = render(
         publication, rows, registry=registry, presentation=presentation
