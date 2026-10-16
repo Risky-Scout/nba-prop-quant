@@ -1,17 +1,40 @@
-"""Expose the distributions the pricing engine already prices from.
+"""Expose the distributions the pricing engine already priced from.
 
-Nothing here is a distribution. Every number this module publishes comes out
-of ``pricing``, through the same call the price in the same row came out of,
-and the only work done here is arranging it into a record a renderer can
-draw and a reader can read.
+Nothing here is a distribution. Every number this stage publishes comes out of
+``nba_prop_quant.pricing``, through the same call the price in the same row
+came out of, and the only work done here is arranging it into a record a
+renderer can draw and a reader can read.
 
-WHY IT IS A SEPARATE MODULE
----------------------------
+WHY IT IS A STAGE AND NOT PART OF PRICING
+-----------------------------------------
 
-``pricing`` is frozen production mathematics whose call sites are pinned
-syntax-identical to the deployment. The way to publish what it computes
-without risking what it computes is to import it rather than extend it, so
-this module holds no probability mathematics of its own: it calls
+The obvious place to produce these is inside ``scripts/15_price_markets.py``,
+which already holds the loaded marginals, the loaded copula and the frozen
+dependence policy. That script is byte-pinned in
+``nba_prop_quant_v2_adaptive_serving_source_contract.json`` and every function
+in it except ``parse_args`` and ``main`` is pinned syntax-tree-identical to
+production, and a module it imports stops being declarable at all. Producing a
+page feature there would mean relocking the serving source and moving a new
+module into the undeclarable core, which is a large change to the frozen
+pricing path in exchange for a display panel.
+
+So this reads what pricing wrote. The priced parquet is the whole priced frame
+-- ``write_parquet_atomic`` is handed it unselected -- so it carries the
+canonical mean columns, the Gate 3 assists mean and every feature the fitted
+marginals read. Everything the engines need to reproduce a distribution is in
+the file, which means the distribution can be reproduced exactly without the
+pricing path changing by one byte.
+
+What this costs is that the stage has to name the same inputs pricing named,
+rather than being handed them. Three of the four are facts in the file or in
+the frozen policy. The fourth, the per-event simulation seed, is loaded out of
+``scripts/15_price_markets.py`` itself rather than restated here, so there is
+one definition of it in the repository: see :func:`load_pricing_entry_point`.
+
+HOW IT AVOIDS BEING A SECOND OPINION
+------------------------------------
+
+This module holds no probability mathematics of its own. It calls
 ``_marginal_pmf_for_row`` for a single stat, ``independent_combo_pmf`` or
 ``simulate_combo_values`` for a combination, and ``_pmf_over_under_push`` and
 ``empirical_over_under_push`` when a test asks whether the arrangement still
@@ -47,16 +70,22 @@ complete pre-bucket distribution and says so.
 
 from __future__ import annotations
 
+import argparse
+import hashlib
+import importlib.util
 import json
 from dataclasses import dataclass
+from pathlib import Path
+from types import ModuleType
 from typing import Any, Callable, Mapping, Sequence
 
+import joblib
 import numpy as np
 import pandas as pd
 
-from .copula import GaussianCopula
-from .distributions import FittedMarginal
-from .pricing import (
+from nba_prop_quant.copula import GaussianCopula
+from nba_prop_quant.distributions import FittedMarginal
+from nba_prop_quant.pricing import (
     COMBO_COMPONENTS,
     PROP_TO_TARGET,
     _marginal_pmf_for_row,
@@ -65,6 +94,27 @@ from .pricing import (
     independent_combo_pmf,
     simulate_combo_values,
 )
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+#: The pricing entry point, loaded for its seed function and nothing else.
+PRICING_ENTRY_POINT = "scripts/15_price_markets.py"
+
+#: ``pricing`` reads a component mean out of the row under this name, and
+#: ``scripts/15_price_markets.py`` builds exactly this mapping before it
+#: prices a combination. Restated rather than imported because importing it
+#: would mean importing the script's ``main``, and it is one formatting rule
+#: over a frozen target list rather than a choice: the combo parity test
+#: reprices every tested line from the published distribution and requires the
+#: probability the row already carries, so a mapping that named the wrong
+#: column could not pass.
+MU_COLUMN_TEMPLATE = "mu_selected_{target}"
+
+#: The pricing script's own defaults for the two simulation arguments. A run
+#: that passed something else has to say so here too, which is why the stage
+#: takes them as arguments and records what it used.
+DEFAULT_COMBO_SIMULATIONS = 20_000
+DEFAULT_SEED = 73
 
 #: How much mass may remain above the last individually listed outcome before
 #: the record stops listing and states the remainder as one bucket. Chosen so
@@ -110,17 +160,21 @@ ANALYTICAL_KINDS: tuple[str, ...] = (KIND_MARGINAL, KIND_CONVOLUTION)
 #: distribution is published beside it.
 INDEPENDENCE_LAMBDA = 1e-12
 
-#: The priced frame's column, and the three fields a record is keyed by. One
-#: distribution belongs to a player's stat in a game, not to a sportsbook's
-#: quote of it, so every quote row on the same wager carries the same string
-#: and the publisher collapses them back to one record.
-DISTRIBUTION_COLUMN = "distribution_json"
-
+#: The three fields a record is keyed by. One distribution belongs to a
+#: player's stat in a game, not to a sportsbook's quote of it: six books
+#: quoting six lines on the same player's points are six prices out of one
+#: forecast.
 DISTRIBUTION_KEY_FIELDS: tuple[str, str, str] = (
     "game_id",
     "player_id",
     "prop_type",
 )
+
+#: This document's own version, read for equality by everything downstream.
+#: Independent of the publication contract: this file is an intermediate
+#: artifact between two stages of one run, and what reaches the destination is
+#: versioned there.
+DOCUMENT_CONTRACT_VERSION = 1
 
 #: The column the pricing path records the mean it priced a single stat
 #: against. Read rather than re-derived: ``scripts/15_price_markets.py``
@@ -575,38 +629,253 @@ def published_distribution_records(
     return records
 
 
-def attach_distribution_column(
-    priced: pd.DataFrame,
-    records: Mapping[str, dict[str, Any]],
-) -> pd.DataFrame:
-    """The records, on the priced frame, one serialised string per row.
+# ----------------------------------------------------------------------
+# the stage
+# ----------------------------------------------------------------------
 
-    Sorted keys and no spaces, so two runs over the same slate write the same
-    bytes and the parquet dictionary-encodes one copy per wager rather than
-    one per quote.
+
+def load_pricing_entry_point(project_root: Path) -> ModuleType:
+    """``scripts/15_price_markets.py``, loaded as a module.
+
+    For ``stable_event_seed`` and nothing else. The seed decides which draws a
+    dependent combination was priced from, so a second definition of it here
+    would be a second answer to that question, and the two would agree until
+    one of them was edited. Loading the file means there is one.
+
+    Safe to load: the script's module body is imports, one ``Console()`` and
+    an ``if __name__`` guard, so importing it runs no pricing and reads no
+    model. A test pins that.
     """
-    out = priced.copy()
+    path = Path(project_root) / PRICING_ENTRY_POINT
 
-    keys = [
-        distribution_key(
-            row_game,
-            row_player,
-            row_prop,
+    if not path.is_file():
+        raise DistributionRefused(
+            f"{path} does not exist, so the seed every dependent combination "
+            "was priced from cannot be read from the script that priced it"
         )
-        for row_game, row_player, row_prop in zip(
-            out["game_id"],
-            out["player_id"],
-            out["prop_type"],
-        )
-    ]
 
-    out[DISTRIBUTION_COLUMN] = [
-        (
-            json.dumps(records[key], sort_keys=True, separators=(",", ":"))
-            if key in records
-            else None
-        )
-        for key in keys
-    ]
+    spec = importlib.util.spec_from_file_location(
+        "nba_prop_quant_pricing_entry_point", path
+    )
 
-    return out
+    if spec is None or spec.loader is None:
+        raise DistributionRefused(f"{path} is not loadable as a module")
+
+    module = importlib.util.module_from_spec(spec)
+
+    spec.loader.exec_module(module)
+
+    return module
+
+
+def mu_columns_for(targets: Sequence[str]) -> dict[str, str]:
+    return {target: MU_COLUMN_TEMPLATE.format(target=target) for target in targets}
+
+
+def distributions_path(data_root: Path, slate_date: str) -> Path:
+    """Where this stage's output for one slate lives.
+
+    Beside the priced markets rather than inside them: the priced parquet is
+    the frozen serving path's own output, provenanced by digest in the serving
+    receipt, and a stage that rewrote it would invalidate that receipt to add
+    a display panel.
+    """
+    return (
+        Path(data_root)
+        / "processed"
+        / "nba_distributions"
+        / f"{slate_date}.json"
+    )
+
+
+def sha256_file(path: Path) -> str:
+    sha = hashlib.sha256()
+
+    with Path(path).open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            sha.update(block)
+
+    return sha.hexdigest()
+
+
+def build_document(
+    *,
+    priced_path: Path,
+    model_dir: Path,
+    project_root: Path = PROJECT_ROOT,
+    slate_date: str,
+    simulations: int = DEFAULT_COMBO_SIMULATIONS,
+    seed: int = DEFAULT_SEED,
+) -> dict[str, Any]:
+    """Every distribution behind one priced slate, and what it was derived from.
+
+    ``priced_sha256`` is the whole point of the document having a header. The
+    publisher is handed a serving receipt that digests the priced parquet, and
+    it refuses a distributions document whose digest is not that one, so a
+    stale file left over from an earlier run cannot be published beside a
+    newer slate's prices.
+    """
+    priced_path = Path(priced_path)
+
+    priced = pd.read_parquet(priced_path)
+
+    marginals = joblib.load(Path(model_dir) / "marginals.joblib")
+
+    copula = joblib.load(Path(model_dir) / "copula.joblib")
+
+    policy = json.loads(
+        (Path(model_dir) / "combo_dependence_policy.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    entry_point = load_pricing_entry_point(project_root)
+
+    records = published_distribution_records(
+        priced,
+        marginals=marginals,
+        mu_columns=mu_columns_for(sorted(marginals)),
+        copula=copula,
+        dependence_lambdas={
+            prop_type: float(entry["production_lambda"])
+            for prop_type, entry in policy["combos"].items()
+        },
+        simulations=int(simulations),
+        combo_seed=lambda game_id, player_id, prop_type: (
+            entry_point.stable_event_seed(
+                game_id, player_id, prop_type, int(seed)
+            )
+        ),
+    )
+
+    return {
+        "combo_simulations": int(simulations),
+        "contract_version": DOCUMENT_CONTRACT_VERSION,
+        "distributions": records,
+        "priced_relative": priced_path.name,
+        "priced_sha256": sha256_file(priced_path),
+        "seed": int(seed),
+        "slate_date": str(slate_date),
+    }
+
+
+def read_document(path: Path) -> dict[str, Any]:
+    """One distributions document, or a refusal naming what is wrong with it."""
+    path = Path(path)
+
+    if not path.is_file():
+        raise DistributionRefused(f"{path} does not exist")
+
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as error:
+        raise DistributionRefused(
+            f"{path} is not readable JSON ({error})"
+        ) from error
+
+    if not isinstance(document, dict):
+        raise DistributionRefused(f"{path} is not a JSON object")
+
+    version = document.get("contract_version")
+
+    if version != DOCUMENT_CONTRACT_VERSION:
+        raise DistributionRefused(
+            f"{path} declares distribution document contract {version!r} and "
+            f"this reader was written against {DOCUMENT_CONTRACT_VERSION}"
+        )
+
+    records = document.get("distributions")
+
+    if not isinstance(records, dict):
+        raise DistributionRefused(f"{path} carries no distributions object")
+
+    return document
+
+
+def write_document(path: Path, document: Mapping[str, Any]) -> bytes:
+    """The document on disk, byte-identical for two runs over the same slate."""
+    path = Path(path)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    payload = (
+        json.dumps(document, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    ).encode("utf-8")
+
+    path.write_bytes(payload)
+
+    return payload
+
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Publish the outcome distribution behind every price on one "
+            "priced slate. Reads the priced markets and the frozen model "
+            "artifacts; writes one JSON document. Changes nothing it reads."
+        )
+    )
+
+    parser.add_argument("--date", required=True)
+
+    parser.add_argument("--data-root", type=Path, required=True)
+
+    parser.add_argument(
+        "--model-dir",
+        type=Path,
+        required=True,
+        help=(
+            "the frozen bundle's models directory, which is what the pricing "
+            "run loaded its marginals and copula from"
+        ),
+    )
+
+    parser.add_argument("--project-root", type=Path, default=PROJECT_ROOT)
+
+    parser.add_argument(
+        "--combo-simulations", type=int, default=DEFAULT_COMBO_SIMULATIONS
+    )
+
+    parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
+
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = parse_args(argv)
+
+    priced_path = (
+        Path(args.data_root)
+        / "processed"
+        / "priced_markets"
+        / f"{args.date}.parquet"
+    )
+
+    if not priced_path.is_file():
+        raise DistributionRefused(
+            f"{priced_path} does not exist, so no slate has been priced for "
+            f"{args.date} and there is nothing to publish a distribution for"
+        )
+
+    document = build_document(
+        priced_path=priced_path,
+        model_dir=args.model_dir,
+        project_root=args.project_root,
+        slate_date=args.date,
+        simulations=args.combo_simulations,
+        seed=args.seed,
+    )
+
+    out_path = distributions_path(args.data_root, args.date)
+
+    write_document(out_path, document)
+
+    print(
+        f"{len(document['distributions'])} distributions -> {out_path}",
+    )
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

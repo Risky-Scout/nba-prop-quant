@@ -28,12 +28,8 @@ PROJECT = Path(__file__).resolve().parents[1]
 if str(PROJECT / "ops") not in sys.path:
     sys.path.insert(0, str(PROJECT / "ops"))
 
+import nba_distribution_publication as distributions  # noqa: E402
 import publish_incumbent_to_wizardofodds as publisher  # noqa: E402
-
-from nba_prop_quant.distribution_publication import (  # noqa: E402
-    KIND_MARGINAL,
-    PublishedDistribution,
-)
 
 SLATE_DATE = "2026-10-20"
 HISTORY_DATE = "2026-10-18"
@@ -86,34 +82,57 @@ TIP_OFF: dict[int, str] = {
 }
 
 
-def distribution_for(line: float) -> str:
-    """A small complete distribution over the line, as the pricing path writes it.
+def distribution_for(line: float) -> dict[str, Any]:
+    """A small complete distribution over the line, in the published shape.
 
-    Built as a ``PublishedDistribution`` and serialised by the same call the
-    pricing path makes, so the fixture's record carries exactly the fields a
-    real one does and a field added there has to be added here too. The
-    numbers are not a model's output -- fitting one would make every publisher
-    test depend on the frozen artifacts -- but they are a real distribution:
-    four outcomes and a tail bucket, summing to one, straddling the line.
+    Built as a ``PublishedDistribution`` and rendered by the same call the
+    distribution stage makes, so the fixture's record carries exactly the
+    fields a real one does and a field added there has to be added here too.
+    The numbers are not a model's output -- deriving them would make every
+    publisher test depend on the 386MB of frozen artifacts -- but they are a
+    real distribution: four listed outcomes and a tail bucket, summing to one,
+    straddling the line.
     """
     first = int(line) - 1
     probability = (0.2, 0.3, 0.3, 0.19)
 
-    return json.dumps(
-        PublishedDistribution(
-            kind=KIND_MARGINAL,
-            support=tuple(range(first, first + len(probability))),
-            probability=probability,
-            tail_outcome=first + len(probability),
-            tail_probability=0.01,
-            mean=line + 0.4,
-            most_likely_low=first + 1,
-            most_likely_high=first + 2,
-            most_likely_mass=0.6,
-        ).payload(),
-        sort_keys=True,
-        separators=(",", ":"),
-    )
+    return distributions.PublishedDistribution(
+        kind=distributions.KIND_MARGINAL,
+        support=tuple(range(first, first + len(probability))),
+        probability=probability,
+        tail_outcome=first + len(probability),
+        tail_probability=0.01,
+        mean=line + 0.4,
+        most_likely_low=first + 1,
+        most_likely_high=first + 2,
+        most_likely_mass=0.6,
+    ).payload()
+
+
+def distributions_document(
+    priced_path: Path, *, slate_date: str = SLATE_DATE
+) -> dict[str, Any]:
+    """The document ``ops/nba_distribution_publication.py`` would have written.
+
+    One record per wager rather than per quote, keyed the way that stage keys
+    them, and provenanced by the digest of the parquet on disk -- which the
+    publisher checks against the serving receipt, so a fixture that digested
+    something else would exercise that refusal rather than the happy path.
+    """
+    return {
+        "combo_simulations": distributions.DEFAULT_COMBO_SIMULATIONS,
+        "contract_version": distributions.DOCUMENT_CONTRACT_VERSION,
+        "distributions": {
+            distributions.distribution_key(game_id, player_id, prop): (
+                distribution_for(line)
+            )
+            for _, game_id, player_id, prop, line, _ in QUOTES
+        },
+        "priced_relative": priced_path.name,
+        "priced_sha256": publisher.sha256_file(priced_path),
+        "seed": distributions.DEFAULT_SEED,
+        "slate_date": slate_date,
+    }
 
 
 def priced_frame() -> pd.DataFrame:
@@ -157,9 +176,6 @@ def priced_frame() -> pd.DataFrame:
                 # the projection with the line or the midpoint would read a
                 # different number.
                 "model_projection": line + 0.4,
-                # Carried on every quote of the wager, which is what the
-                # publisher collapses back to one record per player and stat.
-                "distribution_json": distribution_for(line),
                 "market_type": "over_under",
                 "over_odds": -110,
                 "under_odds": -110,
@@ -261,6 +277,15 @@ def build(
         priced_path, index=False
     )
 
+    distributions_file = publisher.distributions_path(data_root, slate_date)
+
+    distributions_file.parent.mkdir(parents=True, exist_ok=True)
+
+    distributions.write_document(
+        distributions_file,
+        distributions_document(priced_path, slate_date=slate_date),
+    )
+
     receipt = receipt_for(priced_path, slate_date=slate_date)
 
     if receipt_changes:
@@ -281,6 +306,7 @@ def build(
     return {
         "data_root": data_root,
         "destination_root": Path(root) / "destination",
+        "distributions_path": distributions_file,
         "priced_path": priced_path,
         "receipt": receipt,
         "receipt_path": receipt_path,

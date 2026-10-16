@@ -200,6 +200,12 @@ DESTINATIONS_RELATIVE = Path("ops") / "wizardofodds_destinations.json"
 PRICED_MARKETS_RELATIVE = Path("processed") / "priced_markets"
 SERVING_RECEIPTS_RELATIVE = Path("processed") / "incumbent_serving"
 
+#: Where ``ops/nba_distribution_publication.py`` leaves the forecasts behind
+#: one slate's prices. Beside the priced markets rather than inside them: the
+#: priced parquet is digested by the serving receipt, and a stage that rewrote
+#: it to add a display panel would invalidate that provenance.
+DISTRIBUTIONS_RELATIVE = Path("processed") / "nba_distributions"
+
 TRANSPORT_LOCAL_DIRECTORY = "local_directory"
 TRANSPORT_SSH_RSYNC = "ssh_rsync"
 
@@ -245,12 +251,11 @@ PUBLICATION_CONTRACT_VERSION = 3
 #: the same several-hundred-number record six times.
 DISTRIBUTIONS_KEY = "distributions"
 
-#: The priced frame's column the records arrive in, and the fields the key is
-#: built from. Both are ``distribution_publication``'s own, named here rather
-#: than imported because this module imports no model, pricing or calibration
-#: code and a test pins that.
-DISTRIBUTION_SOURCE_COLUMN = "distribution_json"
-
+#: The fields a distribution's key is built from, in order. Named here rather
+#: than imported from the stage that produces them because this module imports
+#: no model, pricing or calibration code and a test pins that. A test also
+#: pins that these are the stage's own three fields in the stage's own order,
+#: so the two cannot drift into keying the same wager differently.
 DISTRIBUTION_KEY_FIELDS: tuple[str, str, str] = (
     "game_id",
     "player_id",
@@ -1657,6 +1662,42 @@ def priced_markets_path(data_root: Path, slate_date: str) -> Path:
     return Path(data_root) / PRICED_MARKETS_RELATIVE / f"{slate_date}.parquet"
 
 
+def distributions_path(data_root: Path, slate_date: str) -> Path:
+    return Path(data_root) / DISTRIBUTIONS_RELATIVE / f"{slate_date}.json"
+
+
+def read_distributions_document(path: Path) -> dict[str, Any]:
+    """What the distribution stage wrote for this slate, as JSON.
+
+    Read here rather than imported from the stage, which imports the pricing
+    engine and the fitted marginals. This module imports no model, pricing or
+    calibration code -- a test pins that -- so what crosses between them is a
+    file and a digest, which is also what makes the provenance check in
+    :func:`published_distributions` possible at all.
+    """
+    path = Path(path)
+
+    if not path.exists():
+        raise PublishingRefused(
+            f"{path} does not exist, so the distributions behind this slate's "
+            "prices have not been produced and the release would publish "
+            "prices with no forecast behind them"
+        )
+
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as error:
+        raise PublishingRefused(
+            f"{path} is not readable JSON ({error}), so the distributions "
+            "behind this slate's prices are not published"
+        ) from error
+
+    if not isinstance(document, dict):
+        raise PublishingRefused(f"{path} is not a JSON object")
+
+    return document
+
+
 def verify_receipt(
     receipt: dict[str, Any], *, slate_date: str, priced_path: Path
 ) -> dict[str, Any]:
@@ -1839,11 +1880,7 @@ def assert_input_is_not_a_candidate_frame(frame: pd.DataFrame) -> None:
 
 
 def assert_schema_is_publishable(frame: pd.DataFrame) -> None:
-    required = (
-        {name for name, _ in PUBLISHED_FIELDS}
-        | set(SCREENED_COLUMNS)
-        | {DISTRIBUTION_SOURCE_COLUMN}
-    )
+    required = {name for name, _ in PUBLISHED_FIELDS} | set(SCREENED_COLUMNS)
 
     missing = sorted(required - set(frame.columns))
 
@@ -2045,79 +2082,50 @@ def distribution_key(source: Any) -> str:
 
 
 def published_distributions(
-    frame: pd.DataFrame, *, rows: list[dict[str, Any]]
+    document: dict[str, Any],
+    *,
+    rows: list[dict[str, Any]],
+    priced_sha256: str,
 ) -> dict[str, dict[str, Any]]:
     """The outcome distributions behind the published rows, one per wager.
 
-    The priced frame carries each record on every quote of the same wager,
-    because a column is the only way a row-shaped file can carry it. This
-    collapses that back to one record per key and refuses the two ways the
-    collapse can be a lie: a wager whose quotes disagree about its own
-    distribution, and a published row with no distribution behind it at all.
+    ``document`` is what ``ops/nba_distribution_publication.py`` wrote for this
+    slate. That stage reads the priced parquet and the frozen marginals and
+    copula, and derives every record through the pricing engine's own
+    functions; a test reprices both sides and compares. What this function is
+    responsible for is that the document in front of it describes *this* slate.
 
-    No arithmetic happens here and none is checked beyond shape. The pricing
-    path that built these records derived them from the same frozen marginals
-    and the same seeded joint simulation that produced the probabilities
-    beside them, and a test reprices both and compares. What this function is
-    responsible for is that what reaches the contract is one record per wager
-    and that the page's fields are in it.
+    Which is what ``priced_sha256`` is for. The serving receipt digests the
+    priced parquet, and a distributions document derived from a different
+    parquet is refused rather than published: the failure it prevents is a
+    stale file from an earlier run being served as the forecast behind today's
+    prices, which is invisible in every other way.
     """
-    if DISTRIBUTION_SOURCE_COLUMN not in frame.columns:
+    recorded = str(document.get("priced_sha256") or "")
+
+    if recorded != priced_sha256:
         raise PublishingRefused(
-            f"the priced markets do not carry {DISTRIBUTION_SOURCE_COLUMN}, so "
-            f"they cannot satisfy contract {PUBLICATION_CONTRACT_VERSION}, "
-            "which publishes the distribution each price came out of"
+            f"the distributions were derived from priced markets digesting "
+            f"{recorded or 'nothing'} and this publication is of "
+            f"{priced_sha256}, so they are a different slate's forecasts and "
+            "are not published beside these prices"
+        )
+
+    source = document.get(DISTRIBUTIONS_KEY)
+
+    if not isinstance(source, dict):
+        raise PublishingRefused(
+            f"the distributions document carries no {DISTRIBUTIONS_KEY} object, "
+            f"so it cannot satisfy contract {PUBLICATION_CONTRACT_VERSION}"
         )
 
     wanted = {distribution_key(row) for row in rows}
 
-    records: dict[str, dict[str, Any]] = {}
-
-    disagreements: set[str] = set()
-
-    for position, (_, source) in enumerate(frame.iterrows()):
-        key = distribution_key(source)
-
-        if key not in wanted:
-            continue
-
-        raw = source.get(DISTRIBUTION_SOURCE_COLUMN)
-
-        if raw is None or (isinstance(raw, float) and math.isnan(raw)):
-            continue
-
-        text = str(raw)
-
-        if not text:
-            continue
-
-        try:
-            record = json.loads(text)
-        except ValueError as error:
-            raise PublishingRefused(
-                f"row {position} carries a {DISTRIBUTION_SOURCE_COLUMN} that is "
-                f"not readable JSON ({error}), so the distribution for {key} is "
-                "not published"
-            ) from error
-
-        if not isinstance(record, dict):
-            raise PublishingRefused(
-                f"row {position} carries a {DISTRIBUTION_SOURCE_COLUMN} holding "
-                f"{type(record).__name__} rather than one distribution record, "
-                f"so the distribution for {key} is not published"
-            )
-
-        if key in records and records[key] != record:
-            disagreements.add(key)
-
-        records[key] = record
-
-    if disagreements:
-        raise PublishingRefused(
-            f"{len(disagreements)} wagers carry more than one distribution "
-            "across their own quotes, so which one the model forecast is not a "
-            "fact this feed holds: " + "; ".join(sorted(disagreements)[:5])
-        )
+    records = {
+        key: record
+        for key, record in source.items()
+        if key in wanted and isinstance(record, dict)
+    }
 
     missing = sorted(wanted - set(records))
 
@@ -3003,6 +3011,7 @@ def publish(
     destinations_path: Path | None = None,
     receipt_path: Path | None = None,
     priced_path: Path | None = None,
+    distributions_file: Path | None = None,
     canary_attestation: Path | None = None,
     destination_name: str | None = None,
     environment: dict[str, str] | None = None,
@@ -3079,13 +3088,23 @@ def publish(
         receipt, slate_date=slate_date, priced_path=priced
     )
 
-    priced_frame = pd.read_parquet(priced)
-
-    rows = published_rows(priced_frame, switch=switch, slate_date=slate_date)
+    rows = published_rows(
+        pd.read_parquet(priced), switch=switch, slate_date=slate_date
+    )
 
     release = build_release(
         rows=rows,
-        distributions=published_distributions(priced_frame, rows=rows),
+        distributions=published_distributions(
+            read_distributions_document(
+                distributions_file
+                if distributions_file is not None
+                else distributions_path(data_root, slate_date)
+            ),
+            rows=rows,
+            priced_sha256=str(
+                provenance.get("priced_market_artifact_sha256") or ""
+            ),
+        ),
         provenance=provenance,
         switch=switch,
         destination=destination,

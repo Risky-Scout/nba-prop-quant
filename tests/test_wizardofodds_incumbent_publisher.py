@@ -843,15 +843,21 @@ def test_verification_reads_through_the_transport(tmp_path: Path):
 
     built = fixture.build(tmp_path)
 
-    priced = pd.read_parquet(built["priced_path"])
-
     rows = publisher.published_rows(
-        priced, switch=switch, slate_date=built["slate_date"]
+        pd.read_parquet(built["priced_path"]),
+        switch=switch,
+        slate_date=built["slate_date"],
     )
+
+    document = publisher.read_distributions_document(built["distributions_path"])
 
     release = publisher.build_release(
         rows=rows,
-        distributions=publisher.published_distributions(priced, rows=rows),
+        distributions=publisher.published_distributions(
+            document,
+            rows=rows,
+            priced_sha256=publisher.sha256_file(built["priced_path"]),
+        ),
         provenance={"slate_date": built["slate_date"]},
         switch=switch,
         destination=destination,
