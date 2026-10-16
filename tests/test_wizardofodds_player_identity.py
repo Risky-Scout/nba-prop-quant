@@ -582,7 +582,11 @@ def test_14_there_is_still_no_game_time_sort(rendered_html: str):
 
     assert sorts is not None
 
-    assert re.findall(r'value="([^"]+)"', sorts.group(1)) == ["ev", "win", "player"]
+    assert re.findall(r'value="([^"]+)"', sorts.group(1)) == [
+        "ev",
+        "model",
+        "player",
+    ]
 
 
 # ======================================================================

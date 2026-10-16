@@ -34,6 +34,7 @@ for relative in ("ops", "src", "tests"):
         sys.path.insert(0, str(PROJECT / relative))
 
 import frozen_bundle_slate_fixture as slate_fixture  # noqa: E402
+import nba_distribution_publication as distribution_stage  # noqa: E402
 import production_lifecycle_preflight as preflight  # noqa: E402
 import publish_incumbent_to_wizardofodds as publisher  # noqa: E402
 import run_incumbent_production_serving as serving  # noqa: E402
@@ -156,6 +157,25 @@ def serve_and_provenance(bundle: Path, root: Path, *, production_sha: str) -> di
 
     receipt_path.write_text(
         json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+    # The stage the lifecycle runs between serving and publication, here for
+    # the same reason the receipt is built by serving's own builder: the
+    # publisher is handed what production hands it. It reads the parquet the
+    # serving run just wrote and the bundle that priced it, so the forecasts
+    # these suites publish are the frozen engines' own and not a fixture's.
+    assert (
+        distribution_stage.main(
+            [
+                "--date",
+                slate_fixture.SLATE_DATE,
+                "--data-root",
+                str(root / "data"),
+                "--model-dir",
+                str(bundle / "models"),
+            ]
+        )
+        == 0
     )
 
     return {"receipt": receipt, "served": served}

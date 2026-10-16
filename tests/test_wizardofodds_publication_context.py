@@ -43,6 +43,7 @@ for relative in ("ops", "src", "tests"):
         sys.path.insert(0, str(PROJECT / relative))
 
 import frozen_bundle_slate_fixture as slate_fixture  # noqa: E402
+import nba_distribution_publication as distribution_stage  # noqa: E402
 import publish_incumbent_to_wizardofodds as publisher  # noqa: E402
 import wizardofodds_player_props_page as page  # noqa: E402
 import wizardofodds_affiliate_routing as routing  # noqa: E402
@@ -663,6 +664,24 @@ def republish(frame: pd.DataFrame, served: dict, root: Path) -> Path:
 
     receipt_path.write_text(
         json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+    # Re-derived rather than copied, for the same reason the receipt is
+    # re-provenanced: the publisher refuses a distributions document that
+    # digests a different parquet, and the one the fixture's own serving run
+    # produced digests the frame this helper just replaced.
+    assert (
+        distribution_stage.main(
+            [
+                "--date",
+                slate_fixture.SLATE_DATE,
+                "--data-root",
+                str(data_root),
+                "--model-dir",
+                receipt["serving_model_dir"],
+            ]
+        )
+        == 0
     )
 
     destination = root / "destination"
