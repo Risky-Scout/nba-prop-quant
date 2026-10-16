@@ -53,9 +53,15 @@ for _relative in ("ops", "src"):
     if str(PROJECT_ROOT / _relative) not in sys.path:
         sys.path.insert(0, str(PROJECT_ROOT / _relative))
 
+import nba_distribution_publication as distribution  # noqa: E402
 import publish_incumbent_to_wizardofodds as publisher  # noqa: E402
 import wizardofodds_affiliate_routing as routing  # noqa: E402
 import wizardofodds_player_props_page as page  # noqa: E402
+
+from nba_prop_quant.distributions import (  # noqa: E402
+    FittedMarginal,
+    NegativeBinomialCalibrator,
+)
 
 #: Where the proof page is written, relative to the page canary's own root.
 #: A child directory, so publishing it cannot touch the page canary's own
@@ -118,6 +124,30 @@ CASES: Mapping[str, dict[str, Any]] = {
             "betanysports is shown under"
         ),
     },
+}
+
+#: Case -> the mean and the dispersion of the fixture marginal its published
+#: distribution is the PMF of.
+#:
+#: Declared, like every other number in this file, because there is no model
+#: here to fit one. What is *not* declared is the distribution: the pair below
+#: is handed to the frozen negative-binomial marginal and the frozen PMF
+#: routine, so the probabilities published for this page are a real
+#: distribution's real probabilities and they sum to one for the reason every
+#: distribution's do. Nothing is written out by hand and nothing is normalised
+#: into looking right.
+#:
+#: The PMF therefore does not reproduce the case's declared probability, and
+#: must not be made to: those probabilities are stated constants standing in
+#: for a calibrated output, and a calibrated probability is not the integral
+#: of the forecast it was calibrated from. That is the same relationship the
+#: real page's distribution panel discloses, which is the one thing about this
+#: fixture worth having be faithful.
+PROOF_MARGINALS: Mapping[str, tuple[float, float]] = {
+    "A": (24.0, 14.0),
+    "B": (8.0, 9.0),
+    "C": (2.2, 6.0),
+    "D": (6.0, 8.0),
 }
 
 #: Case -> (vendor, price on the model's side, price on the other side).
@@ -351,6 +381,61 @@ def wagers() -> Mapping[str, routing.Wager]:
     }
 
 
+def distributions_document(priced_path: Path) -> dict[str, Any]:
+    """The distribution stage's document, for the four fixture wagers.
+
+    The real stage reads the priced parquet and the frozen marginal bundle.
+    There is no bundle here and nothing on this slate was priced by a model,
+    so the marginals are the declared ones in :data:`PROOF_MARGINALS` -- and
+    everything downstream of that choice is the frozen engine's: the support,
+    the probabilities, the tail bucket, the mean and the highlighted range all
+    come out of ``nba_distribution_publication``, the same functions that
+    produce the real page's records, through the same dataclass.
+
+    It carries the priced parquet's digest for the same reason the real
+    document does, so the publisher's provenance check is exercised by this
+    page rather than bypassed for it.
+    """
+    records: dict[str, dict[str, Any]] = {}
+
+    for name, case in CASES.items():
+        mu, size = PROOF_MARGINALS[name]
+
+        marginal = FittedMarginal(
+            kind="nb", model=NegativeBinomialCalibrator(size=float(size))
+        )
+
+        target = distribution.PROP_TO_TARGET[str(case["prop_type"])]
+
+        published = distribution.single_prop_distribution(
+            pd.Series(dtype=object),
+            str(case["prop_type"]),
+            {target: marginal},
+            float(mu),
+        )
+
+        key = distribution.distribution_key(
+            GAME_ID, case["player_id"], case["prop_type"]
+        )
+
+        records[key] = {
+            "game_id": GAME_ID,
+            "player_id": int(case["player_id"]),
+            "prop_type": str(case["prop_type"]),
+            **published.payload(),
+        }
+
+    return {
+        "combo_simulations": 0,
+        "contract_version": distribution.DOCUMENT_CONTRACT_VERSION,
+        "distributions": records,
+        "priced_relative": priced_path.name,
+        "priced_sha256": publisher.sha256_file(priced_path),
+        "seed": distribution.DEFAULT_SEED,
+        "slate_date": SLATE_DATE,
+    }
+
+
 def build_receipt(priced_path: Path, *, production_sha: str) -> dict[str, Any]:
     """The receipt the serving run would have written for this slate.
 
@@ -412,6 +497,11 @@ def publish_locally(root: Path, *, production_sha: str) -> Any:
     priced_path.parent.mkdir(parents=True, exist_ok=True)
 
     priced_frame().to_parquet(priced_path, index=False)
+
+    distribution.write_document(
+        distribution.distributions_path(data_root, SLATE_DATE),
+        distributions_document(priced_path),
+    )
 
     receipt_path = publisher.serving_receipt_path(data_root, SLATE_DATE)
 
