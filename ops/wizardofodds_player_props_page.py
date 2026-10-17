@@ -259,7 +259,7 @@ REQUIRED_ROW_FIELDS: tuple[str, ...] = (
 #: An allow-list on purpose: see the module docstring.
 RENDERED_PROVENANCE: tuple[tuple[str, str], ...] = (
     ("slate_date", "Slate"),
-    ("incumbent_version", "Incumbent version"),
+    ("incumbent_version", "Technical model ID"),
     ("incumbent_authority", "Incumbent authority"),
     ("model_authority", "Published authority"),
     ("production_code_sha", "Production code SHA"),
@@ -272,6 +272,33 @@ RENDERED_PROVENANCE: tuple[tuple[str, str], ...] = (
 #: names the field is a test that still fails if somebody turns the allow-list
 #: into a deny-list.
 WITHHELD_PROVENANCE: tuple[str, ...] = ("priced_market_artifact_path",)
+
+#: Technical model identity -> the name the product goes by in public.
+#:
+#: ``nba_prop_quant_20260818T205213Z`` is the freeze this page serves, and it
+#: belongs in every receipt, manifest and provenance record that has to be
+#: reproducible. It does not belong at the top of a betting page, where it
+#: tells a reader nothing except that the page was built for its author.
+#:
+#: A map rather than one unconditional string, because the product name is a
+#: claim about which model is serving. A freeze nobody has named here is
+#: shown by its technical id instead: ugly, and true, which is the right way
+#: round for the alternative of calling some future model by this one's name.
+PUBLIC_MODEL_NAMES: Mapping[str, str] = {
+    "nba_prop_quant_20260818T205213Z": "NBA Prop Quant 2026\u201327",
+}
+
+
+def public_model_name(version: Any) -> str:
+    """What to call the serving model in front of a bettor.
+
+    Presentation only. Nothing downstream of this reads it: the technical
+    identifier is what every artifact, receipt and manifest carries, and this
+    is the one visible label it is swapped for.
+    """
+    technical = str(version or "")
+
+    return PUBLIC_MODEL_NAMES.get(technical, technical)
 
 #: Side -> the published probability field for that side.
 SIDE_MODEL_PROBABILITY: Mapping[str, str] = {
@@ -2348,7 +2375,8 @@ def _header_provenance(publication: Publication) -> str:
 
     if version:
         cells.append(
-            f"<div><dt>Model version</dt><dd>{escape(str(version))}</dd></div>"
+            "<div><dt>Model</dt>"
+            f"<dd>{escape(public_model_name(version))}</dd></div>"
         )
 
     build = str(publication.provenance.get("production_code_sha") or "")
