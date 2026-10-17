@@ -382,54 +382,28 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: landed, for the reason that entry itself gave: the orchestrator is owned
 #: below, so touching it again requires declaring it again.
 #:
-#: This branch declares six paths and widens nothing. Five of the six are
-#: owned below; the sixth is the distribution stage it introduces, which is
-#: recorded as owned below for the same reason the publisher and the renderer
-#: are. What the branch does is expose distributions the pricing path already
-#: computes. The pricing script is deliberately not declared, because it is
-#: deliberately not touched: the new stage reads the priced parquet the
-#: unchanged script already writes, calls the frozen marginal, convolution and
-#: copula routines that priced those same rows, and writes what they return
-#: next to the digest of the parquet it read. Nothing fits, nothing is
-#: re-priced, no projection, probability, edge or expected value moves, and
-#: the serving path is byte-identical to production.
+#: The distribution branch's six entries were retired in turn when they
+#: landed. Five of the six are owned below, and the sixth, the distribution
+#: stage that branch introduced, was recorded as owned when it landed, so
+#: touching any of them again requires declaring it again.
+#:
+#: This branch declares one path and widens nothing. It is the renderer, which
+#: is owned below, and what changes in it is one visible label: the header
+#: said the serving freeze's technical id and now says the name the product
+#: goes by, with the id itself moved into the collapsed provenance under a
+#: label that says what it is. The mapping is a map from technical id to
+#: public name read at render time and by nothing else, so every receipt,
+#: manifest, release and provenance record still carries the identifier
+#: exactly. No quantity is computed, read differently or written differently.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
-        "ops/nba_distribution_publication.py": (
-            "the distribution stage the lifecycle runs between serving and "
-            "publication. It reads the priced parquet, asks the frozen "
-            "pricing engines for the distribution each of those prices came "
-            "out of, and writes them beside the digest of the parquet it "
-            "read. It defines no probability mathematics of its own and it "
-            "cannot fit, serve, price, promote, route or activate"
-        ),
-        "ops/publish_incumbent_to_wizardofodds.py": (
-            "the published contract carries the distributions additively at "
-            "version 3, and the feed refuses a release whose distributions "
-            "do not provenance to the priced frame it is publishing. No "
-            "existing field is removed or recomputed"
-        ),
-        "ops/run_wizardofodds_publication.py": (
-            "the orchestrator reads the distribution document, checks its "
-            "digest against the priced frame and reports it. Still nothing "
-            "is computed here"
-        ),
         "ops/wizardofodds_player_props_page.py": (
-            "the renderer writes each published price in all three notations "
-            "at build time and renders the published distribution as a "
-            "table. Both are presentation of numbers the release already "
-            "carries: no quantity is computed, and the page's own script "
-            "only chooses which pre-rendered notation is visible"
-        ),
-        "ops/wizardofodds_routing_proof.py": (
-            "the QA proof page carries declared fixture distributions so the "
-            "publisher's new provenance check has something to check. Still "
-            "fixture arithmetic only: it reaches no model and no engine"
-        ),
-        ".github/workflows/nba_production_lifecycle.yml": (
-            "one step appended between serving and publication, running the "
-            "distribution stage for the slate that was just served. Every "
-            "pre-existing step survives unchanged"
+            "the renderer shows the serving model's public product name in "
+            "the header instead of its freeze id, and shows the freeze id in "
+            "the collapsed provenance as the technical model ID. One visible "
+            "label: the identifier reaching every receipt, manifest and "
+            "release is unchanged, nothing is computed, and the page's own "
+            "script is untouched"
         ),
     }
 )
