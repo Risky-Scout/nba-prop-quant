@@ -610,7 +610,7 @@ def test_the_provenance_strip_carries_the_current_state_fields(published):
 
     for label in (
         "Slate",
-        "Incumbent version",
+        "Technical model ID",
         "Production code SHA",
         "Slate served",
         "Release",

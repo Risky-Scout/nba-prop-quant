@@ -964,7 +964,7 @@ def test_the_engineering_provenance_is_no_longer_the_page(consumer, consumer_htm
 
     assert "Model updated" in header
 
-    assert "Model version" in header
+    assert "Model" in header
 
     assert "Production build" in header
 
@@ -1029,6 +1029,58 @@ def test_the_disclosure_is_one_sentence_up_top_and_complete_below(
         f"{words} words of preamble before the first prediction; the "
         "disclosure block this replaced consumed the top of the page"
     )
+
+
+def test_the_header_names_the_model_the_way_a_reader_would(consumer, consumer_html):
+    """The product's name up top; its freeze id one disclosure away.
+
+    ``nba_prop_quant_20260818T205213Z`` is the identity every receipt and
+    manifest has to carry, and a bettor reading it learns only that the page
+    was built for its author. So the header says what the thing is called and
+    the collapsed provenance says exactly which build it was, under a label
+    that says so.
+    """
+    header = consumer_html.split('<section class="wf-controls"', 1)[0]
+
+    technical = consumer["publication"].provenance["incumbent_version"]
+
+    assert technical == "nba_prop_quant_20260818T205213Z"
+
+    assert "<dt>Model</dt><dd>NBA Prop Quant 2026\u201327</dd>" in header
+
+    assert technical not in header
+
+    # And the swap is a label, not a loss: the id is still in the document,
+    # still inside the collapsed section, still named for what it is.
+    collapsed = consumer_html.split('<details class="wf-gloss">', 1)[1]
+
+    assert f"<dt>Technical model ID</dt><dd>{technical}</dd>" in collapsed
+
+    # Nothing machine-readable moved. The manifest keys on the field name, so
+    # a checker reading provenance sees the freeze and not the product name.
+    assert consumer["manifest"]["provenance"]["incumbent_version"] == technical
+
+    assert "NBA Prop Quant" not in json.dumps(consumer["manifest"])
+
+
+def test_a_model_nobody_has_named_is_shown_by_its_technical_id():
+    """The fallback, which is the point of a map rather than a constant.
+
+    A product name is a claim about which model is serving. If some future
+    freeze reaches this page before anybody names it, showing this season's
+    name would be false, so it is shown by its id instead.
+    """
+    assert page.public_model_name("nba_prop_quant_20260818T205213Z") == (
+        "NBA Prop Quant 2026\u201327"
+    )
+
+    assert page.public_model_name("nba_prop_quant_20270901T000000Z") == (
+        "nba_prop_quant_20270901T000000Z"
+    )
+
+    assert page.public_model_name("") == ""
+
+    assert page.public_model_name(None) == ""
 
 
 # ======================================================================
