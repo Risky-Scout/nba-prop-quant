@@ -649,6 +649,34 @@ def test_a_no_slate_day_is_not_asked_for_artifact_provenance(
 # ----------------------------------------------------------------------
 
 
+#: The locked season-2026 opening day, which is the one date the refresh
+#: writes nothing on and a real slate exists anyway.
+OPENING_DAY = "2026-10-20"
+
+
+def opening_day_refresh_status(tmp_path: Path, **overrides) -> Path:
+    """A verified opening-day decision, exactly as the classifier writes it."""
+    decision = {
+        "lifecycle_status": "success",
+        "opening_day": OPENING_DAY,
+        "outcome": "OPENING_DAY_NO_REFRESH",
+        "refresh_exit_code": 11,
+        "run_adaptive_fit": False,
+        "season": 2026,
+        "slate_date": OPENING_DAY,
+        "verified": True,
+        "writes_performed": False,
+    }
+
+    decision.update(overrides)
+
+    path = tmp_path / "refresh_opening_day.json"
+
+    path.write_text(json.dumps(decision, sort_keys=True), encoding="utf-8")
+
+    return path
+
+
 def test_readiness_comes_from_the_refresh_outcome(tmp_path: Path):
     assert serving.slate_readiness(refresh_status(tmp_path, "REFRESHED"))[
         "ready"
@@ -657,6 +685,75 @@ def test_readiness_comes_from_the_refresh_outcome(tmp_path: Path):
     assert not serving.slate_readiness(
         refresh_status(tmp_path, "PRESEASON_BLOCK")
     )["ready"]
+
+
+def test_a_verified_opening_day_is_ready_although_nothing_was_refreshed(
+    tmp_path: Path,
+):
+    """Opening day: no current-season game to ingest, and a real slate."""
+    readiness = serving.slate_readiness(
+        opening_day_refresh_status(tmp_path), slate_date=OPENING_DAY
+    )
+
+    assert readiness["ready"] is True
+    assert readiness["refresh_outcome"] == (
+        serving.REFRESH_OUTCOME_OPENING_DAY_NO_REFRESH
+    )
+
+
+def test_the_incumbent_serves_the_opening_day_slate(
+    tmp_path: Path, project: Path, registry: FitRegistry
+):
+    """The fix, end to end: the season's first slate is priced.
+
+    Before it, the refresh reported opening day with the same code as a day
+    whose prerequisite games had not settled, the classifier failed closed,
+    and this step never ran.
+
+    ``refreshed_data_root`` because the receipt requires the rolling state's
+    fingerprint and opening day writes nothing: the fingerprint is the
+    durable state root's, left by the historical ingest, not that morning's.
+    A state root that has never been fingerprinted is still a refusal here,
+    which is the pre-existing provenance rule and is not widened.
+    """
+    model_dir = serving_tree(project, artifacts={"marginals.joblib": b"frozen"})
+
+    receipt = serving.run(
+        arguments(
+            data_root=refreshed_data_root(tmp_path),
+            model_dir=model_dir,
+            frozen_bundle_root=model_dir.parent,
+            project_root=project,
+            refresh_status=opening_day_refresh_status(tmp_path),
+            registry_root=registry.root,
+            slate_date=OPENING_DAY,
+        )
+    )
+
+    assert receipt["outcome"] == serving.OUTCOME_SERVED
+    assert receipt["slate_readiness"]["ready"] is True
+    assert receipt["priced_market_artifact"] is not None
+    assert serving.missing_provenance(receipt) == []
+
+
+def test_an_opening_day_claim_about_another_slate_is_refused(
+    tmp_path: Path, project: Path, registry: FitRegistry
+):
+    """The outcome describes one date; it does not license the next one."""
+    model_dir = serving_tree(project, artifacts={"marginals.joblib": b"frozen"})
+
+    with pytest.raises(serving.ServingRefused):
+        serving.run(
+            arguments(
+                data_root=refreshed_data_root(tmp_path),
+                model_dir=model_dir,
+                frozen_bundle_root=model_dir.parent,
+                project_root=project,
+                refresh_status=opening_day_refresh_status(tmp_path),
+                registry_root=registry.root,
+                slate_date="2026-10-21",
+            )
+        )
 
 
 def test_a_missing_refresh_status_is_a_refusal_not_an_assumption(
