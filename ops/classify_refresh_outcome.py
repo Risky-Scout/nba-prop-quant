@@ -10,7 +10,7 @@ questions the workflow needs answered:
     * may the lifecycle report success?
     * may the adaptive daily fit run?
 
-Exactly three answers exist:
+Exactly four answers exist:
 
     exit 0
         The rolling state advanced. The lifecycle continues normally and the
@@ -23,15 +23,28 @@ Exactly three answers exist:
         lifecycle succeeds, the adaptive daily fit is skipped and the
         incumbent production fit is retained untouched.
 
+    exit 11, independently verified as opening day
+        The slate date *is* the locked NBA opening day. No current-season game
+        has been played yet, so the refresh has nothing to ingest and the
+        adaptive daily fit has nothing new to fit — but tonight's games are
+        real and the slate is eligible to serve. Nothing was written. This is
+        the one no-op the lifecycle must continue through rather than stop at:
+        it was previously reported with the same code as a day whose
+        prerequisite games had not settled, so it failed closed and the first
+        slate of the season would never have been served.
+
     anything else
         Fail closed. The refresh exit code is returned unchanged so the job
-        carries the real cause, including an exit 20 whose preseason claim
-        could not be verified here.
+        carries the real cause, including an exit 20 whose preseason claim or
+        an exit 11 whose opening-day claim could not be verified here.
 
 Verification does not read the preflight's human-readable banner. It
-re-derives the preseason condition — slate date strictly before opening day —
-from the opening-day table the preflight itself owns, so this module cannot
-disagree with it and cannot invent an opening day of its own.
+re-derives each condition — slate date strictly before opening day for the
+preseason block, slate date exactly on it for the opening-day no-op — from the
+opening-day table the preflight itself owns, so this module cannot disagree
+with it and cannot invent an opening day of its own. The same applies to the
+opening-day exit code: it is imported from the preflight that emits it rather
+than restated here.
 
 Nothing here fetches data, fits a model, promotes a fit or contacts an
 external service.
@@ -55,6 +68,8 @@ PREFLIGHT_MODULE_PATH = ROOT / "ops" / "preflight_current_season_refresh.py"
 
 OPENING_DAY_TABLE_NAME = "OPENING_DAY_BY_SEASON"
 
+OPENING_DAY_CODE_NAME = "OPENING_DAY_NO_REFRESH_CODE"
+
 DEFAULT_SEASON = 2026
 
 EXIT_OK = 0
@@ -69,21 +84,31 @@ EXIT_UNCLASSIFIED = 69
 
 OUTCOME_REFRESHED = "REFRESHED"
 OUTCOME_PRESEASON_BLOCK = "PRESEASON_BLOCK"
+OUTCOME_OPENING_DAY_NO_REFRESH = "OPENING_DAY_NO_REFRESH"
 OUTCOME_REFRESH_FAILED = "REFRESH_FAILED"
 
 STATUS_SUCCESS = "success"
 STATUS_FAILED = "failed"
 
 
-class PreseasonUnverifiable(Exception):
+class StopCodeUnverifiable(Exception):
+    """The claim behind one refresh stop code could not be confirmed."""
+
+
+class PreseasonUnverifiable(StopCodeUnverifiable):
     """The preseason claim behind an exit 20 could not be confirmed."""
 
 
-def load_opening_day_table() -> dict[int, str]:
-    """Read the preflight's locked opening-day table.
+class OpeningDayUnverifiable(StopCodeUnverifiable):
+    """The opening-day claim behind the opening-day code was not confirmed."""
 
-    Imported rather than copied: a second table would be a second opening day,
-    and this module is not allowed to have an opinion about the schedule.
+
+def load_preflight_module(what: str):
+    """Load the readiness preflight so one of its declarations can be read.
+
+    Imported rather than copied: a second opening-day table would be a second
+    opening day, and a restated stop code would be a second contract. This
+    module is not allowed to have an opinion about either.
     """
     spec = importlib.util.spec_from_file_location(
         "preflight_current_season_refresh_opening_days",
@@ -91,8 +116,8 @@ def load_opening_day_table() -> dict[int, str]:
     )
 
     if spec is None or spec.loader is None:
-        raise PreseasonUnverifiable(
-            f"cannot load the opening-day table from {PREFLIGHT_MODULE_PATH}"
+        raise StopCodeUnverifiable(
+            f"cannot load {what} from {PREFLIGHT_MODULE_PATH}"
         )
 
     module = importlib.util.module_from_spec(spec)
@@ -100,15 +125,22 @@ def load_opening_day_table() -> dict[int, str]:
     try:
         spec.loader.exec_module(module)
     except Exception as error:
-        raise PreseasonUnverifiable(
-            f"cannot load the opening-day table from "
+        raise StopCodeUnverifiable(
+            f"cannot load {what} from "
             f"{PREFLIGHT_MODULE_PATH}: {type(error).__name__}: {error}"
         ) from error
+
+    return module
+
+
+def load_opening_day_table() -> dict[int, str]:
+    """Read the preflight's locked opening-day table."""
+    module = load_preflight_module("the opening-day table")
 
     table = getattr(module, OPENING_DAY_TABLE_NAME, None)
 
     if not isinstance(table, dict) or not table:
-        raise PreseasonUnverifiable(
+        raise StopCodeUnverifiable(
             f"{PREFLIGHT_MODULE_PATH.name} declares no "
             f"{OPENING_DAY_TABLE_NAME}"
         )
@@ -116,11 +148,31 @@ def load_opening_day_table() -> dict[int, str]:
     return {int(season): str(day) for season, day in table.items()}
 
 
+def load_opening_day_exit_code() -> int:
+    """Read the exit code the preflight emits on opening day.
+
+    The code is the whole contract between the two processes, so taking it
+    from the emitter is what keeps this module from accepting a number the
+    preflight no longer sends -- or refusing the one it does.
+    """
+    module = load_preflight_module("the opening-day exit code")
+
+    code = getattr(module, OPENING_DAY_CODE_NAME, None)
+
+    if not isinstance(code, int) or isinstance(code, bool) or code == EXIT_OK:
+        raise StopCodeUnverifiable(
+            f"{PREFLIGHT_MODULE_PATH.name} declares no usable "
+            f"{OPENING_DAY_CODE_NAME}"
+        )
+
+    return int(code)
+
+
 def exact_date(value: str, label: str) -> date:
     try:
         parsed = datetime.strptime(value, "%Y-%m-%d").date()
     except (TypeError, ValueError) as error:
-        raise PreseasonUnverifiable(
+        raise StopCodeUnverifiable(
             f"{label} must be exact YYYY-MM-DD; got {value!r} ({error})"
         ) from error
 
@@ -138,7 +190,7 @@ def opening_day_for(
     resolved = load_opening_day_table() if table is None else table
 
     if season not in resolved:
-        raise PreseasonUnverifiable(
+        raise StopCodeUnverifiable(
             f"no locked opening day is configured for season {season}"
         )
 
@@ -171,6 +223,33 @@ def verify_preseason(
     return slate, opening
 
 
+def verify_opening_day(
+    *,
+    season: int,
+    slate_date: str,
+    opening_day: str | None = None,
+    table: dict[int, str] | None = None,
+) -> tuple[date, date]:
+    """Confirm the slate date is exactly the locked opening day.
+
+    Equality, not "on or after". The opening-day no-op is the single date on
+    which no current-season game has been played and a real slate is still
+    scheduled; every later date either has completed games to refresh or has a
+    different reason for having none, and neither may borrow this outcome.
+    """
+    slate = exact_date(slate_date, "slate date")
+    opening = opening_day_for(season, opening_day, table)
+
+    if slate != opening:
+        raise OpeningDayUnverifiable(
+            f"the refresh reported {OUTCOME_OPENING_DAY_NO_REFRESH} for slate "
+            f"date {slate.isoformat()}, but the locked season-{season} "
+            f"opening day is {opening.isoformat()}"
+        )
+
+    return slate, opening
+
+
 def classify(
     *,
     refresh_exit_code: int,
@@ -178,6 +257,7 @@ def classify(
     slate_date: str = "",
     opening_day: str | None = None,
     table: dict[int, str] | None = None,
+    opening_day_code: int | None = None,
 ) -> dict:
     """Map one refresh exit code onto the lifecycle decision."""
     code = int(refresh_exit_code)
@@ -211,6 +291,66 @@ def classify(
 
         return decision
 
+    try:
+        resolved_opening_day_code = (
+            load_opening_day_exit_code()
+            if opening_day_code is None
+            else int(opening_day_code)
+        )
+
+    except StopCodeUnverifiable as error:
+        # The opening-day contract could not be read, so no exit code can be
+        # recognised as that contract. Every nonzero code then reaches the
+        # fail-closed branch below, which is the safe direction: an
+        # unreadable contract must not widen into a success.
+        resolved_opening_day_code = None
+        opening_day_fault: str | None = str(error)
+
+    else:
+        opening_day_fault = None
+
+    if resolved_opening_day_code is not None and (
+        code == resolved_opening_day_code
+    ):
+        try:
+            slate, opening = verify_opening_day(
+                season=season,
+                slate_date=slate_date,
+                opening_day=opening_day,
+                table=table,
+            )
+
+        except StopCodeUnverifiable as error:
+            decision["detail"] = (
+                f"refresh exit {code} claims "
+                f"{OUTCOME_OPENING_DAY_NO_REFRESH} but it could not be "
+                f"verified here, so the lifecycle fails closed: {error}"
+            )
+
+            return decision
+
+        decision.update(
+            {
+                "detail": (
+                    f"{slate.isoformat()} is the locked season-{season} "
+                    "opening day, so no 2026-27 regular-season game has been "
+                    "played yet and there is nothing to refresh or to fit. "
+                    "Nothing was written and the incumbent production fit is "
+                    "retained, but tonight's slate is real: the lifecycle "
+                    "continues and the incumbent serves it."
+                ),
+                "lifecycle_status": STATUS_SUCCESS,
+                "opening_day": opening.isoformat(),
+                "outcome": OUTCOME_OPENING_DAY_NO_REFRESH,
+                "run_adaptive_fit": False,
+                "slate_date": slate.isoformat(),
+                "verified": True,
+                "writes_performed": False,
+            }
+        )
+
+        return decision
+
     if code == REFRESH_EXIT_PRESEASON_BLOCK:
         try:
             slate, opening = verify_preseason(
@@ -220,7 +360,7 @@ def classify(
                 table=table,
             )
 
-        except PreseasonUnverifiable as error:
+        except StopCodeUnverifiable as error:
             decision["detail"] = (
                 f"refresh exit {code} claims PRESEASON_BLOCK but it could "
                 f"not be verified here, so the lifecycle fails closed: "
@@ -255,6 +395,12 @@ def classify(
         "safe no-op; the lifecycle fails closed and the incumbent production "
         "fit is retained"
     )
+
+    if opening_day_fault:
+        decision["detail"] += (
+            f"; the opening-day code could not be read either, so it could "
+            f"not have been recognised: {opening_day_fault}"
+        )
 
     return decision
 

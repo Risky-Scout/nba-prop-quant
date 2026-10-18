@@ -103,7 +103,10 @@ EXIT_OK = 0
 
 # Readiness outcomes owned by ops/preflight_current_season_refresh.py. They
 # are propagated unchanged so the caller sees the preflight's own decision.
-PREFLIGHT_STOP_CODES = frozenset({10, 20, 30, 31})
+# 11 is the opening-day no-refresh code: no prior current-season game exists to
+# ingest, so nothing is fetched here either, and what that means for the rest
+# of the lifecycle is decided by the caller rather than widened here.
+PREFLIGHT_STOP_CODES = frozenset({10, 11, 20, 30, 31})
 
 EXIT_PREFLIGHT_UNEXPECTED = 70
 EXIT_INGEST_FAILED = 71

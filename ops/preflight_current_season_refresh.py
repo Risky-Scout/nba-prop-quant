@@ -19,6 +19,17 @@ OPENING_DAY_BY_SEASON = {
     2026: "2026-10-20",
 }
 
+# Opening day is the one date with no prior current-season game to ingest and
+# a playable slate at the same time. The refresh legitimately mutates nothing,
+# and the slate is still eligible to serve -- two facts that have to travel
+# together. This used to leave here as the same code as a day whose
+# prerequisite games have simply not settled yet, which is a withheld
+# readiness, and the lifecycle could not tell the two apart: it read the
+# opening-day no-op as a refresh failure and stopped before serving the first
+# slate of the season. The exit code is the only channel the refresh wrapper
+# reads, so the distinction has to be one.
+OPENING_DAY_NO_REFRESH_CODE = 11
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -229,12 +240,13 @@ def main() -> None:
 
     if target == opening:
         finish(
-            action="SKIP_REFRESH",
-            code=10,
+            action="OPENING_DAY_NO_REFRESH",
+            code=OPENING_DAY_NO_REFRESH_CODE,
             message=(
                 "Opening-day exception: no completed 2026-27 "
                 "regular-season games belong in the historical information "
-                "set before the first official slate capture."
+                "set before the first official slate capture. Nothing is "
+                "refreshed and the slate itself remains eligible to serve."
             ),
             payload=common,
         )
