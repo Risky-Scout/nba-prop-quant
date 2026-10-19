@@ -228,26 +228,37 @@ system had correctly done nothing.
 
 `ops/classify_refresh_outcome.py` resolves that. It is the single place that
 maps a refresh exit code onto the lifecycle decision, and it admits exactly
-three answers:
+four answers:
 
-| Refresh exit | Outcome | Lifecycle | Adaptive daily fit |
-| --- | --- | --- | --- |
-| `0` | `REFRESHED` | success | runs |
-| `20`, verified preseason | `PRESEASON_BLOCK` | success | **skipped** |
-| anything else | `REFRESH_FAILED` | **fails closed**, re-raising the refresh code | skipped |
+| Refresh exit | Outcome | Lifecycle | Adaptive daily fit | Slate served |
+| --- | --- | --- | --- | --- |
+| `0` | `REFRESHED` | success | runs | yes |
+| `11`, verified opening day | `OPENING_DAY_NO_REFRESH` | success | **skipped** | **yes** |
+| `20`, verified preseason | `PRESEASON_BLOCK` | success | **skipped** | no |
+| anything else | `REFRESH_FAILED` | **fails closed**, re-raising the refresh code | skipped | no |
 
 "Verified" is load-bearing. The classifier does not read the preflight's
-human-readable banner and does not take `20` on trust; it re-derives the
-preseason condition — slate date strictly before opening day — from the
-`OPENING_DAY_BY_SEASON` table the preflight itself owns. The opening day is
-**imported, never restated**, so the two cannot drift and this module has no
+human-readable banner and does not take either code on trust; it re-derives
+the condition from the `OPENING_DAY_BY_SEASON` table the preflight itself
+owns — slate date strictly *before* opening day for `20`, slate date exactly
+*on* it for `11`. The opening day is **imported, never restated**, and so is
+the opening-day exit code, so the two cannot drift and this module has no
 opinion of its own about the schedule. An exit 20 on or after opening day, an
-unparseable slate date, or a season with no locked opening day are all
-unverifiable, and every unverifiable case fails closed.
+exit 11 on any other date, an unparseable slate date, or a season with no
+locked opening day are all unverifiable, and every unverifiable case fails
+closed.
 
 Codes `10`, `30` and `31` — `SKIP_REFRESH`, `HOLD_STANDARD_NOT_READY`,
 `HOLD_ADVANCED_NOT_READY` — are deliberately **not** widened into successes.
-Only `0` and a verified `20` may pass.
+Only `0`, a verified `11` and a verified `20` may pass.
+
+`11` exists because opening day is the one date where "nothing was refreshed"
+and "a real slate exists" are both true: no 2026-27 game has been played, so
+there is nothing to ingest and nothing newly completed to fit, while that
+evening's games are real and the incumbent must price them. It previously left
+the preflight as a `SKIP_REFRESH` `10`, indistinguishable from a day whose
+prerequisite games had simply not settled, so the lifecycle failed closed and
+the first slate of the season would never have been served.
 
 The decision reaches the workflow as two variables written to `$GITHUB_ENV`,
 `REFRESH_OUTCOME` and `RUN_ADAPTIVE`, and the adaptive step is gated on the
@@ -269,6 +280,16 @@ On a preseason day the run is therefore a **success**:
 - the incumbent `current_good_fit_id` is untouched
 - the summary reports `PRESEASON_BLOCK` and says why it is a success
 
+On opening day the run is a **success that continues**: the same four facts
+hold, the summary reports `OPENING_DAY_NO_REFRESH`, and serving proceeds.
+`ops/run_incumbent_production_serving.py` admits that outcome only against
+the classifier's recorded derivation — `verified`, `writes_performed`,
+`season`, `slate_date` and `opening_day` — and then re-derives the opening day
+from the same locked table before serving. A status file that names the
+outcome without the evidence, contradicts itself, disagrees with the slate
+being served, or asserts an opening day the schedule never had is refused
+rather than served.
+
 Nothing about this fabricates a slate, moves opening day, or lets the model
 train on information that does not exist.
 
@@ -277,10 +298,11 @@ train on information that does not exist.
 ## 8. Fail closed
 
 Any failure in refresh, fitting, validation, registration or promotion leaves
-the current good fit exactly where it was. The preseason no-op in §7a is the
-only refresh exit code other than `0` that is allowed to report success, and
-it is allowed only after the preseason condition has been re-verified from the
-preflight's own locked opening day. The registry's promotion state is
+the current good fit exactly where it was. The two no-ops in §7a — the
+preseason block and the opening-day no-refresh — are the only refresh exit
+codes other than `0` that are allowed to report success, and each is allowed
+only after its own condition has been re-verified from the preflight's own
+locked opening day. The registry's promotion state is
 only replaced by a single atomic write after every check passes, candidates
 are registered immutably and separately from promotion, and Step 3C records no
 promotion call at all.

@@ -30,14 +30,33 @@ OUTCOME_LABELS = {
 REFRESH_OUTCOME_LABELS = {
     "REFRESHED": "rolling current-season state advanced",
     "PRESEASON_BLOCK": "before NBA opening day; no refresh was due",
+    "OPENING_DAY_NO_REFRESH": (
+        "NBA opening day; no prior current-season game to refresh"
+    ),
     "REFRESH_FAILED": "refresh failed closed; nothing was published",
 }
 
 PRESEASON_BLOCK = "PRESEASON_BLOCK"
 
+OPENING_DAY_NO_REFRESH = "OPENING_DAY_NO_REFRESH"
+
+#: The verified refresh outcomes that deliberately skip the adaptive daily
+#: fit, so a run with no adaptive status is reporting the intended result
+#: rather than a stage that failed. Both have nothing newly completed to fit;
+#: they differ in whether a slate exists to serve, which is the serving step's
+#: question and not this reporter's.
+NO_ADAPTIVE_REFRESH_OUTCOMES = frozenset(
+    {PRESEASON_BLOCK, OPENING_DAY_NO_REFRESH}
+)
+
 # What the adaptive stage means when the refresh was a verified safe no-op.
 PRESEASON_ADAPTIVE_DETAIL = (
     "skipped: preseason no-op; incumbent fit retained"
+)
+
+OPENING_DAY_ADAPTIVE_DETAIL = (
+    "skipped: opening day has no completed current-season game to fit; "
+    "incumbent fit retained"
 )
 
 
@@ -100,15 +119,22 @@ def build_status(
         field(refresh, "lifecycle_status") == "success"
     )
 
-    # A verified PRESEASON_BLOCK means the adaptive daily fit was deliberately
-    # not run, so its absence is the intended outcome rather than a failure.
-    preseason_no_op = refresh_ok and refresh_outcome == PRESEASON_BLOCK
+    # A verified no-refresh outcome means the adaptive daily fit was
+    # deliberately not run, so its absence is the intended outcome rather than
+    # a failure.
+    adaptive_skipped_by_design = refresh_ok and (
+        refresh_outcome in NO_ADAPTIVE_REFRESH_OUTCOMES
+    )
 
     if not preflight_ok:
         failure_stage = "preflight"
     elif not refresh_ok:
         failure_stage = "refresh"
-    elif adaptive is None and mode == "production" and not preseason_no_op:
+    elif (
+        adaptive is None
+        and mode == "production"
+        and not adaptive_skipped_by_design
+    ):
         failure_stage = "adaptive_protocol"
     else:
         failure_stage = None
@@ -117,8 +143,12 @@ def build_status(
 
     adaptive_detail = OUTCOME_LABELS.get(outcome, outcome)
 
-    if adaptive is None and preseason_no_op:
-        adaptive_detail = PRESEASON_ADAPTIVE_DETAIL
+    if adaptive is None and adaptive_skipped_by_design:
+        adaptive_detail = (
+            OPENING_DAY_ADAPTIVE_DETAIL
+            if refresh_outcome == OPENING_DAY_NO_REFRESH
+            else PRESEASON_ADAPTIVE_DETAIL
+        )
 
     return {
         "adaptive_action": outcome,
@@ -218,6 +248,17 @@ def render(status: dict) -> str:
             "opening day, so there was no regular-season history to refresh: "
             "no data was written, the adaptive daily fit was skipped, and "
             "the incumbent production fit is retained unchanged.",
+        ]
+
+    if status.get("refresh_outcome") == OPENING_DAY_NO_REFRESH:
+        lines += [
+            "",
+            "This is a successful outcome. The slate date is NBA opening "
+            "day, so no current-season game has been played yet and there "
+            "was nothing to refresh or to fit: no data was written, the "
+            "adaptive daily fit was skipped, and the incumbent production "
+            "fit is retained unchanged. Tonight's slate is real, and the "
+            "incumbent serves it.",
         ]
 
     return "\n".join(lines) + "\n"

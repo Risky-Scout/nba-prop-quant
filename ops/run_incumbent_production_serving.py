@@ -75,6 +75,11 @@ module decides readiness instead of the YAML:
         The refresh reported that nothing was written -- before opening day,
         that is the preseason no-op. There is no slate to serve.
 
+        Opening day is the one exception, and it is not this outcome.
+        Nothing is written there either, because no current-season game has
+        been played yet, and tonight's games are real. It arrives as its own
+        verified refresh outcome and is served.
+
     NO_GAMES_ON_SLATE
         A regular-season date with no games on it. The prediction script's own
         documented behaviour is to report that and write nothing, and pricing
@@ -125,6 +130,16 @@ from install_frozen_model_artifacts import (  # noqa: E402
     verify_runtime_model_artifacts,
 )
 
+# The refresh classifier owns the opening-day derivation, and it takes the
+# locked opening day from the readiness preflight rather than restating it.
+# Imported here for the same reason: this module re-checks the one refresh
+# outcome it is willing to serve on, and a second opening day of its own
+# would make that re-check meaningless.
+from classify_refresh_outcome import (  # noqa: E402
+    StopCodeUnverifiable,
+    verify_opening_day,
+)
+
 #: The two scripts that serve a slate. Invoked rather than reimplemented: a
 #: second prediction path here would be a second model.
 PREDICT_SCRIPT = Path("scripts") / "10_predict_slate.py"
@@ -141,6 +156,22 @@ SEASON_STATE_RELATIVE = Path(".state") / "current_season_state.json"
 
 #: The refresh outcome that means a real regular-season slate exists.
 REFRESH_OUTCOME_REFRESHED = "REFRESHED"
+
+#: The other refresh outcome a real regular-season slate can arrive under.
+#: On opening day no current-season game has been played, so the refresh
+#: writes nothing and cannot report REFRESHED -- while tonight's games are
+#: real and the incumbent must price them. Accepted only against the
+#: classifier's own verification evidence, never on the name alone, because
+#: "nothing was refreshed" is otherwise indistinguishable from the preseason
+#: no-op this module is right to decline.
+REFRESH_OUTCOME_OPENING_DAY_NO_REFRESH = "OPENING_DAY_NO_REFRESH"
+
+#: The two refresh outcomes a slate can be served under. Both of them are
+#: statements about one specific date, which is why both are cross-checked
+#: against the date this run was actually asked to serve.
+REFRESH_OUTCOMES_THAT_SERVE: frozenset[str] = frozenset(
+    {REFRESH_OUTCOME_REFRESHED, REFRESH_OUTCOME_OPENING_DAY_NO_REFRESH}
+)
 
 MODEL_AUTHORITY = "incumbent"
 
@@ -359,6 +390,80 @@ def resolve_incumbent(
 # ----------------------------------------------------------------------
 
 
+def _opening_day_readiness(
+    status: dict[str, Any],
+    *,
+    outcome: str,
+) -> dict[str, Any]:
+    """Whether an opening-day no-refresh claim is the verified one.
+
+    The outcome name is not the evidence. The classifier reaches this outcome
+    only after re-deriving, from the readiness preflight's own locked table,
+    that the slate date it was given *is* opening day, and it records that
+    derivation. So this reads the derivation rather than the label: a status
+    file naming the outcome without the evidence behind it, or whose own
+    evidence contradicts itself, is a corrupt record of a decision nobody
+    made. That is the same class of problem as a missing status file, and it
+    is refused in the same terms rather than quietly serving.
+
+    Then the derivation itself is redone here against the same locked table,
+    so a status file that is internally consistent about an opening day the
+    schedule never had is refused too. Serving is the step that would act on
+    the claim, and a claim is only worth the check made where it is used.
+    """
+    evidence_opening_day = status.get("opening_day")
+    evidence_slate_date = status.get("slate_date")
+    evidence_season = status.get("season")
+
+    missing = [
+        name
+        for name, value in (
+            ("verified", status.get("verified") is True),
+            ("writes_performed", status.get("writes_performed") is False),
+            ("opening_day", bool(evidence_opening_day)),
+            ("slate_date", bool(evidence_slate_date)),
+            ("season", isinstance(evidence_season, int)),
+        )
+        if not value
+    ]
+
+    if missing:
+        raise ServingRefused(
+            f"the refresh reported {outcome} without the evidence that "
+            "outcome requires (" + ", ".join(missing) + "), so it cannot be "
+            "distinguished from a day with no slate and is refused"
+        )
+
+    if evidence_slate_date != evidence_opening_day:
+        raise ServingRefused(
+            f"the refresh reported {outcome} for slate date "
+            f"{evidence_slate_date} while naming {evidence_opening_day} as "
+            "opening day, so the claim contradicts itself and is refused"
+        )
+
+    try:
+        verify_opening_day(
+            season=evidence_season, slate_date=evidence_slate_date
+        )
+
+    except StopCodeUnverifiable as error:
+        raise ServingRefused(
+            f"the refresh reported {outcome}, but that could not be "
+            f"re-derived from the locked opening day here, so it is "
+            f"refused: {error}"
+        ) from error
+
+    return {
+        "ready": True,
+        "reason": (
+            f"{evidence_opening_day} is the verified locked opening day, so "
+            "the refresh had nothing to ingest and tonight's slate is still "
+            "the season's first real one"
+        ),
+        "refresh_outcome": outcome,
+    }
+
+
 def slate_readiness(refresh_status: Path | None) -> dict[str, Any]:
     """Whether a real production slate exists to serve.
 
@@ -366,6 +471,15 @@ def slate_readiness(refresh_status: Path | None) -> dict[str, Any]:
     is the fact that matters: before opening day the refresh writes nothing
     and there is no slate, and the classifier has already verified that claim
     against the locked opening day.
+
+    Opening day itself is the one date on which nothing was written and a
+    real slate exists anyway, so it does not arrive as REFRESHED and cannot:
+    there is no prior current-season game to ingest. It arrives as its own
+    verified outcome, and that outcome is accepted here only against the
+    evidence behind it -- see :func:`_opening_day_readiness`.
+
+    Neither answer is the whole gate. Both of them are about one date, and
+    which date is settled by :func:`readiness_for_this_slate`.
     """
     if refresh_status is None:
         return {
@@ -396,6 +510,9 @@ def slate_readiness(refresh_status: Path | None) -> dict[str, Any]:
             "refresh_outcome": outcome,
         }
 
+    if outcome == REFRESH_OUTCOME_OPENING_DAY_NO_REFRESH:
+        return _opening_day_readiness(status, outcome=outcome)
+
     return {
         "ready": False,
         "reason": (
@@ -404,6 +521,56 @@ def slate_readiness(refresh_status: Path | None) -> dict[str, Any]:
         ),
         "refresh_outcome": outcome,
     }
+
+
+def readiness_for_this_slate(
+    readiness: dict[str, Any],
+    *,
+    refresh_status: Path | None,
+    slate_date: str,
+) -> dict[str, Any]:
+    """Readiness, narrowed to the slate this run was actually asked to serve.
+
+    :func:`slate_readiness` answers whether a real slate exists. It cannot
+    answer whether that slate is *this* one: a refresh status file is a
+    statement about one date, and nothing in the file says which date the run
+    holding it was told to serve.
+
+    The lifecycle does compute the slate date once and hand the same value to
+    the classifier and to this step, so today the two agree by construction.
+    That is an invariant of one workflow rather than a property of this
+    contract, and it is the only thing between a status file that is stale,
+    reused across days, or passed by hand to a manual run, and a slate priced
+    on another day's readiness. So the comparison is made here, against the
+    file, on every run -- including the ordinary refreshed case, which has the
+    same exposure and had the same silence.
+
+    Only the two outcomes a slate can be served under are narrowed. An outcome
+    that already refuses is returned exactly as it arrived: nothing here can
+    turn a refusal into a servable slate.
+    """
+    outcome = readiness.get("refresh_outcome")
+
+    if refresh_status is None or outcome not in REFRESH_OUTCOMES_THAT_SERVE:
+        return readiness
+
+    recorded = _load_json(Path(refresh_status)).get("slate_date")
+
+    if not recorded:
+        raise ServingRefused(
+            f"the refresh reported {outcome} without recording which slate "
+            "date it is about, so whether that readiness describes the slate "
+            "being served cannot be established"
+        )
+
+    if recorded != slate_date:
+        raise ServingRefused(
+            f"the refresh reported {outcome} for slate date {recorded}, but "
+            f"this run is serving {slate_date}, so that readiness does not "
+            "describe this slate and is refused"
+        )
+
+    return readiness
 
 
 def input_state_fingerprint(data_root: Path) -> str | None:
@@ -738,6 +905,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     bundle_root = Path(args.frozen_bundle_root).resolve()
 
     readiness = slate_readiness(args.refresh_status)
+
+    readiness = readiness_for_this_slate(
+        readiness,
+        refresh_status=args.refresh_status,
+        slate_date=args.slate_date,
+    )
 
     registry = FitRegistry(
         root=resolve_registry_root(

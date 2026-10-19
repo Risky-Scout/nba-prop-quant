@@ -1608,7 +1608,7 @@ def test_no_model_prediction_or_pricing_module_changed():
     A publisher that needed the serving step adjusted would be a publisher
     that was not reading the already-approved artifact.
 
-    Two of the twelve are declared additive-only, and for those the claim is
+    Three of the twelve are declared additive-only, and for those the claim is
     checked as the containment guard states it rather than as byte-equality --
     see ``tests/serving_additive_pin.py``. Nothing is conceded: a file that
     carries a column forward passes, and a file whose pricing moved does not.

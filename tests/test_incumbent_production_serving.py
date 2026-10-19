@@ -261,7 +261,15 @@ def refreshed_data_root(tmp_path: Path) -> Path:
     return root
 
 
-def refresh_status(tmp_path: Path, outcome: str) -> Path:
+#: The slate ``arguments`` below serves by default. The classifier always
+#: records which date its readiness is about, and serving refuses a status
+#: file that does not, so a fixture status file has to carry it too.
+DEFAULT_SLATE_DATE = "2026-11-15"
+
+
+def refresh_status(
+    tmp_path: Path, outcome: str, slate_date: str = DEFAULT_SLATE_DATE
+) -> Path:
     path = tmp_path / f"refresh_{outcome}.json"
 
     path.write_text(
@@ -269,6 +277,7 @@ def refresh_status(tmp_path: Path, outcome: str) -> Path:
             {
                 "outcome": outcome,
                 "run_adaptive_fit": outcome == "REFRESHED",
+                "slate_date": slate_date,
                 "writes_performed": outcome == "REFRESHED",
             }
         ),
@@ -288,7 +297,7 @@ def arguments(**overrides):
         "receipt_path": None,
         "refresh_status": None,
         "registry_root": None,
-        "slate_date": "2026-11-15",
+        "slate_date": DEFAULT_SLATE_DATE,
         "summary_path": None,
     }
 
@@ -649,6 +658,34 @@ def test_a_no_slate_day_is_not_asked_for_artifact_provenance(
 # ----------------------------------------------------------------------
 
 
+#: The locked season-2026 opening day, which is the one date the refresh
+#: writes nothing on and a real slate exists anyway.
+OPENING_DAY = "2026-10-20"
+
+
+def opening_day_refresh_status(tmp_path: Path, **overrides) -> Path:
+    """A verified opening-day decision, exactly as the classifier writes it."""
+    decision = {
+        "lifecycle_status": "success",
+        "opening_day": OPENING_DAY,
+        "outcome": "OPENING_DAY_NO_REFRESH",
+        "refresh_exit_code": 11,
+        "run_adaptive_fit": False,
+        "season": 2026,
+        "slate_date": OPENING_DAY,
+        "verified": True,
+        "writes_performed": False,
+    }
+
+    decision.update(overrides)
+
+    path = tmp_path / "refresh_opening_day.json"
+
+    path.write_text(json.dumps(decision, sort_keys=True), encoding="utf-8")
+
+    return path
+
+
 def test_readiness_comes_from_the_refresh_outcome(tmp_path: Path):
     assert serving.slate_readiness(refresh_status(tmp_path, "REFRESHED"))[
         "ready"
@@ -657,6 +694,158 @@ def test_readiness_comes_from_the_refresh_outcome(tmp_path: Path):
     assert not serving.slate_readiness(
         refresh_status(tmp_path, "PRESEASON_BLOCK")
     )["ready"]
+
+
+def test_a_verified_opening_day_is_ready_although_nothing_was_refreshed(
+    tmp_path: Path,
+):
+    """Opening day: no current-season game to ingest, and a real slate."""
+    readiness = serving.slate_readiness(opening_day_refresh_status(tmp_path))
+
+    assert readiness["ready"] is True
+    assert readiness["refresh_outcome"] == (
+        serving.REFRESH_OUTCOME_OPENING_DAY_NO_REFRESH
+    )
+
+
+def test_the_incumbent_serves_the_opening_day_slate(
+    tmp_path: Path, project: Path, registry: FitRegistry
+):
+    """The fix, end to end: the season's first slate is priced.
+
+    Before it, the refresh reported opening day with the same code as a day
+    whose prerequisite games had not settled, the classifier failed closed,
+    and this step never ran.
+
+    ``refreshed_data_root`` because the receipt requires the rolling state's
+    fingerprint and opening day writes nothing: the fingerprint is the
+    durable state root's, left by the historical ingest, not that morning's.
+    A state root that has never been fingerprinted is still a refusal here,
+    which is the pre-existing provenance rule and is not widened.
+    """
+    model_dir = serving_tree(project, artifacts={"marginals.joblib": b"frozen"})
+
+    receipt = serving.run(
+        arguments(
+            data_root=refreshed_data_root(tmp_path),
+            model_dir=model_dir,
+            frozen_bundle_root=model_dir.parent,
+            project_root=project,
+            refresh_status=opening_day_refresh_status(tmp_path),
+            registry_root=registry.root,
+            slate_date=OPENING_DAY,
+        )
+    )
+
+    assert receipt["outcome"] == serving.OUTCOME_SERVED
+    assert receipt["slate_readiness"]["ready"] is True
+    assert receipt["priced_market_artifact"] is not None
+    assert serving.missing_provenance(receipt) == []
+
+
+@pytest.mark.parametrize("requested", ["2026-10-21", "2026-11-15", "2026-10-19"])
+def test_a_manual_run_with_a_mismatched_status_file_is_refused(
+    tmp_path: Path, project: Path, registry: FitRegistry, requested: str
+):
+    """F. The whole entry point, not just the readiness function.
+
+    A hand-run serving invocation is the case the workflow invariant says
+    nothing about: the operator supplies both the slate date and the status
+    file, and nothing makes them agree. The run refuses before resolving an
+    incumbent or invoking either serving script.
+    """
+    model_dir = serving_tree(project, artifacts={"marginals.joblib": b"frozen"})
+
+    with pytest.raises(serving.ServingRefused) as caught:
+        serving.run(
+            arguments(
+                data_root=refreshed_data_root(tmp_path),
+                model_dir=model_dir,
+                frozen_bundle_root=model_dir.parent,
+                project_root=project,
+                refresh_status=opening_day_refresh_status(tmp_path),
+                registry_root=registry.root,
+                slate_date=requested,
+            )
+        )
+
+    assert "does not describe this slate" in str(caught.value)
+
+
+def test_a_manual_run_on_a_refreshed_day_is_cross_checked_too(
+    tmp_path: Path, project: Path, registry: FitRegistry
+):
+    """The ordinary case had the same exposure and the same silence."""
+    model_dir = serving_tree(project, artifacts={"marginals.joblib": b"frozen"})
+
+    status = tmp_path / "refresh_stale.json"
+
+    status.write_text(
+        json.dumps({"outcome": "REFRESHED", "slate_date": "2026-11-15"}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(serving.ServingRefused):
+        serving.run(
+            arguments(
+                data_root=refreshed_data_root(tmp_path),
+                model_dir=model_dir,
+                frozen_bundle_root=model_dir.parent,
+                project_root=project,
+                refresh_status=status,
+                registry_root=registry.root,
+                slate_date="2026-11-16",
+            )
+        )
+
+
+def test_an_opening_day_claim_that_contradicts_itself_is_refused(
+    tmp_path: Path,
+):
+    """The outcome names the date it is about, and must be about that date."""
+    with pytest.raises(serving.ServingRefused):
+        serving.slate_readiness(
+            opening_day_refresh_status(tmp_path, slate_date="2026-10-21")
+        )
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"verified": False},
+        {"writes_performed": True},
+        {"opening_day": ""},
+        {"season": "2026"},
+        {"slate_date": ""},
+    ],
+)
+def test_an_opening_day_outcome_without_its_evidence_is_refused(
+    tmp_path: Path, overrides: dict
+):
+    """The outcome name is not the evidence, so the name alone serves nothing.
+
+    Each of these is a status file that reached the right outcome without the
+    derivation behind it. On any of them "nothing was refreshed" is
+    indistinguishable from the preseason no-op this step is right to decline.
+    """
+    with pytest.raises(serving.ServingRefused):
+        serving.slate_readiness(opening_day_refresh_status(tmp_path, **overrides))
+
+
+def test_an_opening_day_the_schedule_never_had_is_refused(tmp_path: Path):
+    """Self-consistency is not enough: the locked table decides.
+
+    A status file can agree with itself about a date that is not opening day.
+    Serving re-derives opening day from the readiness preflight's own table
+    rather than taking the classifier's word for it, because serving is the
+    step that would act on the claim.
+    """
+    with pytest.raises(serving.ServingRefused):
+        serving.slate_readiness(
+            opening_day_refresh_status(
+                tmp_path, opening_day="2026-11-14", slate_date="2026-11-14"
+            )
+        )
 
 
 def test_a_missing_refresh_status_is_a_refusal_not_an_assumption(
