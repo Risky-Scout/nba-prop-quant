@@ -179,34 +179,53 @@ DECLARED_SERVING_PLUMBING_NAMES: tuple[str, ...] = (
 #: So it is declarable, on the same terms as the entry points and the slate
 #: builder. Every line production has must still be there, so no existing
 #: refusal, authority check or provenance requirement can be changed or
-#: dropped. :data:`SERVING_ORCHESTRATOR_EXEMPT_FUNCTIONS` names the only
-#: function whose body may differ, and the branch-safety tests compare every
-#: other function's syntax tree against production.
+#: dropped. :data:`SERVING_ORCHESTRATOR_EXEMPT_FUNCTIONS` names the only two
+#: functions whose bodies may differ, the branch-safety tests compare every
+#: other function's syntax tree against production, and what those two may
+#: have gained is held to :data:`DECLARED_SERVING_READINESS_NAMES`.
 ADDITIVE_ONLY_SERVING_ORCHESTRATORS: tuple[str, ...] = (
     "ops/run_incumbent_production_serving.py",
 )
 
-#: The only function in a declared serving orchestrator whose body may differ
-#: from production. Readiness is the one decision this script makes on its own
-#: account; resolving the incumbent from the registry's promotion state,
-#: verifying the frozen bundle, invoking the two serving scripts, building the
-#: receipt and refusing it for missing provenance are all outside it and are
-#: pinned syntax-tree-identical.
-SERVING_ORCHESTRATOR_EXEMPT_FUNCTIONS: tuple[str, ...] = ("slate_readiness",)
+#: The only functions in a declared serving orchestrator whose bodies may
+#: differ from production. Readiness is the decision this script makes on its
+#: own account, and ``run`` is the one place the run's own arguments exist, so
+#: a readiness check that needs to compare the status file against the date
+#: this run was asked to serve can be reached from nowhere else. Resolving the
+#: incumbent from the registry's promotion state, verifying the frozen bundle,
+#: invoking the two serving scripts, building the receipt and refusing it for
+#: missing provenance are all outside both and are pinned syntax-tree-identical.
+#:
+#: ``run`` is the narrowest way to reach the arguments, not a general
+#: permission: what it may have gained is held to the same statement-level
+#: check as the other exemptions, so it can only have acquired a statement
+#: naming something in :data:`DECLARED_SERVING_READINESS_NAMES`.
+SERVING_ORCHESTRATOR_EXEMPT_FUNCTIONS: tuple[str, ...] = (
+    "slate_readiness",
+    "run",
+)
 
-#: What a statement added to that readiness decision is allowed to be about.
+#: What a statement added to the readiness decision is allowed to be about.
 #:
 #: The rule :data:`DECLARED_SERVING_PLUMBING_NAMES` states, for the one
 #: exemption whose subject is a decision rather than a quantity. Readiness
 #: decides whether a real slate exists, so the way this exemption would widen
 #: is by coming to accept a refresh outcome nobody reviewed -- and the defence
 #: that keeps working is that each added statement has to name something here.
-#: Both names are the opening-day acceptance: the outcome constant, and the
+#:
+#: The first two are the opening-day acceptance: the outcome constant, and the
 #: function that refuses it unless the classifier's recorded derivation and an
-#: independent re-derivation of opening day both hold.
+#: independent re-derivation of opening day both hold. The third narrows
+#: either acceptance to the slate actually being served, by comparing the date
+#: the status file records against the date the run was given. The lifecycle
+#: derives both from one value today, so that comparison cannot fail in the
+#: scheduled path -- which is the point: it is there for the paths that are
+#: not it, a stale or reused status file and a manual invocation, and for the
+#: day a workflow change makes the invariant stop holding silently.
 DECLARED_SERVING_READINESS_NAMES: tuple[str, ...] = (
     "REFRESH_OUTCOME_OPENING_DAY_NO_REFRESH",
     "_opening_day_readiness",
+    "readiness_for_this_slate",
 )
 
 #: The two registries under ``models/`` that record what serving runs, rather
@@ -484,11 +503,15 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
         ),
         "ops/run_incumbent_production_serving.py": (
             "readiness accepts the opening-day outcome, declared "
-            "additive-only with ``slate_readiness`` as the one exempt "
-            "function. It is accepted on the recorded derivation plus an "
-            "independent re-derivation here, never on the outcome's name, so "
-            "'nothing was refreshed' still refuses on every day that is not "
-            "the verified opening day. No incumbent resolution, bundle "
+            "additive-only with ``slate_readiness`` and ``run`` as the two "
+            "exempt functions. It is accepted on the recorded derivation plus "
+            "an independent re-derivation here, never on the outcome's name, "
+            "so 'nothing was refreshed' still refuses on every day that is "
+            "not the verified opening day -- and either acceptance is then "
+            "narrowed to the slate actually being served, by comparing the "
+            "date the status file records against the date this run was "
+            "given. ``run`` is exempt because that is the only place the "
+            "run's own arguments exist. No incumbent resolution, bundle "
             "verification, serving invocation or provenance rule changes"
         ),
         "ops/summarise_production_run.py": (

@@ -386,6 +386,132 @@ def test_serving_re_derives_the_opening_day_rather_than_trusting_it(
 
 
 # ----------------------------------------------------------------------
+# E2. readiness is about one date, and it has to be this one
+# ----------------------------------------------------------------------
+#
+# The serving run knows which slate it was told to price; the status file
+# records which slate its readiness is about. In the scheduled path those
+# agree by construction, because the refresh step computes the date once and
+# hands the same value to the classifier. That is an invariant of one
+# workflow, not a property of this contract, so serving compares the two
+# itself. What it defends against is everything that is not the scheduled
+# path: a stale status file, one reused across days, a manual invocation
+# given the wrong one, and a future workflow change that breaks the invariant
+# without breaking anything visibly.
+
+
+def narrow(decision: dict, tmp_path: Path, requested: str) -> dict:
+    """Readiness for ``requested``, decided from ``decision`` on disk."""
+    status = refresh_status(tmp_path, decision)
+
+    return serving.readiness_for_this_slate(
+        serving.slate_readiness(status),
+        refresh_status=status,
+        slate_date=requested,
+    )
+
+
+@pytest.mark.parametrize(
+    ("status_slate", "requested", "code"),
+    [
+        # A. the run serves opening day; the status file is about the day after
+        (ORDINARY_IN_SEASON_DAY, OPENING_DAY, classifier.EXIT_OK),
+        ("2026-10-21", OPENING_DAY, classifier.EXIT_OK),
+        # B. the run serves the day after; the status file is about opening day
+        (OPENING_DAY, "2026-10-21", None),
+        # E. internally valid, and from another day
+        (ORDINARY_IN_SEASON_DAY, "2026-11-16", classifier.EXIT_OK),
+        ("2026-11-16", ORDINARY_IN_SEASON_DAY, classifier.EXIT_OK),
+    ],
+)
+def test_a_status_file_about_another_date_is_refused(
+    tmp_path: Path, status_slate: str, requested: str, code: int | None
+):
+    """A and B and E: readiness for one date does not license another."""
+    decision = classify(
+        classifier.load_opening_day_exit_code() if code is None else code,
+        status_slate,
+    )
+
+    # The decision itself is sound. Only the date it is about is wrong.
+    assert decision["lifecycle_status"] == "success"
+    assert decision["slate_date"] == status_slate
+
+    with pytest.raises(serving.ServingRefused) as caught:
+        narrow(decision, tmp_path, requested)
+
+    assert "does not describe this slate" in str(caught.value)
+
+
+def test_an_opening_day_status_copied_to_a_later_date_is_refused(
+    tmp_path: Path,
+):
+    """C. The opening-day outcome is the one most worth copying forward.
+
+    It is the only verified outcome under which nothing was refreshed and a
+    slate is served, so a status file carrying it is exactly the artifact a
+    cross-day reuse would reach for. The claim verifies -- it is a real
+    opening-day decision -- and the date it is about is not the date being
+    served.
+    """
+    decision = classify(classifier.load_opening_day_exit_code(), OPENING_DAY)
+
+    assert decision["outcome"] == classifier.OUTCOME_OPENING_DAY_NO_REFRESH
+    assert decision["verified"] is True
+
+    for requested in ("2026-10-21", ORDINARY_IN_SEASON_DAY, "2027-10-20"):
+        with pytest.raises(serving.ServingRefused):
+            narrow(decision, tmp_path, requested)
+
+
+@pytest.mark.parametrize("outcome_code", [classifier.EXIT_OK, None])
+def test_a_status_file_with_no_slate_date_is_refused(
+    tmp_path: Path, outcome_code: int | None
+):
+    """D. A readiness that does not say which date it is about settles nothing.
+
+    Both servable outcomes, because the refreshed case has the same exposure.
+    """
+    code = (
+        classifier.load_opening_day_exit_code()
+        if outcome_code is None
+        else outcome_code
+    )
+
+    decision = classify(code, OPENING_DAY)
+
+    del decision["slate_date"]
+
+    with pytest.raises(serving.ServingRefused):
+        narrow(decision, tmp_path, OPENING_DAY)
+
+
+def test_the_matching_date_is_the_only_one_that_serves(tmp_path: Path):
+    """The check is an equality, so the correct date still passes."""
+    for code, slate in (
+        (classifier.EXIT_OK, ORDINARY_IN_SEASON_DAY),
+        (classifier.load_opening_day_exit_code(), OPENING_DAY),
+    ):
+        decision = classify(code, slate)
+
+        assert narrow(decision, tmp_path, slate)["ready"] is True
+
+
+def test_nothing_in_the_date_check_can_turn_a_refusal_into_a_slate(
+    tmp_path: Path,
+):
+    """A refused outcome is returned as it arrived, whatever the dates say."""
+    for code, slate in (
+        (classifier.REFRESH_EXIT_PRESEASON_BLOCK, DAY_BEFORE_OPENING),
+        (10, OPENING_DAY),
+    ):
+        decision = classify(code, slate)
+
+        for requested in (slate, OPENING_DAY, ORDINARY_IN_SEASON_DAY):
+            assert narrow(decision, tmp_path, requested)["ready"] is False
+
+
+# ----------------------------------------------------------------------
 # F and G. containment
 # ----------------------------------------------------------------------
 
@@ -525,15 +651,15 @@ def test_the_lifecycle_workflow_is_byte_identical_to_production():
 
 
 def test_the_classifier_and_the_serving_step_are_given_the_same_slate_date():
-    """Why serving reads the slate date off the status file and not its own.
+    """The invariant serving's date cross-check deliberately does not rely on.
 
-    The opening-day outcome is about a date, and serving re-derives that date
-    from the preflight's locked table rather than trusting the label. What it
-    does not do is cross-check the status file's date against the date it was
-    itself asked to serve, because there is only one date: the refresh step
-    computes it once, exports it, and hands the same value to the classifier.
-    That is pinned here rather than assumed, since it is the invariant that
-    makes the status file's date the served date.
+    The refresh step computes the slate date once, exports it, and hands the
+    same value to the classifier, so in the scheduled path the status file's
+    date and the served date agree by construction and
+    ``readiness_for_this_slate`` can never fire. That is the point of pinning
+    it here: if a workflow change breaks this, the change is visible in a
+    failing test rather than silent, and serving refuses either way because it
+    compares the two itself rather than trusting this.
     """
     import yaml
 

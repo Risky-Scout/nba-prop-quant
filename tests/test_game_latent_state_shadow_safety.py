@@ -347,12 +347,13 @@ def test_only_the_serving_orchestrator_is_declarable_among_ops_entry_points():
 
     ``ops/`` holds the whole scheduled lifecycle, so "declarable under ops/"
     would be a far wider permission than the two carve-outs above. It is one
-    file, and the one function in it whose body may differ is the readiness
-    decision -- not the one that resolves which incumbent serves, and not the
-    one that invokes the serving scripts.
+    file, and the only functions in it whose bodies may differ are the
+    readiness decision and the entry point whose arguments a readiness check
+    has to be able to see -- not the one that resolves which incumbent serves,
+    and not the one that invokes the serving scripts.
     """
     assert len(ADDITIVE_ONLY_SERVING_ORCHESTRATORS) == 1
-    assert SERVING_ORCHESTRATOR_EXEMPT_FUNCTIONS == ("slate_readiness",)
+    assert SERVING_ORCHESTRATOR_EXEMPT_FUNCTIONS == ("slate_readiness", "run")
 
     for relative in ADDITIVE_ONLY_SERVING_ORCHESTRATORS:
         assert relative.startswith("ops/")
@@ -369,7 +370,13 @@ def test_only_the_serving_orchestrator_is_declarable_among_ops_entry_points():
         node.name for node in source.body if isinstance(node, ast.FunctionDef)
     }
 
-    for name in ("resolve_incumbent", "serve", "build_receipt", "run"):
+    for name in (
+        "resolve_incumbent",
+        "serve",
+        "build_receipt",
+        "missing_provenance",
+        "input_state_fingerprint",
+    ):
         assert name in defined, name
         assert name not in SERVING_ORCHESTRATOR_EXEMPT_FUNCTIONS
 

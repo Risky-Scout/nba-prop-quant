@@ -166,6 +166,13 @@ REFRESH_OUTCOME_REFRESHED = "REFRESHED"
 #: no-op this module is right to decline.
 REFRESH_OUTCOME_OPENING_DAY_NO_REFRESH = "OPENING_DAY_NO_REFRESH"
 
+#: The two refresh outcomes a slate can be served under. Both of them are
+#: statements about one specific date, which is why both are cross-checked
+#: against the date this run was actually asked to serve.
+REFRESH_OUTCOMES_THAT_SERVE: frozenset[str] = frozenset(
+    {REFRESH_OUTCOME_REFRESHED, REFRESH_OUTCOME_OPENING_DAY_NO_REFRESH}
+)
+
 MODEL_AUTHORITY = "incumbent"
 
 AUTHORITY_PROMOTED_FIT = "promoted_fit"
@@ -470,6 +477,9 @@ def slate_readiness(refresh_status: Path | None) -> dict[str, Any]:
     there is no prior current-season game to ingest. It arrives as its own
     verified outcome, and that outcome is accepted here only against the
     evidence behind it -- see :func:`_opening_day_readiness`.
+
+    Neither answer is the whole gate. Both of them are about one date, and
+    which date is settled by :func:`readiness_for_this_slate`.
     """
     if refresh_status is None:
         return {
@@ -511,6 +521,56 @@ def slate_readiness(refresh_status: Path | None) -> dict[str, Any]:
         ),
         "refresh_outcome": outcome,
     }
+
+
+def readiness_for_this_slate(
+    readiness: dict[str, Any],
+    *,
+    refresh_status: Path | None,
+    slate_date: str,
+) -> dict[str, Any]:
+    """Readiness, narrowed to the slate this run was actually asked to serve.
+
+    :func:`slate_readiness` answers whether a real slate exists. It cannot
+    answer whether that slate is *this* one: a refresh status file is a
+    statement about one date, and nothing in the file says which date the run
+    holding it was told to serve.
+
+    The lifecycle does compute the slate date once and hand the same value to
+    the classifier and to this step, so today the two agree by construction.
+    That is an invariant of one workflow rather than a property of this
+    contract, and it is the only thing between a status file that is stale,
+    reused across days, or passed by hand to a manual run, and a slate priced
+    on another day's readiness. So the comparison is made here, against the
+    file, on every run -- including the ordinary refreshed case, which has the
+    same exposure and had the same silence.
+
+    Only the two outcomes a slate can be served under are narrowed. An outcome
+    that already refuses is returned exactly as it arrived: nothing here can
+    turn a refusal into a servable slate.
+    """
+    outcome = readiness.get("refresh_outcome")
+
+    if refresh_status is None or outcome not in REFRESH_OUTCOMES_THAT_SERVE:
+        return readiness
+
+    recorded = _load_json(Path(refresh_status)).get("slate_date")
+
+    if not recorded:
+        raise ServingRefused(
+            f"the refresh reported {outcome} without recording which slate "
+            "date it is about, so whether that readiness describes the slate "
+            "being served cannot be established"
+        )
+
+    if recorded != slate_date:
+        raise ServingRefused(
+            f"the refresh reported {outcome} for slate date {recorded}, but "
+            f"this run is serving {slate_date}, so that readiness does not "
+            "describe this slate and is refused"
+        )
+
+    return readiness
 
 
 def input_state_fingerprint(data_root: Path) -> str | None:
@@ -845,6 +905,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     bundle_root = Path(args.frozen_bundle_root).resolve()
 
     readiness = slate_readiness(args.refresh_status)
+
+    readiness = readiness_for_this_slate(
+        readiness,
+        refresh_status=args.refresh_status,
+        slate_date=args.slate_date,
+    )
 
     registry = FitRegistry(
         root=resolve_registry_root(

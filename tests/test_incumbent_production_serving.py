@@ -261,7 +261,15 @@ def refreshed_data_root(tmp_path: Path) -> Path:
     return root
 
 
-def refresh_status(tmp_path: Path, outcome: str) -> Path:
+#: The slate ``arguments`` below serves by default. The classifier always
+#: records which date its readiness is about, and serving refuses a status
+#: file that does not, so a fixture status file has to carry it too.
+DEFAULT_SLATE_DATE = "2026-11-15"
+
+
+def refresh_status(
+    tmp_path: Path, outcome: str, slate_date: str = DEFAULT_SLATE_DATE
+) -> Path:
     path = tmp_path / f"refresh_{outcome}.json"
 
     path.write_text(
@@ -269,6 +277,7 @@ def refresh_status(tmp_path: Path, outcome: str) -> Path:
             {
                 "outcome": outcome,
                 "run_adaptive_fit": outcome == "REFRESHED",
+                "slate_date": slate_date,
                 "writes_performed": outcome == "REFRESHED",
             }
         ),
@@ -288,7 +297,7 @@ def arguments(**overrides):
         "receipt_path": None,
         "refresh_status": None,
         "registry_root": None,
-        "slate_date": "2026-11-15",
+        "slate_date": DEFAULT_SLATE_DATE,
         "summary_path": None,
     }
 
@@ -732,6 +741,62 @@ def test_the_incumbent_serves_the_opening_day_slate(
     assert receipt["slate_readiness"]["ready"] is True
     assert receipt["priced_market_artifact"] is not None
     assert serving.missing_provenance(receipt) == []
+
+
+@pytest.mark.parametrize("requested", ["2026-10-21", "2026-11-15", "2026-10-19"])
+def test_a_manual_run_with_a_mismatched_status_file_is_refused(
+    tmp_path: Path, project: Path, registry: FitRegistry, requested: str
+):
+    """F. The whole entry point, not just the readiness function.
+
+    A hand-run serving invocation is the case the workflow invariant says
+    nothing about: the operator supplies both the slate date and the status
+    file, and nothing makes them agree. The run refuses before resolving an
+    incumbent or invoking either serving script.
+    """
+    model_dir = serving_tree(project, artifacts={"marginals.joblib": b"frozen"})
+
+    with pytest.raises(serving.ServingRefused) as caught:
+        serving.run(
+            arguments(
+                data_root=refreshed_data_root(tmp_path),
+                model_dir=model_dir,
+                frozen_bundle_root=model_dir.parent,
+                project_root=project,
+                refresh_status=opening_day_refresh_status(tmp_path),
+                registry_root=registry.root,
+                slate_date=requested,
+            )
+        )
+
+    assert "does not describe this slate" in str(caught.value)
+
+
+def test_a_manual_run_on_a_refreshed_day_is_cross_checked_too(
+    tmp_path: Path, project: Path, registry: FitRegistry
+):
+    """The ordinary case had the same exposure and the same silence."""
+    model_dir = serving_tree(project, artifacts={"marginals.joblib": b"frozen"})
+
+    status = tmp_path / "refresh_stale.json"
+
+    status.write_text(
+        json.dumps({"outcome": "REFRESHED", "slate_date": "2026-11-15"}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(serving.ServingRefused):
+        serving.run(
+            arguments(
+                data_root=refreshed_data_root(tmp_path),
+                model_dir=model_dir,
+                frozen_bundle_root=model_dir.parent,
+                project_root=project,
+                refresh_status=status,
+                registry_root=registry.root,
+                slate_date="2026-11-16",
+            )
+        )
 
 
 def test_an_opening_day_claim_that_contradicts_itself_is_refused(
