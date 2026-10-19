@@ -42,7 +42,7 @@ ADDITIVE_ONLY_SERVING_FILES: dict[str, tuple[str, ...]] = {
     "scripts/10_predict_slate.py": ("parse_args", "main"),
     "scripts/15_price_markets.py": ("parse_args", "main"),
     "src/nba_prop_quant/slate.py": ("build_upcoming_slate_features",),
-    "ops/run_incumbent_production_serving.py": ("slate_readiness",),
+    "ops/run_incumbent_production_serving.py": ("slate_readiness", "run"),
 }
 
 
