@@ -139,9 +139,7 @@ def test_day_before_opening_is_a_preseason_no_op(tmp_path: Path):
     assert classifier.exit_code_for(decision) == 0
 
     # The lifecycle continues, but there is nothing to serve.
-    readiness = serving.slate_readiness(
-        refresh_status(tmp_path, decision), slate_date=DAY_BEFORE_OPENING
-    )
+    readiness = serving.slate_readiness(refresh_status(tmp_path, decision))
 
     assert readiness["ready"] is False
     assert readiness["refresh_outcome"] == (
@@ -194,9 +192,7 @@ def test_opening_day_serving_readiness_is_true(tmp_path: Path):
         classifier.load_opening_day_exit_code(), OPENING_DAY
     )
 
-    readiness = serving.slate_readiness(
-        refresh_status(tmp_path, decision), slate_date=OPENING_DAY
-    )
+    readiness = serving.slate_readiness(refresh_status(tmp_path, decision))
 
     assert readiness["ready"] is True
     assert readiness["refresh_outcome"] == (
@@ -243,10 +239,7 @@ def test_ordinary_in_season_day_still_refreshes_and_serves(tmp_path: Path):
     assert decision["writes_performed"] is True
     assert classifier.exit_code_for(decision) == 0
 
-    readiness = serving.slate_readiness(
-        refresh_status(tmp_path, decision),
-        slate_date=ORDINARY_IN_SEASON_DAY,
-    )
+    readiness = serving.slate_readiness(refresh_status(tmp_path, decision))
 
     assert readiness["ready"] is True
     assert readiness["refresh_outcome"] == classifier.OUTCOME_REFRESHED
@@ -279,9 +272,7 @@ def test_every_other_nonzero_refresh_code_still_fails_closed(code: int):
 def test_a_failed_refresh_is_not_served(tmp_path: Path):
     decision = classify(10, OPENING_DAY)
 
-    readiness = serving.slate_readiness(
-        refresh_status(tmp_path, decision), slate_date=OPENING_DAY
-    )
+    readiness = serving.slate_readiness(refresh_status(tmp_path, decision))
 
     assert readiness["ready"] is False
 
@@ -338,8 +329,7 @@ def test_serving_refuses_an_opening_day_claim_with_no_evidence(
             refresh_status(
                 tmp_path,
                 {"outcome": classifier.OUTCOME_OPENING_DAY_NO_REFRESH},
-            ),
-            slate_date=OPENING_DAY,
+            )
         )
 
     assert "without the evidence" in str(caught.value)
@@ -358,9 +348,7 @@ def test_serving_refuses_an_opening_day_claim_missing_one_field(
     del decision[missing]
 
     with pytest.raises(serving.ServingRefused):
-        serving.slate_readiness(
-            refresh_status(tmp_path, decision), slate_date=OPENING_DAY
-        )
+        serving.slate_readiness(refresh_status(tmp_path, decision))
 
 
 def test_serving_refuses_a_self_contradictory_opening_day_claim(
@@ -373,29 +361,9 @@ def test_serving_refuses_a_self_contradictory_opening_day_claim(
     decision["slate_date"] = ORDINARY_IN_SEASON_DAY
 
     with pytest.raises(serving.ServingRefused) as caught:
-        serving.slate_readiness(
-            refresh_status(tmp_path, decision),
-            slate_date=ORDINARY_IN_SEASON_DAY,
-        )
+        serving.slate_readiness(refresh_status(tmp_path, decision))
 
     assert "contradicts itself" in str(caught.value)
-
-
-def test_serving_refuses_an_opening_day_claim_about_another_slate(
-    tmp_path: Path,
-):
-    """A real opening-day decision does not license a different date."""
-    decision = classify(
-        classifier.load_opening_day_exit_code(), OPENING_DAY
-    )
-
-    with pytest.raises(serving.ServingRefused) as caught:
-        serving.slate_readiness(
-            refresh_status(tmp_path, decision),
-            slate_date=ORDINARY_IN_SEASON_DAY,
-        )
-
-    assert "does not describe this slate" in str(caught.value)
 
 
 def test_serving_re_derives_the_opening_day_rather_than_trusting_it(
@@ -412,10 +380,7 @@ def test_serving_re_derives_the_opening_day_rather_than_trusting_it(
     }
 
     with pytest.raises(serving.ServingRefused) as caught:
-        serving.slate_readiness(
-            refresh_status(tmp_path, forged),
-            slate_date=ORDINARY_IN_SEASON_DAY,
-        )
+        serving.slate_readiness(refresh_status(tmp_path, forged))
 
     assert "could not be re-derived" in str(caught.value)
 
@@ -557,6 +522,38 @@ def test_the_lifecycle_workflow_is_byte_identical_to_production():
     assert blob_text(base, relative) == LIFECYCLE_WORKFLOW.read_text(
         encoding="utf-8"
     )
+
+
+def test_the_classifier_and_the_serving_step_are_given_the_same_slate_date():
+    """Why serving reads the slate date off the status file and not its own.
+
+    The opening-day outcome is about a date, and serving re-derives that date
+    from the preflight's locked table rather than trusting the label. What it
+    does not do is cross-check the status file's date against the date it was
+    itself asked to serve, because there is only one date: the refresh step
+    computes it once, exports it, and hands the same value to the classifier.
+    That is pinned here rather than assumed, since it is the invariant that
+    makes the status file's date the served date.
+    """
+    import yaml
+
+    document = yaml.safe_load(LIFECYCLE_WORKFLOW.read_text(encoding="utf-8"))
+
+    steps = {
+        step["name"]: step.get("run") or ""
+        for step in document["jobs"]["lifecycle"]["steps"]
+    }
+
+    refresh = steps["Refresh the current-season rolling state"]
+
+    assert 'echo "slate=$SLATE" >> "$GITHUB_ENV"' in refresh
+    assert '--slate-date "$SLATE"' in refresh
+    assert "classify_refresh_outcome.py" in refresh
+
+    serve = steps["Serve the slate with the incumbent"]
+
+    assert '--slate-date "$slate"' in serve
+    assert '--refresh-status "$RUNNER_TEMP/run/refresh.json"' in serve
 
 
 def test_the_fix_changed_no_workflow_at_all():

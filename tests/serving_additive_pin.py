@@ -5,13 +5,15 @@ each stated it as byte-equality against the production ref over a list of
 numerical modules. That is the right claim and byte-equality was the right way
 to say it for as long as no approved change could reach those files.
 
-Two of them it can. ``scripts/15_price_markets.py`` and
-``src/nba_prop_quant/slate.py`` are declared additive-only in
+Three of them it can. ``scripts/15_price_markets.py``,
+``src/nba_prop_quant/slate.py`` and
+``ops/run_incumbent_production_serving.py`` are declared additive-only in
 ``nba_prop_quant.research.game_latent_state.safety``, because a
 serving-correctness or serving-plumbing fix has to have somewhere to go, and
 the repository already carries five such changes. Byte-equality reads those as
 "a price moved", which is exactly what they are not: it cannot tell a copied
-column apart from an edited coefficient.
+column apart from an edited coefficient, and it cannot tell "opening day has a
+slate" apart from an edited price.
 
 So the claim is stated here the way the containment guard states it, and it is
 strictly stronger than byte-equality over a list that had to shrink to stay
@@ -30,15 +32,17 @@ from pathlib import Path
 
 PROJECT = Path(__file__).resolve().parents[1]
 
-#: The two serving files an approved additive change may reach, each with the
-#: only function whose body may differ. Mirrors
-#: ``ADDITIVE_ONLY_SERVING_ENTRY_POINTS`` / ``ADDITIVE_ONLY_SERVING_SOURCES``
-#: and their exempt-function lists; the branch-safety suite is what enforces
-#: the mapping, and this is how the numerical claims read it.
+#: The serving files an approved additive change may reach, each with the only
+#: functions whose bodies may differ. Mirrors
+#: ``ADDITIVE_ONLY_SERVING_ENTRY_POINTS``, ``ADDITIVE_ONLY_SERVING_SOURCES``
+#: and ``ADDITIVE_ONLY_SERVING_ORCHESTRATORS`` and their exempt-function
+#: lists; the branch-safety suite is what enforces the mapping, and this is
+#: how the numerical claims read it.
 ADDITIVE_ONLY_SERVING_FILES: dict[str, tuple[str, ...]] = {
     "scripts/10_predict_slate.py": ("parse_args", "main"),
     "scripts/15_price_markets.py": ("parse_args", "main"),
     "src/nba_prop_quant/slate.py": ("build_upcoming_slate_features",),
+    "ops/run_incumbent_production_serving.py": ("slate_readiness",),
 }
 
 

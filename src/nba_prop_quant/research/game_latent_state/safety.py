@@ -156,6 +156,59 @@ DECLARED_SERVING_PLUMBING_NAMES: tuple[str, ...] = (
     "tip_off_utc",
 )
 
+#: The serving *orchestrator* a declaration may name, and only additively.
+#:
+#: ``ops/run_incumbent_production_serving.py`` is pinned byte-identical to
+#: production by the publisher suite's numerical claim, and for a good reason:
+#: the publisher consumes the artifact this script produces, so a publisher
+#: that needed this script adjusted would be a publisher reading something
+#: nobody had approved. That reason is about the publisher, and byte-equality
+#: was the right way to say it for as long as no approved change could reach
+#: the file.
+#:
+#: One can. This script is where "does a real slate exist tonight" is decided,
+#: and that question had exactly one wrong answer in it: opening day. No
+#: current-season game has been played, so the refresh writes nothing and
+#: cannot report REFRESHED -- while tonight's games are real and the incumbent
+#: must price them. Readiness had to be able to say so, and byte-equality reads
+#: that as "a price moved", which is precisely what it is not: nothing here
+#: computes a projection or a price. The two scripts that do are declarable
+#: only under the carve-out above, and every model artifact and frozen config
+#: they read stays undeclarable.
+#:
+#: So it is declarable, on the same terms as the entry points and the slate
+#: builder. Every line production has must still be there, so no existing
+#: refusal, authority check or provenance requirement can be changed or
+#: dropped. :data:`SERVING_ORCHESTRATOR_EXEMPT_FUNCTIONS` names the only
+#: function whose body may differ, and the branch-safety tests compare every
+#: other function's syntax tree against production.
+ADDITIVE_ONLY_SERVING_ORCHESTRATORS: tuple[str, ...] = (
+    "ops/run_incumbent_production_serving.py",
+)
+
+#: The only function in a declared serving orchestrator whose body may differ
+#: from production. Readiness is the one decision this script makes on its own
+#: account; resolving the incumbent from the registry's promotion state,
+#: verifying the frozen bundle, invoking the two serving scripts, building the
+#: receipt and refusing it for missing provenance are all outside it and are
+#: pinned syntax-tree-identical.
+SERVING_ORCHESTRATOR_EXEMPT_FUNCTIONS: tuple[str, ...] = ("slate_readiness",)
+
+#: What a statement added to that readiness decision is allowed to be about.
+#:
+#: The rule :data:`DECLARED_SERVING_PLUMBING_NAMES` states, for the one
+#: exemption whose subject is a decision rather than a quantity. Readiness
+#: decides whether a real slate exists, so the way this exemption would widen
+#: is by coming to accept a refresh outcome nobody reviewed -- and the defence
+#: that keeps working is that each added statement has to name something here.
+#: Both names are the opening-day acceptance: the outcome constant, and the
+#: function that refuses it unless the classifier's recorded derivation and an
+#: independent re-derivation of opening day both hold.
+DECLARED_SERVING_READINESS_NAMES: tuple[str, ...] = (
+    "REFRESH_OUTCOME_OPENING_DAY_NO_REFRESH",
+    "_opening_day_readiness",
+)
+
 #: The two registries under ``models/`` that record what serving runs, rather
 #: than being what serving runs.
 #:
@@ -387,23 +440,67 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: stage that branch introduced, was recorded as owned when it landed, so
 #: touching any of them again requires declaring it again.
 #:
-#: This branch declares one path and widens nothing. It is the renderer, which
-#: is owned below, and what changes in it is one visible label: the header
-#: said the serving freeze's technical id and now says the name the product
-#: goes by, with the id itself moved into the collapsed provenance under a
-#: label that says what it is. The mapping is a map from technical id to
-#: public name read at render time and by nothing else, so every receipt,
-#: manifest, release and provenance record still carries the identifier
-#: exactly. No quantity is computed, read differently or written differently.
+#: The public-model-name branch's one entry was retired in turn when it
+#: landed, for the reason that entry itself gave: the renderer is owned below,
+#: so touching it again requires declaring it again.
+#:
+#: This branch declares six paths and widens the carve-outs by one file, named
+#: above. What it corrects is a contradiction between three steps of the
+#: lifecycle about one date. The readiness preflight reported opening day with
+#: the same exit code as a day whose prerequisite games have simply not
+#: settled yet; the classifier is right to read that code as a refresh
+#: failure, and opening day is not one. So the first slate of the season was
+#: the one slate the automation could not serve. Opening day now leaves the
+#: preflight under its own exit code, the classifier accepts that code only
+#: after re-deriving opening day from the preflight's own locked table, and
+#: serving accepts the resulting outcome only against the recorded derivation
+#: and its own independent re-derivation of it. Every other nonzero refresh
+#: code, the old one included, still fails closed exactly as before. Nothing
+#: fits, calibrates, prices or publishes differently: no threshold, feature,
+#: distribution or price is read or written anywhere in this change.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
-        "ops/wizardofodds_player_props_page.py": (
-            "the renderer shows the serving model's public product name in "
-            "the header instead of its freeze id, and shows the freeze id in "
-            "the collapsed provenance as the technical model ID. One visible "
-            "label: the identifier reaching every receipt, manifest and "
-            "release is unchanged, nothing is computed, and the page's own "
-            "script is untouched"
+        "ops/preflight_current_season_refresh.py": (
+            "opening day leaves the preflight under its own exit code instead "
+            "of sharing the one that means 'the games this refresh needs have "
+            "not settled yet'. It owns the locked opening-day table, so the "
+            "distinction belongs here; the branch that reaches it is "
+            "unchanged apart from the code and the banner it already printed, "
+            "and no other outcome, threshold or query moves"
+        ),
+        "ops/refresh_current_season_state.py": (
+            "the new code is propagated unchanged, which is all this wrapper "
+            "has ever done with a preflight readiness outcome. One frozen set "
+            "gains one member; the wrapper still parses no banner and still "
+            "decides nothing itself"
+        ),
+        "ops/classify_refresh_outcome.py": (
+            "the classifier gains a fourth answer: the opening-day code is "
+            "successful and continues, but only after it re-derives opening "
+            "day from the preflight's own locked table, which it imports "
+            "rather than restates. Unverifiable is a failure, as it already "
+            "is for the preseason code, and every other nonzero code reaches "
+            "the same fail-closed branch it reached before"
+        ),
+        "ops/run_incumbent_production_serving.py": (
+            "readiness accepts the opening-day outcome, declared "
+            "additive-only with ``slate_readiness`` as the one exempt "
+            "function. It is accepted on the recorded derivation plus an "
+            "independent re-derivation here, never on the outcome's name, so "
+            "'nothing was refreshed' still refuses on every day that is not "
+            "the verified opening day. No incumbent resolution, bundle "
+            "verification, serving invocation or provenance rule changes"
+        ),
+        "ops/summarise_production_run.py": (
+            "the run summary reads the opening-day outcome as a by-design "
+            "skip of the adaptive protocol rather than a failed stage, which "
+            "is what it already does for the preseason no-op. It reports and "
+            "still exits 0 either way"
+        ),
+        "docs/wizardofodds/PRODUCTION_AUTOMATION.md": (
+            "the refresh contract table goes from three answers to four, "
+            "with what each one means for serving. Documentation only: no "
+            "code reads it"
         ),
     }
 )

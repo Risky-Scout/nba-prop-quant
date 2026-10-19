@@ -73,10 +73,12 @@ module decides readiness instead of the YAML:
 
     NO_PRODUCTION_SLATE
         The refresh reported that nothing was written -- before opening day,
-        that is the preseason no-op. There is no slate to serve. Opening day
-        is the exception: nothing is written there either, because no
-        current-season game has been played, and the slate is real. It
-        arrives as its own verified outcome and is served.
+        that is the preseason no-op. There is no slate to serve.
+
+        Opening day is the one exception, and it is not this outcome.
+        Nothing is written there either, because no current-season game has
+        been played yet, and tonight's games are real. It arrives as its own
+        verified refresh outcome and is served.
 
     NO_GAMES_ON_SLATE
         A regular-season date with no games on it. The prediction script's own
@@ -385,16 +387,15 @@ def _opening_day_readiness(
     status: dict[str, Any],
     *,
     outcome: str,
-    slate_date: str | None,
 ) -> dict[str, Any]:
     """Whether an opening-day no-refresh claim is the verified one.
 
     The outcome name is not the evidence. The classifier reaches this outcome
     only after re-deriving, from the readiness preflight's own locked table,
-    that the slate date *is* opening day, and it records that derivation. So
-    this reads the derivation rather than the label: a status file naming the
-    outcome without the evidence behind it, or whose evidence contradicts the
-    slate actually being served, is a corrupt record of a decision nobody
+    that the slate date it was given *is* opening day, and it records that
+    derivation. So this reads the derivation rather than the label: a status
+    file naming the outcome without the evidence behind it, or whose own
+    evidence contradicts itself, is a corrupt record of a decision nobody
     made. That is the same class of problem as a missing status file, and it
     is refused in the same terms rather than quietly serving.
 
@@ -433,14 +434,6 @@ def _opening_day_readiness(
             "opening day, so the claim contradicts itself and is refused"
         )
 
-    if slate_date is not None and slate_date != evidence_opening_day:
-        raise ServingRefused(
-            f"the refresh reported {outcome} for opening day "
-            f"{evidence_opening_day}, but this run is serving {slate_date}, "
-            "so the opening-day outcome does not describe this slate and is "
-            "refused"
-        )
-
     try:
         verify_opening_day(
             season=evidence_season, slate_date=evidence_slate_date
@@ -464,17 +457,19 @@ def _opening_day_readiness(
     }
 
 
-def slate_readiness(
-    refresh_status: Path | None, *, slate_date: str | None = None
-) -> dict[str, Any]:
+def slate_readiness(refresh_status: Path | None) -> dict[str, Any]:
     """Whether a real production slate exists to serve.
 
     Decided from the refresh classifier's own status file. ``writes_performed``
-    is the fact that matters on most days: before opening day the refresh
-    writes nothing and there is no slate, and the classifier has already
-    verified that claim against the locked opening day. Opening day itself is
-    the one date on which nothing was written and a real slate exists anyway,
-    so it arrives as its own verified outcome rather than as REFRESHED.
+    is the fact that matters: before opening day the refresh writes nothing
+    and there is no slate, and the classifier has already verified that claim
+    against the locked opening day.
+
+    Opening day itself is the one date on which nothing was written and a
+    real slate exists anyway, so it does not arrive as REFRESHED and cannot:
+    there is no prior current-season game to ingest. It arrives as its own
+    verified outcome, and that outcome is accepted here only against the
+    evidence behind it -- see :func:`_opening_day_readiness`.
     """
     if refresh_status is None:
         return {
@@ -506,9 +501,7 @@ def slate_readiness(
         }
 
     if outcome == REFRESH_OUTCOME_OPENING_DAY_NO_REFRESH:
-        return _opening_day_readiness(
-            status, outcome=outcome, slate_date=slate_date
-        )
+        return _opening_day_readiness(status, outcome=outcome)
 
     return {
         "ready": False,
@@ -851,9 +844,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
     bundle_root = Path(args.frozen_bundle_root).resolve()
 
-    readiness = slate_readiness(
-        args.refresh_status, slate_date=args.slate_date
-    )
+    readiness = slate_readiness(args.refresh_status)
 
     registry = FitRegistry(
         root=resolve_registry_root(

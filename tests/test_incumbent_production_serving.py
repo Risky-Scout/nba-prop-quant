@@ -691,9 +691,7 @@ def test_a_verified_opening_day_is_ready_although_nothing_was_refreshed(
     tmp_path: Path,
 ):
     """Opening day: no current-season game to ingest, and a real slate."""
-    readiness = serving.slate_readiness(
-        opening_day_refresh_status(tmp_path), slate_date=OPENING_DAY
-    )
+    readiness = serving.slate_readiness(opening_day_refresh_status(tmp_path))
 
     assert readiness["ready"] is True
     assert readiness["refresh_outcome"] == (
@@ -736,22 +734,51 @@ def test_the_incumbent_serves_the_opening_day_slate(
     assert serving.missing_provenance(receipt) == []
 
 
-def test_an_opening_day_claim_about_another_slate_is_refused(
-    tmp_path: Path, project: Path, registry: FitRegistry
+def test_an_opening_day_claim_that_contradicts_itself_is_refused(
+    tmp_path: Path,
 ):
-    """The outcome describes one date; it does not license the next one."""
-    model_dir = serving_tree(project, artifacts={"marginals.joblib": b"frozen"})
-
+    """The outcome names the date it is about, and must be about that date."""
     with pytest.raises(serving.ServingRefused):
-        serving.run(
-            arguments(
-                data_root=refreshed_data_root(tmp_path),
-                model_dir=model_dir,
-                frozen_bundle_root=model_dir.parent,
-                project_root=project,
-                refresh_status=opening_day_refresh_status(tmp_path),
-                registry_root=registry.root,
-                slate_date="2026-10-21",
+        serving.slate_readiness(
+            opening_day_refresh_status(tmp_path, slate_date="2026-10-21")
+        )
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"verified": False},
+        {"writes_performed": True},
+        {"opening_day": ""},
+        {"season": "2026"},
+        {"slate_date": ""},
+    ],
+)
+def test_an_opening_day_outcome_without_its_evidence_is_refused(
+    tmp_path: Path, overrides: dict
+):
+    """The outcome name is not the evidence, so the name alone serves nothing.
+
+    Each of these is a status file that reached the right outcome without the
+    derivation behind it. On any of them "nothing was refreshed" is
+    indistinguishable from the preseason no-op this step is right to decline.
+    """
+    with pytest.raises(serving.ServingRefused):
+        serving.slate_readiness(opening_day_refresh_status(tmp_path, **overrides))
+
+
+def test_an_opening_day_the_schedule_never_had_is_refused(tmp_path: Path):
+    """Self-consistency is not enough: the locked table decides.
+
+    A status file can agree with itself about a date that is not opening day.
+    Serving re-derives opening day from the readiness preflight's own table
+    rather than taking the classifier's word for it, because serving is the
+    step that would act on the claim.
+    """
+    with pytest.raises(serving.ServingRefused):
+        serving.slate_readiness(
+            opening_day_refresh_status(
+                tmp_path, opening_day="2026-11-14", slate_date="2026-11-14"
             )
         )
 

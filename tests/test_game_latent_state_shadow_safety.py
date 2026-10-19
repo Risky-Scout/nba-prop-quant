@@ -31,13 +31,16 @@ from nba_prop_quant.research.game_latent_state.gates import (
 )
 from nba_prop_quant.research.game_latent_state.safety import (
     ADDITIVE_ONLY_SERVING_ENTRY_POINTS,
+    ADDITIVE_ONLY_SERVING_ORCHESTRATORS,
     ADDITIVE_ONLY_SERVING_SOURCES,
     ADDITIVE_ONLY_WORKFLOWS,
     DECLARABLE_SERVING_SOURCE_REGISTRIES,
     DECLARED_INTEGRATION_PATHS,
     DECLARED_SERVING_PLUMBING_NAMES,
+    DECLARED_SERVING_READINESS_NAMES,
     NUMERICAL_SURFACE_EXEMPT_FUNCTIONS,
     PRODUCTION_REF,
+    SERVING_ORCHESTRATOR_EXEMPT_FUNCTIONS,
     SERVING_SOURCE_EXEMPT_FUNCTIONS,
     PROTECTED_PRODUCTION_PREFIXES,
     PATH_DECLARATION_MODULE as DECLARATION_MODULE,
@@ -104,14 +107,21 @@ def assert_only_declared_plumbing_was_added(
     name: str,
     before: ast.FunctionDef,
     after: ast.FunctionDef,
+    declared: tuple[str, ...] = DECLARED_SERVING_PLUMBING_NAMES,
+    subject: str = "serving plumbing",
 ) -> None:
-    """Every statement an exempt function gained names declared plumbing.
+    """Every statement an exempt function gained names something declared.
 
-    Shared by the entry-point and serving-source pins so the two cannot drift
-    into different ideas of what an exemption permits. An exempt function is
-    permission for named plumbing, not an editable function: a statement that
-    mentions none of :data:`DECLARED_SERVING_PLUMBING_NAMES` fails here, so
-    widening what it may do means adding a name and having that reviewed.
+    Shared by the entry-point, serving-source and orchestrator pins so they
+    cannot drift into different ideas of what an exemption permits. An exempt
+    function is permission for a named subject, not an editable function: a
+    statement that mentions none of the declared names fails here, so widening
+    what it may do means adding a name and having that reviewed.
+
+    ``declared`` is :data:`DECLARED_SERVING_PLUMBING_NAMES` for the two
+    exemptions whose subject is a quantity carried forward, and
+    :data:`DECLARED_SERVING_READINESS_NAMES` for the one whose subject is a
+    decision.
     """
     statements = {ast.dump(node) for node in before.body}
 
@@ -119,11 +129,9 @@ def assert_only_declared_plumbing_was_added(
 
     for node in added:
         rendered = ast.dump(node)
-        assert any(
-            declared in rendered for declared in DECLARED_SERVING_PLUMBING_NAMES
-        ), (
+        assert any(name_ in rendered for name_ in declared), (
             f"{relative}:{name} added a statement that is not declared "
-            f"serving plumbing: {ast.unparse(node)[:160]}"
+            f"{subject}: {ast.unparse(node)[:160]}"
         )
 
 
@@ -331,6 +339,98 @@ def test_a_declared_serving_source_cannot_change_what_it_computes():
                 continue
             assert_only_declared_plumbing_was_added(
                 relative, name, before[name], after[name]
+            )
+
+
+def test_only_the_serving_orchestrator_is_declarable_among_ops_entry_points():
+    """The third carve-out is one named file, not ``ops/``.
+
+    ``ops/`` holds the whole scheduled lifecycle, so "declarable under ops/"
+    would be a far wider permission than the two carve-outs above. It is one
+    file, and the one function in it whose body may differ is the readiness
+    decision -- not the one that resolves which incumbent serves, and not the
+    one that invokes the serving scripts.
+    """
+    assert len(ADDITIVE_ONLY_SERVING_ORCHESTRATORS) == 1
+    assert SERVING_ORCHESTRATOR_EXEMPT_FUNCTIONS == ("slate_readiness",)
+
+    for relative in ADDITIVE_ONLY_SERVING_ORCHESTRATORS:
+        assert relative.startswith("ops/")
+        assert (PROJECT / relative).exists()
+        assert relative not in SERVING_ENTRY_POINTS
+        assert relative not in UNDECLARABLE_PRODUCTION_SOURCES
+
+    source = ast.parse(
+        (PROJECT / ADDITIVE_ONLY_SERVING_ORCHESTRATORS[0]).read_text(
+            encoding="utf-8"
+        )
+    )
+    defined = {
+        node.name for node in source.body if isinstance(node, ast.FunctionDef)
+    }
+
+    for name in ("resolve_incumbent", "serve", "build_receipt", "run"):
+        assert name in defined, name
+        assert name not in SERVING_ORCHESTRATOR_EXEMPT_FUNCTIONS
+
+
+def test_a_declared_serving_orchestrator_change_only_ever_adds_lines():
+    """Declaring the orchestrator buys an accepted outcome, not a rewrite.
+
+    The same line-set comparison the entry points and the slate builder are
+    held to. Every line production has must still be there, so no existing
+    refusal, authority check or provenance requirement can be changed or
+    dropped.
+    """
+    base = production_base()
+    if base is None:
+        pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
+    for relative in ADDITIVE_ONLY_SERVING_ORCHESTRATORS:
+        before = git("show", f"{base}:{relative}").splitlines()
+        after = git("show", f"HEAD:{relative}").splitlines()
+        removed = [line for line in before if line not in after]
+        assert removed == [], f"{relative} removed or edited existing lines: {removed}"
+
+
+def test_a_declared_serving_orchestrator_cannot_widen_what_it_serves():
+    """Every other function in the orchestrator is pinned.
+
+    Readiness is the one decision this file makes on its own account, so it is
+    the one function the carve-out exempts, and its added statements must name
+    a declared readiness subject. Coming to accept a refresh outcome nobody
+    reviewed is the way this exemption would widen, and that is what the
+    statement check refuses.
+    """
+    base = production_base()
+    if base is None:
+        pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
+
+    for relative in ADDITIVE_ONLY_SERVING_ORCHESTRATORS:
+        before = module_functions(git("show", f"{base}:{relative}"))
+        after = module_functions(git("show", f"HEAD:{relative}"))
+
+        assert set(before) <= set(after), (
+            f"{relative} dropped functions: {sorted(set(before) - set(after))}"
+        )
+
+        for name, node in before.items():
+            if name in SERVING_ORCHESTRATOR_EXEMPT_FUNCTIONS:
+                continue
+            assert ast.dump(node) == ast.dump(after[name]), (
+                f"{relative}:{name} is not the function production has, and "
+                f"only {list(SERVING_ORCHESTRATOR_EXEMPT_FUNCTIONS)} may differ"
+            )
+
+        for name in SERVING_ORCHESTRATOR_EXEMPT_FUNCTIONS:
+            if name not in before:
+                continue
+            assert_only_declared_plumbing_was_added(
+                relative,
+                name,
+                before[name],
+                after[name],
+                declared=DECLARED_SERVING_READINESS_NAMES,
+                subject="serving readiness",
             )
 
 
