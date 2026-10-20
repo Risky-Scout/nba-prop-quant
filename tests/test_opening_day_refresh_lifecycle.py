@@ -30,6 +30,9 @@ from pathlib import Path
 
 import pytest
 
+from nba_prop_quant.research.game_latent_state.safety import (
+    DECLARABLE_SERVING_SOURCE_REGISTRIES,
+)
 
 PROJECT = Path(__file__).resolve().parents[1]
 
@@ -586,6 +589,17 @@ def test_no_model_pricing_or_calibration_bytes_changed():
 
 
 def test_no_model_artifact_or_freeze_manifest_changed():
+    """No fitted artifact and no freeze manifest moved.
+
+    Everything under ``models/`` except the two registries that record what
+    serving runs. Those two are not what serving runs: the serving-source
+    contract's own purpose is to have a divergence enumerated and justified in
+    it when an approved change lands, so a branch that may never touch it
+    could never land one. What stays immutable there is the evidence rather
+    than the record, and that is asserted directly below: every
+    ``historical_reference_sha256`` is byte-identical to production and no
+    locked file is dropped.
+    """
     base = production_base()
 
     if base is None:
@@ -594,8 +608,26 @@ def test_no_model_artifact_or_freeze_manifest_changed():
     changed = git("diff", "--name-only", base, "HEAD").splitlines()
 
     for relative in changed:
-        assert not relative.startswith("models/"), relative
+        if relative not in DECLARABLE_SERVING_SOURCE_REGISTRIES:
+            assert not relative.startswith("models/"), relative
         assert not relative.endswith(".joblib"), relative
+
+    for relative in DECLARABLE_SERVING_SOURCE_REGISTRIES:
+        if relative not in changed:
+            continue
+
+        before = json.loads(blob_text(base, relative))
+        after = json.loads((PROJECT / relative).read_text(encoding="utf-8"))
+
+        locked_before = before.get("locked_serving_source_files") or {}
+        locked_after = after.get("locked_serving_source_files") or {}
+
+        assert set(locked_before) <= set(locked_after), relative
+
+        for name, entry in locked_before.items():
+            assert entry.get("historical_reference_sha256") == locked_after[
+                name
+            ].get("historical_reference_sha256"), f"{relative}:{name}"
 
 
 #: The lifecycle's stages, in the order the production ref runs them. Named
