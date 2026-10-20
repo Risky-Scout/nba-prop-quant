@@ -9,7 +9,10 @@ from rich.console import Console
 
 from nba_prop_quant.api import BDLClient
 from nba_prop_quant.settings import get_settings
-from nba_prop_quant.snapshot_schedule import due_windows
+from nba_prop_quant.snapshot_schedule import (
+    CAPTURE_OFFSETS_MINUTES,
+    due_windows,
+)
 from nba_prop_quant.storage import timestamped_jsonl_append
 from nba_prop_quant.prospective_snapshot import (
     build_capture_id,
@@ -38,7 +41,59 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=5,
     )
+    parser.add_argument(
+        "--offset-minutes",
+        action="append",
+        type=int,
+        default=None,
+        help=(
+            "Capture only the scheduled windows at this offset. "
+            "Repeatable. Omitting it selects every offset the capture "
+            "schedule defines, which is what research and manual "
+            "callers already get."
+        ),
+    )
     return parser.parse_args()
+
+
+def selected_offsets(
+    raw: list[int] | None,
+) -> tuple[int, ...] | None:
+    """The offsets a caller narrowed the scheduled capture to.
+
+    ``None`` means no narrowing, which is the behaviour every existing
+    caller has. A named offset the schedule does not define is refused
+    rather than silently matching nothing: a production caller that asked
+    for a window that cannot exist would otherwise capture nothing and
+    report success.
+    """
+    if raw is None:
+        return None
+
+    requested = {
+        int(value)
+        for value in raw
+    }
+
+    unknown = sorted(
+        requested
+        - set(
+            CAPTURE_OFFSETS_MINUTES
+        )
+    )
+
+    if unknown:
+        raise ValueError(
+            "--offset-minutes must name offsets the capture schedule "
+            f"defines; {unknown} are not among "
+            f"{list(CAPTURE_OFFSETS_MINUTES)}"
+        )
+
+    return tuple(
+        sorted(
+            requested
+        )
+    )
 
 
 def parse_now_utc(raw: str | None) -> datetime:
@@ -99,6 +154,19 @@ def main() -> None:
         args.now_utc
     )
 
+    offsets = selected_offsets(
+        args.offset_minutes
+    )
+
+    if (
+        offsets is not None
+        and not args.scheduled
+    ):
+        raise ValueError(
+            "--offset-minutes narrows which scheduled capture windows "
+            "are due, so it has no meaning without --scheduled"
+        )
+
     errors: list[dict[str, object]] = []
 
     with BDLClient(
@@ -121,6 +189,18 @@ def main() -> None:
                 now_utc,
                 grace_minutes=args.grace_minutes,
             )
+
+            if offsets is not None:
+                due = [
+                    row
+                    for row in due
+                    if int(
+                        row[
+                            "offset_minutes"
+                        ]
+                    )
+                    in offsets
+                ]
 
             capture_run_path = (
                 settings.snapshot_dir

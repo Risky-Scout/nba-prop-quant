@@ -30,11 +30,14 @@ from nba_prop_quant.research.game_latent_state.gates import (
     shadow_verdict,
 )
 from nba_prop_quant.research.game_latent_state.safety import (
+    ADDITIVE_ONLY_CAPTURE_ENTRY_POINTS,
     ADDITIVE_ONLY_SERVING_ENTRY_POINTS,
     ADDITIVE_ONLY_SERVING_ORCHESTRATORS,
     ADDITIVE_ONLY_SERVING_SOURCES,
     ADDITIVE_ONLY_WORKFLOWS,
+    CAPTURE_ENTRY_POINT_EXEMPT_FUNCTIONS,
     DECLARABLE_SERVING_SOURCE_REGISTRIES,
+    DECLARED_CAPTURE_SELECTION_NAMES,
     DECLARED_INTEGRATION_PATHS,
     DECLARED_SERVING_PLUMBING_NAMES,
     DECLARED_SERVING_READINESS_NAMES,
@@ -200,6 +203,7 @@ def test_the_declared_integration_surface_cannot_reach_the_served_model():
     """
     undeclarable_prefixes = ("models/", "configs/", "scripts/", "release/", "review/")
     exceptions = (
+        *ADDITIVE_ONLY_CAPTURE_ENTRY_POINTS,
         *ADDITIVE_ONLY_SERVING_ENTRY_POINTS,
         *ADDITIVE_ONLY_SERVING_SOURCES,
         *DECLARABLE_SERVING_SOURCE_REGISTRIES,
@@ -229,6 +233,79 @@ def test_only_the_serving_entry_points_are_declarable_under_scripts():
     for relative in ADDITIVE_ONLY_SERVING_ENTRY_POINTS:
         assert relative.startswith("scripts/")
         assert (PROJECT / relative).exists()
+
+
+def test_only_the_collector_is_declarable_among_capture_scripts():
+    """The capture carve-out is one named file, not the capture lineage.
+
+    The failure mode is the same drift the serving carve-out is pinned
+    against, so this spells out what stays shut rather than only what opened.
+    ``12_run_snapshot_cycle.py`` is the research cadence driver and is named
+    explicitly: production schedules its own segments, so there is no reason
+    for this branch to be able to retime the research windows, and a carve-out
+    that covered the driver would be exactly that permission.
+    """
+    assert len(ADDITIVE_ONLY_CAPTURE_ENTRY_POINTS) == 1
+
+    for relative in ADDITIVE_ONLY_CAPTURE_ENTRY_POINTS:
+        assert relative.startswith("scripts/")
+        assert (PROJECT / relative).exists()
+        # A capture script, not a serving script. The two carve-outs are
+        # disjoint, so neither can be widened by appealing to the other.
+        assert relative not in SERVING_ENTRY_POINTS
+        assert relative not in ADDITIVE_ONLY_SERVING_ENTRY_POINTS
+
+    for relative in (
+        "scripts/12_run_snapshot_cycle.py",
+        "scripts/13_backfill_snapshots.py",
+    ):
+        assert relative not in ADDITIVE_ONLY_CAPTURE_ENTRY_POINTS
+        assert relative not in DECLARED_INTEGRATION_PATHS
+        assert relative not in SHADOW_OWNED_PRODUCTION_PATHS
+
+
+def test_a_declared_capture_change_only_ever_adds_window_selection():
+    """Declaring the collector buys an offset filter, not a new capture.
+
+    The capture envelope is content-addressed: ``capture_id`` is derived from
+    the per-component digests and the recorded window ids, and
+    ``select_capture_bundle`` recomputes all of it before pricing may read a
+    capture. So a change to what this script captures, or to how it hashes it,
+    would invalidate every capture ever written rather than merely being
+    unreviewed. Only ``parse_args`` and ``main`` may differ, and what they may
+    have gained is held to the declared selection names.
+    """
+    base = production_base()
+    if base is None:
+        pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
+
+    for relative in ADDITIVE_ONLY_CAPTURE_ENTRY_POINTS:
+        before = module_functions(git("show", f"{base}:{relative}"))
+        after = module_functions(git("show", f"HEAD:{relative}"))
+
+        assert set(before) <= set(after), (
+            f"{relative} dropped functions: {sorted(set(before) - set(after))}"
+        )
+
+        for name, node in before.items():
+            if name in CAPTURE_ENTRY_POINT_EXEMPT_FUNCTIONS:
+                continue
+            assert ast.dump(node) == ast.dump(after[name]), (
+                f"{relative}:{name} is not the function production has, and "
+                "only parse_args and main may differ"
+            )
+
+        for name in CAPTURE_ENTRY_POINT_EXEMPT_FUNCTIONS:
+            if name not in before:
+                continue
+            assert_only_declared_plumbing_was_added(
+                relative,
+                name,
+                before[name],
+                after[name],
+                declared=DECLARED_CAPTURE_SELECTION_NAMES,
+                subject="capture window selection",
+            )
 
 
 def test_only_the_slate_builder_is_declarable_among_serving_sources():

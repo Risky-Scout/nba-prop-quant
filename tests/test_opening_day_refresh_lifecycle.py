@@ -30,6 +30,9 @@ from pathlib import Path
 
 import pytest
 
+from nba_prop_quant.research.game_latent_state.safety import (
+    DECLARABLE_SERVING_SOURCE_REGISTRIES,
+)
 
 PROJECT = Path(__file__).resolve().parents[1]
 
@@ -586,6 +589,17 @@ def test_no_model_pricing_or_calibration_bytes_changed():
 
 
 def test_no_model_artifact_or_freeze_manifest_changed():
+    """No fitted artifact and no freeze manifest moved.
+
+    Everything under ``models/`` except the two registries that record what
+    serving runs. Those two are not what serving runs: the serving-source
+    contract's own purpose is to have a divergence enumerated and justified in
+    it when an approved change lands, so a branch that may never touch it
+    could never land one. What stays immutable there is the evidence rather
+    than the record, and that is asserted directly below: every
+    ``historical_reference_sha256`` is byte-identical to production and no
+    locked file is dropped.
+    """
     base = production_base()
 
     if base is None:
@@ -594,8 +608,26 @@ def test_no_model_artifact_or_freeze_manifest_changed():
     changed = git("diff", "--name-only", base, "HEAD").splitlines()
 
     for relative in changed:
-        assert not relative.startswith("models/"), relative
+        if relative not in DECLARABLE_SERVING_SOURCE_REGISTRIES:
+            assert not relative.startswith("models/"), relative
         assert not relative.endswith(".joblib"), relative
+
+    for relative in DECLARABLE_SERVING_SOURCE_REGISTRIES:
+        if relative not in changed:
+            continue
+
+        before = json.loads(blob_text(base, relative))
+        after = json.loads((PROJECT / relative).read_text(encoding="utf-8"))
+
+        locked_before = before.get("locked_serving_source_files") or {}
+        locked_after = after.get("locked_serving_source_files") or {}
+
+        assert set(locked_before) <= set(locked_after), relative
+
+        for name, entry in locked_before.items():
+            assert entry.get("historical_reference_sha256") == locked_after[
+                name
+            ].get("historical_reference_sha256"), f"{relative}:{name}"
 
 
 #: The lifecycle's stages, in the order the production ref runs them. Named
@@ -682,16 +714,33 @@ def test_the_classifier_and_the_serving_step_are_given_the_same_slate_date():
     assert '--refresh-status "$RUNNER_TEMP/run/refresh.json"' in serve
 
 
-def test_the_fix_changed_no_workflow_at_all():
+def test_no_workflow_production_already_has_was_changed():
+    """The opening-day fix needed no workflow change, and still has none.
+
+    Stated as "every workflow the production ref has is byte-identical"
+    rather than "no path under .github/workflows/ appears in the diff",
+    because those are the same sentence only on a branch that adds no
+    workflow. The stronger form was true of the branch that made this fix and
+    is a statement about that branch rather than about this fix, so it failed
+    for the next branch to add a schedule rather than for anything doing
+    something wrong. Adding a workflow is governed by the containment
+    declaration; silently editing one production already runs is what this
+    pins.
+    """
     base = production_base()
 
     if base is None:
         pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
 
-    changed = git("diff", "--name-only", base, "HEAD").splitlines()
+    existing = git("ls-tree", "--name-only", f"{base}:.github/workflows").split()
 
-    assert [
-        relative
-        for relative in changed
-        if relative.startswith(".github/workflows/")
-    ] == []
+    assert existing, "the production ref has no workflows, which cannot be right"
+
+    edited = [
+        name
+        for name in existing
+        if blob_text(base, f".github/workflows/{name}")
+        != (PROJECT / ".github" / "workflows" / name).read_text(encoding="utf-8")
+    ]
+
+    assert edited == []

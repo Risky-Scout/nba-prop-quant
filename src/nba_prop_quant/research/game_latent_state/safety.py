@@ -228,6 +228,66 @@ DECLARED_SERVING_READINESS_NAMES: tuple[str, ...] = (
     "readiness_for_this_slate",
 )
 
+#: The *capture* entry point a declaration may name, and only additively.
+#:
+#: The third instance of the deadlock the two carve-outs above resolved, and
+#: the one that had already cost production every slate of the season.
+#: ``scripts/11_collect_snapshots.py`` is the sole producer of the T-20
+#: point-in-time captures the pricing path reads, nothing in the repository
+#: ever invoked it on a schedule, and with no capture present the pricing path
+#: reports no games and exits 0. Automating it needs production to be able to
+#: ask for the one window it consumes, because the collector captures whichever
+#: of the schedule's seven offsets are due and six of them are research
+#: windows production never reads.
+#:
+#: ``scripts/`` was undeclarable apart from the two serving entry points, so
+#: that request had nowhere to go, and the alternatives were worse than the
+#: carve-out: a second producer would duplicate the capture envelope and drift
+#: from the one pricing verifies, and narrowing from outside would mean
+#: rebinding the collector's own due-window function at run time, which is the
+#: same edit made invisible.
+#:
+#: So it is declarable, on exactly the entry points' terms. Every line
+#: production has must still be there, so no existing API call, component,
+#: digest, grace window or envelope key can be changed or dropped.
+#: :data:`CAPTURE_ENTRY_POINT_EXEMPT_FUNCTIONS` names the only functions whose
+#: bodies may differ, the branch-safety tests compare every other function's
+#: syntax tree against production, and what those two may have gained is held
+#: to :data:`DECLARED_CAPTURE_SELECTION_NAMES`. The rest of ``scripts/`` --
+#: the snapshot cycle driver included, so the research cadence stays where it
+#: is -- remains undeclarable.
+ADDITIVE_ONLY_CAPTURE_ENTRY_POINTS: tuple[str, ...] = (
+    "scripts/11_collect_snapshots.py",
+)
+
+#: The only functions in the declared capture entry point whose bodies may
+#: differ from production. ``parse_args`` is where the offset argument is
+#: declared and ``main`` is where it narrows the due list; computing the
+#: per-component digests, building the capture id and appending the envelope
+#: are outside both and are pinned syntax-tree-identical, which is what keeps
+#: the capture format the format every capture ever written was hashed under.
+CAPTURE_ENTRY_POINT_EXEMPT_FUNCTIONS: tuple[str, ...] = (
+    "parse_args",
+    "main",
+)
+
+#: What a statement added to the capture entry point is allowed to be about.
+#:
+#: The rule :data:`DECLARED_SERVING_PLUMBING_NAMES` states, for the exemption
+#: whose subject is which windows a scheduled capture records. The way this
+#: exemption would widen is by coming to change *what* is captured rather than
+#: *which window* it is recorded against, and the defence is that each added
+#: statement has to name one of these. All of them are the offset narrowing:
+#: the argument under both the spellings it appears in, the validator that
+#: refuses an offset the schedule does not define, and the local the due list
+#: is filtered by.
+DECLARED_CAPTURE_SELECTION_NAMES: tuple[str, ...] = (
+    "--offset-minutes",
+    "offset_minutes",
+    "selected_offsets",
+    "offsets",
+)
+
 #: The two registries under ``models/`` that record what serving runs, rather
 #: than being what serving runs.
 #:
@@ -463,67 +523,96 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: landed, for the reason that entry itself gave: the renderer is owned below,
 #: so touching it again requires declaring it again.
 #:
-#: This branch declares six paths and widens the carve-outs by one file, named
-#: above. What it corrects is a contradiction between three steps of the
-#: lifecycle about one date. The readiness preflight reported opening day with
-#: the same exit code as a day whose prerequisite games have simply not
-#: settled yet; the classifier is right to read that code as a refresh
-#: failure, and opening day is not one. So the first slate of the season was
-#: the one slate the automation could not serve. Opening day now leaves the
-#: preflight under its own exit code, the classifier accepts that code only
-#: after re-deriving opening day from the preflight's own locked table, and
-#: serving accepts the resulting outcome only against the recorded derivation
-#: and its own independent re-derivation of it. Every other nonzero refresh
-#: code, the old one included, still fails closed exactly as before. Nothing
-#: fits, calibrates, prices or publishes differently: no threshold, feature,
-#: distribution or price is read or written anywhere in this change.
+#: The opening-day lifecycle branch's six entries were retired in turn when
+#: they landed. Two of them, the serving orchestrator and the production
+#: automation document, are pre-existing production files that branch changed
+#: rather than introduced; the other four are too, and all six are recorded
+#: nowhere, so touching any of them again requires declaring it again.
+#:
+#: This branch declares four paths and widens the carve-outs by one file,
+#: named above. What it corrects is that production had no producer for the
+#: one market snapshot it prices from. The pricing path reads a T-20
+#: point-in-time capture per game and accepts exactly one scheduled capture
+#: for that window; the collector that writes those captures has existed since
+#: the architecture reference commit and nothing ever ran it, so no capture
+#: was ever taken. With none present the snapshot client discovers no bundles,
+#: the prediction script reports no games and exits 0, serving records
+#: NO_GAMES_ON_SLATE and the job goes green -- a real slate with no snapshot
+#: was indistinguishable from a day with no games, which is why it went
+#: unnoticed. A scheduled workflow now hands one five-hour segment to a new
+#: controller that sleeps to each T-20 time it owns, captures that group once,
+#: proves the capture the pricing path requires is really there, and fails
+#: closed by name when it is not. Nothing fits, calibrates, prices or
+#: publishes differently: no threshold, feature, distribution, price or route
+#: is read or written anywhere in this change, the capture envelope keeps
+#: every key it has always had, and live publication stays disabled.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
-        "ops/preflight_current_season_refresh.py": (
-            "opening day leaves the preflight under its own exit code instead "
-            "of sharing the one that means 'the games this refresh needs have "
-            "not settled yet'. It owns the locked opening-day table, so the "
-            "distinction belongs here; the branch that reaches it is "
-            "unchanged apart from the code and the banner it already printed, "
-            "and no other outcome, threshold or query moves"
+        "scripts/11_collect_snapshots.py": (
+            "a scheduled capture can be narrowed to one offset, declared "
+            "additive-only with ``parse_args`` and ``main`` as the two exempt "
+            "functions. Production consumes the T-20 window and the schedule "
+            "defines seven, so without this there was no way to schedule the "
+            "one window pricing reads without also recording six research "
+            "windows nothing consumes. Omitting the argument is the "
+            "pre-existing code path exactly, so every research and manual "
+            "caller is unaffected; an offset the schedule does not define is "
+            "refused rather than matching nothing, because narrowing to an "
+            "impossible window would capture nothing and exit green. No API "
+            "call, component, digest, grace window or envelope key moves -- "
+            "the capture id is derived from that envelope, so a changed key "
+            "would invalidate every capture ever written"
         ),
-        "ops/refresh_current_season_state.py": (
-            "the new code is propagated unchanged, which is all this wrapper "
-            "has ever done with a preflight readiness outcome. One frozen set "
-            "gains one member; the wrapper still parses no banner and still "
-            "decides nothing itself"
+        "ops/run_t20_production_controller.py": (
+            "the T-20 controller itself, which is new. It owns one five-hour "
+            "segment: reads the slate, keeps the T-20 windows whose capture "
+            "time falls inside its own half-open segment, sleeps to each due "
+            "group rather than polling, captures it once, re-runs the pricing "
+            "path's own capture selection to prove the capture is really "
+            "there, then invokes the existing serving, distribution and "
+            "canary publication entry points unchanged. It installs and "
+            "verifies no frozen artifact, reads the morning lifecycle's own "
+            "durable receipt for same-day incumbent readiness, and cannot "
+            "fit, train, calibrate, price, grade, shadow, promote or activate"
         ),
-        "ops/classify_refresh_outcome.py": (
-            "the classifier gains a fourth answer: the opening-day code is "
-            "successful and continues, but only after it re-derives opening "
-            "day from the preflight's own locked table, which it imports "
-            "rather than restates. Unverifiable is a failure, as it already "
-            "is for the preseason code, and every other nonzero code reaches "
-            "the same fail-closed branch it reached before"
+        ".github/workflows/nba_t20_production.yml": (
+            "the missing scheduler, which is new. Three triggers a day, each "
+            "owning one contiguous half-open segment, instead of the "
+            "five-minute poll the capture schedule's grace window would "
+            "otherwise demand. It names the authoritative production ref "
+            "explicitly and refuses before touching production state if the "
+            "checkout is not that ref; it installs two small wheels, probes "
+            "for uncaptured T-20 work, and gates the package install and "
+            "every production invocation behind that probe. It invokes no "
+            "refresh, fit, installer, grader or shadow, and carries no "
+            "publication activation token"
         ),
-        "ops/run_incumbent_production_serving.py": (
-            "readiness accepts the opening-day outcome, declared "
-            "additive-only with ``slate_readiness`` and ``run`` as the two "
-            "exempt functions. It is accepted on the recorded derivation plus "
-            "an independent re-derivation here, never on the outcome's name, "
-            "so 'nothing was refreshed' still refuses on every day that is "
-            "not the verified opening day -- and either acceptance is then "
-            "narrowed to the slate actually being served, by comparing the "
-            "date the status file records against the date this run was "
-            "given. ``run`` is exempt because that is the only place the "
-            "run's own arguments exist. No incumbent resolution, bundle "
-            "verification, serving invocation or provenance rule changes"
+        "ops/validate_workflows.py": (
+            "the static validator gains the new workflow's correctness "
+            "properties: the exact cron set, the runner labels and "
+            "environment, the explicit production checkout ref, and the "
+            "absence of both live-activation tokens and the heavy entry "
+            "points this schedule must never invoke. Every pre-existing rule "
+            "is untouched and the new ones are additive"
         ),
-        "ops/summarise_production_run.py": (
-            "the run summary reads the opening-day outcome as a by-design "
-            "skip of the adaptive protocol rather than a failed stage, which "
-            "is what it already does for the preseason no-op. It reports and "
-            "still exits 0 either way"
+        "models/frozen_manifests/"
+        "nba_prop_quant_v2_adaptive_serving_source_contract.json": (
+            "the collector is relocked at version 7, with the divergence "
+            "enumerated and justified as this contract's own purpose "
+            "requires. Every historical_reference_sha256 is untouched, no "
+            "locked file is dropped, and the four serving sources locked at "
+            "version 6 are unchanged -- this is the capture producer rather "
+            "than a serving source, and it is locked here only because the "
+            "historical contract byte-pins it"
         ),
-        "docs/wizardofodds/PRODUCTION_AUTOMATION.md": (
-            "the refresh contract table goes from three answers to four, "
-            "with what each one means for serving. Documentation only: no "
-            "code reads it"
+        "models/frozen_manifests/"
+        "nba_prop_quant_v2_adaptive_update_protocol.json": (
+            "one digest: the protocol's record of the serving source "
+            "contract's own hash. The production preflight derives that hash "
+            "from the tree and refuses the run on a mismatch, so a relock "
+            "that did not land here too would fail the lifecycle before a "
+            "model was loaded. No methodology, policy digest, DAG stage, "
+            "prohibition or architecture reference moves"
         ),
     }
 )
@@ -747,6 +836,27 @@ SHADOW_OWNED_PRODUCTION_PATHS: Mapping[str, str] = MappingProxyType(
             "priced frame and the frozen marginals and writes one JSON "
             "document; it cannot fit, serve, grade, price, promote, route or "
             "activate"
+        ),
+        "ops/run_t20_production_controller.py": (
+            "the producer of the one market snapshot production prices from, "
+            "which nothing in the repository had. It owns one evening segment "
+            "at a time: sleep to each T-20 time that segment owns, capture "
+            "that tip group once through the existing collector, prove the "
+            "capture the pricing path requires exists by re-running that "
+            "path's own selection, then serve, derive and publish the canary "
+            "through the existing entry points. Fails closed by name rather "
+            "than serving an empty slate. Installs no artifact, states no "
+            "threshold, and cannot fit, train, calibrate, grade, shadow, "
+            "promote or activate"
+        ),
+        ".github/workflows/nba_t20_production.yml": (
+            "the schedule that starts the controller: three low-frequency "
+            "triggers whose segments tile the production window exactly once "
+            "each, so every T-20 time has one owner. Checks out the "
+            "authoritative production ref by name and proves it landed, "
+            "keeps an off-day segment to two small wheels and a probe, and "
+            "invokes no refresh, fit, frozen installer, grader or shadow. "
+            "Publication is canary only and no activation token appears in it"
         ),
     }
 )
