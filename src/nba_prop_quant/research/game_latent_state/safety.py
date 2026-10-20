@@ -288,6 +288,63 @@ DECLARED_CAPTURE_SELECTION_NAMES: tuple[str, ...] = (
     "offsets",
 )
 
+#: The *publication transport* a declaration may name, and only additively.
+#:
+#: The fourth instance of the deadlock the three carve-outs above resolved,
+#: and the one that had already cost opening day. The publisher is pinned
+#: byte-identical by the lifecycle's numerical freeze, which is right about
+#: what that pin is for -- this module decides which rows are publishable,
+#: what a published record contains and which destination is allowed -- and
+#: wrong about one thing inside it: the transport that moves the bytes runs
+#: on the runner, and the runner's rsync is not the one this was written
+#: against. ``--chmod=F600`` is rejected by the macOS runner's rsync while it
+#: parses its own arguments, so the transfer failed before it opened a
+#: connection and the canary feed could not be published at all. A pin that
+#: cannot be moved makes a portability defect in the transport unfixable.
+#:
+#: So the module is declarable, and only on terms narrower than the byte pin
+#: is in the one direction that matters. Nothing that states a number, a
+#: schema, a threshold, a row rule or a destination may differ:
+#: :data:`PUBLICATION_TRANSPORT_CLASS` is the only class whose methods may,
+#: :data:`PUBLICATION_TRANSPORT_EXEMPT_METHODS` names the only method of it
+#: that may, every other top-level definition and every module constant is
+#: pinned syntax-tree-identical, and anything new is held to
+#: :data:`DECLARED_PUBLICATION_TRANSPORT_NAMES`. The published-record
+#: versions, the row rules, the pricing fields, the switch and the
+#: destinations are all outside the class and are therefore frozen exactly as
+#: the byte pin froze them.
+ADDITIVE_ONLY_PUBLICATION_TRANSPORTS: tuple[str, ...] = (
+    "ops/publish_incumbent_to_wizardofodds.py",
+)
+
+#: The only class in the declared publication transport whose methods may
+#: differ from production. The remote transport and nothing else: a local
+#: directory destination has no rsync to be incompatible with, and the
+#: publisher's rules are not in a class at all.
+PUBLICATION_TRANSPORT_CLASS = "SshRsyncTransport"
+
+#: The only method of that class whose body may differ from production.
+#: ``_upload`` is where the transfer is invoked and where the mode is now set
+#: after it; ``_place`` is outside this list on purpose, so the copy into the
+#: served tree, the mode it is served with and the rename that makes the
+#: placement atomic are all pinned to production.
+PUBLICATION_TRANSPORT_EXEMPT_METHODS: tuple[str, ...] = ("_upload",)
+
+#: What a name added to the declared publication transport is allowed to be.
+#:
+#: The rule :data:`DECLARED_CAPTURE_SELECTION_NAMES` states, for the
+#: exemption whose subject is how a file is transferred and what mode it then
+#: carries. All three are that: the mode the staged upload is given, the
+#: command that performs the transfer, and the command that sets the mode.
+#: Nothing here can name a price, a probability, a row, a schema version or a
+#: destination, which is what keeps this from becoming a declaration that the
+#: publisher is editable.
+DECLARED_PUBLICATION_TRANSPORT_NAMES: tuple[str, ...] = (
+    "STAGED_FILE_MODE",
+    "_rsync_argv",
+    "_set_staged_mode",
+)
+
 #: The two registries under ``models/`` that record what serving runs, rather
 #: than being what serving runs.
 #:
@@ -529,90 +586,43 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: rather than introduced; the other four are too, and all six are recorded
 #: nowhere, so touching any of them again requires declaring it again.
 #:
-#: This branch declares four paths and widens the carve-outs by one file,
-#: named above. What it corrects is that production had no producer for the
-#: one market snapshot it prices from. The pricing path reads a T-20
-#: point-in-time capture per game and accepts exactly one scheduled capture
-#: for that window; the collector that writes those captures has existed since
-#: the architecture reference commit and nothing ever ran it, so no capture
-#: was ever taken. With none present the snapshot client discovers no bundles,
-#: the prediction script reports no games and exits 0, serving records
-#: NO_GAMES_ON_SLATE and the job goes green -- a real slate with no snapshot
-#: was indistinguishable from a day with no games, which is why it went
-#: unnoticed. A scheduled workflow now hands one five-hour segment to a new
-#: controller that sleeps to each T-20 time it owns, captures that group once,
-#: proves the capture the pricing path requires is really there, and fails
-#: closed by name when it is not. Nothing fits, calibrates, prices or
-#: publishes differently: no threshold, feature, distribution, price or route
-#: is read or written anywhere in this change, the capture envelope keeps
-#: every key it has always had, and live publication stays disabled.
+#: The T-20 automation branch's six entries were retired in turn when they
+#: landed. Four of them -- the controller, the workflow, and both frozen
+#: manifests -- are recorded as owned or declarable below, and the other two,
+#: the collector and the workflow validator, are pre-existing production
+#: files that branch changed rather than introduced, so touching any of them
+#: again requires declaring it again.
+#:
+#: This branch declares one path, owned below, and widens the carve-outs by
+#: that same file, named above. What it corrects is that the publication
+#: transport could not transfer on the runner it runs on. The upload asked
+#: rsync for the staged file's mode with
+#: ``--chmod=F600``; the macOS runner's rsync rejects that spelling while
+#: parsing its own arguments, so the transfer exited non-zero before opening
+#: a connection and the canary feed could not be published at all. The mode
+#: is now set at the destination by ``chmod``, which is the mechanism this
+#: transport already uses for the served copy, so the file the destination
+#: ends up holding is the file it was always meant to hold. Nothing else
+#: moves: the same ssh argv, the same staging-then-place ordering, the same
+#: digest checks before and after the placement, the same public readback,
+#: and the same canary-only authority with live publication still disabled.
+#: No threshold, feature, distribution, price, probability or route is read or
+#: written anywhere in this change.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
-        "scripts/11_collect_snapshots.py": (
-            "a scheduled capture can be narrowed to one offset, declared "
-            "additive-only with ``parse_args`` and ``main`` as the two exempt "
-            "functions. Production consumes the T-20 window and the schedule "
-            "defines seven, so without this there was no way to schedule the "
-            "one window pricing reads without also recording six research "
-            "windows nothing consumes. Omitting the argument is the "
-            "pre-existing code path exactly, so every research and manual "
-            "caller is unaffected; an offset the schedule does not define is "
-            "refused rather than matching nothing, because narrowing to an "
-            "impossible window would capture nothing and exit green. No API "
-            "call, component, digest, grace window or envelope key moves -- "
-            "the capture id is derived from that envelope, so a changed key "
-            "would invalidate every capture ever written"
-        ),
-        "ops/run_t20_production_controller.py": (
-            "the T-20 controller itself, which is new. It owns one five-hour "
-            "segment: reads the slate, keeps the T-20 windows whose capture "
-            "time falls inside its own half-open segment, sleeps to each due "
-            "group rather than polling, captures it once, re-runs the pricing "
-            "path's own capture selection to prove the capture is really "
-            "there, then invokes the existing serving, distribution and "
-            "canary publication entry points unchanged. It installs and "
-            "verifies no frozen artifact, reads the morning lifecycle's own "
-            "durable receipt for same-day incumbent readiness, and cannot "
-            "fit, train, calibrate, price, grade, shadow, promote or activate"
-        ),
-        ".github/workflows/nba_t20_production.yml": (
-            "the missing scheduler, which is new. Three triggers a day, each "
-            "owning one contiguous half-open segment, instead of the "
-            "five-minute poll the capture schedule's grace window would "
-            "otherwise demand. It names the authoritative production ref "
-            "explicitly and refuses before touching production state if the "
-            "checkout is not that ref; it installs two small wheels, probes "
-            "for uncaptured T-20 work, and gates the package install and "
-            "every production invocation behind that probe. It invokes no "
-            "refresh, fit, installer, grader or shadow, and carries no "
-            "publication activation token"
-        ),
-        "ops/validate_workflows.py": (
-            "the static validator gains the new workflow's correctness "
-            "properties: the exact cron set, the runner labels and "
-            "environment, the explicit production checkout ref, and the "
-            "absence of both live-activation tokens and the heavy entry "
-            "points this schedule must never invoke. Every pre-existing rule "
-            "is untouched and the new ones are additive"
-        ),
-        "models/frozen_manifests/"
-        "nba_prop_quant_v2_adaptive_serving_source_contract.json": (
-            "the collector is relocked at version 7, with the divergence "
-            "enumerated and justified as this contract's own purpose "
-            "requires. Every historical_reference_sha256 is untouched, no "
-            "locked file is dropped, and the four serving sources locked at "
-            "version 6 are unchanged -- this is the capture producer rather "
-            "than a serving source, and it is locked here only because the "
-            "historical contract byte-pins it"
-        ),
-        "models/frozen_manifests/"
-        "nba_prop_quant_v2_adaptive_update_protocol.json": (
-            "one digest: the protocol's record of the serving source "
-            "contract's own hash. The production preflight derives that hash "
-            "from the tree and refuses the run on a mismatch, so a relock "
-            "that did not land here too would fail the lifecycle before a "
-            "model was loaded. No methodology, policy digest, DAG stage, "
-            "prohibition or architecture reference moves"
+        "ops/publish_incumbent_to_wizardofodds.py": (
+            "the staged upload's mode is set by a ``chmod`` at the "
+            "destination instead of by rsync's ``--chmod``, which is the one "
+            "option in the transfer that rsync implementations disagree "
+            "about and the one the macOS runner refuses. It runs only after "
+            "the transfer is known to have succeeded, names the single "
+            "uploaded file quoted, is not recursive, and refuses the upload "
+            "if the path is not a regular file or if the mode cannot be set "
+            "-- so a release whose permissions are unknown is never placed. "
+            "The staged mode is the 600 the removed option expressed and the "
+            "served mode is the 644 the placement already set; neither "
+            "changes. No destination, credential, ssh option, ordering, "
+            "digest check, readback, retention or publishing authority moves"
         ),
     }
 )
