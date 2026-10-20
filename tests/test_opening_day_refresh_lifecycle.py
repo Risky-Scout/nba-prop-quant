@@ -682,16 +682,33 @@ def test_the_classifier_and_the_serving_step_are_given_the_same_slate_date():
     assert '--refresh-status "$RUNNER_TEMP/run/refresh.json"' in serve
 
 
-def test_the_fix_changed_no_workflow_at_all():
+def test_no_workflow_production_already_has_was_changed():
+    """The opening-day fix needed no workflow change, and still has none.
+
+    Stated as "every workflow the production ref has is byte-identical"
+    rather than "no path under .github/workflows/ appears in the diff",
+    because those are the same sentence only on a branch that adds no
+    workflow. The stronger form was true of the branch that made this fix and
+    is a statement about that branch rather than about this fix, so it failed
+    for the next branch to add a schedule rather than for anything doing
+    something wrong. Adding a workflow is governed by the containment
+    declaration; silently editing one production already runs is what this
+    pins.
+    """
     base = production_base()
 
     if base is None:
         pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
 
-    changed = git("diff", "--name-only", base, "HEAD").splitlines()
+    existing = git("ls-tree", "--name-only", f"{base}:.github/workflows").split()
 
-    assert [
-        relative
-        for relative in changed
-        if relative.startswith(".github/workflows/")
-    ] == []
+    assert existing, "the production ref has no workflows, which cannot be right"
+
+    edited = [
+        name
+        for name in existing
+        if blob_text(base, f".github/workflows/{name}")
+        != (PROJECT / ".github" / "workflows" / name).read_text(encoding="utf-8")
+    ]
+
+    assert edited == []
