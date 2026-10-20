@@ -135,6 +135,34 @@ real_canary = pytest.mark.skipif(
 # ======================================================================
 
 
+def local_rsync_argv(
+    transport: publisher.SshRsyncTransport, sent: Path, target: str
+) -> list[str]:
+    """The transport's own rsync command, addressed on this machine.
+
+    Derived from :meth:`publisher.SshRsyncTransport._rsync_argv` rather than
+    restated, so the local tier runs the option set production runs. A
+    restated copy is how a portability defect survives its own fix: the
+    option that the macOS runner's rsync rejected was in both, and a test
+    carrying its own argv can keep passing while production cannot transfer.
+
+    Two elements are replaced and nothing else is: the ``-e`` remote shell,
+    which has no meaning for a transfer that does not leave this machine, and
+    the ``user@host:path`` destination, which becomes the path alone.
+    """
+    argv = transport._rsync_argv(sent, target)
+
+    shell = argv.index("-e")
+
+    argv = argv[:shell] + argv[shell + 2 :]
+
+    assert argv[-1].endswith(f":{target}"), argv
+
+    argv[-1] = target
+
+    return argv
+
+
 class LoopbackSshRsync(publisher.SshRsyncTransport):
     """The real transport with its three outward seams pointed at this machine.
 
@@ -158,6 +186,12 @@ class LoopbackSshRsync(publisher.SshRsyncTransport):
         self.corrupt_staging: bytes | None = None
         self.corrupt_served: bytes | None = None
         self.refuse_with: str | None = None
+        #: Refuse only the remote commands whose script contains this, which
+        #: is how a test breaks one step of a run and lets the rest happen.
+        #: ``refuse_with`` breaks every command and cannot distinguish a
+        #: destination that rejected the key from one that rejected a chmod.
+        self.refuse_matching: str | None = None
+        self.rsync_argv: list[list[str]] = []
         self.scripts: list[str] = []
         self.public_origin = ""
 
@@ -168,6 +202,14 @@ class LoopbackSshRsync(publisher.SshRsyncTransport):
             raise publisher.RemoteCommandFailed(
                 f"{self.remote.user}@{self.remote.host} refused a command "
                 f"(exit 255): {self.refuse_with}"
+            )
+
+        if self.refuse_matching is not None and self.refuse_matching in script:
+            self.scripts.append(script)
+
+            raise publisher.RemoteCommandFailed(
+                f"{self.remote.user}@{self.remote.host} refused a command "
+                f"(exit 1): chmod: Operation not permitted"
             )
 
         self.scripts.append(script)
@@ -204,17 +246,12 @@ class LoopbackSshRsync(publisher.SshRsyncTransport):
 
             self.truncate_to = None
 
+        argv = local_rsync_argv(self, sent, target)
+
+        self.rsync_argv.append(argv)
+
         completed = subprocess.run(
-            [
-                "rsync",
-                "--checksum",
-                "--times",
-                "--chmod=F600",
-                "--no-perms",
-                "--",
-                str(sent),
-                target,
-            ],
+            argv,
             capture_output=True,
             text=True,
             check=False,
@@ -225,6 +262,12 @@ class LoopbackSshRsync(publisher.SshRsyncTransport):
                 f"the loopback rsync of {safe} failed "
                 f"(exit {completed.returncode}): {completed.stderr.strip()}"
             )
+
+        # The transport's own step, run against this machine through the same
+        # remote-shell seam. The option set above and the mode below are the
+        # two halves of one arrangement, so the local tier exercises both
+        # rather than asserting one and stubbing the other.
+        self._set_staged_mode(target)
 
         if self.corrupt_staging is not None:
             Path(target).write_bytes(self.corrupt_staging)
@@ -1223,6 +1266,354 @@ def test_no_credential_material_is_committed_with_the_destination():
         "BEGIN OPENSSH",
     ):
         assert marker not in text, f"the destination configuration holds {marker}"
+
+
+# ======================================================================
+# the upload's permissions, and their portability
+# ======================================================================
+
+
+class HeldRsync:
+    """Stands in for the module the transport runs rsync through.
+
+    Narrower than patching ``subprocess.run`` itself: the only call it can
+    answer is the transfer, and the transport's remote-shell seam is
+    overridden separately, so a test that reaches anything else fails loudly
+    rather than silently running a real command.
+    """
+
+    def __init__(self, transport: RecordedUpload) -> None:
+        self.transport = transport
+
+    def run(self, argv: list[str], **_: Any) -> subprocess.CompletedProcess:
+        self.transport.argv.append(list(argv))
+
+        return subprocess.CompletedProcess(
+            argv,
+            self.transport.rsync_returncode,
+            "",
+            self.transport.rsync_stderr,
+        )
+
+
+class RecordedUpload(publisher.SshRsyncTransport):
+    """The real ``_upload``, with both of its outward calls held.
+
+    These tests are about the two commands the transport builds and the order
+    it runs them in, so the commands are captured rather than performed. The
+    option set is proven against a real rsync by the local tier above, which
+    runs the same argv; what cannot be proven there is what happens when the
+    transfer fails, because a transfer to this machine does not.
+    """
+
+    def __init__(
+        self, destination: publisher.Destination, **keywords: Any
+    ) -> None:
+        super().__init__(destination, **keywords)
+
+        self.argv: list[list[str]] = []
+        self.scripts: list[str] = []
+        self.rsync_returncode = 0
+        self.rsync_stderr = ""
+        self.refuse_matching: str | None = None
+
+    def _run_remote(self, script: str) -> str:
+        self.scripts.append(script)
+
+        if self.refuse_matching is not None and self.refuse_matching in script:
+            raise publisher.RemoteCommandFailed(
+                f"{self.remote.user}@{self.remote.host} refused a command "
+                "(exit 1): chmod: changing permissions: Operation not "
+                "permitted"
+            )
+
+        return ""
+
+
+@pytest.fixture
+def recorded(loopback: dict, monkeypatch: pytest.MonkeyPatch):
+    transport = RecordedUpload(loopback["destination"])
+
+    monkeypatch.setattr(publisher, "subprocess", HeldRsync(transport))
+
+    try:
+        yield transport
+    finally:
+        transport.close()
+
+
+def chmod_scripts(transport: RecordedUpload) -> list[str]:
+    return [script for script in transport.scripts if "chmod" in script]
+
+
+@requires("rsync")
+def test_the_upload_command_names_no_rsync_chmod_option(recorded: RecordedUpload):
+    """The option the macOS runner rejected is gone, and nothing replaced it.
+
+    ``--chmod`` is asserted absent in every spelling rather than only as the
+    ``F600`` that failed: ``--chmod=600`` parses on the runner today and is
+    the same bet on one implementation's option table, which is the bet that
+    cost a slate.
+    """
+    recorded._upload("releases/r/rows.json", Path("/dev/null"))
+
+    assert len(recorded.argv) == 1
+
+    argv = recorded.argv[0]
+
+    assert not any(item.startswith("--chmod") for item in argv), argv
+    assert "F600" not in " ".join(argv)
+    assert not any(item.startswith("--no-perms") for item in argv), argv
+    assert not any(item.startswith("--perms") for item in argv), argv
+    assert "-p" not in argv
+
+
+@requires("rsync")
+def test_the_upload_still_transfers_over_the_configured_ssh_destination(
+    recorded: RecordedUpload,
+):
+    """Removing the option changed the permissions, not the transport.
+
+    The remote shell is the transport's own ``ssh`` argv -- its key, port,
+    batch mode and known-hosts file -- and the destination is still the
+    staging path at the configured account and host.
+    """
+    recorded._upload("releases/r/rows.json", Path("/dev/null"))
+
+    argv = recorded.argv[0]
+
+    assert argv[0] == "rsync"
+    assert "--checksum" in argv
+    assert "--times" in argv
+
+    assert argv[argv.index("-e") + 1] == shlex.join(recorded._ssh_argv())
+
+    remote = recorded.remote
+
+    assert argv[-1] == (
+        f"{remote.user}@{remote.host}:"
+        f"{recorded._staged('releases/r/rows.json')}"
+    )
+
+    # ``--`` before the operands, so a path is never read as an option.
+    assert argv[-3] == "--"
+
+
+@requires("rsync")
+def test_a_successful_transfer_is_followed_by_an_exact_remote_chmod(
+    recorded: RecordedUpload,
+):
+    """One file, by name, after the transfer and not before it.
+
+    The mode is the one ``--chmod=F600`` expressed, so the file the
+    destination holds is the file it held before this fix. ``-R`` is asserted
+    absent because a recursive chmod reaching up from this path would widen
+    the staging directory that keeps an unverified upload unreadable.
+    """
+    safe = "releases/r/rows.json"
+
+    recorded._upload(safe, Path("/dev/null"))
+
+    staged = recorded._staged(safe)
+
+    assert chmod_scripts(recorded) == [
+        f"[ -f {shlex.quote(staged)} ]; "
+        f"[ ! -L {shlex.quote(staged)} ]; "
+        f"chmod 600 -- {shlex.quote(staged)}"
+    ]
+
+    assert publisher.STAGED_FILE_MODE == "600"
+
+    script = chmod_scripts(recorded)[0]
+
+    assert " -R" not in script
+    assert "--recursive" not in script
+    assert script.count("chmod") == 1
+
+    # The mkdir, then the transfer, then the mode. A chmod before the
+    # transfer would be a permission for a file that is not there yet.
+    assert recorded.scripts.index(script) == len(recorded.scripts) - 1
+    assert len(recorded.argv) == 1
+
+
+@requires("rsync")
+def test_a_failed_transfer_refuses_before_any_chmod_is_attempted(
+    recorded: RecordedUpload,
+):
+    """rsync failing is the end of the upload, not a step on the way through.
+
+    This is the case that was failing in production: the runner's rsync exits
+    non-zero while parsing its own arguments. The refusal has to carry what
+    rsync said, and nothing may run afterwards -- a chmod that reported
+    success here would make a transfer that never happened look like one that
+    did.
+    """
+    recorded.rsync_returncode = 1
+    recorded.rsync_stderr = "rsync: --chmod=F600: invalid argument"
+
+    with pytest.raises(publisher.RemoteCommandFailed) as refusal:
+        recorded._upload("releases/r/rows.json", Path("/dev/null"))
+
+    assert "invalid argument" in str(refusal.value)
+
+    assert chmod_scripts(recorded) == []
+
+
+@requires("rsync")
+def test_a_refused_remote_chmod_fails_the_upload_closed(
+    recorded: RecordedUpload,
+):
+    """A mode that could not be set is a failed upload, not a warning.
+
+    The staging file exists at this point and has whatever mode the transfer
+    left it. Continuing would place a release whose permissions are unknown,
+    so the refusal propagates and the caller never reaches the placement.
+    """
+    recorded.refuse_matching = "chmod"
+
+    with pytest.raises(publisher.RemoteCommandFailed) as refusal:
+        recorded._upload("releases/r/rows.json", Path("/dev/null"))
+
+    assert "Operation not permitted" in str(refusal.value)
+
+    assert len(chmod_scripts(recorded)) == 1
+
+
+@requires("rsync")
+@requires("bash")
+def test_the_staged_file_is_mode_600_and_the_served_copy_is_readable(
+    tmp_path: Path, loopback: dict
+):
+    """The modes the destination ends up with, measured rather than argued.
+
+    600 in private staging is what ``--chmod=F600`` was for and is unchanged.
+    644 on the served copy is set where it always was, as the file is placed,
+    and is deliberately not 600: the public readback fetches it over HTTPS,
+    and a release only the deploy account can read is a release a reader gets
+    a 403 for. ``_place`` is byte-identical to production, which the
+    lifecycle's numerical pin holds it to; this measures what that means.
+    """
+    built = fixture.build(tmp_path / "source")
+
+    receipt = publish(built, loopback)
+
+    assert receipt["outcome"] == publisher.OUTCOME_PUBLISHED
+    assert receipt["promotion"]["promoted"] is True
+
+    staged = sorted(
+        path for path in loopback["staging"].rglob("*") if path.is_file()
+    )
+
+    assert staged
+
+    for path in staged:
+        assert path.stat().st_mode & 0o777 == 0o600, path
+
+    served = sorted(
+        path for path in loopback["published"].rglob("*") if path.is_file()
+    )
+
+    assert served
+
+    for path in served:
+        assert path.stat().st_mode & 0o777 == 0o644, path
+
+
+@requires("rsync")
+@requires("bash")
+def test_a_shell_sensitive_remote_path_is_quoted_and_interpolates_nothing(
+    tmp_path: Path, loopback: dict, monkeypatch: pytest.MonkeyPatch
+):
+    """A path that is a command if unquoted is only ever a path.
+
+    The relative-path check refuses a path that could climb out of the
+    subpath; it does not refuse spaces, quotes or ``$(...)``, because those
+    address a file below the subpath perfectly well and the defence against
+    them is quoting rather than rejection. So this writes one, through every
+    command the transport builds -- the mkdir, the transfer, the new chmod,
+    the copy, the rename and both digests -- with the working directory moved
+    somewhere empty. An interpolated command substitution would run there and
+    leave a file behind, and there is none.
+    """
+    sandbox = tmp_path / "cwd"
+
+    sandbox.mkdir()
+
+    monkeypatch.chdir(sandbox)
+
+    relative = "releases/odd $(touch injected) 'name'/rows.json"
+
+    payload = b'{"rows": []}\n'
+
+    transport = LoopbackSshRsync(loopback["destination"])
+
+    try:
+        transport.write_bytes(relative, payload)
+
+        assert transport.read_bytes(relative) == payload
+        assert transport.exists(relative) is True
+    finally:
+        transport.close()
+
+    staged = loopback["staging"] / relative
+
+    assert staged.is_file()
+    assert staged.stat().st_mode & 0o777 == 0o600
+
+    served = loopback["published"] / relative
+
+    assert served.is_file()
+    assert served.read_bytes() == payload
+    assert served.stat().st_mode & 0o777 == 0o644
+
+    assert not (sandbox / "injected").exists()
+    assert sorted(path.name for path in sandbox.iterdir()) == []
+
+
+def test_no_production_command_names_an_rsync_chmod_option():
+    """The defect is fixed everywhere it could be, not only where it fired.
+
+    Feed and page publication are the same transport -- the page builder and
+    the publication entry point both reach it through
+    ``publisher.build_transport`` -- so one call site is the whole surface.
+    Asserted as a scan anyway, because "there is only one" is the claim most
+    worth having a test for.
+
+    Scanned as string literals that *are* the option rather than as text
+    containing it, so the prose explaining why the option is gone does not
+    read as the option coming back.
+    """
+    offenders = []
+
+    for directory in ("ops", "scripts", "src"):
+        for path in sorted((PROJECT / directory).rglob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Constant) and isinstance(
+                    node.value, str
+                ):
+                    if node.value.startswith("--chmod"):
+                        offenders.append(
+                            f"{path.relative_to(PROJECT).as_posix()}:"
+                            f"{node.lineno}"
+                        )
+
+    assert offenders == []
+
+
+def test_the_switch_still_enables_the_canary_only():
+    """This is a transport fix, so the publishing authority is where it was."""
+    switch = json.loads(
+        (PROJECT / publisher.SWITCH_RELATIVE).read_text(encoding="utf-8")
+    )
+
+    modes = switch["modes"]
+
+    assert modes[publisher.MODE_CANARY]["state"] == publisher.STATE_ENABLED
+    assert modes[publisher.MODE_LIVE]["state"] == publisher.STATE_DISABLED
+    assert switch["published_authority"] == publisher.MODEL_AUTHORITY
+    assert switch["candidate_authority"] == "shadow_only"
 
 
 # ======================================================================
