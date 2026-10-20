@@ -605,6 +605,15 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
             "than a serving source, and it is locked here only because the "
             "historical contract byte-pins it"
         ),
+        "models/frozen_manifests/"
+        "nba_prop_quant_v2_adaptive_update_protocol.json": (
+            "one digest: the protocol's record of the serving source "
+            "contract's own hash. The production preflight derives that hash "
+            "from the tree and refuses the run on a mismatch, so a relock "
+            "that did not land here too would fail the lifecycle before a "
+            "model was loaded. No methodology, policy digest, DAG stage, "
+            "prohibition or architecture reference moves"
+        ),
     }
 )
 
