@@ -23,9 +23,17 @@ WORKFLOW_DIR = ROOT / ".github" / "workflows"
 
 PRODUCTION_WORKFLOW = "nba_production_lifecycle.yml"
 
+#: The scheduler for the one market snapshot production prices from. Separate
+#: from the lifecycle because it runs on a different clock: the lifecycle is
+#: the once-daily heavy path and this fires three bounded segments covering
+#: the evening's T-20 capture windows.
+T20_WORKFLOW = "nba_t20_production.yml"
+
 CI_WORKFLOW = "ci.yml"
 
 AUTHORITATIVE_PRODUCTION_BRANCH = "production/wizardofodds-integration"
+
+PRODUCTION_ENVIRONMENT = "wizardofodds-production"
 
 # The production lifecycle mutates durable state that only exists on one
 # machine, so it must land on that machine and nowhere else.
@@ -78,6 +86,46 @@ PUBLICATION_ACTIVATION_TOKENS = (
     "NBA_PROP_WOO_PUBLISH_APPROVAL",
     "--mode live",
     "--stage live",
+)
+
+# ----------------------------------------------------------------------
+# the T-20 capture scheduler
+# ----------------------------------------------------------------------
+
+#: The three segments the T-20 workflow schedules, and the only ones. Pinned
+#: here because the segment boundaries are a correctness property rather than
+#: a preference: they are half-open and contiguous, so every T-20 time in the
+#: supported window is owned by exactly one invocation. A fourth cron would
+#: make two invocations fight over the same window; a missing one would leave
+#: a span of the evening with no owner at all.
+T20_SCHEDULE_CRONS: tuple[str, ...] = (
+    "25 0 * * *",
+    "25 14 * * *",
+    "25 19 * * *",
+)
+
+T20_ENTRY_POINT = "ops/run_t20_production_controller.py"
+
+#: Once-daily heavy and state-maintenance work. The T-20 workflow fires up to
+#: three times a day and repeats none of it: the refresh, the adaptive
+#: protocol, the frozen-package install, grading, the shadow and the shadow
+#: monitor all belong to the lifecycle, and running any of them per tip group
+#: is the cost this design exists to avoid.
+T20_FORBIDDEN_ENTRY_POINTS: tuple[str, ...] = (
+    "ops/refresh_current_season_state.py",
+    "ops/run_adaptive_daily_fit.py",
+    "ops/install_frozen_model_artifacts.py",
+    "ops/grade_incumbent_production_slate.py",
+    "ops/run_production_shadow.py",
+    "ops/monitor_live_shadow_evidence.py",
+)
+
+#: A serving workflow installs what it serves with. The dev extra is pytest
+#: and ruff, which serve nothing, and upgrading the installer on every trigger
+#: is network and time spent on nothing.
+T20_FORBIDDEN_INSTALL_TOKENS: tuple[str, ...] = (
+    ".[dev]",
+    "pip install --upgrade pip",
 )
 
 
@@ -155,6 +203,9 @@ def problems_for(name: str, workflow: dict) -> list[str]:
 
     if name == PRODUCTION_WORKFLOW:
         found += production_problems(name, on, workflow, jobs)
+
+    if name == T20_WORKFLOW:
+        found += t20_problems(name, on, jobs)
 
     if name == CI_WORKFLOW:
         if "pull_request" not in on:
@@ -241,6 +292,117 @@ def production_problems(
                 found.append(
                     f"{name}: job {job_name} checks out without an explicit "
                     "ref; a scheduled run would take the default branch"
+                )
+
+    return found
+
+
+def t20_problems(name: str, on: dict, jobs: dict) -> list[str]:
+    """Require the T-20 scheduler to stay a scheduler.
+
+    Three things are checked here rather than left to review. The segment
+    schedule, because its contiguity is what makes every capture window owned
+    exactly once. The runner, environment and checkout ref, because this job
+    writes the snapshot tree and publishes, and a hosted runner or an
+    inherited default-branch checkout would do that against the wrong state.
+    And the absence of the lifecycle's once-daily work, because the whole
+    point of a three-times-a-day scheduler is that it does not refresh, fit,
+    recalibrate, grade, shadow or reinstall the frozen package per tip group.
+    """
+    found: list[str] = []
+
+    scheduled = sorted(
+        str(entry.get("cron", "")) for entry in (on.get("schedule") or [])
+    )
+
+    if scheduled != sorted(T20_SCHEDULE_CRONS):
+        found.append(
+            f"{name}: schedules {scheduled or 'nothing'} rather than the "
+            f"contiguous segments {sorted(T20_SCHEDULE_CRONS)}, so a T-20 "
+            "window would be owned by two invocations or by none"
+        )
+
+    if "workflow_dispatch" not in on:
+        found.append(f"{name}: no workflow_dispatch trigger")
+
+    text = (WORKFLOW_DIR / name).read_text(encoding="utf-8")
+
+    if AUTHORITATIVE_PRODUCTION_BRANCH not in text:
+        found.append(
+            f"{name}: never names the authoritative production branch, so a "
+            "scheduled run would use the default branch"
+        )
+
+    for token in PUBLICATION_ACTIVATION_TOKENS:
+        for number, line in enumerate(text.splitlines(), 1):
+            if token in line and not line.strip().startswith("#"):
+                found.append(
+                    f"{name}:{number}: names {token!r}, which is live "
+                    "publication activation material and belongs to a "
+                    "reviewed decision rather than to a schedule"
+                )
+
+    for job_name, job in jobs.items():
+        labels = runner_labels(job)
+
+        absent = [
+            label for label in PRODUCTION_RUNNER_LABELS if label not in labels
+        ]
+
+        if absent:
+            found.append(
+                f"{name}: job {job_name} does not require "
+                f"{', '.join(absent)}; the snapshot tree, the fit registry "
+                "and the installed frozen bundle live on the self-hosted "
+                "runner and do not survive a hosted one"
+            )
+
+        if job.get("environment") != PRODUCTION_ENVIRONMENT:
+            found.append(
+                f"{name}: job {job_name} does not declare environment "
+                f"{PRODUCTION_ENVIRONMENT}, so its secrets and variables "
+                "would not resolve"
+            )
+
+        steps = job.get("steps") or []
+
+        checkout = [
+            step
+            for step in steps
+            if str(step.get("uses", "")).startswith("actions/checkout")
+        ]
+
+        if not checkout:
+            found.append(f"{name}: job {job_name} has no checkout step")
+
+        for step in checkout:
+            if not (step.get("with") or {}).get("ref"):
+                found.append(
+                    f"{name}: job {job_name} checks out without an explicit "
+                    "ref; a scheduled run would take the default branch"
+                )
+
+        commands = "\n".join(str(step.get("run", "")) for step in steps)
+
+        if T20_ENTRY_POINT not in commands:
+            found.append(
+                f"{name}: job {job_name} never runs {T20_ENTRY_POINT}, so "
+                "nothing would capture the snapshot production prices from"
+            )
+
+        for entry_point in T20_FORBIDDEN_ENTRY_POINTS:
+            if entry_point in commands:
+                found.append(
+                    f"{name}: job {job_name} runs {entry_point}, which is "
+                    "the lifecycle's once-daily work and must not be "
+                    "repeated per T-20 segment"
+                )
+
+        for token in T20_FORBIDDEN_INSTALL_TOKENS:
+            if token in commands:
+                found.append(
+                    f"{name}: job {job_name} runs {token!r}, which a "
+                    "production serving workflow has no use for"
                 )
 
     return found
@@ -421,6 +583,9 @@ def validate() -> list[str]:
 
     if PRODUCTION_WORKFLOW not in names:
         found.append(f"missing {PRODUCTION_WORKFLOW}")
+
+    if T20_WORKFLOW not in names:
+        found.append(f"missing {T20_WORKFLOW}")
 
     if CI_WORKFLOW not in names:
         found.append(f"missing {CI_WORKFLOW}")

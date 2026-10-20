@@ -1,0 +1,262 @@
+name: NBA T-20 production capture and serving
+
+# The producer of the one market snapshot production prices from.
+#
+# `15_price_markets.py` defaults to `--input-source snapshot` and
+# `10_predict_slate.py` reads the same bundle, both through
+# ProspectiveSnapshotClient, which accepts exactly one scheduled capture per
+# game at the primary T-20 window. The collector that writes those captures
+# already existed and nothing ever ran it, so no capture was ever made: with
+# none present the client discovers no bundles, the prediction script reports
+# "no games" and exits 0, serving records NO_GAMES_ON_SLATE and the job goes
+# green. A real slate with no snapshot was indistinguishable from a day with
+# no games. This workflow is the missing scheduler.
+#
+# WHY THREE TRIGGERS AND NOT A POLLER
+# -----------------------------------
+#
+# The capture schedule's due test is a five-minute grace around each target,
+# so a scheduler that only ever asked "is anything due now" would have to fire
+# every five minutes all evening -- hundreds of runs a day on a self-hosted
+# runner whose pickup latency has been measured in hours. Instead each trigger
+# hands ops/run_t20_production_controller.py one bounded five-hour segment.
+# The controller reads the real schedule once, computes the T-20 times inside
+# its own segment, and sleeps to each of them. Sleeping replaces polling.
+#
+#   25 14 * * *  owns 14:25 UTC .. 19:25 UTC
+#   25 19 * * *  owns 19:25 UTC .. 00:25 UTC
+#   25  0 * * *  owns 00:25 UTC .. 05:25 UTC
+#
+# Half-open intervals, so no window is owned by two segments and none is
+# owned by neither. Together they cover 14:25 UTC on the slate date through
+# 05:25 UTC the next day, which is every tip an NBA slate has. A T-20 time
+# outside that span belongs to no segment, and the controller fails closed
+# with UNSUPPORTED_T20_TIME rather than dropping the game.
+#
+# The last trigger is after midnight UTC and the slate it captures for is the
+# evening before, so the slate date is derived in America/New_York and never
+# from the UTC calendar date.
+#
+# WHAT THIS IS NOT
+# ----------------
+#
+# Not a second lifecycle. nba_production_lifecycle.yml remains the once-daily
+# heavy path: it refreshes the rolling state, runs the adaptive protocol,
+# installs and verifies the frozen runtime bundle, grades and shadows. This
+# workflow repeats none of that. It reads the durable serving receipt that
+# work left behind, and if that receipt does not prove a verified incumbent
+# for this slate under this production SHA, the controller refuses with
+# MORNING_PRODUCTION_NOT_READY rather than establishing an authority of its
+# own.
+#
+# It is also deliberately cheap on an off day. The probe step below answers
+# "does this segment hold an uncaptured T-20 window" from the schedule and the
+# capture log alone, using two small wheels, and a segment with no work exits
+# before the scientific environment is installed, before the frozen bundle is
+# touched, and before anything is served or published.
+#
+# DEFAULT-BRANCH BEHAVIOUR
+# ------------------------
+#
+# GitHub fires scheduled events only from the default branch, so this file
+# must also exist on `main` for the schedule to run at all, while the code it
+# invokes lives on production/wizardofodds-integration. It therefore names the
+# production ref explicitly and proves the checkout is that ref before any
+# production state is touched. See docs/wizardofodds/PRODUCTION_AUTOMATION.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      segment_cron:
+        description: 'Which scheduled segment to own. Omit to use the clock.'
+        type: choice
+        options:
+          - ''
+          - '25 14 * * *'
+          - '25 19 * * *'
+          - '25 0 * * *'
+        default: ''
+        required: false
+      slate_date:
+        description: 'Slate date YYYY-MM-DD. Defaults to the segment start in US/Eastern.'
+        type: string
+        required: false
+      production_ref:
+        description: 'Authoritative production ref to check out'
+        type: string
+        required: false
+        default: production/wizardofodds-integration
+
+  schedule:
+    # Off the top of the hour, where GitHub's scheduler is most congested.
+    # Three a day, and no more: the controller sleeps to the windows inside
+    # its segment rather than being woken to look for them.
+    - cron: '25 14 * * *'
+    - cron: '25 19 * * *'
+    - cron: '25 0 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  # One T-20 segment at a time, and queued rather than cancelled: cancelling
+  # mid-flight could interrupt a capture append or a publication readback, and
+  # the segments do not overlap by construction, so queueing is only ever a
+  # safety net against a badly delayed pickup.
+  group: nba-t20-production
+  cancel-in-progress: false
+
+jobs:
+  t20:
+    name: NBA T-20 capture and serving
+    # The same durable state backend the lifecycle writes: the snapshot tree,
+    # the fit registry's promotion state and the installed frozen bundle all
+    # live on this machine and none of them survives a hosted runner.
+    runs-on:
+      - self-hosted
+      - nba-production
+    # A segment is five hours wide and the controller sleeps inside it. It
+    # exits as soon as its own windows are done, so this is a ceiling rather
+    # than an expected duration.
+    timeout-minutes: 340
+    environment: wizardofodds-production
+
+    env:
+      PRODUCTION_REF: ${{ inputs.production_ref || 'production/wizardofodds-integration' }}
+
+    steps:
+      - name: Check out the authoritative production code
+        uses: actions/checkout@v4
+        with:
+          # Explicit: a scheduled event originates from the default branch, so
+          # the production ref is named rather than inherited.
+          ref: ${{ github.event_name == 'schedule' && 'production/wizardofodds-integration' || (inputs.production_ref || 'production/wizardofodds-integration') }}
+          fetch-depth: 0
+
+      - name: Record and verify the production checkout
+        id: checkout
+        run: |
+          set -euo pipefail
+          SHA="$(git rev-parse HEAD)"
+          REF="$(git rev-parse --abbrev-ref HEAD)"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Production code SHA: $SHA"
+          echo "Checked-out ref: $REF"
+          echo "Triggered by: ${{ github.event_name }}"
+          echo "Workflow ref: ${{ github.ref }}"
+          # The checkout above names the ref; this proves it landed. A
+          # scheduled run that silently took the default branch would run the
+          # scheduler copy of the code against production state.
+          if [ "$REF" != "$PRODUCTION_REF" ]; then
+            echo "refusing: the checkout is $REF, not the requested $PRODUCTION_REF"
+            exit 1
+          fi
+          if [ "$(git rev-parse "$PRODUCTION_REF")" != "$SHA" ]; then
+            echo "refusing: $PRODUCTION_REF does not resolve to $SHA"
+            exit 1
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Its own environment, for the reason the lifecycle documents: on this
+      # long-lived Mac, setup-python reports a tool-cache interpreter while a
+      # bare install resolves to machine-global site-packages. Created once per
+      # invocation and reused by every T-20 group the invocation handles;
+      # nothing here rebuilds an environment per game or per tip group.
+      - name: Create the run environment
+        id: venv
+        run: |
+          set -euo pipefail
+          VENV="$RUNNER_TEMP/t20-venv"
+          BOOTSTRAP="$(python -c 'import sys; print(sys.executable)')"
+          echo "Bootstrap interpreter: $BOOTSTRAP"
+          "$BOOTSTRAP" -m venv --clear "$VENV"
+          echo "venv=$VENV" >> "$GITHUB_OUTPUT"
+          echo "$VENV/bin" >> "$GITHUB_PATH"
+
+      # Two small wheels, deliberately not the package. The probe imports
+      # nba_prop_quant.api and nba_prop_quant.snapshot_schedule and nothing
+      # else, so an off-day segment never pays for pandas, numpy, xgboost,
+      # scikit-learn, shap or pyarrow. No `pip install --upgrade pip`: this is
+      # a serving workflow and upgrading the installer on every trigger is
+      # network and time spent on nothing.
+      - name: Install the segment probe's dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install 'httpx>=0.27' 'tenacity>=9.0'
+
+      # The cheap exit. Reads the slate schedule once and the append-only
+      # capture log once, and reports whether this segment owns any T-20
+      # window that has not already been captured. A segment with none is a
+      # success here and every step below it is skipped.
+      - name: Probe the segment for uncaptured T-20 work
+        id: probe
+        env:
+          BDL_API_KEY: ${{ secrets.BDL_API_KEY }}
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/t20"
+          python ops/run_t20_production_controller.py \
+            --probe-only \
+            --cron "${{ github.event.schedule || inputs.segment_cron }}" \
+            --data-root "$NBA_PROP_DATA_DIR" \
+            --production-sha "${{ steps.checkout.outputs.sha }}" \
+            --receipt-path "$RUNNER_TEMP/t20/segment_probe.json" \
+            --github-output "$GITHUB_OUTPUT"
+
+      # Production dependencies only. Not `.[dev]`: pytest and ruff are CI
+      # tools and this workflow serves production. Installed only once the
+      # probe has found work, and once per invocation rather than per group.
+      - name: Install the production package
+        if: steps.probe.outputs.t20_work == 'true'
+        run: |
+          set -euo pipefail
+          python -m pip install -e .
+
+      # The whole of the segment's work, in one process: sleep to each T-20
+      # time this segment owns, revalidate the schedule, capture that due
+      # group once, prove the capture the pricing path requires is really
+      # there, then serve the slate, derive the distributions behind the
+      # prices and publish the canary feed and page.
+      #
+      # The segment bounds and the slate date come from the probe rather than
+      # being recomputed, so the two steps cannot disagree about which segment
+      # this invocation owns if the clock crosses a boundary between them.
+      #
+      # No continue-on-error, on purpose. A due T-20 window that cannot be
+      # captured, a capture that cannot be verified, or a served slate that
+      # cannot be published is a production failure and the job must go red.
+      - name: Capture T-20, serve the slate and publish the canary
+        if: steps.probe.outputs.t20_work == 'true'
+        env:
+          BDL_API_KEY: ${{ secrets.BDL_API_KEY }}
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+          NBA_PROP_FIT_REGISTRY_DIR: ${{ vars.NBA_PROP_FIT_REGISTRY_DIR }}
+          # The deployment key, by name. Never printed, never written to a
+          # receipt, and read only by the transport that needs it.
+          NBA_WOO_SSH_PRIVATE_KEY: ${{ secrets.NBA_WOO_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          python ops/run_t20_production_controller.py \
+            --segment-start-utc "${{ steps.probe.outputs.segment_start_utc }}" \
+            --segment-end-utc "${{ steps.probe.outputs.segment_end_utc }}" \
+            --slate-date "${{ inputs.slate_date || steps.probe.outputs.slate_date }}" \
+            --data-root "$NBA_PROP_DATA_DIR" \
+            --registry-root "$NBA_PROP_FIT_REGISTRY_DIR" \
+            --production-sha "${{ steps.checkout.outputs.sha }}" \
+            --run-dir "$RUNNER_TEMP/t20" \
+            --receipt-path "$RUNNER_TEMP/t20/t20_controller.json" \
+            --summary-path "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the segment diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nba-t20-segment-${{ github.run_id }}
+          path: ${{ runner.temp }}/t20
+          retention-days: 14
+          if-no-files-found: warn
