@@ -22,6 +22,7 @@ lifecycle workflow moved.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
 import subprocess
@@ -31,7 +32,11 @@ from pathlib import Path
 import pytest
 
 from nba_prop_quant.research.game_latent_state.safety import (
+    ADDITIVE_ONLY_PUBLICATION_TRANSPORTS,
     DECLARABLE_SERVING_SOURCE_REGISTRIES,
+    DECLARED_PUBLICATION_TRANSPORT_NAMES,
+    PUBLICATION_TRANSPORT_CLASS,
+    PUBLICATION_TRANSPORT_EXEMPT_METHODS,
 )
 
 PROJECT = Path(__file__).resolve().parents[1]
@@ -575,17 +580,152 @@ NUMERICAL_MODULES: tuple[str, ...] = (
 )
 
 
+def top_level(source: str) -> dict[str, ast.AST]:
+    """Top-level functions and classes by name, and nothing nested."""
+    return {
+        node.name: node
+        for node in ast.parse(source).body
+        if isinstance(node, (ast.FunctionDef, ast.ClassDef))
+    }
+
+
+def module_constants(source: str) -> dict[str, ast.AST]:
+    """Top-level assignments by name, which is where this module's rules are.
+
+    The published-record versions, the row limits, the timeouts, the relative
+    paths and the mode names are all module constants, so pinning these is
+    pinning every number and every path the module states.
+    """
+    constants: dict[str, ast.AST] = {}
+
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.AnnAssign) and isinstance(
+            node.target, ast.Name
+        ):
+            constants[node.target.id] = node
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    constants[target.id] = node
+
+    return constants
+
+
+def class_methods(source: str, name: str) -> dict[str, ast.AST]:
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.ClassDef) and node.name == name:
+            return {
+                child.name: child
+                for child in node.body
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+            }
+
+    return {}
+
+
+def assert_only_the_publication_transport_moved(
+    relative: str, before: str, after: str
+) -> None:
+    """Nothing that states a number, a schema or a rule may differ.
+
+    Narrower than the byte pin in the direction the pin exists for, and wider
+    only in the one the transport needs. The module's rules -- which rows are
+    publishable, what a published record contains, which destination a mode
+    may reach, every version and every threshold -- are module constants and
+    top-level functions, and all of them are held syntax-tree-identical to
+    production here. Only the remote transport's class may differ, only in
+    the method that invokes rsync, and only by gaining names that were
+    declared for it.
+    """
+    definitions_before = top_level(before)
+    definitions_after = top_level(after)
+
+    assert set(definitions_before) <= set(definitions_after), (
+        f"{relative} dropped "
+        f"{sorted(set(definitions_before) - set(definitions_after))}"
+    )
+
+    for name, node in definitions_before.items():
+        if name == PUBLICATION_TRANSPORT_CLASS:
+            continue
+
+        assert ast.dump(node) == ast.dump(definitions_after[name]), (
+            f"{relative}:{name} is not what production has, and only "
+            f"{PUBLICATION_TRANSPORT_CLASS} may differ"
+        )
+
+    constants_before = module_constants(before)
+    constants_after = module_constants(after)
+
+    assert set(constants_before) <= set(constants_after), (
+        f"{relative} dropped "
+        f"{sorted(set(constants_before) - set(constants_after))}"
+    )
+
+    for name, node in constants_before.items():
+        assert ast.dump(node) == ast.dump(constants_after[name]), (
+            f"{relative}:{name} is a module constant and may not move"
+        )
+
+    methods_before = class_methods(before, PUBLICATION_TRANSPORT_CLASS)
+    methods_after = class_methods(after, PUBLICATION_TRANSPORT_CLASS)
+
+    assert methods_before, f"{relative} has no {PUBLICATION_TRANSPORT_CLASS}"
+
+    assert set(methods_before) <= set(methods_after), (
+        f"{relative} dropped "
+        f"{sorted(set(methods_before) - set(methods_after))}"
+    )
+
+    for name, node in methods_before.items():
+        if name in PUBLICATION_TRANSPORT_EXEMPT_METHODS:
+            continue
+
+        assert ast.dump(node) == ast.dump(methods_after[name]), (
+            f"{relative}:{PUBLICATION_TRANSPORT_CLASS}.{name} is not the "
+            "method production has, and only "
+            f"{list(PUBLICATION_TRANSPORT_EXEMPT_METHODS)} may differ"
+        )
+
+    added = (
+        (set(definitions_after) - set(definitions_before))
+        | (set(constants_after) - set(constants_before))
+        | (set(methods_after) - set(methods_before))
+    )
+
+    assert added <= set(DECLARED_PUBLICATION_TRANSPORT_NAMES), (
+        f"{relative} added {sorted(added - set(DECLARED_PUBLICATION_TRANSPORT_NAMES))}, "
+        "which is not declared publication transport plumbing"
+    )
+
+
 def test_no_model_pricing_or_calibration_bytes_changed():
-    """F. The model, its features, Gate 3, pricing and the PMFs are frozen."""
+    """F. The model, its features, Gate 3, pricing and the PMFs are frozen.
+
+    Byte-identical for every module here except the declared publication
+    transport, where the freeze is restated rather than relaxed. That module
+    is on this list because it decides what is publishable and what a
+    published record says, and it also happens to contain the rsync the
+    runner refuses -- a transport defect that a byte pin makes unfixable
+    while protecting nothing numerical. So the one declared file is held to
+    the stronger statement below and every other file is held to its bytes.
+    """
     base = production_base()
 
     if base is None:
         pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
 
     for relative in NUMERICAL_MODULES:
-        assert blob_text(base, relative) == (
-            PROJECT / relative
-        ).read_text(encoding="utf-8"), relative
+        before = blob_text(base, relative)
+
+        after = (PROJECT / relative).read_text(encoding="utf-8")
+
+        if after == before:
+            continue
+
+        assert relative in ADDITIVE_ONLY_PUBLICATION_TRANSPORTS, relative
+
+        assert_only_the_publication_transport_moved(relative, before, after)
 
 
 def test_no_model_artifact_or_freeze_manifest_changed():

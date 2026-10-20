@@ -231,6 +231,23 @@ PUBLIC_READBACK_TIMEOUT_SECONDS = 60
 #: defect, and a transport that reported both as "" could not tell them apart.
 REMOTE_MISSING = "MISSING"
 
+#: The mode an uploaded file carries while it sits unverified in the private
+#: staging tree. Set by ``chmod`` at the destination rather than by rsync's
+#: ``--chmod``: that option is not portable across the rsync implementations a
+#: self-hosted runner may carry, and the macOS runner's rejects the ``F``-
+#: prefixed form outright, which failed publication during local option
+#: parsing before a single byte was sent. The destination's own ``chmod`` is
+#: the mechanism this transport already uses for the served copy, so naming
+#: the mode here costs one remote command and removes the only option in the
+#: upload that every rsync does not accept.
+#:
+#: Only the staged copy. The served copy's mode is set where it always was,
+#: as the file is placed, and is deliberately not this one: the served tree is
+#: read by a web server, and a release nobody but the deploy account can read
+#: is a release the public readback fetches a 403 for. ``_place`` is
+#: unchanged.
+STAGED_FILE_MODE = "600"
+
 #: The published record's own version. Independent of the two feed versions:
 #: this names the shape of what is written to the destination, not the shape
 #: of what was read from the runtime.
@@ -1496,14 +1513,62 @@ class SshRsyncTransport:
                 "not serve what was verified"
             )
 
-    def _upload(self, safe: str, local: Path) -> None:
-        """rsync one file into the private staging tree.
+    def _rsync_argv(self, local: Path, target: str) -> list[str]:
+        """The transfer, as a command, so what is sent is readable in one place.
+
+        Every option here has to be one that any rsync a self-hosted runner
+        carries accepts, because the transfer runs on the runner rather than
+        at the destination. Permissions are deliberately not among them:
+        rsync's ``--chmod`` is the one option in this command that
+        implementations disagree about, and the macOS runner's rsync rejects
+        the ``F``-prefixed form while parsing its own arguments, so the
+        publication failed before it opened a connection. The mode is set by
+        :meth:`_set_staged_mode` instead.
 
         No ``--partial``: rsync writes a temporary and renames it when the
         transfer completes, so an interrupted transfer leaves the staging path
         absent rather than short. ``--checksum`` so a staging file that
         already exists is compared by content rather than by size and
         timestamp, which is the comparison a rerun needs.
+        """
+        return [
+            "rsync",
+            "--checksum",
+            "--times",
+            "-e",
+            shlex.join(self._ssh_argv()),
+            "--",
+            str(local),
+            f"{self.remote.user}@{self.remote.host}:{target}",
+        ]
+
+    def _set_staged_mode(self, target: str) -> None:
+        """Give the uploaded file its mode, at the destination, by name.
+
+        One path, quoted, and no ``-R``: this narrows a single regular file's
+        permissions and can neither widen a directory's nor reach a second
+        file. The two tests before the ``chmod`` are what make that a property
+        rather than an intention -- ``chmod`` follows symlinks, so a symlink
+        at the addressed path would point it at whatever the link named, and a
+        staging path that is not a regular file is not the upload this just
+        made. ``set -eu`` in :meth:`_run_remote` turns either into the
+        script's failure, which is a refusal here, so the release is not
+        placed and nothing is promoted.
+        """
+        quoted = shlex.quote(target)
+
+        self._run_remote(
+            f"[ -f {quoted} ]; [ ! -L {quoted} ]; "
+            f"chmod {STAGED_FILE_MODE} -- {quoted}"
+        )
+
+    def _upload(self, safe: str, local: Path) -> None:
+        """rsync one file into the private staging tree, then set its mode.
+
+        The mode is set after the transfer rather than during it, and only
+        after the transfer is known to have succeeded: a ``chmod`` that ran
+        regardless would report a permission for a file that is not there, and
+        a transfer that failed must not look like one that worked.
         """
         target = self._staged(safe)
 
@@ -1512,18 +1577,7 @@ class SshRsyncTransport:
         self._run_remote(f"mkdir -p -- {shlex.quote(parent)}")
 
         completed = subprocess.run(
-            [
-                "rsync",
-                "--checksum",
-                "--times",
-                "--chmod=F600",
-                "--no-perms",
-                "-e",
-                shlex.join(self._ssh_argv()),
-                "--",
-                str(local),
-                f"{self.remote.user}@{self.remote.host}:{target}",
-            ],
+            self._rsync_argv(local, target),
             capture_output=True,
             text=True,
             timeout=SSH_COMMAND_TIMEOUT_SECONDS,
@@ -1536,6 +1590,8 @@ class SshRsyncTransport:
                 f"failed (exit {completed.returncode}): "
                 f"{(completed.stderr or completed.stdout).strip()}"
             )
+
+        self._set_staged_mode(target)
 
     def _place(self, safe: str) -> None:
         """Copy a verified staging file into the served tree, atomically.

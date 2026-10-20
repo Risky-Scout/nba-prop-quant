@@ -31,6 +31,7 @@ from nba_prop_quant.research.game_latent_state.gates import (
 )
 from nba_prop_quant.research.game_latent_state.safety import (
     ADDITIVE_ONLY_CAPTURE_ENTRY_POINTS,
+    ADDITIVE_ONLY_PUBLICATION_TRANSPORTS,
     ADDITIVE_ONLY_SERVING_ENTRY_POINTS,
     ADDITIVE_ONLY_SERVING_ORCHESTRATORS,
     ADDITIVE_ONLY_SERVING_SOURCES,
@@ -39,8 +40,11 @@ from nba_prop_quant.research.game_latent_state.safety import (
     DECLARABLE_SERVING_SOURCE_REGISTRIES,
     DECLARED_CAPTURE_SELECTION_NAMES,
     DECLARED_INTEGRATION_PATHS,
+    DECLARED_PUBLICATION_TRANSPORT_NAMES,
     DECLARED_SERVING_PLUMBING_NAMES,
     DECLARED_SERVING_READINESS_NAMES,
+    PUBLICATION_TRANSPORT_CLASS,
+    PUBLICATION_TRANSPORT_EXEMPT_METHODS,
     NUMERICAL_SURFACE_EXEMPT_FUNCTIONS,
     PRODUCTION_REF,
     SERVING_ORCHESTRATOR_EXEMPT_FUNCTIONS,
@@ -306,6 +310,74 @@ def test_a_declared_capture_change_only_ever_adds_window_selection():
                 declared=DECLARED_CAPTURE_SELECTION_NAMES,
                 subject="capture window selection",
             )
+
+
+def test_only_the_remote_transport_is_declarable_in_the_publisher():
+    """The publication carve-out is one file and one class inside it.
+
+    What stays shut is the rest of the module, which is where every rule the
+    byte pin exists for lives: the row rules, the published-record versions,
+    the destination resolution, the switch reading and the promotion. None of
+    them is in the transport class, and the lifecycle's numerical pin holds
+    all of them syntax-tree-identical to production even for the declared
+    file, so declaring it buys a transfer command and a file mode and
+    nothing else.
+
+    The three neighbouring publication entry points are named explicitly:
+    they reach this same transport through ``build_transport``, so there is
+    no reason for any of them to be declarable for a defect in it, and a
+    carve-out that covered them would be exactly that permission.
+    """
+    assert len(ADDITIVE_ONLY_PUBLICATION_TRANSPORTS) == 1
+
+    for relative in ADDITIVE_ONLY_PUBLICATION_TRANSPORTS:
+        assert relative.startswith("ops/")
+        assert (PROJECT / relative).exists()
+        # Disjoint from the three carve-outs above, so none of the four can be
+        # widened by appealing to another.
+        assert relative not in ADDITIVE_ONLY_CAPTURE_ENTRY_POINTS
+        assert relative not in ADDITIVE_ONLY_SERVING_ENTRY_POINTS
+        assert relative not in ADDITIVE_ONLY_SERVING_ORCHESTRATORS
+        assert relative not in ADDITIVE_ONLY_SERVING_SOURCES
+
+    for relative in (
+        "ops/run_wizardofodds_publication.py",
+        "ops/wizardofodds_player_props_page.py",
+        "ops/nba_distribution_publication.py",
+    ):
+        assert relative not in ADDITIVE_ONLY_PUBLICATION_TRANSPORTS
+        assert relative not in DECLARED_INTEGRATION_PATHS
+
+    assert PUBLICATION_TRANSPORT_EXEMPT_METHODS == ("_upload",)
+
+    # The placement is not exempt, so the served copy's mode and the rename
+    # that makes serving atomic are pinned to production.
+    assert "_place" not in PUBLICATION_TRANSPORT_EXEMPT_METHODS
+
+    source = (PROJECT / ADDITIVE_ONLY_PUBLICATION_TRANSPORTS[0]).read_text(
+        encoding="utf-8"
+    )
+
+    classes = {
+        node.name: node
+        for node in ast.parse(source).body
+        if isinstance(node, ast.ClassDef)
+    }
+
+    assert PUBLICATION_TRANSPORT_CLASS in classes
+
+    methods = {
+        child.name
+        for child in classes[PUBLICATION_TRANSPORT_CLASS].body
+        if isinstance(child, ast.FunctionDef)
+    }
+
+    assert set(PUBLICATION_TRANSPORT_EXEMPT_METHODS) <= methods
+
+    # Every declared name is really in the file, so the declaration cannot
+    # carry a permission nothing uses.
+    for name in DECLARED_PUBLICATION_TRANSPORT_NAMES:
+        assert name in source, name
 
 
 def test_only_the_slate_builder_is_declarable_among_serving_sources():
