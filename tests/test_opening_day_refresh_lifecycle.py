@@ -32,9 +32,14 @@ from pathlib import Path
 import pytest
 
 from nba_prop_quant.research.game_latent_state.safety import (
+    ADDITIVE_ONLY_PAGE_CONSISTENCY_CHECKS,
     ADDITIVE_ONLY_PUBLICATION_TRANSPORTS,
     DECLARABLE_SERVING_SOURCE_REGISTRIES,
+    DECLARED_PAGE_CONSISTENCY_NAMES,
     DECLARED_PUBLICATION_TRANSPORT_NAMES,
+    PAGE_CONSISTENCY_CLASS,
+    PAGE_CONSISTENCY_EXEMPT_FUNCTIONS,
+    PAGE_CONSISTENCY_EXEMPT_METHODS,
     PUBLICATION_TRANSPORT_CLASS,
     PUBLICATION_TRANSPORT_EXEMPT_METHODS,
 )
@@ -699,16 +704,182 @@ def assert_only_the_publication_transport_moved(
     )
 
 
+class StripDeclaredPlumbing(ast.NodeTransformer):
+    """A tree with the declared names' binding and hand-off taken back out.
+
+    Used to state what a function gained rather than to exempt it from being
+    compared at all. A binding of a declared name is unwrapped back to the
+    bare expression it wraps, and a keyword argument named for a declared name
+    is dropped; if what is left is production's own tree, then the declared
+    plumbing is the whole of what the function gained and no second change
+    rode along inside it.
+    """
+
+    def __init__(self, declared: tuple[str, ...]) -> None:
+        self.declared = frozenset(declared)
+
+    def visit_Assign(self, node: ast.Assign) -> ast.AST:
+        self.generic_visit(node)
+
+        if (
+            len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and node.targets[0].id in self.declared
+        ):
+            return ast.Expr(value=node.value)
+
+        return node
+
+    def visit_Call(self, node: ast.Call) -> ast.AST:
+        self.generic_visit(node)
+
+        node.keywords = [
+            keyword
+            for keyword in node.keywords
+            if keyword.arg not in self.declared
+        ]
+
+        return node
+
+
+def class_fields(source: str, name: str) -> dict[str, ast.AST]:
+    """A class's own annotated attributes by name, which for a dataclass is its fields."""
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.ClassDef) and node.name == name:
+            return {
+                child.target.id: child
+                for child in node.body
+                if isinstance(child, ast.AnnAssign)
+                and isinstance(child.target, ast.Name)
+            }
+
+    return {}
+
+
+def assert_only_the_page_consistency_check_moved(
+    relative: str, before: str, after: str
+) -> None:
+    """Nothing the renderer states about a number, a format or a route may differ.
+
+    Narrower than the byte pin in the direction the pin exists for, and wider
+    only in the one the agreement check needs. The odds conversions, the
+    percentage formatting, the column set, the cell builders, the provenance
+    allow-list, the confinement rules and the routing call are top-level
+    definitions and module constants, and all of them are held
+    syntax-tree-identical to production here.
+
+    Only the agreement check's own body may differ, and only one accessor of
+    the card may. The function that aggregates rows into cards is not exempt:
+    it is compared against production's tree with the declared plumbing
+    stripped back out, so it may have gained the binding of the settled value
+    and the passing of it to the card, and nothing else.
+    """
+    strip = StripDeclaredPlumbing(DECLARED_PAGE_CONSISTENCY_NAMES)
+
+    definitions_before = top_level(before)
+    definitions_after = top_level(after)
+
+    assert set(definitions_before) <= set(definitions_after), (
+        f"{relative} dropped "
+        f"{sorted(set(definitions_before) - set(definitions_after))}"
+    )
+
+    for name, node in definitions_before.items():
+        if name in PAGE_CONSISTENCY_EXEMPT_FUNCTIONS:
+            continue
+
+        if name == PAGE_CONSISTENCY_CLASS:
+            continue
+
+        stripped = strip.visit(definitions_after[name])
+
+        assert ast.dump(node) == ast.dump(stripped), (
+            f"{relative}:{name} is not what production has once the declared "
+            f"names are removed, and only "
+            f"{list(PAGE_CONSISTENCY_EXEMPT_FUNCTIONS)} may differ"
+        )
+
+    constants_before = module_constants(before)
+    constants_after = module_constants(after)
+
+    assert set(constants_before) <= set(constants_after), (
+        f"{relative} dropped "
+        f"{sorted(set(constants_before) - set(constants_after))}"
+    )
+
+    for name, node in constants_before.items():
+        assert ast.dump(node) == ast.dump(constants_after[name]), (
+            f"{relative}:{name} is a module constant and may not move"
+        )
+
+    methods_before = class_methods(before, PAGE_CONSISTENCY_CLASS)
+    methods_after = class_methods(after, PAGE_CONSISTENCY_CLASS)
+
+    assert methods_before, f"{relative} has no {PAGE_CONSISTENCY_CLASS}"
+
+    assert set(methods_before) <= set(methods_after), (
+        f"{relative} dropped "
+        f"{sorted(set(methods_before) - set(methods_after))}"
+    )
+
+    for name, node in methods_before.items():
+        if name in PAGE_CONSISTENCY_EXEMPT_METHODS:
+            continue
+
+        assert ast.dump(node) == ast.dump(methods_after[name]), (
+            f"{relative}:{PAGE_CONSISTENCY_CLASS}.{name} is not the member "
+            "production has, and only "
+            f"{list(PAGE_CONSISTENCY_EXEMPT_METHODS)} may differ"
+        )
+
+    fields_before = class_fields(before, PAGE_CONSISTENCY_CLASS)
+    fields_after = class_fields(after, PAGE_CONSISTENCY_CLASS)
+
+    assert set(fields_before) <= set(fields_after), (
+        f"{relative} dropped "
+        f"{sorted(set(fields_before) - set(fields_after))}"
+    )
+
+    for name, node in fields_before.items():
+        assert ast.dump(node) == ast.dump(fields_after[name]), (
+            f"{relative}:{PAGE_CONSISTENCY_CLASS}.{name} is a published field "
+            "the card reads and may not move"
+        )
+
+    added = (
+        (set(definitions_after) - set(definitions_before))
+        | (set(constants_after) - set(constants_before))
+        | (set(methods_after) - set(methods_before))
+        | (set(fields_after) - set(fields_before))
+    )
+
+    assert added <= set(DECLARED_PAGE_CONSISTENCY_NAMES), (
+        f"{relative} added {sorted(added - set(DECLARED_PAGE_CONSISTENCY_NAMES))}, "
+        "which is not declared page consistency plumbing"
+    )
+
+
+#: Each declared file on the numerical list, and the stronger statement it is
+#: held to instead of its bytes. A module reaches this mapping by having a
+#: defect a byte pin makes unfixable while protecting nothing numerical, and
+#: it stays on the numerical list: the pin is restated, not lifted.
+NARROWED_NUMERICAL_PINS: tuple[tuple[tuple[str, ...], object], ...] = (
+    (ADDITIVE_ONLY_PUBLICATION_TRANSPORTS, assert_only_the_publication_transport_moved),
+    (ADDITIVE_ONLY_PAGE_CONSISTENCY_CHECKS, assert_only_the_page_consistency_check_moved),
+)
+
+
 def test_no_model_pricing_or_calibration_bytes_changed():
     """F. The model, its features, Gate 3, pricing and the PMFs are frozen.
 
-    Byte-identical for every module here except the declared publication
-    transport, where the freeze is restated rather than relaxed. That module
-    is on this list because it decides what is publishable and what a
-    published record says, and it also happens to contain the rsync the
-    runner refuses -- a transport defect that a byte pin makes unfixable
-    while protecting nothing numerical. So the one declared file is held to
-    the stronger statement below and every other file is held to its bytes.
+    Byte-identical for every module here except the two declared ones, where
+    the freeze is restated rather than relaxed. Both are on this list because
+    they decide what is publishable and what a published record says, and both
+    also happen to contain a defect in machinery that states no number -- the
+    rsync the runner refuses, and a string comparison of two spellings of one
+    double -- which a byte pin makes unfixable while protecting nothing
+    numerical. So each declared file is held to its own stronger statement
+    above and every other file is held to its bytes.
     """
     base = production_base()
 
@@ -723,9 +894,15 @@ def test_no_model_pricing_or_calibration_bytes_changed():
         if after == before:
             continue
 
-        assert relative in ADDITIVE_ONLY_PUBLICATION_TRANSPORTS, relative
+        narrowed = [
+            check
+            for declared, check in NARROWED_NUMERICAL_PINS
+            if relative in declared
+        ]
 
-        assert_only_the_publication_transport_moved(relative, before, after)
+        assert len(narrowed) == 1, relative
+
+        narrowed[0](relative, before, after)
 
 
 def test_no_model_artifact_or_freeze_manifest_changed():

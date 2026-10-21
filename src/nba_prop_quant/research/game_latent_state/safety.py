@@ -345,6 +345,73 @@ DECLARED_PUBLICATION_TRANSPORT_NAMES: tuple[str, ...] = (
     "_set_staged_mode",
 )
 
+#: The *page consistency check* a declaration may name, and only additively.
+#:
+#: The fifth instance of the deadlock the four carve-outs above resolved, and
+#: the second to cost opening day. The renderer is pinned byte-identical by
+#: the lifecycle's numerical freeze, which is right about what that pin is for
+#: -- this module decides which published release may become a public claim --
+#: and wrong about one thing inside it: the check that a wager's rows state
+#: one model probability compared their *serialisations*. A wager several
+#: books price is published once per book, every one of those rows carries the
+#: same model output, and two arrivals at one double can differ in the bits
+#: the format cannot hold. The feed published 603 rows and verified them; the
+#: page then refused the whole release because two rows spelled one
+#: probability ``0.5899928519036952`` and ``0.5899928519036954``. A pin that
+#: cannot be moved makes a defect in the renderer's own validation unfixable,
+#: and the defect refuses correct releases.
+#:
+#: So the module is declarable, and only on terms narrower than the byte pin
+#: is in the one direction that matters. Nothing that states a number, a
+#: format, a column, a destination or a routing rule may differ:
+#: :data:`PAGE_CONSISTENCY_EXEMPT_FUNCTIONS` names the only top-level
+#: definition whose body may, :data:`PAGE_CONSISTENCY_CLASS` and
+#: :data:`PAGE_CONSISTENCY_EXEMPT_METHODS` name the only card accessor that
+#: may, every other definition and every module constant is pinned
+#: syntax-tree-identical, anything new is held to
+#: :data:`DECLARED_PAGE_CONSISTENCY_NAMES`, and the function that aggregates
+#: rows into cards is pinned to production's own tree once the declared
+#: plumbing is taken back out of it. The odds conversions, the percentage
+#: formatting, the column set, the provenance allow-list, the confinement and
+#: the routing call are all outside this and are frozen exactly as the byte
+#: pin froze them.
+ADDITIVE_ONLY_PAGE_CONSISTENCY_CHECKS: tuple[str, ...] = (
+    "ops/wizardofodds_player_props_page.py",
+)
+
+#: The only top-level definition in the declared renderer whose body may
+#: differ from production. The agreement check and nothing else: the
+#: conversions, the formatters, the cell builders and the confinement rules
+#: are all separate definitions and all pinned.
+PAGE_CONSISTENCY_EXEMPT_FUNCTIONS: tuple[str, ...] = ("_agree_on_the_model",)
+
+#: The only class in the declared renderer whose members may differ. The card,
+#: because the one accessor that states the settled probability is on it.
+PAGE_CONSISTENCY_CLASS = "PageRow"
+
+#: The only member of that class whose body may differ from production. The
+#: market probability, the edge, the expected value, the fair odds, the
+#: projection, the matchup and the card ordering are all outside this list, so
+#: every number a card shows apart from the model's own probability is pinned
+#: to the accessor production has.
+PAGE_CONSISTENCY_EXEMPT_METHODS: tuple[str, ...] = ("model_probability",)
+
+#: What a name added to the declared renderer is allowed to be.
+#:
+#: The rule :data:`DECLARED_PUBLICATION_TRANSPORT_NAMES` states, for the
+#: exemption whose subject is whether a release's rows state one number. All
+#: four are that: the two constants that say how close two copies of one
+#: double must be, the predicate that answers it, and the field that carries
+#: the answer onto the card. Nothing here can name a price, a column, a
+#: format, a destination or a route, which is what keeps this from becoming a
+#: declaration that the renderer is editable.
+DECLARED_PAGE_CONSISTENCY_NAMES: tuple[str, ...] = (
+    "MODEL_SCALAR_FLOOR",
+    "MODEL_SCALAR_ULPS",
+    "model_scalar",
+    "model_scalars_settled",
+)
+
 #: The two registries under ``models/`` that record what serving runs, rather
 #: than being what serving runs.
 #:
@@ -593,36 +660,43 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: files that branch changed rather than introduced, so touching any of them
 #: again requires declaring it again.
 #:
+#: The rsync portability branch's one entry was retired in turn when it
+#: landed, for the reason that entry itself gave: the publisher is owned
+#: below, so touching it again requires declaring it again.
+#:
 #: This branch declares one path, owned below, and widens the carve-outs by
-#: that same file, named above. What it corrects is that the publication
-#: transport could not transfer on the runner it runs on. The upload asked
-#: rsync for the staged file's mode with
-#: ``--chmod=F600``; the macOS runner's rsync rejects that spelling while
-#: parsing its own arguments, so the transfer exited non-zero before opening
-#: a connection and the canary feed could not be published at all. The mode
-#: is now set at the destination by ``chmod``, which is the mechanism this
-#: transport already uses for the served copy, so the file the destination
-#: ends up holding is the file it was always meant to hold. Nothing else
-#: moves: the same ssh argv, the same staging-then-place ordering, the same
-#: digest checks before and after the placement, the same public readback,
-#: and the same canary-only authority with live publication still disabled.
-#: No threshold, feature, distribution, price, probability or route is read or
-#: written anywhere in this change.
+#: that same file, named above. What it corrects is that the renderer refused
+#: a release the feed had published correctly. A wager several sportsbooks
+#: price is published once per book and every one of those rows carries the
+#: same model probability, so the page checks that they state one number
+#: before it states it on a card -- and it checked their serialisations. Two
+#: rows of the opening-day release spelled one double
+#: ``0.5899928519036952`` and ``0.5899928519036954``, two bits apart, and the
+#: whole page was refused. The check is now numerical and the bound is the
+#: resolution of the values themselves, so the format's noise is one number
+#: and anything a model could have meant is still two. Nothing else moves:
+#: the same rows, the same routing, the same columns, the same formatting,
+#: the same provenance, the same confinement, and the same canary-only
+#: authority with live publication still disabled. No threshold, feature,
+#: distribution, price, probability or route is computed anywhere in this
+#: change, and the number a card states is a published one.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
-        "ops/publish_incumbent_to_wizardofodds.py": (
-            "the staged upload's mode is set by a ``chmod`` at the "
-            "destination instead of by rsync's ``--chmod``, which is the one "
-            "option in the transfer that rsync implementations disagree "
-            "about and the one the macOS runner refuses. It runs only after "
-            "the transfer is known to have succeeded, names the single "
-            "uploaded file quoted, is not recursive, and refuses the upload "
-            "if the path is not a regular file or if the mode cannot be set "
-            "-- so a release whose permissions are unknown is never placed. "
-            "The staged mode is the 600 the removed option expressed and the "
-            "served mode is the 644 the placement already set; neither "
-            "changes. No destination, credential, ssh option, ordering, "
-            "digest check, readback, retention or publishing authority moves"
+        "ops/wizardofodds_player_props_page.py": (
+            "the check that a wager's published rows agree about the model's "
+            "probability compares them as numbers instead of as strings, "
+            "within the resolution of the values themselves -- eight units "
+            "in the last place, floored at 1e-15 -- so two serialisations of "
+            "one double are one number and a difference a model could "
+            "express is still a refusal. It fails closed on everything it "
+            "failed closed on before: a missing probability, one that is not "
+            "a number, one that is infinite or NaN, and any disagreement "
+            "above that bound all refuse the page. The number a card states "
+            "is one the release published, read from the wager's own stable "
+            "row order rather than averaged, recomputed or taken from "
+            "whichever sportsbook the reader is routed to. No published row, "
+            "feed, distribution, routing rule, column, format, destination "
+            "or publishing authority moves"
         ),
     }
 )

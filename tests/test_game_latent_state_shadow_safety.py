@@ -31,6 +31,7 @@ from nba_prop_quant.research.game_latent_state.gates import (
 )
 from nba_prop_quant.research.game_latent_state.safety import (
     ADDITIVE_ONLY_CAPTURE_ENTRY_POINTS,
+    ADDITIVE_ONLY_PAGE_CONSISTENCY_CHECKS,
     ADDITIVE_ONLY_PUBLICATION_TRANSPORTS,
     ADDITIVE_ONLY_SERVING_ENTRY_POINTS,
     ADDITIVE_ONLY_SERVING_ORCHESTRATORS,
@@ -40,9 +41,13 @@ from nba_prop_quant.research.game_latent_state.safety import (
     DECLARABLE_SERVING_SOURCE_REGISTRIES,
     DECLARED_CAPTURE_SELECTION_NAMES,
     DECLARED_INTEGRATION_PATHS,
+    DECLARED_PAGE_CONSISTENCY_NAMES,
     DECLARED_PUBLICATION_TRANSPORT_NAMES,
     DECLARED_SERVING_PLUMBING_NAMES,
     DECLARED_SERVING_READINESS_NAMES,
+    PAGE_CONSISTENCY_CLASS,
+    PAGE_CONSISTENCY_EXEMPT_FUNCTIONS,
+    PAGE_CONSISTENCY_EXEMPT_METHODS,
     PUBLICATION_TRANSPORT_CLASS,
     PUBLICATION_TRANSPORT_EXEMPT_METHODS,
     NUMERICAL_SURFACE_EXEMPT_FUNCTIONS,
@@ -346,6 +351,14 @@ def test_only_the_remote_transport_is_declarable_in_the_publisher():
         "ops/nba_distribution_publication.py",
     ):
         assert relative not in ADDITIVE_ONLY_PUBLICATION_TRANSPORTS
+
+    # Neither of the two is declarable at all. The renderer is left out of
+    # this pair because it has a carve-out of its own, asserted below: what
+    # matters here is that it cannot be edited by appealing to *this* one.
+    for relative in (
+        "ops/run_wizardofodds_publication.py",
+        "ops/nba_distribution_publication.py",
+    ):
         assert relative not in DECLARED_INTEGRATION_PATHS
 
     assert PUBLICATION_TRANSPORT_EXEMPT_METHODS == ("_upload",)
@@ -378,6 +391,127 @@ def test_only_the_remote_transport_is_declarable_in_the_publisher():
     # carry a permission nothing uses.
     for name in DECLARED_PUBLICATION_TRANSPORT_NAMES:
         assert name in source, name
+
+
+def test_only_the_model_agreement_check_is_declarable_in_the_page():
+    """The renderer's carve-out is one file, one function and one accessor.
+
+    What stays shut is the rest of the module, which is where everything the
+    byte pin exists for lives: the odds conversions, the percentage
+    formatting, the column set, the provenance allow-list, the confinement
+    rules and the call into the router. None of them is the agreement check,
+    and the lifecycle's numerical pin holds all of them syntax-tree-identical
+    to production even for the declared file, so declaring it buys a
+    numerical comparison and the field that carries its answer, and nothing
+    else.
+
+    The publication entry point and the distribution stage are named
+    explicitly: they are the two neighbouring stages of the same release, and
+    a carve-out that covered them would be permission to edit what is
+    published rather than how one published number is compared.
+    """
+    assert len(ADDITIVE_ONLY_PAGE_CONSISTENCY_CHECKS) == 1
+
+    for relative in ADDITIVE_ONLY_PAGE_CONSISTENCY_CHECKS:
+        assert relative.startswith("ops/")
+        assert (PROJECT / relative).exists()
+        # Disjoint from the four carve-outs above, so none of the five can be
+        # widened by appealing to another.
+        assert relative not in ADDITIVE_ONLY_CAPTURE_ENTRY_POINTS
+        assert relative not in ADDITIVE_ONLY_PUBLICATION_TRANSPORTS
+        assert relative not in ADDITIVE_ONLY_SERVING_ENTRY_POINTS
+        assert relative not in ADDITIVE_ONLY_SERVING_ORCHESTRATORS
+        assert relative not in ADDITIVE_ONLY_SERVING_SOURCES
+
+    for relative in (
+        "ops/publish_incumbent_to_wizardofodds.py",
+        "ops/run_wizardofodds_publication.py",
+        "ops/nba_distribution_publication.py",
+    ):
+        assert relative not in ADDITIVE_ONLY_PAGE_CONSISTENCY_CHECKS
+        assert relative not in DECLARED_INTEGRATION_PATHS
+
+    assert PAGE_CONSISTENCY_EXEMPT_FUNCTIONS == ("_agree_on_the_model",)
+
+    assert PAGE_CONSISTENCY_EXEMPT_METHODS == ("model_probability",)
+
+    # The aggregation is not exempt. It is compared against production with
+    # the declared names stripped back out of it, which is what lets it bind
+    # the settled value without becoming editable.
+    assert "page_rows" not in PAGE_CONSISTENCY_EXEMPT_FUNCTIONS
+
+    # Every other number a card shows is still pinned to the accessor
+    # production has.
+    for accessor in (
+        "market_probability",
+        "edge",
+        "expected_value",
+        "fair_odds",
+        "projection",
+    ):
+        assert accessor not in PAGE_CONSISTENCY_EXEMPT_METHODS
+
+    source = (PROJECT / ADDITIVE_ONLY_PAGE_CONSISTENCY_CHECKS[0]).read_text(
+        encoding="utf-8"
+    )
+
+    tree = ast.parse(source)
+
+    definitions = {
+        node.name
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.ClassDef))
+    }
+
+    assert set(PAGE_CONSISTENCY_EXEMPT_FUNCTIONS) <= definitions
+
+    assert PAGE_CONSISTENCY_CLASS in definitions
+
+    classes = {
+        node.name: node for node in tree.body if isinstance(node, ast.ClassDef)
+    }
+
+    members = {
+        child.name
+        for child in classes[PAGE_CONSISTENCY_CLASS].body
+        if isinstance(child, ast.FunctionDef)
+    }
+
+    assert set(PAGE_CONSISTENCY_EXEMPT_METHODS) <= members
+
+    # Every declared name is really in the file, so the declaration cannot
+    # carry a permission nothing uses.
+    for name in DECLARED_PAGE_CONSISTENCY_NAMES:
+        assert name in source, name
+
+    # And the declaration cannot be a tolerance by another name: what it
+    # bought is a bound at the resolution of a double, not a rounding.
+    assert "MODEL_SCALAR_ULPS" in DECLARED_PAGE_CONSISTENCY_NAMES
+
+    # Asked of the syntax tree rather than of the text, because this module
+    # is mostly prose and a word search here matches the prose.
+    assert not [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and "isclose" in ast.unparse(node.func)
+    ], "a relative-tolerance comparison would not be a machine-precision one"
+
+    # Every small float in the renderer, enumerated. The declared floor, and
+    # the two the module already had: the mass a published PMF's
+    # probabilities may miss one by, and the margin the highlighted peak is
+    # compared under. Neither is a probability comparison and neither moves
+    # here. A 1e-6 or a 0.0001 cannot be sitting in the module under any
+    # name, because the set is pinned rather than searched.
+    small = {
+        ast.unparse(node)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, float)
+        and 0.0 < node.value < 1e-3
+    }
+
+    assert small == {"1e-09", "1e-12", "1e-15"}, small
 
 
 def test_only_the_slate_builder_is_declarable_among_serving_sources():
