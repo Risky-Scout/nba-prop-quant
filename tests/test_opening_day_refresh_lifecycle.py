@@ -34,8 +34,10 @@ import pytest
 from nba_prop_quant.research.game_latent_state.safety import (
     ADDITIVE_ONLY_PAGE_CONSISTENCY_CHECKS,
     ADDITIVE_ONLY_PUBLICATION_TRANSPORTS,
+    ADDITIVE_ONLY_SERVING_ENTRY_POINTS,
     ADDITIVE_ONLY_SERVING_SOURCES,
     DECLARABLE_SERVING_SOURCE_REGISTRIES,
+    NUMERICAL_SURFACE_EXEMPT_FUNCTIONS,
     DECLARED_PAGE_CONSISTENCY_NAMES,
     DECLARED_PUBLICATION_TRANSPORT_NAMES,
     DECLARED_SERVING_PLUMBING_NAMES,
@@ -942,6 +944,85 @@ def assert_only_the_slate_builder_moved(
             )
 
 
+def assert_only_the_serving_entry_point_moved(
+    relative: str, before: str, after: str
+) -> None:
+    """Nothing a serving script computes may differ except what it carries.
+
+    A serving entry point's byte pin protects the numbers the script itself
+    computes. It is restated rather than lifted in the one direction the
+    carve-out in ``safety`` defines: ``parse_args``, where an argument is
+    declared, and ``main``, where it is used, are the only definitions whose
+    bodies may differ, every other function -- which is everything that
+    prices, projects, verifies a manifest or routes a prop -- is held
+    syntax-tree-identical to production here, every module constant is too,
+    and what the two exempt functions may have gained is held to the declared
+    plumbing names.
+
+    That is strictly more than this file's byte comparison asserted, which
+    said nothing about content at all once a file was allowed to differ.
+    """
+    removed = [
+        line for line in before.splitlines() if line not in after.splitlines()
+    ]
+
+    assert removed == [], (
+        f"{relative} removed or edited lines production has: {removed}"
+    )
+
+    definitions_before = top_level(before)
+    definitions_after = top_level(after)
+
+    assert set(definitions_before) <= set(definitions_after), (
+        f"{relative} dropped "
+        f"{sorted(set(definitions_before) - set(definitions_after))}"
+    )
+
+    for name, node in definitions_before.items():
+        if name in NUMERICAL_SURFACE_EXEMPT_FUNCTIONS:
+            continue
+
+        assert ast.dump(node) == ast.dump(definitions_after[name]), (
+            f"{relative}:{name} is not what production has, and only "
+            f"{list(NUMERICAL_SURFACE_EXEMPT_FUNCTIONS)} may differ"
+        )
+
+    constants_before = module_constants(before)
+    constants_after = module_constants(after)
+
+    assert set(constants_before) <= set(constants_after), (
+        f"{relative} dropped "
+        f"{sorted(set(constants_before) - set(constants_after))}"
+    )
+
+    for name, node in constants_before.items():
+        assert ast.dump(node) == ast.dump(constants_after[name]), (
+            f"{relative}:{name} is a module constant and may not move"
+        )
+
+    for name in NUMERICAL_SURFACE_EXEMPT_FUNCTIONS:
+        if name not in definitions_before:
+            continue
+
+        statements = {
+            ast.dump(node) for node in definitions_before[name].body
+        }
+
+        for node in definitions_after[name].body:
+            rendered = ast.dump(node)
+
+            if rendered in statements:
+                continue
+
+            assert any(
+                declared in rendered
+                for declared in DECLARED_SERVING_PLUMBING_NAMES
+            ), (
+                f"{relative}:{name} added a statement that is not declared "
+                f"serving plumbing: {ast.unparse(node)[:160]}"
+            )
+
+
 #: Each declared file on the numerical list, and the stronger statement it is
 #: held to instead of its bytes. A module reaches this mapping by having a
 #: defect a byte pin makes unfixable while protecting nothing numerical, and
@@ -950,20 +1031,24 @@ NARROWED_NUMERICAL_PINS: tuple[tuple[tuple[str, ...], object], ...] = (
     (ADDITIVE_ONLY_PUBLICATION_TRANSPORTS, assert_only_the_publication_transport_moved),
     (ADDITIVE_ONLY_PAGE_CONSISTENCY_CHECKS, assert_only_the_page_consistency_check_moved),
     (ADDITIVE_ONLY_SERVING_SOURCES, assert_only_the_slate_builder_moved),
+    (ADDITIVE_ONLY_SERVING_ENTRY_POINTS, assert_only_the_serving_entry_point_moved),
 )
 
 
 def test_no_model_pricing_or_calibration_bytes_changed():
     """F. The model, its features, Gate 3, pricing and the PMFs are frozen.
 
-    Byte-identical for every module here except the two declared ones, where
-    the freeze is restated rather than relaxed. Both are on this list because
-    they decide what is publishable and what a published record says, and both
-    also happen to contain a defect in machinery that states no number -- the
-    rsync the runner refuses, and a string comparison of two spellings of one
-    double -- which a byte pin makes unfixable while protecting nothing
-    numerical. So each declared file is held to its own stronger statement
-    above and every other file is held to its bytes.
+    Byte-identical for every module here except the declared ones, where the
+    freeze is restated rather than relaxed. Each is on this list because it
+    decides what is publishable, what the fitted models are shown or what a
+    published record says, and each also happens to contain a defect in
+    machinery that states no number of its own -- the rsync the runner
+    refuses, a string comparison of two spellings of one double, which
+    player-games a prior averages over, and a column that said a figure did
+    not exist while the stage beside it published that figure -- which a byte
+    pin makes unfixable while protecting nothing numerical. So each declared
+    file is held to its own stronger statement above and every other file is
+    held to its bytes.
     """
     base = production_base()
 
