@@ -126,7 +126,7 @@ jobs:
 
     steps:
       - name: Check out the authoritative production code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Explicit: a scheduled event originates from the default branch, so
           # the production ref is named rather than inherited.
@@ -156,8 +156,11 @@ jobs:
             exit 1
           fi
 
+      # No `cache:`, for the reason the lifecycle documents: this runner's own
+      # pip cache directory survives between runs, so a GitHub cache would
+      # move bytes over the network to replace bytes already on the disk.
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -183,10 +186,17 @@ jobs:
       # scikit-learn, shap or pyarrow. No `pip install --upgrade pip`: this is
       # a serving workflow and upgrading the installer on every trigger is
       # network and time spent on nothing.
+      #
+      # Through the production constraint file, so the two wheels an off-day
+      # segment does install are the versions a successful run proved rather
+      # than whatever was published that morning. The floors are still here
+      # because they are what the probe's imports need; the constraint file is
+      # what decides which release satisfies them.
       - name: Install the segment probe's dependencies
         run: |
           set -euo pipefail
-          python -m pip install 'httpx>=0.27' 'tenacity>=9.0'
+          python -m pip install -c constraints/py312-production.txt \
+            'httpx>=0.27' 'tenacity>=9.0'
 
       # The cheap exit. Reads the slate schedule once and the append-only
       # capture log once, and reports whether this segment owns any T-20
@@ -211,11 +221,17 @@ jobs:
       # Production dependencies only. Not `.[dev]`: pytest and ruff are CI
       # tools and this workflow serves production. Installed only once the
       # probe has found work, and once per invocation rather than per group.
+      #
+      # At the versions a successful run proved, for the reason the lifecycle
+      # documents: pyproject.toml states floors, which is what the code needs
+      # rather than what production is known to work under, and without the
+      # constraint file every segment re-resolved the tree against that
+      # morning's PyPI.
       - name: Install the production package
         if: steps.probe.outputs.t20_work == 'true'
         run: |
           set -euo pipefail
-          python -m pip install -e .
+          python -m pip install -c constraints/py312-production.txt -e .
 
       # The whole of the segment's work, in one process: sleep to each T-20
       # time this segment owns, revalidate the schedule, capture that due
@@ -254,7 +270,7 @@ jobs:
 
       - name: Upload the segment diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: nba-t20-segment-${{ github.run_id }}
           path: ${{ runner.temp }}/t20
