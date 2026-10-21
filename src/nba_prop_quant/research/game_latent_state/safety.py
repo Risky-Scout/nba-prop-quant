@@ -756,6 +756,20 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
             "routing, marginal family, calibration, dependence, Gate 3 "
             "routing, fitted artifacts -- stays false"
         ),
+        "models/frozen_manifests/"
+        "nba_prop_quant_v2_adaptive_update_protocol.json": (
+            "one field, adaptive_serving_source_contract_sha256, which is the "
+            "digest of the registry relocked above. assert_protocol_matches_tree "
+            "refuses a daily fit whose protocol does not describe the working "
+            "tree, so relocking the one without the other is a fit that cannot "
+            "run. The two hashes it derives from the model surface, config_hash "
+            "and feature_schema_hash, are unchanged and are the evidence that "
+            "no config and no feature schema moved. Nothing else in the file "
+            "is touched: the architecture contract digest, the architecture "
+            "reference SHA, the DAG stages, the five frozen policy digests, "
+            "the Gate 3 candidate policy id, the selector prohibition and the "
+            "prohibited-operation list all stand"
+        ),
     }
 )
 
