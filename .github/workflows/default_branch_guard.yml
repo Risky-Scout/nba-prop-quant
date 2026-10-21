@@ -48,7 +48,7 @@ jobs:
 
     steps:
       - name: Check out the branch under test
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Full history: the validator reads the authoritative lifecycle copy
           # out of the production ref with `git show`, which a shallow clone
@@ -56,14 +56,21 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
+      # One pure-Python wheel, and deliberately not installed through the
+      # production constraint file. This workflow is the one that runs from
+      # `main` as well as from production, and `main` carries the workflows
+      # and the scheduler's validators rather than the production dependency
+      # set -- a `-c constraints/py312-production.txt` here would fail on the
+      # branch this job exists to check. No `pip install --upgrade pip`
+      # either: the interpreter above brings its own, and upgrading it on
+      # every push is a download spent on nothing.
       - name: Install the validator's only dependency
         run: |
           set -euo pipefail
-          python -m pip install --upgrade pip
           python -m pip install 'pyyaml>=6'
 
       - name: Fetch the authoritative production ref
@@ -87,7 +94,7 @@ jobs:
 
       - name: Upload the report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: default-branch-guard-${{ github.run_id }}
           path: ${{ runner.temp }}/scheduler_role.json

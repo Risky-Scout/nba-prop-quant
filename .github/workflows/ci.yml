@@ -32,7 +32,7 @@ jobs:
 
     steps:
       - name: Check out the branch under test
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Full history, not the default shallow clone. The repository's
           # frozen-source integrity tests read blobs at the architecture
@@ -40,16 +40,32 @@ jobs:
           # clone cannot resolve.
           fetch-depth: 0
 
+      # The pip cache is setup-python's own, keyed on the constraint file.
+      # That is the correct key: the constraint file names every version this
+      # job may install, so an unchanged constraint file means an unchanged
+      # download set and a changed one invalidates the cache by itself. No
+      # second caching system is configured here -- a hand-rolled
+      # actions/cache over the same directory would be a second key for one
+      # thing, and the two would disagree.
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: constraints/py312-production.txt
 
+      # No `pip install --upgrade pip`. The interpreter setup-python selected
+      # brings its own pip; upgrading it on every run is a download that
+      # changes the installer under the job for no stated reason, and nothing
+      # in this repository requires a pip newer than the one shipped.
+      #
+      # The constraint file is what makes two runs of the same commit install
+      # the same versions. The dev extra is CI's: this is the job that runs
+      # pytest and ruff.
       - name: Install the package and test dependencies
         run: |
           set -euo pipefail
-          python -m pip install --upgrade pip
-          python -m pip install -e '.[dev]'
+          python -m pip install -c constraints/py312-production.txt -e '.[dev]'
 
       - name: Validate workflow definitions
         run: |

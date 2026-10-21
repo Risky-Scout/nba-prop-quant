@@ -91,7 +91,7 @@ jobs:
 
     steps:
       - name: Check out the authoritative production code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Explicit: a scheduled event originates from the default branch, so
           # the production ref is named rather than inherited.
@@ -108,8 +108,13 @@ jobs:
           echo "Triggered by: ${{ github.event_name }}"
           echo "Workflow ref: ${{ github.ref }}"
 
+      # No `cache:` here, unlike CI. This runner is the long-lived Mac and its
+      # own pip cache directory already survives between runs, so the wheels
+      # are reused without a GitHub cache being uploaded and downloaded around
+      # them. Adding one would move the same bytes over the network to replace
+      # bytes already on the disk.
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -136,11 +141,26 @@ jobs:
           echo "architecture=$(uname -m)" >> "$GITHUB_OUTPUT"
           echo "$VENV/bin" >> "$GITHUB_PATH"
 
+      # Production dependencies only, at the versions a successful run already
+      # proved. Three things were wrong with what this used to be.
+      #
+      # It installed `.[dev]`, which is pytest and ruff. Neither serves a
+      # prediction, and a production environment that carries its own test
+      # runner is a production environment that can be made to run tests.
+      #
+      # It re-resolved the whole tree against whatever PyPI had that morning,
+      # because pyproject.toml states floors -- what the code needs -- and a
+      # floor is not a statement about what production is known to work under.
+      # The constraint file is that statement, so two runs of the same commit
+      # build the same environment.
+      #
+      # And it upgraded pip first, every day, which changes the installer
+      # under the run and is a download nothing here asked for. The
+      # interpreter selected above brings its own pip and that is the one used.
       - name: Install the production package
         run: |
           set -euo pipefail
-          python -m pip install --upgrade pip
-          python -m pip install -e '.[dev]'
+          python -m pip install -c constraints/py312-production.txt -e .
 
       # Fails the job when the interpreter resolves outside the environment
       # above. It runs after the install because the question is where the
@@ -567,7 +587,7 @@ jobs:
 
       - name: Upload run diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: nba-production-run-${{ github.run_id }}
           path: ${{ runner.temp }}/run

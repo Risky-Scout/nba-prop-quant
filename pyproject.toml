@@ -31,7 +31,25 @@ dependencies = [
   "shap>=0.46",
   "tenacity>=9.0",
   "typer>=0.12",
-  "xgboost>=2.1"
+  # Package selection, not a behaviour change. The import stays `xgboost`, the
+  # version is the same on both platforms, and no parameter, thread count,
+  # seed or Booster load changes: `xgboost-cpu` is the same upstream release
+  # built without the GPU plugin.
+  #
+  # The reason is the dependency the GPU build declares. The `xgboost` wheel
+  # requires `nvidia-nccl-cu13; platform_system == "Linux"`, so every Linux
+  # install pulls a 291 MB CUDA collective-communication library. This project
+  # trains and predicts on CPU, has no GPU production path, and nothing here
+  # loads NCCL -- so on Linux that payload was downloaded and installed on
+  # every CI run and every fresh environment to be used by nothing.
+  #
+  # Pinned rather than floored, and pinned to the version production already
+  # serves under. `xgboost-cpu` publishes no macOS wheel, which is also why
+  # the marker is a selection rather than a plain substitution: the production
+  # runner is a Mac and takes `xgboost`, whose macOS wheel has no NVIDIA
+  # requirement to shed.
+  "xgboost-cpu==3.4.1; sys_platform == 'linux'",
+  "xgboost==3.4.1; sys_platform != 'linux'"
 ]
 
 [project.optional-dependencies]

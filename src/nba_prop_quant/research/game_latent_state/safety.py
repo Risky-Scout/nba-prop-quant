@@ -664,39 +664,88 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: landed, for the reason that entry itself gave: the publisher is owned
 #: below, so touching it again requires declaring it again.
 #:
-#: This branch declares one path, owned below, and widens the carve-outs by
-#: that same file, named above. What it corrects is that the renderer refused
-#: a release the feed had published correctly. A wager several sportsbooks
-#: price is published once per book and every one of those rows carries the
-#: same model probability, so the page checks that they state one number
-#: before it states it on a card -- and it checked their serialisations. Two
-#: rows of the opening-day release spelled one double
-#: ``0.5899928519036952`` and ``0.5899928519036954``, two bits apart, and the
-#: whole page was refused. The check is now numerical and the bound is the
-#: resolution of the values themselves, so the format's noise is one number
-#: and anything a model could have meant is still two. Nothing else moves:
-#: the same rows, the same routing, the same columns, the same formatting,
-#: the same provenance, the same confinement, and the same canary-only
-#: authority with live publication still disabled. No threshold, feature,
-#: distribution, price, probability or route is computed anywhere in this
-#: change, and the number a card states is a published one.
+#: The page float-consistency branch's one entry was retired in turn when it
+#: landed, for the reason that entry itself gave: the renderer is owned below,
+#: so touching it again requires declaring it again.
+#:
+#: This branch declares five paths: four workflows and the workflow validator.
+#: Three of the four workflows are owned below and ``ci.yml`` is not, and
+#: neither is the validator -- both are pre-existing production files this
+#: lineage changes rather than introduces, so both are recorded nowhere when
+#: this lands and touching either again requires declaring it again.
+#:
+#: What it changes is what an environment installs, and nothing about what
+#: runs in it. Three recurring costs, each independently verifiable. The
+#: official actions move to the Node 24 generations, because the Node 20 ones
+#: are deprecated and warn on every run. The Linux dependency set takes
+#: ``xgboost-cpu``, which is the same upstream XGBoost release without the
+#: ``nvidia-nccl-cu13`` requirement, so a CPU-only fit stops downloading a
+#: 291 MB CUDA collective library it never loads; macOS keeps ``xgboost``,
+#: which has no such requirement and for which no CPU wheel is published.
+#: And every install goes through ``constraints/py312-production.txt``, so a
+#: fresh per-run environment resolves the versions a previous run proved
+#: rather than whatever PyPI published that morning.
+#:
+#: Nothing about the model moves. No frozen artifact, feature, Gate 3
+#: threshold, calibration, price, PMF, simulation count, snapshot, T-20
+#: boundary, publication semantic, player identity or promotion authority is
+#: touched, no XGBoost parameter, thread count, seed or Booster load changes,
+#: and the ``xgboost`` import is the same import. Live publication stays
+#: disabled, the production ref, environment, runner and canary validations
+#: are untouched, and the only workflow semantics that change are the version
+#: of an action and the arguments to ``pip install``.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
-        "ops/wizardofodds_player_props_page.py": (
-            "the check that a wager's published rows agree about the model's "
-            "probability compares them as numbers instead of as strings, "
-            "within the resolution of the values themselves -- eight units "
-            "in the last place, floored at 1e-15 -- so two serialisations of "
-            "one double are one number and a difference a model could "
-            "express is still a refusal. It fails closed on everything it "
-            "failed closed on before: a missing probability, one that is not "
-            "a number, one that is infinite or NaN, and any disagreement "
-            "above that bound all refuse the page. The number a card states "
-            "is one the release published, read from the wager's own stable "
-            "row order rather than averaged, recomputed or taken from "
-            "whichever sportsbook the reader is routed to. No published row, "
-            "feed, distribution, routing rule, column, format, destination "
-            "or publishing authority moves"
+        ".github/workflows/ci.yml": (
+            "installs through the production constraint file, so the suite "
+            "that gates a change runs under the versions production will "
+            "build rather than under that morning's resolution, and caches "
+            "pip on that file as its key. The official actions move to the "
+            "Node 24 generations. It stays a GitHub-hosted, pull-request "
+            "job: no runner label, trigger, permission or step moves, and it "
+            "still cannot reach the production runner"
+        ),
+        ".github/workflows/default_branch_guard.yml": (
+            "the official actions move to the Node 24 generations and the "
+            "daily pip self-upgrade is removed. Its install is deliberately "
+            "left unconstrained: this is the one job that also runs from the "
+            "default branch, which carries the schedulers and their "
+            "validators rather than the production dependency set, so naming "
+            "a production constraint file here would fail on the branch the "
+            "job exists to check. No trigger, permission, runner or checked "
+            "property moves"
+        ),
+        ".github/workflows/nba_production_lifecycle.yml": (
+            "the official actions move to the Node 24 generations; the "
+            "install becomes the package alone through the production "
+            "constraint file, where it was the dev extra resolved fresh; and "
+            "the daily pip self-upgrade is removed. Production no longer "
+            "carries pytest or ruff, which serve nothing. Every step, "
+            "condition, order, entry point, ref, runner label, environment "
+            "and concurrency setting is byte-identical: the additive-only "
+            "check reads this file line by line against production and the "
+            "substitutions are enumerated there"
+        ),
+        ".github/workflows/nba_t20_production.yml": (
+            "the same three changes as the lifecycle: Node 24 actions, both "
+            "installs routed through the production constraint file, and no "
+            "pip self-upgrade. The cheap probe still installs two small "
+            "wheels and not the scientific stack, and the expensive install "
+            "is still gated behind it. The three capture segments, their "
+            "boundaries, the controller entry point, the ref, the runner, "
+            "the environment and the canary-only publishing authority are "
+            "unchanged"
+        ),
+        "ops/validate_workflows.py": (
+            "gains three expectations and loses none: every official action "
+            "names the pinned Node 24 version, every install in a "
+            "constrained workflow goes through the production constraint "
+            "file, and neither production workflow installs the dev extra or "
+            "upgrades pip. The forbidden-install check it already had for "
+            "the T-20 workflow now covers the lifecycle too. No "
+            "production-ref, environment, runner, concurrency, canary, "
+            "publication-order, refresh-classification or secret-leak check "
+            "is weakened, removed or made conditional"
         ),
     }
 )
@@ -952,6 +1001,51 @@ SHADOW_OWNED_PRODUCTION_PATHS: Mapping[str, str] = MappingProxyType(
 #: production ref rather than trusting either mapping.
 ADDITIVE_ONLY_WORKFLOWS: tuple[str, ...] = (
     ".github/workflows/nba_production_lifecycle.yml",
+)
+
+#: The lines in an additive-only workflow a declaration may replace, and what
+#: each must be replaced by.
+#:
+#: Append-only was right about every change to this file until it met one that
+#: could not be an appended step. A deprecated action version is not a step
+#: that can be added beside the old one -- a job that checks out twice checks
+#: out twice -- and neither is an install command: appending a second
+#: ``pip install`` beside the first leaves the first one running. So the
+#: pin had the shape of the four carve-outs above: right about what it was
+#: for, which is that nothing may silently rewrite the production path, and
+#: unable to express the one kind of edit that is not a rewrite.
+#:
+#: Stated as an exhaustive old-line-to-new-line mapping rather than as a
+#: relaxation, so what a declaration buys is these five replacements and
+#: nothing else. Each is checked both ways: the old line may be gone only if
+#: the new one is present, which is what stops a substitution from being used
+#: as a deletion. Three are an official action's version and name nothing
+#: else; the other two are the install, and what replaces them installs the
+#: package alone through the constraint file. No ``run`` body, condition,
+#: entry point, ref, label, environment or ordering appears here, and the
+#: numerical freeze still pins every line that is not listed.
+DECLARED_WORKFLOW_LINE_SUBSTITUTIONS: Mapping[str, str] = MappingProxyType(
+    {
+        "uses: actions/checkout@v4": "uses: actions/checkout@v7",
+        "uses: actions/setup-python@v5": "uses: actions/setup-python@v7",
+        "uses: actions/upload-artifact@v4": "uses: actions/upload-artifact@v6",
+        "python -m pip install -e '.[dev]'": (
+            "python -m pip install -c constraints/py312-production.txt -e ."
+        ),
+    }
+)
+
+#: The lines in an additive-only workflow a declaration may simply delete.
+#:
+#: One line, and the narrowest kind there is: a command whose absence is the
+#: whole point. Upgrading pip on every scheduled run changes the installer
+#: under the run and downloads something nothing asked for, and there is no
+#: replacement because the interpreter the workflow selects already brings
+#: its own pip. Nothing that refreshes, fits, registers, serves, grades,
+#: prices, publishes or guards can be deleted through this: it is one literal
+#: command and the tests pin it as such.
+DECLARED_WORKFLOW_LINE_REMOVALS: tuple[str, ...] = (
+    "python -m pip install --upgrade pip",
 )
 
 

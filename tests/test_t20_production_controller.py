@@ -73,6 +73,14 @@ controller = load_ops("run_t20_production_controller")
 
 validator = load_ops("validate_workflows")
 
+#: The one install command the T-20 workflow may run. Written out rather than
+#: matched loosely because the constraint file is the half that matters: an
+#: install of the same package without it resolves against whatever PyPI is
+#: serving that morning.
+PRODUCTION_INSTALL = (
+    f"pip install -c {validator.PRODUCTION_CONSTRAINT_FILE} -e ."
+)
+
 
 @pytest.fixture(autouse=True)
 def block_all_network(monkeypatch):
@@ -1377,9 +1385,9 @@ def test_the_workflow_runs_the_controller_and_nothing_heavier():
 def test_the_workflow_installs_production_dependencies_only():
     commands = t20_commands()
 
-    assert "pip install -e ." in commands
+    assert PRODUCTION_INSTALL in commands
 
-    for token in validator.T20_FORBIDDEN_INSTALL_TOKENS:
+    for token in validator.PRODUCTION_FORBIDDEN_INSTALL_TOKENS:
         assert token not in commands, token
 
 
@@ -1397,7 +1405,7 @@ def test_the_expensive_install_is_gated_behind_the_cheap_probe():
     gated = [
         step
         for step in steps
-        if "pip install -e ." in str(step.get("run", ""))
+        if PRODUCTION_INSTALL in str(step.get("run", ""))
         or (
             validator.T20_ENTRY_POINT in str(step.get("run", ""))
             and "--probe-only" not in str(step.get("run", ""))
@@ -1417,16 +1425,22 @@ def test_the_expensive_install_is_gated_behind_the_cheap_probe():
         names.index(step["name"]) for step in gated
     )
 
-    # The probe itself installs two small wheels, not the scientific stack.
+    # The probe itself installs two small wheels, not the scientific stack,
+    # and names them through the same constraint file as everything else.
     probe_install = next(
-        step
-        for step in steps
-        if "python -m pip install 'httpx" in str(step.get("run", ""))
+        step for step in steps if "'httpx" in str(step.get("run", ""))
     )
 
     assert probe_install.get("if") is None
 
     assert "pandas" not in str(probe_install["run"])
+
+    assert any(
+        "pip install" in command
+        and validator.PRODUCTION_CONSTRAINT_FILE in command
+        and "'httpx" in command
+        for command in validator.shell_commands(str(probe_install["run"]))
+    )
 
 
 def test_the_workflow_binds_secrets_only_to_environment_variables():

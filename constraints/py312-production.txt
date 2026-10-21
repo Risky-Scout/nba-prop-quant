@@ -1,0 +1,107 @@
+# The Python 3.12 dependency set production and CI are known to work under.
+#
+# A pip constraint file, not a requirements file: it says which version of a
+# package may be installed, never that it must be installed. So the same file
+# serves the production install, which asks for the package alone, and the CI
+# install, which asks for the package and its dev extra -- production does not
+# acquire pytest or ruff by being handed a file that pins them.
+#
+# WHY IT EXISTS
+# -------------
+#
+# Every production run builds a fresh virtual environment, and until this file
+# existed each one re-resolved the whole tree against whatever PyPI had that
+# morning. The floors in pyproject.toml are deliberately floors -- they say
+# what the code needs, which is a different question from what production is
+# known to work under -- so a run could pick up a numpy, pandas, scipy or shap
+# released hours earlier and no reviewed decision anywhere said it should. The
+# frozen Gate 3 artifacts are unpickled by scikit-learn, the priced parquet is
+# written by pyarrow and the distributions go through numpy: a silent minor
+# bump in any of them is a change to what production serves.
+#
+# HOW IT WAS PRODUCED
+# -------------------
+#
+# From the versions successful production and CI runs actually resolved, not
+# from "latest". Every line below is a version that has already served a slate
+# or passed the suite. The transitive section is the closure pip resolves from
+# the direct section: it is pinned too, because an unpinned transitive package
+# is the same daily drift one level down, and `pip install -c` only constrains
+# what it names.
+#
+# A dependency added to pyproject.toml must be added here with the version the
+# run that proved it resolved. `python -m pip install --dry-run --report` over
+# this file reports any package the resolver reached that is not named here,
+# and tests/test_dependency_reproducibility.py fails when one exists.
+
+# ----------------------------------------------------------------------
+# the project's own dependencies
+# ----------------------------------------------------------------------
+
+duckdb==1.5.6
+httpx==0.28.1
+joblib==1.6.0
+numba==0.68.0
+numpy==2.5.4
+pandas==3.0.6
+pyarrow==26.0.0
+pydantic==2.14.1
+pydantic-settings==2.16.1
+python-dotenv==1.2.4
+PyYAML==6.0.3
+rich==15.0.0
+scikit-learn==1.9.0
+scipy==1.18.1
+shap==0.54.1
+tenacity==9.2.1
+typer==0.27.3
+
+# XGBoost, by platform, for the reason pyproject.toml states: the `xgboost`
+# wheel requires nvidia-nccl-cu13 on Linux, which is a 291 MB CUDA collective
+# library that a CPU-only production path never loads. `xgboost-cpu` is the
+# same upstream release without it and provides the same `xgboost` import.
+# Pinned at one version on both platforms, so the Linux and macOS
+# environments run the same XGBoost build and not two.
+xgboost-cpu==3.4.1 ; sys_platform == "linux"
+xgboost==3.4.1 ; sys_platform != "linux"
+
+# ----------------------------------------------------------------------
+# the dev extra, which CI installs and production does not
+# ----------------------------------------------------------------------
+
+pytest==9.1.1
+ruff==0.17.1
+
+# ----------------------------------------------------------------------
+# the transitive closure of everything above
+# ----------------------------------------------------------------------
+#
+# Pinned for the same reason as the direct set. Nothing here is imported by
+# this project's own code; they are here so that the environment a run builds
+# is the environment a previous run proved.
+
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.15.1
+certifi==2026.10.19
+cloudpickle==3.1.2
+h11==0.16.0
+httpcore==1.0.9
+idna==3.20
+iniconfig==2.3.1
+llvmlite==0.50.0
+markdown-it-py==4.2.0
+mdurl==0.1.2
+narwhals==2.27.1
+packaging==26.3
+pluggy==1.7.0
+pydantic-core==2.50.1
+pygments==2.21.0
+python-dateutil==2.9.0.post0
+shellingham==1.5.4
+six==1.17.0
+slicer==0.0.8
+threadpoolctl==3.7.0
+tqdm==4.70.1
+typing-extensions==4.16.0
+typing-inspection==0.4.4
