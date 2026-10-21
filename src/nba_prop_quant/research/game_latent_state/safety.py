@@ -756,6 +756,17 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
             "routing, marginal family, calibration, dependence, Gate 3 "
             "routing, fitted artifacts -- stays false"
         ),
+        "docs/GO_LIVE_CHECKLIST.md": (
+            "a new plain-language statement of what enabling live Wizard of "
+            "Odds publishing requires, for a reader without the context to "
+            "assemble it from the publishing switch, the destinations "
+            "registry and the publisher's own gating. It reports the state "
+            "those files already hold and grants nothing: no switch, token, "
+            "approval variable, destination, transport or publication "
+            "semantic is reached by adding a document, and live publication "
+            "stays disabled with its approval token unissued. Documentation "
+            "only -- no executable path reads it"
+        ),
         "models/frozen_manifests/"
         "nba_prop_quant_v2_adaptive_update_protocol.json": (
             "one field, adaptive_serving_source_contract_sha256, which is the "
