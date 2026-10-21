@@ -722,8 +722,67 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: rule is touched anywhere in this change. No fitted artifact moves. What
 #: changes is which player-games the live builder averages over, and it
 #: changes to the set training averaged over.
+#:
+#: The pricing entry point's third declared use is a publication defect with
+#: the same shape as the first: a quantity that already existed on the path
+#: was not carried to the stage that publishes it.
+#:
+#: ``model_projection`` is the one column naming the model's central forecast
+#: for a wager, and the pricing script wrote null into it for every
+#: combination prop. The reason recorded in place was that a combination is
+#: priced from a joint distribution over its components and that no central
+#: forecast of the combined total exists on this path. The second half of
+#: that was wrong: a distribution has a mean, the pricing step is the stage
+#: that builds the combination's distribution at all, and
+#: ``ops/nba_distribution_publication.py`` was already publishing that mean
+#: beside the price under ``distribution_mean``. So the figure existed, was
+#: already published one field away, and the column a bettor reads it from
+#: said there was none -- which on the public page is an empty Model
+#: Projection cell for five of the eleven prop families the model prices.
+#:
+#: The fix takes the mean from whichever engine priced the row, on
+#: ``price_combo_lines``' own branch and threshold: the convolution of the
+#: component marginals under independence, and the mean of the very draws the
+#: simulation priced from under dependence. Taking it from the engine rather
+#: than adding up the component means is a choice about which number is
+#: published and not about which is right -- a Gaussian copula couples the
+#: components' ranks and moves no mass within any component's marginal, so
+#: the sum's mean is the sum of the component means at every dependence
+#: coefficient -- but only the engine's answer is the mean of the
+#: distribution published beside it, and on the frozen policy's one dependent
+#: combination the two differ by the simulation's own sampling error.
+#:
+#: Nothing in ``pricing.py`` moves: it stays undeclarable and
+#: byte-identical to production, and both engines are reached by named import
+#: so no second definition of a combination's distribution exists. No
+#: probability, price, edge, EV, quantile, line, calibration, dependence
+#: coefficient, simulation count or routing rule is computed or changed
+#: anywhere in this change, and every single-stat row's projection is the
+#: column it already was.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
+        "scripts/15_price_markets.py": (
+            "a combination prop now publishes the mean of the distribution "
+            "its lines were priced from instead of a null model_projection. "
+            "The mean is taken inside main, from the engine price_combo_lines "
+            "itself selects on the same threshold -- independent_combo_pmf "
+            "under independence and simulate_combo_values' own draws under "
+            "dependence -- both reached by named import, so no second "
+            "definition of a combination's distribution exists and "
+            "src/nba_prop_quant/pricing.py stays undeclarable and "
+            "byte-identical to production. The added statements name "
+            "model_projection, which is declared serving plumbing. Every "
+            "line production has survives, including the null write, which is "
+            "now the column's starting value and is what a row the pricing "
+            "lookup found no price for still carries; every function except "
+            "main is syntax-tree-identical to production, which the "
+            "branch-safety tests pin. No probability, price, edge, EV, "
+            "quantile, line, calibration, dependence coefficient, simulation "
+            "count or routing rule is computed or changed, every single-stat "
+            "projection is the column it already was, and the published "
+            "figure is required to equal the distribution mean "
+            "ops/nba_distribution_publication.py records for the same wager"
+        ),
         "src/nba_prop_quant/slate.py": (
             "the live builder now takes its rolling priors over "
             "build_base_frame's played-player-game population instead of "
@@ -745,13 +804,14 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
         ),
         "models/frozen_manifests/"
         "nba_prop_quant_v2_adaptive_serving_source_contract.json": (
-            "relocks src/nba_prop_quant/slate.py at version 8 and records "
-            "the divergence, which is what this registry exists for: its own "
+            "relocks src/nba_prop_quant/slate.py at version 8 and "
+            "scripts/15_price_markets.py at version 9, and records both "
+            "divergences, which is what this registry exists for: its own "
             "purpose requires every difference from the historical reference "
             "to be enumerated and justified in it. The historical reference "
             "hashes are untouched, no locked file is dropped, the divergence "
-            "count is unchanged because slate.py was already a declared "
-            "divergence, and every invariant flag -- feature definitions, "
+            "count is unchanged because both files were already declared "
+            "divergences, and every invariant flag -- feature definitions, "
             "training feature definitions, model mathematics, mean-model "
             "routing, marginal family, calibration, dependence, Gate 3 "
             "routing, fitted artifacts -- stays false"

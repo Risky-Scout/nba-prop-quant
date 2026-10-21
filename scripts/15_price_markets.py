@@ -28,8 +28,10 @@ from nba_prop_quant.normalize import (
 from nba_prop_quant.pricing import (
     COMBO_COMPONENTS,
     PROP_TO_TARGET,
+    independent_combo_pmf,
     price_combo_lines,
     price_single_prop_frame,
+    simulate_combo_values,
 )
 from nba_prop_quant.production import (
     TARGETS,
@@ -974,6 +976,88 @@ def main() -> None:
                 "prop_type"
             ] = prop_type
 
+            # The mean of the distribution this combination's lines were
+            # priced from, which is the same thing model_projection already
+            # names for a single stat: the central forecast the probability
+            # beside it was computed against.
+            #
+            # The branch is price_combo_lines' branch, on the same threshold,
+            # so the figure comes from whichever engine actually priced the
+            # row -- the convolution of the component marginals when the
+            # frozen dependence coefficient is zero, and the mean of the very
+            # draws the simulation priced from when it is not. Regenerating
+            # those draws needs the seed the call above used, which is why
+            # that expression is restated rather than shared; a test requires
+            # the two to parse to the same tree.
+            #
+            # Taking it from the engine rather than adding up the component
+            # means is a choice about which number is published, not about
+            # which is right: a Gaussian copula couples the components' ranks
+            # and moves no mass within any component's marginal, so the sum's
+            # mean is the sum of the component means under every dependence
+            # coefficient. What the engine gives is the mean of the
+            # distribution ops/nba_distribution_publication.py publishes
+            # beside the price, so the panel's distribution and the Model
+            # Projection above it are one object rather than two agreeing
+            # estimates of one.
+            if lambda_value <= 1e-12:
+                combo_pmf = (
+                    independent_combo_pmf(
+                        row,
+                        prop_type,
+                        marginals,
+                        mu_columns,
+                    )
+                )
+
+                combo_projection = float(
+                    np.dot(
+                        np.arange(
+                            len(
+                                combo_pmf
+                            ),
+                            dtype=float,
+                        ),
+                        combo_pmf,
+                    )
+                )
+            else:
+                combo_projection = float(
+                    np.mean(
+                        simulate_combo_values(
+                            row=row,
+                            prop_type=prop_type,
+                            marginals=marginals,
+                            mu_columns=mu_columns,
+                            copula=copula,
+                            dependence_lambda=(
+                                lambda_value
+                            ),
+                            simulations=(
+                                args.combo_simulations
+                            ),
+                            seed=stable_event_seed(
+                                int(
+                                    game_id
+                                ),
+                                int(
+                                    player_id
+                                ),
+                                prop_type,
+                                args.seed,
+                            ),
+                        )
+                    )
+                )
+
+            # Carried under its own name because the merge below runs before
+            # model_projection is established on this part, and a lookup
+            # column of that name would be overwritten by the statement that
+            # establishes it.
+            probabilities[
+                "combo_model_projection"
+            ] = combo_projection
+
             event_probabilities.append(
                 probabilities
             )
@@ -995,6 +1079,15 @@ def main() -> None:
             validate="many_to_one",
         )
 
+        # The column's starting value, and the value that survives only on a
+        # row the merge above found no price for -- the one case where there
+        # really is no figure to publish. Every row the lookup matched is
+        # filled below with the mean the loop took from the pricing engine.
+        #
+        # The paragraph this statement used to carry is kept verbatim under
+        # this one. It is the reasoning that was reversed, not a description
+        # of what happens here now:
+        #
         # Stated absent rather than left for the concat below to invent. A
         # combo line is priced from a joint distribution over its components
         # and no central forecast of the combined total exists anywhere on
@@ -1005,6 +1098,25 @@ def main() -> None:
         priced_part[
             "model_projection"
         ] = np.nan
+
+        priced_part[
+            "model_projection"
+        ] = priced_part[
+            "model_projection"
+        ].fillna(
+            pd.to_numeric(
+                priced_part[
+                    "combo_model_projection"
+                ],
+                errors="coerce",
+            )
+        )
+
+        priced_part = priced_part.drop(
+            columns=[
+                "combo_model_projection",
+            ],
+        )
 
         priced_parts.append(
             priced_part

@@ -737,18 +737,20 @@ def test_a_natural_priced_slate_names_every_player():
 
 
 # ======================================================================
-# combo props: observed, not changed
+# combo props
 # ======================================================================
 
 
-def test_combo_props_still_publish_a_null_projection(served: dict):
-    """Reported rather than corrected, which is this task's instruction.
+def test_combo_props_publish_a_real_projection(served: dict):
+    """A combination publishes a number, not a null.
 
-    A combo line is priced from a joint distribution over its components and
-    no central forecast of the combined total is produced anywhere on this
-    path, so the publication carries null and the page leaves the cell empty.
+    The mean of the joint distribution its lines were priced from, written
+    into the same ``model_projection`` column a single stat uses, so the page
+    shows a Model Projection for a combination the way it does for points.
     The fixture quotes no combo prop, so this records that fact instead of
-    asserting over an empty selection.
+    asserting over an empty selection; the slate that quotes every
+    combination the frozen policy covers is in
+    ``test_nba_published_distributions.py``.
     """
     combo_types = sorted(COMBO_COMPONENTS)
 
@@ -765,4 +767,10 @@ def test_combo_props_still_publish_a_null_projection(served: dict):
 
         return
 
-    assert combo_rows["model_projection"].isna().all()
+    projections = pd.to_numeric(
+        combo_rows["model_projection"], errors="coerce"
+    )
+
+    assert projections.notna().all()
+
+    assert (projections > 0).all()
