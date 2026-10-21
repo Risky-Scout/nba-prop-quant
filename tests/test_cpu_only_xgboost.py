@@ -23,6 +23,7 @@ loads the frozen bundle, or writes outside ``tmp_path``.
 
 from __future__ import annotations
 
+import ast
 import re
 import subprocess
 import sys
@@ -176,18 +177,46 @@ def python_files() -> list[Path]:
     )
 
 
+def executable_source(path: Path) -> str:
+    """The file's code with its prose removed.
+
+    Scanning raw text cannot tell ``tree_method="gpu_hist"`` from a comment
+    explaining why this project does not use one -- and the module that
+    declares why the NVIDIA dependency was dropped is full of the second.
+    Comments and docstrings are the prose; string literals are not, because a
+    GPU tree method is selected by one.
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+
+    for node in ast.walk(tree):
+        if not isinstance(
+            node,
+            (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef),
+        ):
+            continue
+
+        body = node.body
+
+        if (
+            body
+            and isinstance(body[0], ast.Expr)
+            and isinstance(body[0].value, ast.Constant)
+            and isinstance(body[0].value.value, str)
+        ):
+            node.body = body[1:] or [ast.Pass()]
+
+    return ast.unparse(ast.fix_missing_locations(tree))
+
+
 def test_no_source_file_names_a_gpu_only_api():
     found: list[str] = []
 
     for path in python_files():
-        lowered = path.read_text(encoding="utf-8").lower()
+        lowered = executable_source(path).lower()
 
-        for number, line in enumerate(lowered.splitlines(), 1):
-            for token in GPU_ONLY_TOKENS:
-                if token in line:
-                    found.append(
-                        f"{path.relative_to(REPO)}:{number}: {token}"
-                    )
+        for token in GPU_ONLY_TOKENS:
+            if token in lowered:
+                found.append(f"{path.relative_to(REPO)}: {token}")
 
     assert found == [], (
         "these name XGBoost surface the CPU build does not provide, so the "

@@ -1003,39 +1003,58 @@ ADDITIVE_ONLY_WORKFLOWS: tuple[str, ...] = (
     ".github/workflows/nba_production_lifecycle.yml",
 )
 
-#: The lines in an additive-only workflow a declaration may replace, and what
-#: each must be replaced by.
+#: The lines in a pinned workflow a declaration may replace, and the only
+#: lines each may be replaced by.
 #:
-#: Append-only was right about every change to this file until it met one that
-#: could not be an appended step. A deprecated action version is not a step
-#: that can be added beside the old one -- a job that checks out twice checks
-#: out twice -- and neither is an install command: appending a second
-#: ``pip install`` beside the first leaves the first one running. So the
-#: pin had the shape of the four carve-outs above: right about what it was
+#: Append-only was right about every change to these files until it met one
+#: that could not be an appended step. A deprecated action version is not a
+#: step that can be added beside the old one -- a job that checks out twice
+#: checks out twice -- and neither is an install command: appending a second
+#: ``pip install`` beside the first leaves the first one running. So these
+#: pins had the shape of the five carve-outs above: right about what they are
 #: for, which is that nothing may silently rewrite the production path, and
 #: unable to express the one kind of edit that is not a rewrite.
 #:
-#: Stated as an exhaustive old-line-to-new-line mapping rather than as a
-#: relaxation, so what a declaration buys is these five replacements and
-#: nothing else. Each is checked both ways: the old line may be gone only if
-#: the new one is present, which is what stops a substitution from being used
-#: as a deletion. Three are an official action's version and name nothing
-#: else; the other two are the install, and what replaces them installs the
-#: package alone through the constraint file. No ``run`` body, condition,
-#: entry point, ref, label, environment or ordering appears here, and the
-#: numerical freeze still pins every line that is not listed.
-DECLARED_WORKFLOW_LINE_SUBSTITUTIONS: Mapping[str, str] = MappingProxyType(
-    {
-        "uses: actions/checkout@v4": "uses: actions/checkout@v7",
-        "uses: actions/setup-python@v5": "uses: actions/setup-python@v7",
-        "uses: actions/upload-artifact@v4": "uses: actions/upload-artifact@v6",
-        "python -m pip install -e '.[dev]'": (
-            "python -m pip install -c constraints/py312-production.txt -e ."
-        ),
-    }
+#: Stated as an exhaustive mapping from the production line to the complete
+#: set of lines it may have become, so what a declaration buys is these
+#: substitutions and nothing else. Each is checked both ways: the production
+#: line may be absent only if one of its replacements is present, which is
+#: what stops a substitution from being used as a deletion. Three are an
+#: official action's version and name nothing else. The rest are the install,
+#: and every replacement differs from what it replaces by the constraint file
+#: and, for the lifecycle, by dropping the dev extra production never needed.
+#: No ``run`` body, condition, entry point, ref, label, environment or
+#: ordering appears here, and the byte pins still hold every line not listed.
+DECLARED_WORKFLOW_LINE_SUBSTITUTIONS: Mapping[str, tuple[str, ...]] = (
+    MappingProxyType(
+        {
+            "uses: actions/checkout@v4": ("uses: actions/checkout@v7",),
+            "uses: actions/setup-python@v5": (
+                "uses: actions/setup-python@v7",
+            ),
+            "uses: actions/upload-artifact@v4": (
+                "uses: actions/upload-artifact@v6",
+            ),
+            "python -m pip install -e '.[dev]'": (
+                "python -m pip install -c "
+                "constraints/py312-production.txt -e '.[dev]'",
+                "python -m pip install -c "
+                "constraints/py312-production.txt -e .",
+            ),
+            "python -m pip install -e .": (
+                "python -m pip install -c "
+                "constraints/py312-production.txt -e .",
+            ),
+            "python -m pip install 'httpx>=0.27' 'tenacity>=9.0'": (
+                "python -m pip install -c "
+                "constraints/py312-production.txt "
+                "'httpx>=0.27' 'tenacity>=9.0'",
+            ),
+        }
+    )
 )
 
-#: The lines in an additive-only workflow a declaration may simply delete.
+#: The lines in a pinned workflow a declaration may simply delete.
 #:
 #: One line, and the narrowest kind there is: a command whose absence is the
 #: whole point. Upgrading pip on every scheduled run changes the installer
@@ -1046,6 +1065,23 @@ DECLARED_WORKFLOW_LINE_SUBSTITUTIONS: Mapping[str, str] = MappingProxyType(
 #: command and the tests pin it as such.
 DECLARED_WORKFLOW_LINE_REMOVALS: tuple[str, ...] = (
     "python -m pip install --upgrade pip",
+)
+
+#: The non-comment lines a declaration may add to a pinned workflow.
+#:
+#: Two, and both are ``actions/setup-python`` inputs rather than anything that
+#: runs: the action's own pip cache, keyed on the constraint file. The key is
+#: the point -- the constraint file names every version the job may install,
+#: so an unchanged file means an unchanged download set and a changed one
+#: invalidates the cache by itself. They appear only in the GitHub-hosted CI
+#: job: the self-hosted runner's pip cache directory already survives between
+#: runs, and a GitHub cache there would move bytes over the network to replace
+#: bytes on the disk. Nothing here is a command, a condition, a ref, a label
+#: or an entry point, and a comment needs no declaration because a comment
+#: cannot run.
+DECLARED_WORKFLOW_ADDED_LINES: tuple[str, ...] = (
+    "cache: pip",
+    "cache-dependency-path: constraints/py312-production.txt",
 )
 
 

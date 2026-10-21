@@ -11,6 +11,7 @@ from __future__ import annotations
 import ast
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -71,6 +72,12 @@ from nba_prop_quant.research.game_latent_state.safety import (
 )
 
 PROJECT = Path(__file__).resolve().parents[1]
+
+sys.path.insert(0, str(PROJECT / "tests"))
+
+from workflow_additive_pin import (  # noqa: E402
+    assert_only_the_declared_workflow_lines_moved,
+)
 
 SHADOW_PACKAGE = PROJECT / "src" / "nba_prop_quant" / "research" / "game_latent_state"
 
@@ -928,20 +935,11 @@ def test_a_declared_workflow_change_only_ever_adds_steps():
     if base is None:
         pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
     for relative in ADDITIVE_ONLY_WORKFLOWS:
-        before = git("show", f"{base}:{relative}").splitlines()
-        after = git("show", f"HEAD:{relative}").splitlines()
-        present = {line.strip() for line in after}
-        allowed = set(DECLARED_WORKFLOW_LINE_REMOVALS) | {
-            old
-            for old, new in DECLARED_WORKFLOW_LINE_SUBSTITUTIONS.items()
-            if new in present
-        }
-        removed = [
-            line
-            for line in before
-            if line not in after and line.strip() not in allowed
-        ]
-        assert removed == [], f"{relative} removed or edited existing lines: {removed}"
+        assert_only_the_declared_workflow_lines_moved(
+            relative,
+            git("show", f"{base}:{relative}"),
+            git("show", f"HEAD:{relative}"),
+        )
 
 
 def test_the_declared_workflow_substitutions_are_only_versions_and_installs():
@@ -953,13 +951,16 @@ def test_the_declared_workflow_substitutions_are_only_versions_and_installs():
     apart from the ref -- or a ``pip install``, and a deletion must be the pip
     self-upgrade and nothing else.
     """
-    for old, new in DECLARED_WORKFLOW_LINE_SUBSTITUTIONS.items():
-        if old.startswith("uses:"):
-            assert old.split("@")[0] == new.split("@")[0], (old, new)
-            continue
+    for old, replacements in DECLARED_WORKFLOW_LINE_SUBSTITUTIONS.items():
+        assert replacements, old
 
-        assert old.startswith("python -m pip install"), old
-        assert new.startswith("python -m pip install"), new
+        for new in replacements:
+            if old.startswith("uses:"):
+                assert old.split("@")[0] == new.split("@")[0], (old, new)
+                continue
+
+            assert old.startswith("python -m pip install"), old
+            assert new.startswith("python -m pip install"), new
 
     assert DECLARED_WORKFLOW_LINE_REMOVALS == (
         "python -m pip install --upgrade pip",
@@ -969,7 +970,13 @@ def test_the_declared_workflow_substitutions_are_only_versions_and_installs():
     stated = "\n".join(
         [
             *DECLARED_WORKFLOW_LINE_SUBSTITUTIONS,
-            *DECLARED_WORKFLOW_LINE_SUBSTITUTIONS.values(),
+            *(
+                new
+                for replacements in (
+                    DECLARED_WORKFLOW_LINE_SUBSTITUTIONS.values()
+                )
+                for new in replacements
+            ),
             *DECLARED_WORKFLOW_LINE_REMOVALS,
         ]
     )

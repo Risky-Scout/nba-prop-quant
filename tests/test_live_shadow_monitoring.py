@@ -28,6 +28,13 @@ import pytest
 import yaml
 
 PROJECT = Path(__file__).resolve().parents[1]
+
+sys.path.insert(0, str(PROJECT / "tests"))
+
+from workflow_additive_pin import (  # noqa: E402
+    assert_only_the_declared_workflow_lines_moved,
+)
+
 ENTRY_POINT = PROJECT / "ops" / "monitor_live_shadow_evidence.py"
 POLICY_PATH = PROJECT / "research" / "final_model" / "live_shadow_promotion_policy.json"
 LIFECYCLE = PROJECT / ".github" / "workflows" / "nba_production_lifecycle.yml"
@@ -1496,7 +1503,12 @@ def test_the_monitoring_step_persists_its_status_durably(lifecycle):
 
 
 def test_the_lifecycle_change_adds_lines_and_removes_none():
-    """The additive-only contract, checked against the production head."""
+    """The additive-only contract, checked against the production head.
+
+    Stated through the shared pin rather than inline, so the enumerated
+    action-version and install substitutions this suite has no opinion about
+    are read the same way every other suite reads them.
+    """
     base = subprocess.run(
         ["git", "rev-parse", "origin/production/wizardofodds-integration"],
         capture_output=True,
@@ -1512,7 +1524,8 @@ def test_the_lifecycle_change_adds_lines_and_removes_none():
         capture_output=True,
         text=True,
         cwd=PROJECT,
-    ).stdout.splitlines()
-    after = (PROJECT / relative).read_text(encoding="utf-8").splitlines()
+    ).stdout
 
-    assert [line for line in before if line not in after] == []
+    assert_only_the_declared_workflow_lines_moved(
+        relative, before, (PROJECT / relative).read_text(encoding="utf-8")
+    )
