@@ -143,6 +143,24 @@ SERVING_SOURCE_EXEMPT_FUNCTIONS: tuple[str, ...] = (
 #: slate builder copies the two team names and the tip time the schedule
 #: payload arrives with. Nothing here computes a projection or decides a
 #: matchup, and neither name buys anything beyond carrying one forward.
+#:
+#: ``history_games``, ``context``, ``flags`` and ``season_progress`` are the
+#: other kind, and the kind the carve-out above exists for: each names a
+#: feature the fitted models were shown one definition of, which the live
+#: builder stated a second definition of. The last two names are that again,
+#: and they are about the *population* every one of those definitions is taken
+#: over rather than about any one of them. ``build_base_frame`` opens with
+#: ``df[df["minutes"].fillna(0) > 0]``, so every rolling prior, decay state
+#: and Kalman state the models were fit on is defined over appearances; the
+#: live builder was handed BALLDONTLIE's whole stats table, where a rostered
+#: player who did not play arrives carrying zero minutes, and averaged each
+#: feature over appearances and absences alike. ``played_advanced_rows`` is
+#: the same population one table along, the restriction ``build_base_frame``
+#: already applies to the advanced history and says why in place. Neither
+#: name states a threshold, a window, a weight or a feature definition --
+#: there is no new rule here, only training's own population reaching the
+#: path that serves it -- and neither can reach a probability, a price, an
+#: edge, an EV or a route.
 DECLARED_SERVING_PLUMBING_NAMES: tuple[str, ...] = (
     "frozen_bundle_root",
     "history_games",
@@ -154,6 +172,8 @@ DECLARED_SERVING_PLUMBING_NAMES: tuple[str, ...] = (
     "visitor_abbreviation",
     "player_abbreviation",
     "tip_off_utc",
+    "played_player_games",
+    "played_advanced_rows",
 )
 
 #: The serving *orchestrator* a declaration may name, and only additively.
@@ -664,39 +684,77 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: landed, for the reason that entry itself gave: the publisher is owned
 #: below, so touching it again requires declaring it again.
 #:
-#: This branch declares one path, owned below, and widens the carve-outs by
-#: that same file, named above. What it corrects is that the renderer refused
-#: a release the feed had published correctly. A wager several sportsbooks
-#: price is published once per book and every one of those rows carries the
-#: same model probability, so the page checks that they state one number
-#: before it states it on a card -- and it checked their serialisations. Two
-#: rows of the opening-day release spelled one double
-#: ``0.5899928519036952`` and ``0.5899928519036954``, two bits apart, and the
-#: whole page was refused. The check is now numerical and the bound is the
-#: resolution of the values themselves, so the format's noise is one number
-#: and anything a model could have meant is still two. Nothing else moves:
-#: the same rows, the same routing, the same columns, the same formatting,
-#: the same provenance, the same confinement, and the same canary-only
-#: authority with live publication still disabled. No threshold, feature,
-#: distribution, price, probability or route is computed anywhere in this
-#: change, and the number a card states is a published one.
+#: The page-float-consistency branch's one entry was retired in turn when it
+#: landed, for the reason that entry itself gave: the renderer is owned below,
+#: so touching it again requires declaring it again.
+#:
+#: This branch declares the slate module and the serving-source registry, and
+#: widens the slate builder's carve-out by two names, all three named above.
+#: What it corrects is the fourth instance of one defect: a feature the fitted
+#: models were shown one definition of, served under another. The first three
+#: were definitions -- the competition-regime flags, then
+#: ``season_progress``. This one is the population every definition is taken
+#: over. ``build_base_frame`` opens by keeping only the player-games with
+#: minutes on them, so every rolling prior, decay state and Kalman state the
+#: models were fit on is an average over appearances. BALLDONTLIE returns a
+#: row per rostered player, the live builder read that table whole, and so
+#: every game a player missed entered his per-minute EWMs as a zero and his
+#: minutes EWM as a zero.
+#:
+#: Like ``season_progress``, it refused nothing and announced nothing: it
+#: served the models numbers they were not fit on. Unlike it, the error has a
+#: direction, because every target here is a count and the contamination can
+#: only subtract -- and it is selective, because it scales with how much of a
+#: player's recent history is absence. So the durable players were priced
+#: correctly, the absence-prone ones were marked down, and the output read as
+#: a model with a view on the under rather than as a model with a defect. On
+#: opening night, when every player's most recent rows are the end of a
+#: season he may have missed, that is most of the slate.
+#:
+#: The fix is the one the carve-out exists for and the same shape as the last
+#: two: the rule stays where production states it, and only training's own
+#: population reaches the path that serves it. ``features.py``, ``decay.py``,
+#: ``kalman.py``, ``game_context.py``, ``model.py``, ``production.py``,
+#: ``pricing.py`` and ``distributions.py`` are all byte-identical to
+#: production, which the branch-safety tests and the targeted tests both pin.
+#: No feature definition, window, weight, threshold, distribution, price,
+#: probability, simulation count, Gate 3 route, calibration or publication
+#: rule is touched anywhere in this change. No fitted artifact moves. What
+#: changes is which player-games the live builder averages over, and it
+#: changes to the set training averaged over.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
-        "ops/wizardofodds_player_props_page.py": (
-            "the check that a wager's published rows agree about the model's "
-            "probability compares them as numbers instead of as strings, "
-            "within the resolution of the values themselves -- eight units "
-            "in the last place, floored at 1e-15 -- so two serialisations of "
-            "one double are one number and a difference a model could "
-            "express is still a refusal. It fails closed on everything it "
-            "failed closed on before: a missing probability, one that is not "
-            "a number, one that is infinite or NaN, and any disagreement "
-            "above that bound all refuse the page. The number a card states "
-            "is one the release published, read from the wager's own stable "
-            "row order rather than averaged, recomputed or taken from "
-            "whichever sportsbook the reader is routed to. No published row, "
-            "feed, distribution, routing rule, column, format, destination "
-            "or publishing authority moves"
+        "src/nba_prop_quant/slate.py": (
+            "the live builder now takes its rolling priors over "
+            "build_base_frame's played-player-game population instead of "
+            "over BALLDONTLIE's whole stats table, and restricts the "
+            "advanced history to the same played keys build_base_frame "
+            "restricts it to. Two added statements in the one exempt "
+            "function, each naming one of the two declared names, plus the "
+            "two functions they name. The restriction is taken after "
+            "assert_slate_inputs_precede_slate rather than before it, so a "
+            "same-day or later-day row cannot evade the leakage guard by "
+            "being a row for a player who did not play. Every line "
+            "production has survives and every other function in the module "
+            "is syntax-tree-identical to production, which the branch-safety "
+            "tests pin. No feature definition, prior, window, weight, "
+            "threshold, probability, price, edge, EV, quantile, line, "
+            "distribution, simulation count or routing rule is computed or "
+            "changed, and for a history in which nobody missed a game the "
+            "served frame is identical column for column"
+        ),
+        "models/frozen_manifests/"
+        "nba_prop_quant_v2_adaptive_serving_source_contract.json": (
+            "relocks src/nba_prop_quant/slate.py at version 8 and records "
+            "the divergence, which is what this registry exists for: its own "
+            "purpose requires every difference from the historical reference "
+            "to be enumerated and justified in it. The historical reference "
+            "hashes are untouched, no locked file is dropped, the divergence "
+            "count is unchanged because slate.py was already a declared "
+            "divergence, and every invariant flag -- feature definitions, "
+            "training feature definitions, model mathematics, mean-model "
+            "routing, marginal family, calibration, dependence, Gate 3 "
+            "routing, fitted artifacts -- stays false"
         ),
     }
 )

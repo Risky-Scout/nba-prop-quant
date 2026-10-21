@@ -34,14 +34,17 @@ import pytest
 from nba_prop_quant.research.game_latent_state.safety import (
     ADDITIVE_ONLY_PAGE_CONSISTENCY_CHECKS,
     ADDITIVE_ONLY_PUBLICATION_TRANSPORTS,
+    ADDITIVE_ONLY_SERVING_SOURCES,
     DECLARABLE_SERVING_SOURCE_REGISTRIES,
     DECLARED_PAGE_CONSISTENCY_NAMES,
     DECLARED_PUBLICATION_TRANSPORT_NAMES,
+    DECLARED_SERVING_PLUMBING_NAMES,
     PAGE_CONSISTENCY_CLASS,
     PAGE_CONSISTENCY_EXEMPT_FUNCTIONS,
     PAGE_CONSISTENCY_EXEMPT_METHODS,
     PUBLICATION_TRANSPORT_CLASS,
     PUBLICATION_TRANSPORT_EXEMPT_METHODS,
+    SERVING_SOURCE_EXEMPT_FUNCTIONS,
 )
 
 PROJECT = Path(__file__).resolve().parents[1]
@@ -859,6 +862,86 @@ def assert_only_the_page_consistency_check_moved(
     )
 
 
+def assert_only_the_slate_builder_moved(
+    relative: str, before: str, after: str
+) -> None:
+    """Nothing the live builder computes may differ except its population.
+
+    The slate module's byte pin protects a different thing from the other two
+    on this list: not what a published record says but what the fitted models
+    are shown. It is restated rather than lifted in the only direction a
+    serving-parity fix needs, which is the direction the carve-out in
+    ``safety`` already defines -- ``build_upcoming_slate_features`` is the one
+    function whose body may differ, every leakage guard, slate-date rule,
+    prior, rolling window and classifier call in the module is a separate
+    top-level definition and is held syntax-tree-identical to production
+    here, every module constant is too, and what the exempt function may have
+    gained is held to the declared plumbing names.
+
+    That is strictly more than this file's byte comparison asserted, which
+    said nothing about content at all once a file was allowed to differ.
+    """
+    removed = [
+        line for line in before.splitlines() if line not in after.splitlines()
+    ]
+
+    assert removed == [], (
+        f"{relative} removed or edited lines production has: {removed}"
+    )
+
+    definitions_before = top_level(before)
+    definitions_after = top_level(after)
+
+    assert set(definitions_before) <= set(definitions_after), (
+        f"{relative} dropped "
+        f"{sorted(set(definitions_before) - set(definitions_after))}"
+    )
+
+    for name, node in definitions_before.items():
+        if name in SERVING_SOURCE_EXEMPT_FUNCTIONS:
+            continue
+
+        assert ast.dump(node) == ast.dump(definitions_after[name]), (
+            f"{relative}:{name} is not what production has, and only "
+            f"{list(SERVING_SOURCE_EXEMPT_FUNCTIONS)} may differ"
+        )
+
+    constants_before = module_constants(before)
+    constants_after = module_constants(after)
+
+    assert set(constants_before) <= set(constants_after), (
+        f"{relative} dropped "
+        f"{sorted(set(constants_before) - set(constants_after))}"
+    )
+
+    for name, node in constants_before.items():
+        assert ast.dump(node) == ast.dump(constants_after[name]), (
+            f"{relative}:{name} is a module constant and may not move"
+        )
+
+    for name in SERVING_SOURCE_EXEMPT_FUNCTIONS:
+        if name not in definitions_before:
+            continue
+
+        statements = {
+            ast.dump(node) for node in definitions_before[name].body
+        }
+
+        for node in definitions_after[name].body:
+            rendered = ast.dump(node)
+
+            if rendered in statements:
+                continue
+
+            assert any(
+                declared in rendered
+                for declared in DECLARED_SERVING_PLUMBING_NAMES
+            ), (
+                f"{relative}:{name} added a statement that is not declared "
+                f"serving plumbing: {ast.unparse(node)[:160]}"
+            )
+
+
 #: Each declared file on the numerical list, and the stronger statement it is
 #: held to instead of its bytes. A module reaches this mapping by having a
 #: defect a byte pin makes unfixable while protecting nothing numerical, and
@@ -866,6 +949,7 @@ def assert_only_the_page_consistency_check_moved(
 NARROWED_NUMERICAL_PINS: tuple[tuple[tuple[str, ...], object], ...] = (
     (ADDITIVE_ONLY_PUBLICATION_TRANSPORTS, assert_only_the_publication_transport_moved),
     (ADDITIVE_ONLY_PAGE_CONSISTENCY_CHECKS, assert_only_the_page_consistency_check_moved),
+    (ADDITIVE_ONLY_SERVING_SOURCES, assert_only_the_slate_builder_moved),
 )
 
 
