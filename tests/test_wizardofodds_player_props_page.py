@@ -20,7 +20,9 @@ credential environment variable's value are both absent from the output.
 
 from __future__ import annotations
 
+import ast
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -1049,6 +1051,431 @@ def test_the_page_computes_no_pricing_of_its_own():
 
     for forbidden in ("from nba_prop_quant", "import numpy", "import pandas"):
         assert forbidden not in routing_source
+
+
+# ----------------------------------------------------------------------
+# one wager, several books, one model probability
+# ----------------------------------------------------------------------
+#
+# A wager several sportsbooks price is published once per book, and every one
+# of those rows carries the model's own probability for it. The page states
+# that probability once, so it checks first that the rows state one number --
+# and the question "is this one number" is numerical. Two arrivals at one
+# double can differ in the bits the format cannot hold, and a release the feed
+# published correctly was refused over exactly that.
+#
+# What follows pins both halves: the format's noise is one number, and
+# anything a model could have meant is still two.
+
+
+#: The pair that refused a live release. Two adjacent-but-one doubles, 2e-16
+#: apart, which is the resolution of the type rather than a disagreement.
+SETTLED_PAIR: tuple[float, float] = (0.5899928519036952, 0.5899928519036954)
+
+#: A difference a model could express: three orders of magnitude above the
+#: noise, and still far too small for any cell on the page to print
+#: differently -- which is the point. The page refuses it rather than choosing
+#: one, because it cannot tell which one the model meant.
+UNSETTLED_PAIR: tuple[float, float] = (0.5899928519036952, 0.5899928519046952)
+
+
+#: The books quoting the fixture wager, in the order the rows are written.
+#: Neither is an affiliate, so which one the page routes a reader to is
+#: decided by the price and a test can move it. ``bet365`` sorts first under
+#: the page's own offer ordering, and is deliberately not the book the default
+#: prices select: the stated model number has to come from the wager's stable
+#: order rather than from whichever sportsbook won.
+DUPLICATE_VENDORS: tuple[str, ...] = ("bet365", "fanduel", "pinnacle")
+
+#: The prices those books post for the side, worst first, so the routing
+#: selects the second row rather than the first.
+DUPLICATE_PRICES: tuple[int, ...] = (-120, -115, -112)
+
+
+def duplicate_probability_frame(
+    values: tuple[float, ...], *, prices: tuple[int, ...] | None = None
+):
+    """One wager, one row per book, each with its own copy of the model's probability.
+
+    Player 18's rebounds under 5.5, built from the publisher's own fixture row
+    so the frame is the shape the publisher accepts rather than a hand-written
+    dictionary that could drift from the published contract.
+
+    Two published fields differ between the rows and no others: the side's
+    probability, which is what is under test, and the price, which is what
+    makes them competing offers the router has to choose between.
+    """
+    import pandas as pd
+
+    template = fixture.priced_frame().iloc[0].to_dict()
+
+    posted = DUPLICATE_PRICES if prices is None else prices
+
+    rows = []
+
+    for index, probability in enumerate(values):
+        quote = dict(template)
+
+        quote.update(
+            {
+                "id": 8100 + index,
+                "vendor": DUPLICATE_VENDORS[index],
+                "under_odds": posted[index],
+                "player_id": 18,
+                "player_name": "Delta Example",
+                "prop_type": "rebounds",
+                "line_value": 5.5,
+                "model_projection": 5.9,
+                "calibrated_q_under_nonpush": probability,
+            }
+        )
+
+        rows.append(quote)
+
+    return pd.DataFrame(rows)
+
+
+def restate_rows(state: dict, document: dict) -> None:
+    """Put an edited rows document back, with the digests that attest to it.
+
+    The page verifies the rows against the manifest and the manifest against
+    the pointer, so a test that edits a row has to re-attest it or it sees the
+    tamper refusal instead of the one it is about.
+    """
+    manifest = load_manifest(state)
+
+    payload = publisher.serialise(document)
+
+    rewrite(state, manifest["rows_relative"], payload)
+
+    manifest["rows_sha256"] = publisher.digest(payload)
+
+    rewrite(state, manifest_path(state), publisher.serialise(manifest))
+
+    current = json.loads(
+        (state["destination"] / publisher.CURRENT_POINTER).read_text()
+    )
+
+    current["rows_sha256"] = manifest["rows_sha256"]
+
+    rewrite(state, publisher.CURRENT_POINTER, publisher.serialise(current))
+
+
+def published_rows(state: dict) -> dict:
+    return json.loads(
+        (state["destination"] / load_manifest(state)["rows_relative"]).read_text()
+    )
+
+
+def steps_above(value: float, count: int) -> float:
+    """``count`` representable doubles above ``value``."""
+    for _ in range(count):
+        value = math.nextafter(value, math.inf)
+
+    return value
+
+
+@pytest.mark.parametrize(
+    "values, settled",
+    [
+        (SETTLED_PAIR, True),
+        ((SETTLED_PAIR[0], SETTLED_PAIR[0]), True),
+        ((SETTLED_PAIR[0],), True),
+        (UNSETTLED_PAIR, False),
+        ((SETTLED_PAIR[0], 0.61), False),
+        ((SETTLED_PAIR[0], float("nan")), False),
+        ((float("nan"), float("nan")), False),
+        ((SETTLED_PAIR[0], float("inf")), False),
+        ((SETTLED_PAIR[0], float("-inf")), False),
+        ((SETTLED_PAIR[0], None), False),
+        ((None, None), False),
+        ((SETTLED_PAIR[0], "not a number"), False),
+        ((), False),
+    ],
+)
+def test_whether_published_copies_of_a_model_scalar_are_one_number(
+    values, settled
+):
+    """The settlement rule, case by case, on the helper the page asks.
+
+    Missing, not a number, infinite and ``NaN`` are all unsettled: they are
+    not a number the page could state, and a page that treated the absence of
+    a probability as agreement would render a card about nothing. Exactly
+    equal is settled, the format's noise is settled, and a difference the
+    model could have meant is not.
+    """
+    assert page.model_scalars_settled(values) is settled
+
+
+def test_the_settlement_bound_is_the_last_bits_and_not_a_rounding():
+    """The bound is the resolution of the values compared, not a tolerance.
+
+    Pinned at the bound rather than only on either side of it, and pinned at
+    two magnitudes, because the thing that must not drift is that this scales
+    with the value's own last bit. A fixed 1e-6 or a display rounding would
+    pass every case below and would also pass a real disagreement.
+    """
+    assert page.MODEL_SCALAR_ULPS == 8
+
+    assert page.MODEL_SCALAR_FLOOR == 1e-15
+
+    # Near a half, eight units in the last place is under the floor, so the
+    # floor is what applies: 1e-15, which is nine of them.
+    probability = SETTLED_PAIR[0]
+
+    assert 8 * math.ulp(probability) < page.MODEL_SCALAR_FLOOR
+
+    assert page.model_scalars_settled((probability, steps_above(probability, 9)))
+
+    assert not page.model_scalars_settled(
+        (probability, steps_above(probability, 10))
+    )
+
+    # Where one unit in the last place is the wider of the two, the ULP rule
+    # is what applies, and eight is the bound.
+    big = 1024.0
+
+    assert 8 * math.ulp(big) > page.MODEL_SCALAR_FLOOR
+
+    assert page.model_scalars_settled((big, steps_above(big, 8)))
+
+    assert not page.model_scalars_settled((big, steps_above(big, 9)))
+
+    # The spread of the pair that refused a live release, stated as what it
+    # is: two bits of a double.
+    assert SETTLED_PAIR[1] - SETTLED_PAIR[0] == 2 * math.ulp(SETTLED_PAIR[0])
+
+    # And the spread the page still refuses, stated the same way: a thousand
+    # times coarser than the format, and invisible in every rendered cell.
+    assert UNSETTLED_PAIR[1] - UNSETTLED_PAIR[0] > 1e-13
+
+    assert page.percent(UNSETTLED_PAIR[0]) == page.percent(UNSETTLED_PAIR[1])
+
+
+def test_two_books_whose_probability_differs_in_the_last_bits_build_one_card(
+    tmp_path,
+):
+    """The release that was refused. One card, and the number it states is published.
+
+    The feed was correct: 603 rows, verified. The page refused it because two
+    of its rows spelled one probability two ways. This is that slate, reduced
+    to the one wager it turned on.
+    """
+    state = publish(tmp_path, frame=duplicate_probability_frame(SETTLED_PAIR))
+
+    built = build(state)
+
+    assert len(built["rows"]) == 1
+
+    page_row = built["rows"][0]
+
+    assert page_row.wager.player_id == 18
+
+    assert page_row.wager.prop_type == "rebounds"
+
+    assert page_row.wager.line_value == 5.5
+
+    assert page_row.side == routing.SIDE_UNDER
+
+    assert len(page_row.quotes) == len(SETTLED_PAIR)
+
+    # Stated, not computed: the number on the card is the first row's own
+    # published value, unchanged. Not their mean -- which is neither of them,
+    # and is a number no row carries -- and not the routed book's, which is
+    # the other one here.
+    assert page_row.model_probability == SETTLED_PAIR[0]
+
+    assert page_row.model_probability != sum(SETTLED_PAIR) / len(SETTLED_PAIR)
+
+    assert page_row.row["calibrated_q_under_nonpush"] == SETTLED_PAIR[1]
+
+    html = built["files"][page.PAGE_NAME].decode("utf-8")
+
+    assert f'data-model-p="{page_row.model_probability}"' in html
+
+    assert page.percent(page_row.model_probability) in html
+
+
+def test_the_card_states_the_model_number_whichever_book_is_routed(tmp_path):
+    """The model's probability is not a property of a price.
+
+    The two rows are routed differently -- reversing the prices sends the
+    reader to the other book -- and the number the card calls the model's
+    opinion is the same either way. It is read off the wager's own stable row
+    order rather than off whichever sportsbook won, because a model
+    probability that moved when the routing moved would not be the model's.
+    """
+    forwards = build(
+        publish(tmp_path / "a", frame=duplicate_probability_frame(SETTLED_PAIR))
+    )
+
+    backwards = build(
+        publish(
+            tmp_path / "b",
+            frame=duplicate_probability_frame(
+                SETTLED_PAIR, prices=DUPLICATE_PRICES[1::-1]
+            ),
+        )
+    )
+
+    first, second = forwards["rows"][0], backwards["rows"][0]
+
+    assert first.routed.offer is not None
+
+    assert second.routed.offer is not None
+
+    assert first.routed.offer.vendor != second.routed.offer.vendor
+
+    assert first.row["quote_id"] != second.row["quote_id"]
+
+    assert (
+        first.row["calibrated_q_under_nonpush"]
+        != second.row["calibrated_q_under_nonpush"]
+    )
+
+    assert first.model_probability == second.model_probability == SETTLED_PAIR[0]
+
+
+def test_a_settled_wager_builds_the_same_bytes_every_time(tmp_path):
+    """Nothing about the settlement is order-dependent or averaged.
+
+    Three builds of the slate whose two rows differ in their last bits. A
+    canonical value picked from an unstable ordering, or any arithmetic over
+    the copies, would show up here as bytes that move.
+    """
+    state = publish(tmp_path, frame=duplicate_probability_frame(SETTLED_PAIR))
+
+    builds = [build(state) for _ in range(3)]
+
+    for other in builds[1:]:
+        assert other["files"] == builds[0]["files"]
+
+    assert len({result["manifest"]["page_sha256"] for result in builds}) == 1
+
+
+def test_two_books_that_really_disagree_about_the_model_refuse_the_build(
+    tmp_path,
+):
+    """Fail closed. The page cannot say which of two probabilities the model meant."""
+    state = publish(tmp_path, frame=duplicate_probability_frame(UNSETTLED_PAIR))
+
+    with pytest.raises(
+        page.PageRefused,
+        match="disagree about calibrated_q_under_nonpush",
+    ) as refusal:
+        build(state)
+
+    assert "is not settled and no card can state it" in str(refusal.value)
+
+
+@pytest.mark.parametrize("broken", [float("nan"), float("inf")])
+def test_a_published_probability_that_is_not_a_number_refuses_the_build(
+    tmp_path, broken
+):
+    """A release carrying ``NaN`` or an infinity is refused, not rendered.
+
+    The publisher refuses these too, which is where they are meant to be
+    caught. Checked again here because the page reads a release it did not
+    write, and because the settlement rule is numerical: a comparison that
+    worked on serialisations would have found ``NaN`` equal to ``NaN`` and
+    put it on a card.
+    """
+    state = publish(tmp_path, frame=duplicate_probability_frame(SETTLED_PAIR))
+
+    document = published_rows(state)
+
+    for row in document["rows"]:
+        row["calibrated_q_under_nonpush"] = broken
+
+    restate_rows(state, document)
+
+    with pytest.raises(
+        page.PageRefused, match="disagree about calibrated_q_under_nonpush"
+    ):
+        build(state)
+
+
+def test_a_release_missing_the_model_probability_refuses_the_build(tmp_path):
+    """No probability at all is a refusal, named by the field that is absent."""
+    state = publish(tmp_path, frame=duplicate_probability_frame(SETTLED_PAIR))
+
+    document = published_rows(state)
+
+    for row in document["rows"]:
+        del row["calibrated_q_under_nonpush"]
+
+    restate_rows(state, document)
+
+    with pytest.raises(page.PageRefused, match="calibrated_q_under_nonpush"):
+        build(state)
+
+
+def test_only_the_model_probability_is_settled_numerically(tmp_path):
+    """Everything else on a wager is still compared exactly, or not at all.
+
+    The tolerance exists for one field: the model's own probability, which the
+    page states once for a wager and which every row on that wager therefore
+    has to agree on. Nothing else is required to agree across offers -- a
+    price, a book, a quote id and a line are properties of an offer, and the
+    card reads them off the one offer it points at -- so there is nothing else
+    for a tolerance to be applied to, and this pins that.
+    """
+    source = (PROJECT / "ops" / "wizardofodds_player_props_page.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert source.count("model_scalars_settled(") == 2
+
+    tree = ast.parse(source)
+
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "model_scalars_settled"
+    ]
+
+    assert len(calls) == 1
+
+    settled = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "_agree_on_the_model"
+    )
+
+    assert calls[0] in ast.walk(settled)
+
+    # The field it is asked about is the side's own model probability, taken
+    # from the page's existing mapping rather than named again here.
+    assert set(page.SIDE_MODEL_PROBABILITY.values()) == {
+        "calibrated_q_over_nonpush",
+        "calibrated_q_under_nonpush",
+    }
+
+    # An offer's own fields are read off the quoting row and never compared
+    # between rows, so loosening equality cannot have reached them.
+    state = publish(tmp_path, frame=duplicate_probability_frame(SETTLED_PAIR))
+
+    page_row = build(state)["rows"][0]
+
+    offer_fields = ("quote_id", "vendor", "under_odds", "line_value")
+
+    distinct = {
+        name: {str(quote.get(name)) for quote in page_row.quotes}
+        for name in offer_fields
+    }
+
+    assert len(distinct["quote_id"]) == len(SETTLED_PAIR)
+
+    assert len(distinct["vendor"]) == len(SETTLED_PAIR)
+
+    assert len(distinct["under_odds"]) == len(SETTLED_PAIR)
+
+    assert len(distinct["line_value"]) == 1
+
+    for name in offer_fields:
+        assert page_row.row[name] in [quote[name] for quote in page_row.quotes]
 
 
 # ======================================================================

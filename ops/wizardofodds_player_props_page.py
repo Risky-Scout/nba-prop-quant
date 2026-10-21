@@ -311,6 +311,29 @@ SIDE_MARKET_PROBABILITY: Mapping[str, str] = {
     routing.SIDE_UNDER: "market_devig_q_under",
 }
 
+#: How far two published copies of one model scalar may lie apart and still be
+#: the same number: eight units in the last place of the values compared.
+#:
+#: A wager several sportsbooks price is published once per book, and each row
+#: carries the model's own probability for that wager. The probability does not
+#: depend on a price, so the copies are one number -- but they are one number
+#: that has been through a float at every step, and two arrivals at one result
+#: can differ in the last bits a double can hold. That difference is the
+#: format's, not the model's.
+#:
+#: Eight is chosen to cover the handful of representation steps between a
+#: calibrated probability and a published row while staying at the scale of the
+#: last bit. It is not a display tolerance, not a rounding, and not a
+#: sportsbook's precision: at a probability near a half this is under 1e-15, so
+#: a disagreement a model could actually express -- 1e-12, say -- is still a
+#: refusal. Widening it would make this check stop asking its question.
+MODEL_SCALAR_ULPS: int = 8
+
+#: The floor under that bound, so it does not vanish for a value near zero
+#: where one unit in the last place is subnormally small. Still far below any
+#: difference a published probability could mean.
+MODEL_SCALAR_FLOOR: float = 1e-15
+
 #: Side -> the published edge and expected value for that side. The side's own
 #: columns rather than ``model_preferred_edge``, because a card is about one
 #: wager and the row it reads may be a book whose own preferred side is the
@@ -1243,6 +1266,14 @@ class PageRow:
     row: Mapping[str, Any] = field(repr=False)
     quotes: tuple[Mapping[str, Any], ...] = field(default=(), repr=False)
 
+    #: The model's probability for this wager, as one of the published rows
+    #: carries it, settled across the offer universe by
+    #: :func:`_agree_on_the_model`. ``None`` when a caller built the row
+    #: without going through that check, and then the quoting row's own copy
+    #: is read instead -- the two differ only in the last bits a double holds,
+    #: because a release in which they differed by more is refused.
+    model_scalar: Any = None
+
     #: Where the selected sportsbook can be reached when it is not an
     #: affiliate and the site has an established destination for it. ``None``
     #: whenever the selection is an affiliate -- those go through the redirect
@@ -1265,6 +1296,9 @@ class PageRow:
 
     @property
     def model_probability(self) -> Any:
+        if self.model_scalar is not None:
+            return self.model_scalar
+
         return self.row[SIDE_MODEL_PROBABILITY[self.side]]
 
     @property
@@ -1438,7 +1472,7 @@ def page_rows(
             )
         )
 
-        _agree_on_the_model(ordered, wager=wager)
+        model_scalar = _agree_on_the_model(ordered, wager=wager)
 
         routed = routing.route(
             routing.offers_for(publication.rows, wager), registry=registry
@@ -1452,6 +1486,7 @@ def page_rows(
                 routed=routed,
                 row=quoting,
                 quotes=ordered,
+                model_scalar=model_scalar,
                 direct_url=_direct_url(routed, fallback=fallback),
                 distribution=publication.distributions.get(
                     distribution_key(quoting)
@@ -1502,21 +1537,83 @@ def _direct_url(
     return fallback.url_for(routed.offer.vendor)
 
 
+def model_scalars_settled(values: Sequence[Any]) -> bool:
+    """Whether every published copy of one model scalar is the same number.
+
+    ``True`` only when there is at least one copy, every copy is a finite
+    number, and the widest gap between them is no more than the representation
+    noise of the values themselves -- :data:`MODEL_SCALAR_ULPS` units in the
+    last place, floored at :data:`MODEL_SCALAR_FLOOR`.
+
+    Deliberately numerical rather than textual. The copies are the same model
+    output published once per sportsbook, and ``0.5899928519036952`` and
+    ``0.5899928519036954`` are two spellings of one double two bits apart, not
+    two opinions; comparing their serialisations refuses a release over the
+    format it was written in. Everything a disagreement could actually be is
+    still a disagreement, because the bound is the last bit and not a
+    rounding: a missing copy, a copy that is not a number, a copy that is
+    infinite or ``NaN``, and any gap a probability could mean all answer
+    ``False``.
+
+    Answers one question and computes nothing. It does not average the copies,
+    pick a middle, round them to a common figure or decide what the number
+    should have been -- a caller that needs the number takes one of the copies
+    as it was published.
+    """
+    numbers: list[float] = []
+
+    for value in values:
+        number = _finite(value)
+
+        if number is None:
+            return False
+
+        numbers.append(number)
+
+    if not numbers:
+        return False
+
+    spread = max(numbers) - min(numbers)
+
+    if spread == 0.0:
+        return True
+
+    tolerance = max(
+        MODEL_SCALAR_ULPS * max(math.ulp(number) for number in numbers),
+        MODEL_SCALAR_FLOOR,
+    )
+
+    return spread <= tolerance
+
+
 def _agree_on_the_model(
     quotes: tuple[Mapping[str, Any], ...], *, wager: routing.Wager
-) -> None:
-    """Refuse a wager whose rows disagree about the model's probability."""
+) -> Any:
+    """The one probability a wager's rows state, or a refusal.
+
+    Returns the first row's value exactly as the release published it. The
+    rows are in the wager's own stable order by the time this is called, so
+    which copy that is does not depend on which sportsbook the reader is
+    routed to and does not change between builds -- the page states the
+    model's number rather than a number that came attached to a price.
+
+    Nothing is derived on the way through: this validates, and the value
+    returned is a published one.
+    """
     field_name = SIDE_MODEL_PROBABILITY[wager.side]
 
-    values = {str(quote.get(field_name)) for quote in quotes}
+    values = tuple(quote.get(field_name) for quote in quotes)
 
-    if len(values) > 1:
+    if not model_scalars_settled(values):
         raise PageRefused(
             f"the published rows for {wager.prop_type} {wager.side} "
             f"{wager.line_value} on player {wager.player_id} disagree about "
-            f"{field_name} ({sorted(values)}), so what the model says about "
-            "this wager is not settled and no card can state it"
+            f"{field_name} ({sorted({str(value) for value in values})}), so "
+            "what the model says about this wager is not settled and no card "
+            "can state it"
         )
+
+    return values[0]
 
 
 def _quoting_row(
