@@ -130,12 +130,38 @@ Recorded in
 > sources against the historical architecture reference only, so building a
 > runtime bundle from this corrected source would fail its frozen-source check.
 
-In plain terms: the tool that packages the model for the website checks against
-an older approved file list, and the corrected file is not on it. Updating that
-tool is a known, deliberately deferred task.
+In plain terms: the tool that packages the model for the website checks every
+file against an older approved list, and refuses anything that differs.
 
-Publishing is still possible without it — but it would publish the pre-fix
-behaviour, which is the behaviour that produced the heavy under bias.
+**It is worse than the note suggests, and it is not caused by the bias fix.**
+Running the packaging tool against production fails on three files that have
+nothing to do with that fix:
+
+```
+FAIL: runtime bundle not built.
+Frozen mathematical model source verification failed:
+  scripts/10_predict_slate.py: differs from frozen commit 4def8ad33ccc
+  scripts/11_collect_snapshots.py: differs from frozen commit 4def8ad33ccc
+  scripts/15_price_markets.py: differs from frozen commit 4def8ad33ccc
+```
+
+Those three files are byte-identical on the production branch and on the fix
+branch, and the packaging tool is identical too. So **no runtime bundle can be
+built from production at all today**, with or without the bias fix. Every file
+the packaging tool checks has already been authorised to differ in a separate
+register that the tool does not read.
+
+This has to be fixed before anything can be published, corrected or not. It is
+an engineering task, not a decision, and it is the **first** blocker: until the
+packaging tool can build a bundle from production, there is nothing to publish
+and Section 2's three steps cannot be reached.
+
+A fix for it was written and tested, but it could not be landed on the branch
+carrying the bias fix. The repository's own branch-safety rules forbid it there:
+`scripts/` is an undeclarable path, and the research package is banned from even
+naming the packaging tool. That is a deliberate decision about who may change
+the publishing surface, so the fix needs a reviewed change on a lineage
+permitted to touch it rather than a way around the rule.
 
 ---
 
