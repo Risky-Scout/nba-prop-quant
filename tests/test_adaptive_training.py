@@ -325,9 +325,10 @@ class StubFitEngine:
         self._record("fit_calibration")
 
         # One digest per PROP-routed prop, which is what the real engine
-        # records: it hashes every entry it wrote into the calibration policy,
-        # and it writes an entry for every prop route. RAW routes acquire no
-        # fitted parameters and so acquire no digest.
+        # records: a raw route acquires no fitted parameters and so acquires
+        # no digest. The engine is pinned against this directly by
+        # test_a_raw_routed_prop_acquires_no_calibration_digest, because a
+        # stub that happens to be right cannot catch the engine being wrong.
         context.notes["calibration_hashes"] = {
             prop_type: hashlib.sha256(prop_type.encode("utf-8")).hexdigest()
             for prop_type, route in sorted(FROZEN_CALIBRATION_ROUTES.items())
@@ -2248,3 +2249,112 @@ def test_no_fitting_stage_reads_the_mutable_data_root():
 
     assert "context.data_root" not in engine
     assert "workspace.inputs" in engine
+
+
+def test_a_raw_routed_prop_acquires_no_calibration_digest(tmp_path):
+    """The real engine records digests for PROP routes and for nothing else.
+
+    This is the production fit's own ``fit_calibration``, not the stub engine
+    the orchestration tests use. The stub always had this property and so
+    could never have caught the engine losing it: the engine hashed every
+    entry it wrote into the calibration policy, including the two-key literal
+    it writes for a raw route when it declines to fit, which handed
+    ``check_calibration_valid`` a digest for a prop that was never calibrated
+    and failed the candidate on a methodology change that had not happened.
+
+    The consequence was not confined to the candidate. Registration exits
+    nonzero, the lifecycle's adaptive step is not permitted to fail softly,
+    and so the incumbent's serving, publication and grading were skipped on
+    a day the incumbent itself was healthy.
+    """
+    from types import SimpleNamespace
+
+    from nba_prop_quant.adaptive_training import (
+        BenchmarkRecorder,
+        ProductionFitEngine,
+    )
+
+    models = tmp_path / "models"
+    models.mkdir()
+
+    context = SimpleNamespace(
+        workspace=SimpleNamespace(models=models, inputs=tmp_path / "inputs"),
+        benchmark=BenchmarkRecorder(),
+        calibration_fallbacks={},
+        notes={},
+    )
+
+    ProductionFitEngine(PROJECT).fit_calibration(context)
+
+    digests = context.notes["calibration_hashes"]
+
+    policy = json.loads(
+        (models / "market_probability_calibration_policy.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    raw = {
+        prop for prop, route in FROZEN_CALIBRATION_ROUTES.items() if route == "raw"
+    }
+
+    prop_routed = {
+        prop for prop, route in FROZEN_CALIBRATION_ROUTES.items() if route == "prop"
+    }
+
+    # The policy still describes every prop, including the raw ones. It is the
+    # digest map that must not, because that is the map the check reads.
+    assert set(policy["props"]) == raw | prop_routed
+
+    assert raw, "the frozen route table must still route something raw"
+
+    assert set(digests) == prop_routed, (
+        "a raw-routed prop acquired a calibration digest: "
+        f"{sorted(set(digests) & raw)}"
+    )
+
+    for prop in prop_routed:
+        assert policy["props"][prop]["selected_method"] == "prop"
+
+    for prop in raw:
+        assert policy["props"][prop] == {"selected_method": "raw"}
+
+
+def test_the_computed_check_accepts_what_the_engine_now_records(tmp_path):
+    """The producer and the check agree, end to end.
+
+    The two halves were written against the same frozen route table and still
+    disagreed in production. Pinning the engine's own output against the real
+    check is the only form of this that cannot drift again.
+    """
+    from types import SimpleNamespace
+
+    from nba_prop_quant.adaptive_training import (
+        BenchmarkRecorder,
+        ProductionFitEngine,
+    )
+    from nba_prop_quant.adaptive_validation import check_calibration_valid
+
+    models = tmp_path / "models"
+    models.mkdir()
+
+    context = SimpleNamespace(
+        workspace=SimpleNamespace(models=models, inputs=tmp_path / "inputs"),
+        benchmark=BenchmarkRecorder(),
+        calibration_fallbacks={},
+        notes={},
+    )
+
+    ProductionFitEngine(PROJECT).fit_calibration(context)
+
+    result = check_calibration_valid(
+        calibration_hashes=context.notes["calibration_hashes"],
+        calibration_fallbacks=dict(context.calibration_fallbacks),
+        calibration_routes=dict(FROZEN_CALIBRATION_ROUTES),
+    )
+
+    assert result.passed, result.error
+
+    assert result.values["unexpected_digests"] == []
+
+    assert result.values["missing_digests"] == []

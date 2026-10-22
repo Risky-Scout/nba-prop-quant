@@ -383,14 +383,23 @@ def test_5_the_projection_does_not_depend_on_the_quote_it_is_published_with(
         assert page_row.projection in grouped[wager]
 
 
-def test_6_a_combo_prop_publishes_no_projection_rather_than_a_sum():
-    """The one prop family with nothing to publish, and it says so.
+def test_6_a_combo_prop_publishes_the_mean_of_the_distribution_it_priced():
+    """The joint distribution has a mean, and that is what is published.
 
-    A combo line is priced from a joint distribution over its components and
-    no central forecast of the combined total is produced anywhere on this
-    path. The sum of the component means is not that forecast. So the pricing
-    step writes the column as null for every combo row rather than omitting
-    it, and the page leaves the cell empty rather than filling it.
+    A combination total has no mean column upstream, because nothing before
+    the pricing step forms the combination at all. It does have a
+    distribution, and the pricing step is where that distribution is built --
+    so the mean is taken there, from whichever of the two engines priced the
+    row, and written into the same column a single stat publishes.
+
+    Asserted against the source here because the fixture this module serves
+    quotes no combination. The slate that does is in
+    ``test_nba_published_distributions.py``, which requires the published
+    figure to equal the mean of the distribution published beside it.
+
+    The null path is not removed by any of that: it is the column's starting
+    value, it survives on a row the pricing lookup found no price for, and
+    the page still renders that as a dash rather than as a number.
     """
     assert COMBO_COMPONENTS
 
@@ -404,9 +413,33 @@ def test_6_a_combo_prop_publishes_no_projection_rather_than_a_sum():
         and "model_projection" in ast.unparse(node.targets[0])
     ]
 
-    assert len(combo_writes) == 1
+    assert len(combo_writes) == 2
 
-    assert ast.unparse(combo_writes[0].value) == "np.nan"
+    initial, filled = combo_writes
+
+    assert ast.unparse(initial.value) == "np.nan"
+
+    # Filled, not overwritten, so the null above is what a row with no priced
+    # mean still carries -- and the mean itself arrives on the column the
+    # pricing loop carried the engine's own answer on.
+    fill = ast.unparse(filled.value)
+
+    assert fill.startswith("priced_part['model_projection'].fillna(")
+
+    assert "combo_model_projection" in fill
+
+    # Both of ``price_combo_lines``' branches are called by name, so neither
+    # dependence regime is served a mean from an engine that did not price
+    # it, and no third definition of a combination's distribution is reached.
+    called = {
+        node.func.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+
+    assert "independent_combo_pmf" in called
+
+    assert "simulate_combo_values" in called
 
     empty = page.PageRow(
         wager=routing.Wager(
@@ -478,6 +511,43 @@ def test_the_published_projection_is_the_column_the_price_came_from():
         f"priced against: {ast.unparse(published[0])} vs "
         f"{ast.unparse(priced_with[0])}"
     )
+
+
+def test_a_dependent_combo_projection_comes_from_the_draws_it_was_priced_from():
+    """The two simulation calls, pinned to each other argument by argument.
+
+    A dependent combination's projection is the mean of its own draws, and
+    they are its own only if the correlation, the draw count and the seed all
+    match the ones the price came from. The ``price_combo_lines`` call cannot
+    be refactored to share a variable with them -- it is pinned
+    syntax-identical to production under the additive-only rule -- so the
+    duplication is pinned instead, the same way the single-stat projection's
+    is above.
+    """
+    tree = ast.parse((PROJECT / PRICING_SCRIPT).read_text(encoding="utf-8"))
+
+    shared = ("dependence_lambda", "simulations", "seed")
+
+    arguments: dict[str, list[str]] = {name: [] for name in shared}
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+
+        if getattr(node.func, "id", "") not in (
+            "price_combo_lines",
+            "simulate_combo_values",
+        ):
+            continue
+
+        for keyword in node.keywords:
+            if keyword.arg in arguments:
+                arguments[keyword.arg].append(ast.dump(keyword.value))
+
+    for name in shared:
+        assert len(arguments[name]) == 2, name
+
+        assert arguments[name][0] == arguments[name][1], name
 
 
 # ======================================================================

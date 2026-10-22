@@ -143,6 +143,24 @@ SERVING_SOURCE_EXEMPT_FUNCTIONS: tuple[str, ...] = (
 #: slate builder copies the two team names and the tip time the schedule
 #: payload arrives with. Nothing here computes a projection or decides a
 #: matchup, and neither name buys anything beyond carrying one forward.
+#:
+#: ``history_games``, ``context``, ``flags`` and ``season_progress`` are the
+#: other kind, and the kind the carve-out above exists for: each names a
+#: feature the fitted models were shown one definition of, which the live
+#: builder stated a second definition of. The last two names are that again,
+#: and they are about the *population* every one of those definitions is taken
+#: over rather than about any one of them. ``build_base_frame`` opens with
+#: ``df[df["minutes"].fillna(0) > 0]``, so every rolling prior, decay state
+#: and Kalman state the models were fit on is defined over appearances; the
+#: live builder was handed BALLDONTLIE's whole stats table, where a rostered
+#: player who did not play arrives carrying zero minutes, and averaged each
+#: feature over appearances and absences alike. ``played_advanced_rows`` is
+#: the same population one table along, the restriction ``build_base_frame``
+#: already applies to the advanced history and says why in place. Neither
+#: name states a threshold, a window, a weight or a feature definition --
+#: there is no new rule here, only training's own population reaching the
+#: path that serves it -- and neither can reach a probability, a price, an
+#: edge, an EV or a route.
 DECLARED_SERVING_PLUMBING_NAMES: tuple[str, ...] = (
     "frozen_bundle_root",
     "history_games",
@@ -154,6 +172,8 @@ DECLARED_SERVING_PLUMBING_NAMES: tuple[str, ...] = (
     "visitor_abbreviation",
     "player_abbreviation",
     "tip_off_utc",
+    "played_player_games",
+    "played_advanced_rows",
 )
 
 #: The serving *orchestrator* a declaration may name, and only additively.
@@ -664,9 +684,21 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: landed, for the reason that entry itself gave: the publisher is owned
 #: below, so touching it again requires declaring it again.
 #:
-#: The page float-consistency branch's one entry was retired in turn when it
+#: The page-float-consistency branch's one entry was retired in turn when it
 #: landed, for the reason that entry itself gave: the renderer is owned below,
 #: so touching it again requires declaring it again.
+#:
+#: The played-game-population branch's seven entries were retired in turn when
+#: they landed. One of them, the incumbent grader, is owned below, so touching
+#: it again requires declaring it again. Five of the other six -- the adaptive
+#: training module, the pricing script, the slate module and both frozen
+#: manifests -- are pre-existing production files that lineage changed rather
+#: than introduced, so they are recorded nowhere. The sixth, the go-live
+#: checklist, is a file that lineage introduced and is recorded nowhere all the
+#: same: it sits under a protected prefix and so had to be declared, but no
+#: executable path reads it, so there is nothing for an ownership entry to
+#: describe. Touching any of the seven again requires declaring it again. This
+#: branch touches none of them.
 #:
 #: This branch declares five paths: four workflows and the workflow validator.
 #: Three of the four workflows are owned below and ``ci.yml`` is not, and

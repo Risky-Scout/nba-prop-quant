@@ -55,24 +55,40 @@ def rules(grader):
 
 
 def priced_frame(records: list[dict[str, Any]], *, priced_at: str) -> pd.DataFrame:
-    """Priced markets in the shape ``scripts/15_price_markets.py`` writes."""
+    """Priced markets in the shape ``scripts/15_price_markets.py`` writes.
+
+    ``market_over`` is optional for the same reason the grader treats the
+    de-vigged market pair as optional: a day whose capture carried no market
+    probability is still a gradeable day, and the fixtures that predate the
+    benchmark are what prove it.
+    """
     rows = []
     for record in records:
         over = float(record["q_over"])
-        rows.append(
-            {
-                "game_id": int(record["game_id"]),
-                "player_id": int(record["player_id"]),
-                "prop_type": record.get("prop_type", "points"),
-                "line_value": float(record["line"]),
-                "vendor": record.get("vendor", "wizardofodds"),
-                "calibrated_q_over_nonpush": over,
-                "calibrated_q_under_nonpush": 1.0 - over,
-                "model_preferred_side": record.get("side", "over"),
-                "priced_at_utc": priced_at,
-                "market_pricing_schema_version": 3,
-            }
-        )
+        row = {
+            "game_id": int(record["game_id"]),
+            "player_id": int(record["player_id"]),
+            "prop_type": record.get("prop_type", "points"),
+            "line_value": float(record["line"]),
+            "vendor": record.get("vendor", "wizardofodds"),
+            "calibrated_q_over_nonpush": over,
+            "calibrated_q_under_nonpush": 1.0 - over,
+            "model_preferred_side": record.get("side", "over"),
+            "priced_at_utc": priced_at,
+            "market_pricing_schema_version": 3,
+        }
+
+        if "market_over" in record:
+            market_over = record["market_over"]
+            row["market_devig_q_over"] = (
+                None if market_over is None else float(market_over)
+            )
+            row["market_devig_q_under"] = (
+                None if market_over is None else 1.0 - float(market_over)
+            )
+
+        rows.append(row)
+
     return pd.DataFrame.from_records(rows)
 
 
@@ -326,6 +342,309 @@ def test_the_run_receipt_reports_the_slate_scores(grader, settled):
     assert receipt["published"] is False
     assert receipt["promotion_authority"] == "NONE"
     assert receipt["production_serving_was_affected"] is False
+
+
+# ======================================================================
+# the benchmark: the same rows, scored against the market
+# ======================================================================
+
+
+@pytest.fixture
+def settled_against_the_market(tmp_path):
+    """A settled slate whose capture carried the de-vigged market too.
+
+    The three wagers are chosen so the comparison has a known direction on
+    each: the model is nearer the outcome on the first, the market is nearer
+    on the second, and the two are level on the third.
+    """
+    return build_root(
+        tmp_path,
+        priced=priced_frame(
+            [
+                # realized 31 over 24.5, so "over" happened. Model 0.62,
+                # market 0.50: the model was nearer.
+                {
+                    "game_id": 1,
+                    "player_id": 11,
+                    "line": 24.5,
+                    "q_over": 0.62,
+                    "market_over": 0.50,
+                },
+                # realized 12 under 18.5, so "over" did not happen. Model
+                # 0.40, market 0.20: the market was nearer.
+                {
+                    "game_id": 1,
+                    "player_id": 12,
+                    "line": 18.5,
+                    "q_over": 0.40,
+                    "market_over": 0.20,
+                },
+                # identical probabilities, so this row contributes nothing to
+                # either delta and proves the pairing is per-row.
+                {
+                    "game_id": 2,
+                    "player_id": 21,
+                    "line": 8.5,
+                    "q_over": 0.55,
+                    "market_over": 0.55,
+                    "prop_type": "assists",
+                    "side": "under",
+                },
+            ],
+            priced_at="2026-11-04T22:05:00+00:00",
+        ),
+        stats=stats_frame(
+            [
+                {"game_id": 1, "player_id": 11, "pts": 31.0},
+                {"game_id": 1, "player_id": 12, "pts": 12.0},
+                {"game_id": 2, "player_id": 21, "ast": 4.0},
+            ],
+            date=SLATE,
+        ),
+        games=games_frame([{"game_id": 1}, {"game_id": 2}], date=SLATE),
+    )
+
+
+def test_the_market_is_scored_on_the_identical_outcome_and_side(
+    grader, settled_against_the_market
+):
+    """Both sides of every row come from one capture and one realization."""
+    assert invoke(grader, settled_against_the_market) == 0
+
+    grades = stored_grades(settled_against_the_market).set_index("player_id")
+
+    assert grades["market_probability"].notna().all()
+    assert grades["market_brier_contribution"].notna().all()
+    assert grades["market_log_loss_contribution"].notna().all()
+
+    for player_id, market_over in ((11, 0.50), (12, 0.20), (21, 0.55)):
+        row = grades.loc[player_id]
+
+        # The under row reads the under column, which is the same convention
+        # the model's own probability is read on.
+        expected = market_over if row["side"] == "over" else 1.0 - market_over
+
+        assert row["market_probability"] == pytest.approx(expected)
+
+        assert row["market_brier_contribution"] == pytest.approx(
+            grader.brier_contribution(expected, row["realized_result"])
+        )
+        assert row["market_log_loss_contribution"] == pytest.approx(
+            grader.log_loss_contribution(expected, row["realized_result"])
+        )
+
+        assert row["market_probability_column"] == (
+            "market_devig_q_over" if row["side"] == "over" else "market_devig_q_under"
+        )
+
+
+def test_the_receipt_reports_the_delta_against_the_market(
+    grader, settled_against_the_market
+):
+    """Model minus market, so a negative delta is the model ahead."""
+    assert invoke(grader, settled_against_the_market) == 0
+
+    receipt = json.loads(
+        settled_against_the_market["receipt_path"].read_text(encoding="utf-8")
+    )
+
+    scores = receipt["scores"]
+
+    assert scores["events"] == 3
+    assert scores["market_events"] == 3
+
+    grades = stored_grades(settled_against_the_market)
+
+    assert scores["market_brier"] == pytest.approx(
+        grades["market_brier_contribution"].mean()
+    )
+    assert scores["market_log_loss"] == pytest.approx(
+        grades["market_log_loss_contribution"].mean()
+    )
+
+    assert scores["brier_delta_model_minus_market"] == pytest.approx(
+        grades["brier_contribution"].mean()
+        - grades["market_brier_contribution"].mean()
+    )
+    assert scores["log_loss_delta_model_minus_market"] == pytest.approx(
+        grades["log_loss_contribution"].mean()
+        - grades["market_log_loss_contribution"].mean()
+    )
+
+    # The sign is the whole point of reporting a delta at all, so it is
+    # pinned rather than inferred: on this slate the market wins, because the
+    # row it is nearer on is further from the model than the row the model
+    # wins is from the market.
+    assert scores["brier_delta_model_minus_market"] > 0
+
+
+def test_a_row_the_market_priced_better_is_recorded_not_hidden(
+    grader, settled_against_the_market
+):
+    """A grader that could only record favourable rows would be worthless."""
+    assert invoke(grader, settled_against_the_market) == 0
+
+    grades = stored_grades(settled_against_the_market).set_index("player_id")
+
+    model_ahead = grades.loc[11]
+    market_ahead = grades.loc[12]
+    level = grades.loc[21]
+
+    assert model_ahead["brier_contribution"] < model_ahead["market_brier_contribution"]
+    assert (
+        market_ahead["brier_contribution"] > market_ahead["market_brier_contribution"]
+    )
+    assert level["brier_contribution"] == pytest.approx(
+        level["market_brier_contribution"]
+    )
+
+
+def test_a_capture_without_a_market_probability_still_grades_the_model(
+    grader, settled
+):
+    """The benchmark is optional; the model's own score is not.
+
+    ``settled`` carries no market columns at all, which is the shape every
+    slate priced before this benchmark existed has.
+    """
+    assert invoke(grader, settled) == 0
+
+    grades = stored_grades(settled)
+
+    assert grades["brier_contribution"].notna().all()
+    assert grades["market_probability"].isna().all()
+    assert grades["market_brier_contribution"].isna().all()
+    assert grades["market_log_loss_contribution"].isna().all()
+    assert grades["market_probability_column"].isna().all()
+
+    receipt = json.loads(settled["receipt_path"].read_text(encoding="utf-8"))
+
+    assert receipt["scores"]["events"] == 3
+    assert receipt["scores"]["market_events"] == 0
+    assert receipt["scores"]["brier_delta_model_minus_market"] is None
+
+
+def test_the_delta_is_taken_over_the_rows_that_carry_both_sides(grader, tmp_path):
+    """A delta over two different row sets is not a delta.
+
+    One of these three wagers has no market probability, so the comparison
+    covers two rows while the slate grades three, and the reported delta must
+    be the two-row one rather than a slate-wide model figure differenced
+    against a two-row market figure.
+    """
+    paths = build_root(
+        tmp_path,
+        priced=priced_frame(
+            [
+                {
+                    "game_id": 1,
+                    "player_id": 11,
+                    "line": 24.5,
+                    "q_over": 0.62,
+                    "market_over": 0.50,
+                },
+                {
+                    "game_id": 1,
+                    "player_id": 12,
+                    "line": 18.5,
+                    "q_over": 0.40,
+                    "market_over": 0.20,
+                },
+                # Priced, gradeable, and quoted with no market probability.
+                {
+                    "game_id": 2,
+                    "player_id": 21,
+                    "line": 8.5,
+                    "q_over": 0.99,
+                    "market_over": None,
+                    "prop_type": "assists",
+                    "side": "under",
+                },
+            ],
+            priced_at="2026-11-04T22:05:00+00:00",
+        ),
+        stats=stats_frame(
+            [
+                {"game_id": 1, "player_id": 11, "pts": 31.0},
+                {"game_id": 1, "player_id": 12, "pts": 12.0},
+                {"game_id": 2, "player_id": 21, "ast": 4.0},
+            ],
+            date=SLATE,
+        ),
+        games=games_frame([{"game_id": 1}, {"game_id": 2}], date=SLATE),
+    )
+
+    assert invoke(grader, paths) == 0
+
+    grades = stored_grades(paths)
+    scores = json.loads(paths["receipt_path"].read_text(encoding="utf-8"))["scores"]
+
+    assert scores["events"] == 3
+    assert scores["market_events"] == 2
+
+    paired = grades.loc[grades["market_brier_contribution"].notna()]
+
+    assert len(paired) == 2
+
+    assert scores["brier_delta_model_minus_market"] == pytest.approx(
+        paired["brier_contribution"].mean()
+        - paired["market_brier_contribution"].mean()
+    )
+
+    # The slate-wide model Brier is not the paired one, which is exactly the
+    # confusion this pins against.
+    assert scores["brier"] != pytest.approx(paired["brier_contribution"].mean())
+
+
+def test_an_unsettled_row_carries_no_market_score_either(grader, tmp_path):
+    """A benchmark scored before the outcome exists would be a fabrication."""
+    paths = build_root(
+        tmp_path,
+        priced=priced_frame(
+            [
+                {
+                    "game_id": 1,
+                    "player_id": 11,
+                    "line": 24.5,
+                    "q_over": 0.62,
+                    "market_over": 0.50,
+                }
+            ],
+            priced_at="2026-11-04T22:05:00+00:00",
+        ),
+        stats=stats_frame(
+            [{"game_id": 1, "player_id": 11, "pts": 31.0}], date=SLATE
+        ),
+        games=games_frame([{"game_id": 1, "final": False}], date=SLATE),
+    )
+
+    assert invoke(grader, paths) == 0
+
+    grades = stored_grades(paths)
+
+    assert set(grades["settlement_status"]) == {grader.STATUS_PENDING}
+
+    # The market's probability is a fact about the capture and is recorded.
+    # Its score is a fact about the outcome and is not.
+    assert grades["market_probability"].notna().all()
+    assert grades["market_brier_contribution"].isna().all()
+    assert grades["market_log_loss_contribution"].isna().all()
+
+
+def test_the_report_states_the_delta_and_its_direction(
+    grader, settled_against_the_market
+):
+    assert invoke(grader, settled_against_the_market) == 0
+
+    receipt = json.loads(
+        settled_against_the_market["receipt_path"].read_text(encoding="utf-8")
+    )
+
+    report = grader.render(receipt)
+
+    assert "market brier" in report
+    assert "market-paired events : 3" in report
+    assert "negative is the model ahead" in report
 
 
 # ======================================================================

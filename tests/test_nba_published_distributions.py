@@ -23,7 +23,9 @@ Three claims, and they are not the same claim.
 
 Mass is arithmetic internal to the record. The *mean* is a claim about the
 pricing path: the record's mean must be the mean the line was priced against,
-which for a single stat is the published ``model_projection``. And the *line
+which is the published ``model_projection`` -- for a combination as well as
+for a single stat, because the pricing step takes a combination's projection
+from the same engine this record comes out of. And the *line
 probabilities* are the claim that matters most -- summing the published
 record's mass around a line has to reproduce the probability the pricing
 engine computed for that line, for every line on the slate.
@@ -426,15 +428,20 @@ def test_10_a_records_mean_is_the_mean_the_line_was_priced_against(slate, record
     tail it sits -- a mean recomputed from the published rows would be the
     mean of the display. The published mean is required to be the canonical
     projection, which is the number the panel shows as Model Projection.
+
+    Over every record, combinations included. A combination has no mean
+    column upstream -- nothing before the pricing step forms the combination
+    at all -- so the pricing step takes it from the engine that priced the
+    lines, which is the engine that produced the distribution this record is.
+    The two are therefore required to be the same number and not two
+    estimates of one, and that holds across the branch: four of the frozen
+    policy's combinations are convolved and ``rebounds_assists`` is simulated,
+    whose record would disagree with an analytic mean by its own sampling
+    error.
     """
     checked = 0
 
     for key, record in records.items():
-        prop_type = key.split("|")[2]
-
-        if prop_type not in pricing.PROP_TO_TARGET:
-            continue
-
         projection = float(
             group_of(slate["priced"], key).iloc[0][stage.PROJECTION_COLUMN]
         )
@@ -445,7 +452,7 @@ def test_10_a_records_mean_is_the_mean_the_line_was_priced_against(slate, record
 
         checked += 1
 
-    assert checked >= len(EXPECTED_SINGLE)
+    assert checked >= len(EXPECTED_SINGLE) + len(EXPECTED_COMBO)
 
 
 def test_11_summing_the_record_reproduces_the_priced_line_probability(
