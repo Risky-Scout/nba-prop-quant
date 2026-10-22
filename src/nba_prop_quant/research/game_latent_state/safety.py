@@ -761,6 +761,22 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: column it already was.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
+        "src/nba_prop_quant/adaptive_training.py": (
+            "the calibration digest map no longer records a digest for a "
+            "prop the frozen route table routes 'raw'. One added condition "
+            "on the comprehension that builds notes['calibration_hashes'], "
+            "reading the same FROZEN_CALIBRATION_ROUTES table the loop above "
+            "it already branches on. Nothing is fitted, refitted, "
+            "recalibrated or routed differently: a raw entry is the "
+            "two-key literal the loop writes when it declines to fit, and "
+            "hashing it was recording evidence of a calibration that does "
+            "not exist. check_calibration_valid reads a digest's presence "
+            "as the fit having routed that prop to 'prop', so the digest "
+            "failed the candidate for a methodology change that had not "
+            "happened, and the failure took the incumbent's serving, "
+            "publication and grading down with it. Every prop-routed "
+            "digest is the byte-identical hash of the byte-identical entry"
+        ),
         "scripts/15_price_markets.py": (
             "a combination prop now publishes the mean of the distribution "
             "its lines were priced from instead of a null model_projection. "
