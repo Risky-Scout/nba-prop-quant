@@ -51,6 +51,12 @@ from nba_prop_quant.research.game_latent_state.safety import (
 
 PROJECT = Path(__file__).resolve().parents[1]
 
+sys.path.insert(0, str(PROJECT / "tests"))
+
+from workflow_additive_pin import (  # noqa: E402
+    assert_only_the_declared_workflow_lines_moved,
+)
+
 PRODUCTION_REF = "production/wizardofodds-integration"
 
 LIFECYCLE_WORKFLOW = (
@@ -1035,6 +1041,8 @@ NARROWED_NUMERICAL_PINS: tuple[tuple[tuple[str, ...], object], ...] = (
 )
 
 
+
+
 def test_no_model_pricing_or_calibration_bytes_changed():
     """F. The model, its features, Gate 3, pricing and the PMFs are frozen.
 
@@ -1155,7 +1163,7 @@ def test_workflow_step_order_is_unchanged():
     assert tuple(step["name"] for step in steps) == EXPECTED_STEP_ORDER
 
 
-def test_the_lifecycle_workflow_is_byte_identical_to_production():
+def test_the_lifecycle_workflow_still_runs_what_production_runs():
     base = production_base()
 
     if base is None:
@@ -1163,8 +1171,10 @@ def test_the_lifecycle_workflow_is_byte_identical_to_production():
 
     relative = LIFECYCLE_WORKFLOW.relative_to(PROJECT).as_posix()
 
-    assert blob_text(base, relative) == LIFECYCLE_WORKFLOW.read_text(
-        encoding="utf-8"
+    assert_only_the_declared_workflow_lines_moved(
+        relative,
+        blob_text(base, relative),
+        LIFECYCLE_WORKFLOW.read_text(encoding="utf-8"),
     )
 
 
@@ -1200,18 +1210,18 @@ def test_the_classifier_and_the_serving_step_are_given_the_same_slate_date():
     assert '--refresh-status "$RUNNER_TEMP/run/refresh.json"' in serve
 
 
-def test_no_workflow_production_already_has_was_changed():
-    """The opening-day fix needed no workflow change, and still has none.
+def test_no_workflow_production_already_has_lost_a_step():
+    """Every job production runs still runs the same thing.
 
-    Stated as "every workflow the production ref has is byte-identical"
-    rather than "no path under .github/workflows/ appears in the diff",
-    because those are the same sentence only on a branch that adds no
-    workflow. The stronger form was true of the branch that made this fix and
-    is a statement about that branch rather than about this fix, so it failed
-    for the next branch to add a schedule rather than for anything doing
-    something wrong. Adding a workflow is governed by the containment
-    declaration; silently editing one production already runs is what this
-    pins.
+    Stated over every workflow the production ref has rather than over the
+    paths in the diff, because those are the same sentence only on a branch
+    that adds no workflow. The stronger form, byte identity, was a statement
+    about the branch that wrote it -- that fix needed no workflow change --
+    rather than about what the pin is for, which is that nothing silently
+    rewrites a job production already runs. Adding a workflow is governed by
+    the containment declaration; what this pins is that an edited one keeps
+    every command, condition, ref, label and entry point it had, with only
+    the declared action versions, installs and cache inputs moving.
     """
     base = production_base()
 
@@ -1222,11 +1232,14 @@ def test_no_workflow_production_already_has_was_changed():
 
     assert existing, "the production ref has no workflows, which cannot be right"
 
-    edited = [
-        name
-        for name in existing
-        if blob_text(base, f".github/workflows/{name}")
-        != (PROJECT / ".github" / "workflows" / name).read_text(encoding="utf-8")
-    ]
+    for name in existing:
+        relative = f".github/workflows/{name}"
 
-    assert edited == []
+        before = blob_text(base, relative)
+
+        after = (PROJECT / relative).read_text(encoding="utf-8")
+
+        if after == before:
+            continue
+
+        assert_only_the_declared_workflow_lines_moved(relative, before, after)

@@ -688,192 +688,96 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: landed, for the reason that entry itself gave: the renderer is owned below,
 #: so touching it again requires declaring it again.
 #:
-#: This branch declares the slate module and the serving-source registry, and
-#: widens the slate builder's carve-out by two names, all three named above.
-#: What it corrects is the fourth instance of one defect: a feature the fitted
-#: models were shown one definition of, served under another. The first three
-#: were definitions -- the competition-regime flags, then
-#: ``season_progress``. This one is the population every definition is taken
-#: over. ``build_base_frame`` opens by keeping only the player-games with
-#: minutes on them, so every rolling prior, decay state and Kalman state the
-#: models were fit on is an average over appearances. BALLDONTLIE returns a
-#: row per rostered player, the live builder read that table whole, and so
-#: every game a player missed entered his per-minute EWMs as a zero and his
-#: minutes EWM as a zero.
+#: The played-game-population branch's seven entries were retired in turn when
+#: they landed. One of them, the incumbent grader, is owned below, so touching
+#: it again requires declaring it again. Five of the other six -- the adaptive
+#: training module, the pricing script, the slate module and both frozen
+#: manifests -- are pre-existing production files that lineage changed rather
+#: than introduced, so they are recorded nowhere. The sixth, the go-live
+#: checklist, is a file that lineage introduced and is recorded nowhere all the
+#: same: it sits under a protected prefix and so had to be declared, but no
+#: executable path reads it, so there is nothing for an ownership entry to
+#: describe. Touching any of the seven again requires declaring it again. This
+#: branch touches none of them.
 #:
-#: Like ``season_progress``, it refused nothing and announced nothing: it
-#: served the models numbers they were not fit on. Unlike it, the error has a
-#: direction, because every target here is a count and the contamination can
-#: only subtract -- and it is selective, because it scales with how much of a
-#: player's recent history is absence. So the durable players were priced
-#: correctly, the absence-prone ones were marked down, and the output read as
-#: a model with a view on the under rather than as a model with a defect. On
-#: opening night, when every player's most recent rows are the end of a
-#: season he may have missed, that is most of the slate.
+#: This branch declares five paths: four workflows and the workflow validator.
+#: Three of the four workflows are owned below and ``ci.yml`` is not, and
+#: neither is the validator -- both are pre-existing production files this
+#: lineage changes rather than introduces, so both are recorded nowhere when
+#: this lands and touching either again requires declaring it again.
 #:
-#: The fix is the one the carve-out exists for and the same shape as the last
-#: two: the rule stays where production states it, and only training's own
-#: population reaches the path that serves it. ``features.py``, ``decay.py``,
-#: ``kalman.py``, ``game_context.py``, ``model.py``, ``production.py``,
-#: ``pricing.py`` and ``distributions.py`` are all byte-identical to
-#: production, which the branch-safety tests and the targeted tests both pin.
-#: No feature definition, window, weight, threshold, distribution, price,
-#: probability, simulation count, Gate 3 route, calibration or publication
-#: rule is touched anywhere in this change. No fitted artifact moves. What
-#: changes is which player-games the live builder averages over, and it
-#: changes to the set training averaged over.
+#: What it changes is what an environment installs, and nothing about what
+#: runs in it. Three recurring costs, each independently verifiable. The
+#: official actions move to the Node 24 generations, because the Node 20 ones
+#: are deprecated and warn on every run. The Linux dependency set takes
+#: ``xgboost-cpu``, which is the same upstream XGBoost release without the
+#: ``nvidia-nccl-cu13`` requirement, so a CPU-only fit stops downloading a
+#: 291 MB CUDA collective library it never loads; macOS keeps ``xgboost``,
+#: which has no such requirement and for which no CPU wheel is published.
+#: And every install goes through ``constraints/py312-production.txt``, so a
+#: fresh per-run environment resolves the versions a previous run proved
+#: rather than whatever PyPI published that morning.
 #:
-#: The pricing entry point's third declared use is a publication defect with
-#: the same shape as the first: a quantity that already existed on the path
-#: was not carried to the stage that publishes it.
-#:
-#: ``model_projection`` is the one column naming the model's central forecast
-#: for a wager, and the pricing script wrote null into it for every
-#: combination prop. The reason recorded in place was that a combination is
-#: priced from a joint distribution over its components and that no central
-#: forecast of the combined total exists on this path. The second half of
-#: that was wrong: a distribution has a mean, the pricing step is the stage
-#: that builds the combination's distribution at all, and
-#: ``ops/nba_distribution_publication.py`` was already publishing that mean
-#: beside the price under ``distribution_mean``. So the figure existed, was
-#: already published one field away, and the column a bettor reads it from
-#: said there was none -- which on the public page is an empty Model
-#: Projection cell for five of the eleven prop families the model prices.
-#:
-#: The fix takes the mean from whichever engine priced the row, on
-#: ``price_combo_lines``' own branch and threshold: the convolution of the
-#: component marginals under independence, and the mean of the very draws the
-#: simulation priced from under dependence. Taking it from the engine rather
-#: than adding up the component means is a choice about which number is
-#: published and not about which is right -- a Gaussian copula couples the
-#: components' ranks and moves no mass within any component's marginal, so
-#: the sum's mean is the sum of the component means at every dependence
-#: coefficient -- but only the engine's answer is the mean of the
-#: distribution published beside it, and on the frozen policy's one dependent
-#: combination the two differ by the simulation's own sampling error.
-#:
-#: Nothing in ``pricing.py`` moves: it stays undeclarable and
-#: byte-identical to production, and both engines are reached by named import
-#: so no second definition of a combination's distribution exists. No
-#: probability, price, edge, EV, quantile, line, calibration, dependence
-#: coefficient, simulation count or routing rule is computed or changed
-#: anywhere in this change, and every single-stat row's projection is the
-#: column it already was.
+#: Nothing about the model moves. No frozen artifact, feature, Gate 3
+#: threshold, calibration, price, PMF, simulation count, snapshot, T-20
+#: boundary, publication semantic, player identity or promotion authority is
+#: touched, no XGBoost parameter, thread count, seed or Booster load changes,
+#: and the ``xgboost`` import is the same import. Live publication stays
+#: disabled, the production ref, environment, runner and canary validations
+#: are untouched, and the only workflow semantics that change are the version
+#: of an action and the arguments to ``pip install``.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
-        "ops/grade_incumbent_production_slate.py": (
-            "a grade row now carries the de-vigged market probability the "
-            "same priced row was quoted with, and scores it on the identical "
-            "outcome, side and log-loss floor. The columns are read from the "
-            "priced frame the grader already opens -- the pair "
-            "add_market_probability_layer writes and the publisher already "
-            "carries to the page -- so nothing new is computed about a "
-            "market, fetched, or re-derived from odds. The pair is optional: "
-            "a capture without it still grades the model, which is the shape "
-            "every slate priced before this benchmark existed has. Both "
-            "halves of every reported delta are taken over the rows carrying "
-            "both sides, and market_events states how many that was. "
-            "Reported, never gated: this entry point still predicts "
-            "nothing, prices nothing, promotes nothing, publishes nothing "
-            "and writes only into the grade tree no serving script names, "
-            "and no probability, price, edge, EV, line, calibration or "
-            "settlement rule is changed"
+        ".github/workflows/ci.yml": (
+            "installs through the production constraint file, so the suite "
+            "that gates a change runs under the versions production will "
+            "build rather than under that morning's resolution, and caches "
+            "pip on that file as its key. The official actions move to the "
+            "Node 24 generations. It stays a GitHub-hosted, pull-request "
+            "job: no runner label, trigger, permission or step moves, and it "
+            "still cannot reach the production runner"
         ),
-        "src/nba_prop_quant/adaptive_training.py": (
-            "the calibration digest map no longer records a digest for a "
-            "prop the frozen route table routes 'raw'. One added condition "
-            "on the comprehension that builds notes['calibration_hashes'], "
-            "reading the same FROZEN_CALIBRATION_ROUTES table the loop above "
-            "it already branches on. Nothing is fitted, refitted, "
-            "recalibrated or routed differently: a raw entry is the "
-            "two-key literal the loop writes when it declines to fit, and "
-            "hashing it was recording evidence of a calibration that does "
-            "not exist. check_calibration_valid reads a digest's presence "
-            "as the fit having routed that prop to 'prop', so the digest "
-            "failed the candidate for a methodology change that had not "
-            "happened, and the failure took the incumbent's serving, "
-            "publication and grading down with it. Every prop-routed "
-            "digest is the byte-identical hash of the byte-identical entry"
+        ".github/workflows/default_branch_guard.yml": (
+            "the official actions move to the Node 24 generations and the "
+            "daily pip self-upgrade is removed. Its install is deliberately "
+            "left unconstrained: this is the one job that also runs from the "
+            "default branch, which carries the schedulers and their "
+            "validators rather than the production dependency set, so naming "
+            "a production constraint file here would fail on the branch the "
+            "job exists to check. No trigger, permission, runner or checked "
+            "property moves"
         ),
-        "scripts/15_price_markets.py": (
-            "a combination prop now publishes the mean of the distribution "
-            "its lines were priced from instead of a null model_projection. "
-            "The mean is taken inside main, from the engine price_combo_lines "
-            "itself selects on the same threshold -- independent_combo_pmf "
-            "under independence and simulate_combo_values' own draws under "
-            "dependence -- both reached by named import, so no second "
-            "definition of a combination's distribution exists and "
-            "src/nba_prop_quant/pricing.py stays undeclarable and "
-            "byte-identical to production. The added statements name "
-            "model_projection, which is declared serving plumbing. Every "
-            "line production has survives, including the null write, which is "
-            "now the column's starting value and is what a row the pricing "
-            "lookup found no price for still carries; every function except "
-            "main is syntax-tree-identical to production, which the "
-            "branch-safety tests pin. No probability, price, edge, EV, "
-            "quantile, line, calibration, dependence coefficient, simulation "
-            "count or routing rule is computed or changed, every single-stat "
-            "projection is the column it already was, and the published "
-            "figure is required to equal the distribution mean "
-            "ops/nba_distribution_publication.py records for the same wager"
+        ".github/workflows/nba_production_lifecycle.yml": (
+            "the official actions move to the Node 24 generations; the "
+            "install becomes the package alone through the production "
+            "constraint file, where it was the dev extra resolved fresh; and "
+            "the daily pip self-upgrade is removed. Production no longer "
+            "carries pytest or ruff, which serve nothing. Every step, "
+            "condition, order, entry point, ref, runner label, environment "
+            "and concurrency setting is byte-identical: the additive-only "
+            "check reads this file line by line against production and the "
+            "substitutions are enumerated there"
         ),
-        "src/nba_prop_quant/slate.py": (
-            "the live builder now takes its rolling priors over "
-            "build_base_frame's played-player-game population instead of "
-            "over BALLDONTLIE's whole stats table, and restricts the "
-            "advanced history to the same played keys build_base_frame "
-            "restricts it to. Two added statements in the one exempt "
-            "function, each naming one of the two declared names, plus the "
-            "two functions they name. The restriction is taken after "
-            "assert_slate_inputs_precede_slate rather than before it, so a "
-            "same-day or later-day row cannot evade the leakage guard by "
-            "being a row for a player who did not play. Every line "
-            "production has survives and every other function in the module "
-            "is syntax-tree-identical to production, which the branch-safety "
-            "tests pin. No feature definition, prior, window, weight, "
-            "threshold, probability, price, edge, EV, quantile, line, "
-            "distribution, simulation count or routing rule is computed or "
-            "changed, and for a history in which nobody missed a game the "
-            "served frame is identical column for column"
+        ".github/workflows/nba_t20_production.yml": (
+            "the same three changes as the lifecycle: Node 24 actions, both "
+            "installs routed through the production constraint file, and no "
+            "pip self-upgrade. The cheap probe still installs two small "
+            "wheels and not the scientific stack, and the expensive install "
+            "is still gated behind it. The three capture segments, their "
+            "boundaries, the controller entry point, the ref, the runner, "
+            "the environment and the canary-only publishing authority are "
+            "unchanged"
         ),
-        "models/frozen_manifests/"
-        "nba_prop_quant_v2_adaptive_serving_source_contract.json": (
-            "relocks src/nba_prop_quant/slate.py at version 8 and "
-            "scripts/15_price_markets.py at version 9, and records both "
-            "divergences, which is what this registry exists for: its own "
-            "purpose requires every difference from the historical reference "
-            "to be enumerated and justified in it. The historical reference "
-            "hashes are untouched, no locked file is dropped, the divergence "
-            "count is unchanged because both files were already declared "
-            "divergences, and every invariant flag -- feature definitions, "
-            "training feature definitions, model mathematics, mean-model "
-            "routing, marginal family, calibration, dependence, Gate 3 "
-            "routing, fitted artifacts -- stays false"
-        ),
-        "docs/GO_LIVE_CHECKLIST.md": (
-            "a new plain-language statement of what enabling live Wizard of "
-            "Odds publishing requires, for a reader without the context to "
-            "assemble it from the publishing switch, the destinations "
-            "registry and the publisher's own gating. It reports the state "
-            "those files already hold and grants nothing: no switch, token, "
-            "approval variable, destination, transport or publication "
-            "semantic is reached by adding a document, and live publication "
-            "stays disabled with its approval token unissued. Documentation "
-            "only -- no executable path reads it"
-        ),
-        "models/frozen_manifests/"
-        "nba_prop_quant_v2_adaptive_update_protocol.json": (
-            "one field, adaptive_serving_source_contract_sha256, which is the "
-            "digest of the registry relocked above. assert_protocol_matches_tree "
-            "refuses a daily fit whose protocol does not describe the working "
-            "tree, so relocking the one without the other is a fit that cannot "
-            "run. The two hashes it derives from the model surface, config_hash "
-            "and feature_schema_hash, are unchanged and are the evidence that "
-            "no config and no feature schema moved. Nothing else in the file "
-            "is touched: the architecture contract digest, the architecture "
-            "reference SHA, the DAG stages, the five frozen policy digests, "
-            "the Gate 3 candidate policy id, the selector prohibition and the "
-            "prohibited-operation list all stand"
+        "ops/validate_workflows.py": (
+            "gains three expectations and loses none: every official action "
+            "names the pinned Node 24 version, every install in a "
+            "constrained workflow goes through the production constraint "
+            "file, and neither production workflow installs the dev extra or "
+            "upgrades pip. The forbidden-install check it already had for "
+            "the T-20 workflow now covers the lifecycle too. No "
+            "production-ref, environment, runner, concurrency, canary, "
+            "publication-order, refresh-classification or secret-leak check "
+            "is weakened, removed or made conditional"
         ),
     }
 )
@@ -1129,6 +1033,87 @@ SHADOW_OWNED_PRODUCTION_PATHS: Mapping[str, str] = MappingProxyType(
 #: production ref rather than trusting either mapping.
 ADDITIVE_ONLY_WORKFLOWS: tuple[str, ...] = (
     ".github/workflows/nba_production_lifecycle.yml",
+)
+
+#: The lines in a pinned workflow a declaration may replace, and the only
+#: lines each may be replaced by.
+#:
+#: Append-only was right about every change to these files until it met one
+#: that could not be an appended step. A deprecated action version is not a
+#: step that can be added beside the old one -- a job that checks out twice
+#: checks out twice -- and neither is an install command: appending a second
+#: ``pip install`` beside the first leaves the first one running. So these
+#: pins had the shape of the five carve-outs above: right about what they are
+#: for, which is that nothing may silently rewrite the production path, and
+#: unable to express the one kind of edit that is not a rewrite.
+#:
+#: Stated as an exhaustive mapping from the production line to the complete
+#: set of lines it may have become, so what a declaration buys is these
+#: substitutions and nothing else. Each is checked both ways: the production
+#: line may be absent only if one of its replacements is present, which is
+#: what stops a substitution from being used as a deletion. Three are an
+#: official action's version and name nothing else. The rest are the install,
+#: and every replacement differs from what it replaces by the constraint file
+#: and, for the lifecycle, by dropping the dev extra production never needed.
+#: No ``run`` body, condition, entry point, ref, label, environment or
+#: ordering appears here, and the byte pins still hold every line not listed.
+DECLARED_WORKFLOW_LINE_SUBSTITUTIONS: Mapping[str, tuple[str, ...]] = (
+    MappingProxyType(
+        {
+            "uses: actions/checkout@v4": ("uses: actions/checkout@v7",),
+            "uses: actions/setup-python@v5": (
+                "uses: actions/setup-python@v7",
+            ),
+            "uses: actions/upload-artifact@v4": (
+                "uses: actions/upload-artifact@v6",
+            ),
+            "python -m pip install -e '.[dev]'": (
+                "python -m pip install -c "
+                "constraints/py312-production.txt -e '.[dev]'",
+                "python -m pip install -c "
+                "constraints/py312-production.txt -e .",
+            ),
+            "python -m pip install -e .": (
+                "python -m pip install -c "
+                "constraints/py312-production.txt -e .",
+            ),
+            "python -m pip install 'httpx>=0.27' 'tenacity>=9.0'": (
+                "python -m pip install -c "
+                "constraints/py312-production.txt "
+                "'httpx>=0.27' 'tenacity>=9.0'",
+            ),
+        }
+    )
+)
+
+#: The lines in a pinned workflow a declaration may simply delete.
+#:
+#: One line, and the narrowest kind there is: a command whose absence is the
+#: whole point. Upgrading pip on every scheduled run changes the installer
+#: under the run and downloads something nothing asked for, and there is no
+#: replacement because the interpreter the workflow selects already brings
+#: its own pip. Nothing that refreshes, fits, registers, serves, grades,
+#: prices, publishes or guards can be deleted through this: it is one literal
+#: command and the tests pin it as such.
+DECLARED_WORKFLOW_LINE_REMOVALS: tuple[str, ...] = (
+    "python -m pip install --upgrade pip",
+)
+
+#: The non-comment lines a declaration may add to a pinned workflow.
+#:
+#: Two, and both are ``actions/setup-python`` inputs rather than anything that
+#: runs: the action's own pip cache, keyed on the constraint file. The key is
+#: the point -- the constraint file names every version the job may install,
+#: so an unchanged file means an unchanged download set and a changed one
+#: invalidates the cache by itself. They appear only in the GitHub-hosted CI
+#: job: the self-hosted runner's pip cache directory already survives between
+#: runs, and a GitHub cache there would move bytes over the network to replace
+#: bytes on the disk. Nothing here is a command, a condition, a ref, a label
+#: or an entry point, and a comment needs no declaration because a comment
+#: cannot run.
+DECLARED_WORKFLOW_ADDED_LINES: tuple[str, ...] = (
+    "cache: pip",
+    "cache-dependency-path: constraints/py312-production.txt",
 )
 
 

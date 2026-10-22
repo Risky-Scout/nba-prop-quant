@@ -120,12 +120,62 @@ T20_FORBIDDEN_ENTRY_POINTS: tuple[str, ...] = (
     "ops/monitor_live_shadow_evidence.py",
 )
 
+# ----------------------------------------------------------------------
+# what a workflow may install, and with what
+# ----------------------------------------------------------------------
+
+#: The version each official GitHub action must name, and the only one.
+#:
+#: These three generations are the Node 24 ones. The Node 20 runtime is
+#: deprecated: a workflow still on it logs a deprecation warning on every run
+#: and stops working on a date GitHub chooses rather than one this repository
+#: does. Pinned to a single version rather than a floor because `uses:` has no
+#: range syntax -- a workflow names exactly one ref, so "at least v7" is not a
+#: thing a workflow file can say, and the only way to state the requirement is
+#: to state the version.
+#:
+#: Executing a Node 24 action needs a runner that can: support landed in
+#: actions/runner v2.327.0. The self-hosted production runner reports 2.337 or
+#: newer, so it satisfies that; GitHub-hosted runners are always current.
+OFFICIAL_ACTION_VERSIONS: dict[str, str] = {
+    "actions/checkout": "v7",
+    "actions/setup-python": "v7",
+    "actions/upload-artifact": "v6",
+}
+
 #: A serving workflow installs what it serves with. The dev extra is pytest
-#: and ruff, which serve nothing, and upgrading the installer on every trigger
-#: is network and time spent on nothing.
-T20_FORBIDDEN_INSTALL_TOKENS: tuple[str, ...] = (
+#: and ruff, which serve nothing -- and a production environment carrying its
+#: own test runner is one that can be made to run tests. Upgrading the
+#: installer on every trigger is a download nothing asked for that changes
+#: the installer under the run.
+PRODUCTION_FORBIDDEN_INSTALL_TOKENS: tuple[str, ...] = (
     ".[dev]",
     "pip install --upgrade pip",
+)
+
+#: The version set production and CI are known to work under.
+#:
+#: pyproject.toml states floors, which is what the code needs and a different
+#: question from what production is proven under. Without this file every
+#: fresh environment re-resolved the whole tree against that morning's PyPI,
+#: so a numpy, pandas, scipy or shap published hours earlier could land in a
+#: run that serves predictions with no reviewed decision anywhere saying it
+#: should.
+PRODUCTION_CONSTRAINT_FILE = "constraints/py312-production.txt"
+
+#: The workflows whose every ``pip install`` must go through that file.
+#:
+#: The two production workflows, because they serve, and CI, because a suite
+#: that passes under versions production will not install is not a check on
+#: production. ``default_branch_guard.yml`` is deliberately absent: it is the
+#: one workflow that also runs from the default branch, which carries the
+#: schedulers and their validators rather than the production dependency set,
+#: so naming a production constraint file there would fail on the branch that
+#: job exists to check.
+CONSTRAINED_INSTALL_WORKFLOWS: tuple[str, ...] = (
+    PRODUCTION_WORKFLOW,
+    T20_WORKFLOW,
+    CI_WORKFLOW,
 )
 
 
@@ -164,6 +214,110 @@ def runner_labels(job: dict) -> list[str]:
     return []
 
 
+def steps_of(jobs: dict) -> list[tuple[str, dict]]:
+    """Every step in the workflow, paired with the job it belongs to."""
+    return [
+        (job_name, step)
+        for job_name, job in jobs.items()
+        for step in (job.get("steps") or [])
+    ]
+
+
+def official_action_problems(name: str, jobs: dict) -> list[str]:
+    """Refuse an official action on a version other than the pinned one.
+
+    Only the official actions, and only the ones named in
+    :data:`OFFICIAL_ACTION_VERSIONS`: a third-party action's version is that
+    project's own release cadence and is not this rule's business.
+    """
+    found: list[str] = []
+
+    for job_name, step in steps_of(jobs):
+        uses = str(step.get("uses", ""))
+
+        if "@" not in uses:
+            continue
+
+        action, _, version = uses.partition("@")
+
+        expected = OFFICIAL_ACTION_VERSIONS.get(action)
+
+        if expected is None or version == expected:
+            continue
+
+        found.append(
+            f"{name}: job {job_name} uses {uses}, and {action} is pinned to "
+            f"{expected}; an older generation runs on the deprecated Node 20 "
+            "runtime"
+        )
+
+    return found
+
+
+def install_problems(name: str, jobs: dict) -> list[str]:
+    """Refuse an install that is not reproducible, or not production-only.
+
+    Two separate requirements that happen to live in the same commands. Every
+    install must name the constraint file, so the environment a run builds is
+    one a previous run proved rather than whatever was published that morning.
+    And a production workflow must not install the dev extra or upgrade pip.
+    """
+    found: list[str] = []
+
+    production = name in (PRODUCTION_WORKFLOW, T20_WORKFLOW)
+
+    for job_name, step in steps_of(jobs):
+        run = str(step.get("run", ""))
+
+        if production:
+            for token in PRODUCTION_FORBIDDEN_INSTALL_TOKENS:
+                if token in run:
+                    found.append(
+                        f"{name}: job {job_name} runs {token!r}, which a "
+                        "production serving workflow has no use for"
+                    )
+
+        if name not in CONSTRAINED_INSTALL_WORKFLOWS:
+            continue
+
+        for command in shell_commands(run):
+            if "pip install" not in command:
+                continue
+
+            if PRODUCTION_CONSTRAINT_FILE in command:
+                continue
+
+            found.append(
+                f"{name}: job {job_name} installs with {command.strip()!r}, "
+                f"which does not go through {PRODUCTION_CONSTRAINT_FILE}, so "
+                "the versions it resolves are whatever was published that day"
+            )
+
+    return found
+
+
+def shell_commands(script: str) -> list[str]:
+    """One entry per command in a ``run`` block, continuations joined.
+
+    A long install is written over several lines with trailing backslashes,
+    and reading those lines separately would see a ``pip install`` whose
+    arguments are somewhere else.
+    """
+    commands: list[str] = []
+
+    for line in script.splitlines():
+        if commands and commands[-1].rstrip().endswith("\\"):
+            commands[-1] = (
+                commands[-1].rstrip().removesuffix("\\").rstrip()
+                + " "
+                + line.strip()
+            )
+        else:
+            commands.append(line)
+
+    return commands
+
+
 def untrusted_runner_problems(name: str, on: dict, jobs: dict) -> list[str]:
     if not any(trigger in on for trigger in UNTRUSTED_TRIGGERS):
         return []
@@ -200,6 +354,10 @@ def problems_for(name: str, workflow: dict) -> list[str]:
         )
 
     found += untrusted_runner_problems(name, on, jobs)
+
+    found += official_action_problems(name, jobs)
+
+    found += install_problems(name, jobs)
 
     if name == PRODUCTION_WORKFLOW:
         found += production_problems(name, on, workflow, jobs)
@@ -396,13 +554,6 @@ def t20_problems(name: str, on: dict, jobs: dict) -> list[str]:
                     f"{name}: job {job_name} runs {entry_point}, which is "
                     "the lifecycle's once-daily work and must not be "
                     "repeated per T-20 segment"
-                )
-
-        for token in T20_FORBIDDEN_INSTALL_TOKENS:
-            if token in commands:
-                found.append(
-                    f"{name}: job {job_name} runs {token!r}, which a "
-                    "production serving workflow has no use for"
                 )
 
     return found

@@ -11,6 +11,7 @@ from __future__ import annotations
 import ast
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -45,6 +46,8 @@ from nba_prop_quant.research.game_latent_state.safety import (
     DECLARED_PUBLICATION_TRANSPORT_NAMES,
     DECLARED_SERVING_PLUMBING_NAMES,
     DECLARED_SERVING_READINESS_NAMES,
+    DECLARED_WORKFLOW_LINE_REMOVALS,
+    DECLARED_WORKFLOW_LINE_SUBSTITUTIONS,
     PAGE_CONSISTENCY_CLASS,
     PAGE_CONSISTENCY_EXEMPT_FUNCTIONS,
     PAGE_CONSISTENCY_EXEMPT_METHODS,
@@ -69,6 +72,12 @@ from nba_prop_quant.research.game_latent_state.safety import (
 )
 
 PROJECT = Path(__file__).resolve().parents[1]
+
+sys.path.insert(0, str(PROJECT / "tests"))
+
+from workflow_additive_pin import (  # noqa: E402
+    assert_only_the_declared_workflow_lines_moved,
+)
 
 SHADOW_PACKAGE = PROJECT / "src" / "nba_prop_quant" / "research" / "game_latent_state"
 
@@ -916,15 +925,64 @@ def test_a_declared_workflow_change_only_ever_adds_steps():
     "a step was appended" from "a step was edited": every line the production
     ref has must still be there, so no existing command can be changed, have a
     flag added or be reordered out of existence by a declaration.
+
+    The two enumerated exceptions are the edits that cannot be an appended
+    step -- an action's version and the install command, where a second copy
+    beside the first would simply run twice. A substitution counts only when
+    its replacement is actually present, so neither can be used to delete.
     """
     base = production_base()
     if base is None:
         pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
     for relative in ADDITIVE_ONLY_WORKFLOWS:
-        before = git("show", f"{base}:{relative}").splitlines()
-        after = git("show", f"HEAD:{relative}").splitlines()
-        removed = [line for line in before if line not in after]
-        assert removed == [], f"{relative} removed or edited existing lines: {removed}"
+        assert_only_the_declared_workflow_lines_moved(
+            relative,
+            git("show", f"{base}:{relative}"),
+            git("show", f"HEAD:{relative}"),
+        )
+
+
+def test_the_declared_workflow_substitutions_are_only_versions_and_installs():
+    """What the enumeration above is allowed to contain.
+
+    Without this the mapping is a place to put any line pair at all, which
+    would make the additive-only pin mean whatever the mapping says. Every
+    entry must be an official action's version bump -- identical on both sides
+    apart from the ref -- or a ``pip install``, and a deletion must be the pip
+    self-upgrade and nothing else.
+    """
+    for old, replacements in DECLARED_WORKFLOW_LINE_SUBSTITUTIONS.items():
+        assert replacements, old
+
+        for new in replacements:
+            if old.startswith("uses:"):
+                assert old.split("@")[0] == new.split("@")[0], (old, new)
+                continue
+
+            assert old.startswith("python -m pip install"), old
+            assert new.startswith("python -m pip install"), new
+
+    assert DECLARED_WORKFLOW_LINE_REMOVALS == (
+        "python -m pip install --upgrade pip",
+    )
+
+    # Nothing that runs the production path can be substituted or deleted.
+    stated = "\n".join(
+        [
+            *DECLARED_WORKFLOW_LINE_SUBSTITUTIONS,
+            *(
+                new
+                for replacements in (
+                    DECLARED_WORKFLOW_LINE_SUBSTITUTIONS.values()
+                )
+                for new in replacements
+            ),
+            *DECLARED_WORKFLOW_LINE_REMOVALS,
+        ]
+    )
+
+    for forbidden in ("ops/", "scripts/", "if:", "ref:", "runs-on", "env:"):
+        assert forbidden not in stated, forbidden
 
 
 def test_the_added_lifecycle_step_cannot_fail_the_production_job():

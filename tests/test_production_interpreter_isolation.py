@@ -240,6 +240,21 @@ def step_index(predicate) -> int:
     raise AssertionError("no matching step")
 
 
+def installs_the_project(step: dict) -> bool:
+    """Whether this step is the one that installs the project itself.
+
+    Stated as "a ``pip install`` naming an editable target" rather than as the
+    literal command, because what these tests are about is the ordering of
+    the environment, the install and the verification -- not which flags the
+    install carries. The command gained a constraint file and would otherwise
+    have stopped being found, leaving two ordering checks silently passing on
+    nothing.
+    """
+    run = str(step.get("run", ""))
+
+    return "pip install" in run and " -e " in f"{run} "
+
+
 def test_the_lifecycle_creates_a_per_run_environment():
     steps = lifecycle_steps()
 
@@ -264,9 +279,7 @@ def test_the_lifecycle_creates_a_per_run_environment():
 def test_the_environment_is_created_before_anything_is_installed():
     venv = step_index(lambda step: "-m venv" in str(step.get("run", "")))
 
-    install = step_index(
-        lambda step: "pip install -e" in str(step.get("run", ""))
-    )
+    install = step_index(installs_the_project)
 
     assert venv < install, (
         "GITHUB_PATH takes effect in later steps only, so the environment "
@@ -275,9 +288,7 @@ def test_the_environment_is_created_before_anything_is_installed():
 
 
 def test_the_interpreter_is_verified_after_the_install():
-    install = step_index(
-        lambda step: "pip install -e" in str(step.get("run", ""))
-    )
+    install = step_index(installs_the_project)
 
     verify = step_index(
         lambda step: "verify_production_interpreter.py" in str(step.get("run", ""))
