@@ -681,6 +681,62 @@ def canonical_season_progress(
     return float(np.clip(float(value), 0.0, 1.0))
 
 
+def played_player_games(stats: pd.DataFrame) -> pd.DataFrame:
+    """Return the player-games training's rolling features are defined over.
+
+    ``build_base_frame`` opens with ``df[df["minutes"].fillna(0) > 0]`` and
+    then sorts by ``["player_id", "date", "game_id"]``, and every rolling
+    prior, decay state and Kalman state the fitted models name is defined
+    over what survives those two steps. Both are reproduced here, because the
+    live builder read neither.
+
+    BALLDONTLIE's stats endpoint returns a row per rostered player, so a
+    player who did not play arrives carrying zero or null minutes. Serving
+    was handed that table whole, which put the missed games into every
+    per-minute EWM as a zero and into the minutes EWM as a zero: a feature
+    the models were fit on over appearances was served averaged over
+    appearances *and absences*. Every target here is a count, so the error has
+    one direction, and it falls hardest on the players whose recent rows are
+    absences -- which on opening night is every player returning from an
+    injury that ended their last season.
+
+    Reproduced rather than read out of ``features.py`` for the reason
+    :func:`canonical_season_progress` gives: training states the rule inside a
+    frame builder that needs the outcomes an upcoming slate does not have, so
+    there is no callable to consult. What keeps the two in step is a parity
+    test that builds one game through both paths and requires one number.
+    """
+    played = stats[stats["minutes"].fillna(0) > 0]
+
+    return (
+        played
+        .sort_values(["player_id", "date", "game_id"])
+        .reset_index(drop=True)
+    )
+
+
+def played_advanced_rows(
+    advanced: pd.DataFrame,
+    played_stats: pd.DataFrame,
+) -> pd.DataFrame:
+    """Return ``advanced`` restricted to ``played_stats``' player-games.
+
+    ``build_base_frame`` restricts the advanced history by an inner merge on
+    the exact ``(game_id, player_id)`` keys that survived its minutes filter,
+    and says why in place: BALLDONTLIE can return advanced rows for DNP and
+    zero-minute player-games, so the advanced priors have to be built over the
+    same played-player population the box-score priors are. The live builder
+    read the table unrestricted, so ``_advanced_latest`` took each player's
+    usage, true shooting and pace EWM over rows training had excluded.
+    """
+    if advanced is None or advanced.empty:
+        return advanced
+
+    keys = played_stats[["game_id", "player_id"]].drop_duplicates()
+
+    return advanced.merge(keys, on=["game_id", "player_id"], how="inner")
+
+
 def build_upcoming_slate_features(
     history_stats: pd.DataFrame,
     upcoming_games: pd.DataFrame,
@@ -695,6 +751,13 @@ def build_upcoming_slate_features(
     upcoming["date"] = pd.to_datetime(upcoming["date"]).dt.normalize()
 
     assert_slate_inputs_precede_slate(stats, advanced, upcoming)
+
+    # Taken after the leakage guard rather than before it, so a same-day or
+    # later-day row cannot evade the guard by being a row for a player who
+    # did not play.
+    stats = played_player_games(stats)
+
+    advanced = played_advanced_rows(advanced, stats)
 
     team_context = _latest_team_context(stats)
     advanced_latest = _advanced_latest(advanced)

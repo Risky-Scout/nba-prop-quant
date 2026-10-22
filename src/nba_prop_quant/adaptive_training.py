@@ -2349,9 +2349,17 @@ class ProductionFitEngine:
             encoding="utf-8",
         )
 
+        # Raw routes are excluded deliberately. The frozen route table is what
+        # decides which props carry fitted calibration, and the computed check
+        # reads the presence of a digest as the fit having routed a prop to
+        # 'prop'. A raw entry is the two-key literal written above and carries
+        # no fitted parameters, so hashing it recorded a digest for a prop that
+        # was never calibrated, and registration refused the candidate for a
+        # methodology change that had not happened.
         context.notes["calibration_hashes"] = {
             prop_type: sha256_canonical(entry)
             for prop_type, entry in sorted(policy["props"].items())
+            if FROZEN_CALIBRATION_ROUTES.get(prop_type) != "raw"
         }
 
     def fit_gate3(self, context: "FitContext") -> None:

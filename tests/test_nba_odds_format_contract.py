@@ -1766,8 +1766,8 @@ def test_41_the_projection_column_is_the_published_field_at_two_decimals(
         published = page_row.row["model_projection"]
 
         if published is None:
-            # A combo line has no single-statistic projection to show, and the
-            # panel says nothing rather than inventing one.
+            # A row the pricing path published no projection for, which the
+            # panel says nothing about rather than inventing a figure for.
             assert "<dt>Model Projection</dt>" not in panel_for(html, page_row)
 
             continue
