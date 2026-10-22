@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Grade the incumbent's served slate against realized box scores.
+"""Grade the incumbent's served slate against realized box scores, and
+against the market it was priced beside.
 
 WHAT THIS IS FOR
 ----------------
@@ -9,6 +10,28 @@ are recorded durably, but nothing read them back against what happened. Until
 that loop closes there is no incumbent baseline, and without an incumbent
 baseline the frozen promotion policy's central comparison -- candidate
 against incumbent on Brier and log loss -- has only one side.
+
+THE BENCHMARK, ON THE SAME ROWS
+-------------------------------
+
+Scoring the model against outcomes answers whether it is calibrated. It does
+not answer the question every public claim is actually defined against, which
+is whether it is better than the price it was quoted beside. So the de-vigged
+market probability already sitting on each priced row is carried through to
+the grade and scored on the identical outcome, the identical side and the
+identical log-loss floor, and the slate's deltas are reported as model minus
+market.
+
+That pairing is what ``PUBLIC_CLAIM_POLICY_V1`` is written in terms of: its
+classifications are Brier and log-loss deltas against the no-vig market with
+bootstrap bounds over a stated prospective sample, and its primary sample
+requires the model's prediction and the market comparison to come from the
+identical capture. These columns are that capture -- they are fields of the
+very row the model's own probability is read from -- so the record this
+accumulates is eligible evidence rather than a later reconstruction.
+
+Reported, never gated. Nothing here decides anything about publication, and
+a slate on which the market wins is recorded exactly as one where it loses.
 
 WHAT IT MAY AND MAY NOT DO
 --------------------------
@@ -135,6 +158,22 @@ PROBABILITY_PAIRS: tuple[tuple[str, str], ...] = (
     ("q_over_calibrated", "q_under_calibrated"),
     ("raw_q_over_nonpush", "raw_q_under_nonpush"),
     ("p_over_calibrated", "p_under_calibrated"),
+)
+
+#: The de-vigged market probability pair, which is the benchmark every public
+#: claim is defined against. ``add_market_probability_layer`` writes
+#: ``market_devig_q_over``/``_under`` on every priced row and the publisher
+#: already carries both to the page, so the market's own answer to each wager
+#: is recorded beside the model's; nothing scored it.
+#:
+#: Optional, and deliberately so. A row without a market probability is still
+#: a gradeable prediction -- the model's own score does not depend on the
+#: benchmark being present -- so an absent pair narrows the comparison rather
+#: than refusing the day, which is the opposite of how the model's own
+#: probability pair above is treated.
+MARKET_PROBABILITY_PAIRS: tuple[tuple[str, str], ...] = (
+    ("market_devig_q_over", "market_devig_q_under"),
+    ("market_devig_p_over", "market_devig_p_under"),
 )
 
 #: Identity every priced row must carry to be gradeable at all.
@@ -551,6 +590,23 @@ def grade_rows(
         )
 
     over_column, under_column = pair
+
+    # The benchmark, taken from the same capture as the prediction. The public
+    # claim policy requires model and market to be compared on the identical
+    # capture, and this is that capture: these are columns of the very row the
+    # model's own probability is read from, not a second lookup against
+    # whatever the market says now.
+    market_pair = next(
+        (
+            (over, under)
+            for over, under in MARKET_PROBABILITY_PAIRS
+            if over in priced.columns and under in priced.columns
+        ),
+        None,
+    )
+
+    market_over_column, market_under_column = market_pair or (None, None)
+
     prediction_timestamp_column = _first_present(
         priced.columns, ("priced_at_utc", "generated_at_utc")
     )
@@ -567,6 +623,15 @@ def grade_rows(
         probability = pd.to_numeric(
             row[over_column] if side == "over" else row[under_column],
             errors="coerce",
+        )
+
+        market_probability = (
+            pd.to_numeric(
+                row[market_over_column if side == "over" else market_under_column],
+                errors="coerce",
+            )
+            if market_pair is not None
+            else float("nan")
         )
 
         prediction_timestamp = (
@@ -592,10 +657,15 @@ def grade_rows(
             "line": None if pd.isna(line_value) else float(line_value),
             "vendor": None if row.get("vendor") is None else str(row.get("vendor")),
             "model_probability": None if pd.isna(probability) else float(probability),
+            "market_probability": (
+                None if pd.isna(market_probability) else float(market_probability)
+            ),
             "realized_value": None,
             "realized_result": None,
             "brier_contribution": None,
             "log_loss_contribution": None,
+            "market_brier_contribution": None,
+            "market_log_loss_contribution": None,
             "settlement_status": STATUS_PENDING,
             "settlement_detail": "",
             "prediction_timestamp": (
@@ -606,6 +676,13 @@ def grade_rows(
             "settlement_timestamp": settlement.get("settlement_timestamp"),
             "side_column": side_column,
             "probability_column": over_column if side == "over" else under_column,
+            "market_probability_column": (
+                None
+                if market_pair is None
+                else (
+                    market_over_column if side == "over" else market_under_column
+                )
+            ),
             "log_loss_floor": LOG_LOSS_FLOOR,
             "graded_at": graded_at,
             **{key: provenance[key] for key in sorted(provenance)},
@@ -620,6 +697,7 @@ def grade_rows(
                 rules=rules,
                 side=side,
                 probability=probability,
+                market_probability=market_probability,
                 line_value=line_value,
                 prop_type=prop_type,
                 settlement_available=bool(settlement["available"]),
@@ -638,6 +716,7 @@ def _settle(
     rules: Any,
     side: str | None,
     probability: Any,
+    market_probability: Any,
     line_value: Any,
     prop_type: str,
     settlement_available: bool,
@@ -724,6 +803,21 @@ def _settle(
     record["log_loss_contribution"] = log_loss_contribution(
         float(probability), realized
     )
+
+    # The benchmark is scored on the identical outcome, the identical side and
+    # the identical convention. Scored only where it exists: a row whose
+    # capture carried no market probability is still graded for the model, and
+    # leaving the market columns null is what keeps the paired comparison
+    # honest -- a missing benchmark that defaulted to anything would be a
+    # fabricated comparator on exactly the rows least able to support one.
+    if not pd.isna(market_probability):
+        record["market_brier_contribution"] = brier_contribution(
+            float(market_probability), realized
+        )
+        record["market_log_loss_contribution"] = log_loss_contribution(
+            float(market_probability), realized
+        )
+
     record["settlement_status"] = STATUS_GRADED
     record["settlement_detail"] = (
         f"realized {float(actual):g} against line {float(line_value):g}"
@@ -927,6 +1021,17 @@ def carry_graded_at(graded: pd.DataFrame, grade_path: Path) -> pd.DataFrame:
         if column not in skipped and column in stored.columns
     ]
 
+    # A store written before this run's columns existed cannot show a row
+    # unchanged, because the fields that would have to match are not in it.
+    # Carrying its timestamps would date the market score to before the run
+    # that first computed one.
+    if any(
+        column not in stored.columns
+        for column in graded.columns
+        if column not in skipped
+    ):
+        return graded
+
     previous = stored.set_index(GRADE_KEY)
 
     carried = graded.copy()
@@ -967,18 +1072,67 @@ def _same_value(before: Any, after: Any) -> bool:
 
 
 def _slate_scores(graded: pd.DataFrame) -> dict[str, Any]:
-    """The slate's own Brier and log loss. Reported, never gated here."""
+    """The slate's own Brier and log loss, and the market's on the same rows.
+
+    Reported, never gated here. The market figures are computed over the
+    rows that carry a market contribution rather than over every settled row,
+    and ``market_events`` is how many that was: a delta taken over two
+    different row sets is not a delta, so the pairing is stated rather than
+    assumed, and a reader can see when the benchmark covered less than the
+    slate.
+
+    Deltas are model minus market, so a negative delta is the model ahead --
+    the sign convention the public claim policy's thresholds are written in.
+    """
     settled = graded.loc[graded["settlement_status"] == STATUS_GRADED]
 
-    if settled.empty:
-        return {"events": 0, "brier": None, "log_loss": None, "base_rate": None}
+    empty = {
+        "events": 0,
+        "brier": None,
+        "log_loss": None,
+        "base_rate": None,
+        "market_events": 0,
+        "market_brier": None,
+        "market_log_loss": None,
+        "brier_delta_model_minus_market": None,
+        "log_loss_delta_model_minus_market": None,
+    }
 
-    return {
+    if settled.empty:
+        return empty
+
+    scores: dict[str, Any] = {
+        **empty,
         "events": int(len(settled)),
         "brier": float(settled["brier_contribution"].mean()),
         "log_loss": float(settled["log_loss_contribution"].mean()),
         "base_rate": float(settled["realized_result"].mean()),
     }
+
+    paired = settled.loc[settled["market_brier_contribution"].notna()]
+
+    scores["market_events"] = int(len(paired))
+
+    if paired.empty:
+        return scores
+
+    scores["market_brier"] = float(paired["market_brier_contribution"].mean())
+    scores["market_log_loss"] = float(
+        paired["market_log_loss_contribution"].mean()
+    )
+
+    # Both sides of each delta come from ``paired``, so the model figure here
+    # is not the slate-wide one above whenever the benchmark covered fewer
+    # rows than the slate.
+    scores["brier_delta_model_minus_market"] = float(
+        paired["brier_contribution"].mean() - paired["market_brier_contribution"].mean()
+    )
+    scores["log_loss_delta_model_minus_market"] = float(
+        paired["log_loss_contribution"].mean()
+        - paired["market_log_loss_contribution"].mean()
+    )
+
+    return scores
 
 
 # ----------------------------------------------------------------------
@@ -1119,6 +1273,27 @@ def render(receipt: dict[str, Any]) -> str:
             f"log loss             : {scores['log_loss']:.6f}",
             f"base rate            : {scores['base_rate']:.6f}",
         ]
+
+    if scores.get("market_events"):
+        lines += [
+            f"market-paired events : {scores['market_events']}",
+            f"market brier         : {scores['market_brier']:.6f}",
+            f"market log loss      : {scores['market_log_loss']:.6f}",
+            (
+                "brier delta          : "
+                f"{scores['brier_delta_model_minus_market']:+.6f}"
+                " (model minus market; negative is the model ahead)"
+            ),
+            (
+                "log loss delta       : "
+                f"{scores['log_loss_delta_model_minus_market']:+.6f}"
+            ),
+        ]
+    elif scores.get("events"):
+        lines.append(
+            "market-paired events : 0 (no de-vigged market probability on "
+            "these rows, so no comparison is reported)"
+        )
 
     artifact = receipt.get("grade_artifact")
 
