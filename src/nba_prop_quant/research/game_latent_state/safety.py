@@ -761,6 +761,24 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: column it already was.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
+        "ops/grade_incumbent_production_slate.py": (
+            "a grade row now carries the de-vigged market probability the "
+            "same priced row was quoted with, and scores it on the identical "
+            "outcome, side and log-loss floor. The columns are read from the "
+            "priced frame the grader already opens -- the pair "
+            "add_market_probability_layer writes and the publisher already "
+            "carries to the page -- so nothing new is computed about a "
+            "market, fetched, or re-derived from odds. The pair is optional: "
+            "a capture without it still grades the model, which is the shape "
+            "every slate priced before this benchmark existed has. Both "
+            "halves of every reported delta are taken over the rows carrying "
+            "both sides, and market_events states how many that was. "
+            "Reported, never gated: this entry point still predicts "
+            "nothing, prices nothing, promotes nothing, publishes nothing "
+            "and writes only into the grade tree no serving script names, "
+            "and no probability, price, edge, EV, line, calibration or "
+            "settlement rule is changed"
+        ),
         "src/nba_prop_quant/adaptive_training.py": (
             "the calibration digest map no longer records a digest for a "
             "prop the frozen route table routes 'raw'. One added condition "

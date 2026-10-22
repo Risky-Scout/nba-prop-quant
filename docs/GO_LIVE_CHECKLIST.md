@@ -15,6 +15,8 @@ wizardofodds.com. No technical background assumed.
 | Model authority | `shadow_only` |
 | Slate published to the live NBA Player Props path | **Never** |
 | Slate published to the preview path | **Not yet either** — see Section 3 |
+| Record of model accuracy against outcomes | Built, wired into the daily run, **no rows yet** |
+| Record of model accuracy against the market | Built, wired into the daily run, **no rows yet** |
 
 ### What these mean
 
@@ -105,45 +107,131 @@ What the runs report, in their own words:
 | 16–19 Oct | `NOT_SERVED_NOTHING_TO_PUBLISH` | preseason — "no regular-season slate exists to serve" |
 | 20 Oct (morning) | `NOT_SERVED_NOTHING_TO_PUBLISH` | "the incumbent recorded NO_GAMES_ON_SLATE … so there is no priced artifact to publish" |
 | 20–21 Oct (evening) | step failed before publishing | "the morning production lifecycle has not proven a verified incumbent runtime … so the runtime it verified is not the code about to serve" |
+| 21 Oct (morning) | nothing published | the run **failed at candidate registration**, before serving — see below |
 
-**None of these is a transport failure and none is a permission failure.** Every
-one is the pipeline declining to publish something it had not produced. That is
-the designed behaviour. But it does mean the honest answer to *"has the preview
-proved the path?"* is **not yet** — the address and the login are proven, a real
-slate landing there is not.
+**Only the last of these was a defect, and it has been fixed.** The others are
+the pipeline declining to publish something it had not produced, which is the
+designed behaviour.
+
+### The 21 October failure, and why it mattered
+
+The 21 October production run died with:
+
+```
+"error": "CandidateIncomplete",
+"message": "candidate failed computed validation checks: calibration_valid:
+            raw-routed props that acquired a calibration digest: blocks, steals"
+```
+
+The frozen route table routes `blocks` and `steals` **raw**, meaning the daily
+fit deliberately does not calibrate them. It wrote a short record saying so, and
+then fingerprinted every record it had written — including those two. The
+validation check reads a fingerprint's presence as proof that a prop *was*
+calibrated, so it correctly refused a candidate for a change of method that had
+never happened.
+
+**The damage was not confined to the candidate.** The candidate publishes
+nothing — it is shadow-only. But the step that registers it is not allowed to
+fail quietly, so its refusal skipped everything after it: serving the slate,
+publishing the preview, and grading the previous day. A healthy incumbent did
+not serve, on a day it had nothing wrong with it.
+
+This is fixed. The fingerprint map now excludes raw routes, and two tests drive
+the production fitter itself and reproduce the exact error above without the fix.
 
 ---
 
-## Section 4 — Three requirements before live
+## Section 4 — What it takes to go live
 
-All three are required. **If any one is missing or mismatched, publication
-refuses and writes nothing at all.** That is intended behaviour, not a fault.
-Three separate places, deliberately, so that no single mistake can publish.
+The switch names three requirements. **There is a fourth**, and it is the one
+most likely to be missed, so all four are listed here.
+
+Each of the first three is required on its own. **If any is missing or
+mismatched, publication refuses and writes nothing at all.** That is intended
+behaviour, not a fault. Three separate places, deliberately, so that no single
+mistake can publish.
 
 ### Step 1 — Enable live mode in a reviewed commit
 
 - **File:** `ops/wizardofodds_publishing_switch.json`
 - **Change:** set `modes.live.state` from `"DISABLED"` to `"ENABLED"`
 - **Also:** replace the `modes.live.approval_token` value
-  `"no-approval-has-been-granted"` with the real token the decision chooses
+  `"no-approval-has-been-granted"` with a real token the decision chooses
 - **How:** committed and reviewed through a normal pull request
 - **Who:** a code owner
 - **Why a commit:** so the decision is permanently on the record with a name and
   a date against it, rather than typed into a terminal and forgotten
 
+**Replacing the token is not cosmetic.** The code does not treat
+`no-approval-has-been-granted` as a special case — it is already a non-empty
+string, and the gate only checks that the environment matches whatever the file
+says. Leave it in place and anyone who knows that phrase, which is published in
+this repository, satisfies Step 3. Choosing a new token is what makes Step 3 an
+approval rather than a formality.
+
 ### Step 2 — Set the publish environment variable
 
 - **Variable:** `NBA_PROP_WOO_PUBLISH`
-- **Set to:** the same state as the switch
+- **Set to:** the literal word `ENABLED`, matching the switch exactly
+- **Not accepted:** `enabled`, `true`, `1`, or anything else — it is a
+  character-for-character string comparison against the committed file
+- **Where:** a GitHub repository **variable**, the way `NBA_PROP_DATA_DIR` is set
 - **Status now:** not set
-- **Who:** the operator running the publish
+- **Who:** whoever administers Actions variables
 
 ### Step 3 — Set the approval environment variable
 
 - **Variable:** `NBA_PROP_WOO_PUBLISH_APPROVAL`
 - **Set to:** exactly the approval token chosen in Step 1
+- **Where:** a GitHub repository **secret**, the way `NBA_WOO_SSH_PRIVATE_KEY`
+  is set — this string is the approval, so it should not be readable
 - **Status now:** not set
-- **Who:** the operator running the publish
+- **Who:** whoever administers Actions secrets, ideally not the Step 1 reviewer
+
+### Step 4 — Ask the publisher for live mode
+
+The first three open the gate. **They do not walk through it.** The daily
+automation asks for `--mode canary` in both publication steps and hands them
+neither approval variable, so all three sign-offs could be complete and the
+preview would still be the only thing published.
+
+**This is on purpose, and it is enforced.** `ops/validate_workflows.py` refuses
+any workflow line naming `NBA_PROP_WOO_PUBLISH`, `NBA_PROP_WOO_PUBLISH_APPROVAL`,
+`--mode live` or `--stage live`, in its own words because
+
+> Live publication is a separate reviewed decision taken through the committed
+> switch and two environment variables. None of them belongs in a workflow file:
+> a schedule that carried the approval would make every scheduled run an
+> activation.
+
+So the live steps are deliberately **not** pre-wired, and nothing but a reviewed
+human commit can wire them. That commit has to do two things together, which is
+the review gate working as designed:
+
+1. Add live publication steps to `.github/workflows/nba_production_lifecycle.yml`,
+   carrying both approval variables. They must be **added** beside the canary
+   steps, not edited into them: that file is additive-only, and
+   `test_a_declared_workflow_change_only_ever_adds_steps` requires every line
+   production already has to survive.
+2. Amend `PUBLICATION_ACTIVATION_TOKENS` in `ops/validate_workflows.py` so the
+   guard permits what the decision has authorised.
+
+A reviewer who sees step 2 in a diff knows exactly what is being asked for.
+That is the entire point of the guard.
+
+### Verifying the gate without opening it
+
+`python ops/validate_workflows.py` must pass, and the gate itself can be
+exercised against a scratch copy of the switch without touching the committed
+one. Every partial combination refuses:
+
+| What is supplied | Result |
+| --- | --- |
+| Switch flipped, no variables | Refused |
+| Switch flipped, state variable only | Refused |
+| Switch flipped, approval variable only | Refused |
+| Both set, token wrong by one character | Refused |
+| All three aligned | **Allowed** |
 
 ---
 
@@ -175,7 +263,9 @@ than any new code or configuration."*
 ## Section 6 — Bottom line
 
 **Enabling live is a human decision requiring three sign-offs. No code change is
-missing for the switch itself.**
+missing for the switch itself.** The fourth step above is a consequence of the
+decision, not a precondition for it: it cannot be written until the decision
+exists, because the guard refuses it.
 
 The judgement call — *do we want this model's numbers on the public site?* — is
 what is absent, along with the three acts in Section 4 that record it.
@@ -193,10 +283,10 @@ accident:
 
 ---
 
-## Two things to settle before you take the decision
+## What sits in front of the decision
 
-Section 4 is complete and accurate for turning live publishing on. Two separate
-matters sit in front of it.
+Section 4 is complete and accurate for turning live publishing on. Three
+separate matters sit in front of it, in this order.
 
 ### 1. The packaging tool cannot build a bundle from production
 
@@ -241,6 +331,66 @@ Section 3 above. The switch names a "real natural-slate proof" as what precedes
 the live decision, and no slate has landed at the preview path yet. Enabling live
 before that would mean the first bytes ever written to the public page are also
 the first bytes the pipeline has ever successfully published.
+
+The 21 October defect that stopped a healthy slate from serving is fixed, so the
+next production day with games on it is the first real chance at this proof.
+
+### 3. The record against the market has only just started existing
+
+**This is now built, and it was not before.** Every published row has always
+carried the market's own de-vigged probability for the same wager, but nothing
+ever scored it: grading measured the model against outcomes and stopped there.
+
+That mattered because `docs/wizardofodds/PUBLIC_CLAIM_POLICY_V1.md` — the
+document governing what the site may say — defines every one of its
+classifications in market-relative terms, and requires the model's prediction
+and the market comparison to come from the identical capture.
+
+The daily grading loop now carries the market probability into each grade row
+and scores it on the identical outcome, side and convention, reporting the
+Brier and log-loss deltas as model minus market.
+
+**What that does not do is produce a record retroactively.** The policy's
+minimum prospective sample is:
+
+| Claim | Minimum |
+| --- | --- |
+| Any upgrade past "Prospective validation in progress" | 300 games and 5,000 graded contracts |
+| A claim about one specific prop | 150 games and 1,000 graded contracts for that prop |
+
+Nothing has been graded yet, because nothing has served yet. The sample starts
+accumulating on the first production day with games, and until it reaches those
+minimums the only label the site may carry is **"Prospective validation in
+progress."**
+
+### What the one existing market comparison says
+
+Measured retrospectively at Gate 2 certification on 2025 development data.
+Lower Brier is better, so a negative delta is the model ahead:
+
+| Prop | Served model | De-vig market | Model minus market |
+| --- | --- | --- | --- |
+| steals | 0.238054 | 0.241501 | **−0.003447** |
+| points_assists | 0.249964 | 0.250294 | −0.000330 |
+| points_rebounds | 0.249483 | 0.249508 | −0.000025 |
+| rebounds_assists | 0.248511 | 0.248421 | +0.000089 |
+| points_rebounds_assists | 0.249824 | 0.249433 | +0.000391 |
+| blocks | 0.202499 | 0.202036 | +0.000464 |
+| points | 0.249974 | 0.249130 | +0.000843 |
+| rebounds | 0.246543 | 0.245269 | +0.001273 |
+| assists | 0.246038 | 0.242139 | +0.003898 |
+| threes | 0.240135 | 0.236676 | +0.003459 |
+
+The model beats the market meaningfully on **steals** and nowhere else. The two
+combination props it edges are smaller than the measurement's own noise. On
+points, assists and threes the market wins, and the game-clustered bootstrap
+puts those outside the 95% interval, so they are real rather than sampling
+accidents.
+
+Gate 2's own summary states the limit: *"No Gate 2 result constitutes
+prospective market superiority."* That is why the prospective record above has
+to exist before any claim is made, and why the claim policy forbids the words
+"profitable model", "beats sportsbooks" and "guaranteed edge" without it.
 
 ---
 
