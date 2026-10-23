@@ -116,18 +116,48 @@ NUMERICAL_SURFACE_EXEMPT_FUNCTIONS: tuple[str, ...] = (
 #: above did the work it exists for: the rule stayed where production states
 #: it and only the call into it was added.
 #:
+#: The carve-out's third use is the same defect read from the other side, and
+#: it is the first one that is not in the slate module. The appearance-only
+#: priors answer what a player played when he played. ``availability.py``
+#: read them as what a player has to vacate, and pooled every OUT player's
+#: projected minutes as freed opportunity for his team-mates. For an absence
+#: the priors have already absorbed those minutes are not his to vacate: the
+#: rotation that played took them, the priors record the rotation that played,
+#: and the team-mates receiving them already hold them. On a slate whose
+#: absentees are mostly settled -- an opening night, where the injury feed is
+#: full of players who have not appeared for months and of players who have
+#: never appeared at all -- the freed pool is almost entirely minutes the team
+#: never had, and it is handed out on top of priors that already contain them.
+#:
+#: So ``availability.py`` is declarable, on the same terms, and it is the
+#: narrowest file that can state the correction: the pool is summed there and
+#: nowhere else, and the only other way to shrink it is to misstate an
+#: absentee's projected minutes upstream, which would also move the usage
+#: multiplier and would leave the recorded base minutes saying something
+#: untrue. :data:`SERVING_SOURCE_EXEMPT_FUNCTIONS` names the one function in
+#: it whose body may differ, every line production has must still be there --
+#: including the unweighted pool, which is still what runs when the share is
+#: absent -- and the elasticity weights, the iteration count, the minutes cap,
+#: the OUT zeroing and the usage multiplier are all inside that function and
+#: all unchanged.
+#:
 #: Every other module the serving path imports -- the model, the copula, the
 #: marginals, the pricing, the production contract -- remains undeclarable.
 ADDITIVE_ONLY_SERVING_SOURCES: tuple[str, ...] = (
     "src/nba_prop_quant/slate.py",
+    "src/nba_prop_quant/availability.py",
 )
 
 #: The only functions in a declared serving source whose bodies may differ
 #: from production. The live slate builder is where a feature the models
 #: require is produced; every prior, window, leakage guard and slate-date rule
-#: in the same module is outside it and is pinned syntax-tree-identical.
+#: in the same module is outside it and is pinned syntax-tree-identical. The
+#: availability adjustment is where an absence is turned into opportunity for
+#: somebody else; ``_is_out`` and ``OUT_PATTERNS``, which decide who is absent
+#: at all, are outside it and are pinned the same way.
 SERVING_SOURCE_EXEMPT_FUNCTIONS: tuple[str, ...] = (
     "build_upcoming_slate_features",
+    "apply_current_injury_adjustment",
 )
 
 #: What a statement added to an exempt function is allowed to be about.
@@ -703,10 +733,29 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: landed, for the reason that entry itself gave: the renderer is owned below,
 #: so touching it again requires declaring it again.
 #:
-#: This branch declares the slate module and the serving-source registry, and
-#: widens the slate builder's carve-out by two names, all three named above.
-#: What it corrects is the fourth instance of one defect: a feature the fitted
-#: models were shown one definition of, served under another. The first three
+#: The played-game population fix's three entries were retired in turn when
+#: they landed. All three are pre-existing production files this lineage
+#: changed rather than introduced and are recorded nowhere, which is why this
+#: branch declares all three again. The combination-projection branch's one
+#: entry, the raw-calibration-digest branch's one entry and the go-live
+#: checklist's one entry were retired the same way: the pricing script and
+#: the training module are pre-existing production files recorded nowhere,
+#: and the checklist is a document that branch introduced and chose not to
+#: own, so touching any of the three again requires declaring it again. The
+#: grading entry point's one entry was retired in turn and is owned below,
+#: which is the reason that entry itself gave.
+#:
+#: This branch declares the slate module, the availability module and both
+#: serving-source registries, widens the serving-source carve-out to a second
+#: module and a second exempt function, and widens the slate builder's
+#: plumbing names by two, all named above. What it corrects is the same defect
+#: the carve-out's first two uses corrected, one layer downstream of the
+#: population fix: the appearance-only priors are the right population, and
+#: the availability layer was reading them as a claim they do not make.
+#:
+#: The population fix itself corrected the fourth instance of one defect: a
+#: feature the fitted models were shown one definition of, served under
+#: another. The first three
 #: were definitions -- the competition-regime flags, then
 #: ``season_progress``. This one is the population every definition is taken
 #: over. ``build_base_frame`` opens by keeping only the player-games with
@@ -776,105 +825,55 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: column it already was.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
-        "ops/grade_incumbent_production_slate.py": (
-            "a grade row now carries the de-vigged market probability the "
-            "same priced row was quoted with, and scores it on the identical "
-            "outcome, side and log-loss floor. The columns are read from the "
-            "priced frame the grader already opens -- the pair "
-            "add_market_probability_layer writes and the publisher already "
-            "carries to the page -- so nothing new is computed about a "
-            "market, fetched, or re-derived from odds. The pair is optional: "
-            "a capture without it still grades the model, which is the shape "
-            "every slate priced before this benchmark existed has. Both "
-            "halves of every reported delta are taken over the rows carrying "
-            "both sides, and market_events states how many that was. "
-            "Reported, never gated: this entry point still predicts "
-            "nothing, prices nothing, promotes nothing, publishes nothing "
-            "and writes only into the grade tree no serving script names, "
-            "and no probability, price, edge, EV, line, calibration or "
-            "settlement rule is changed"
-        ),
-        "src/nba_prop_quant/adaptive_training.py": (
-            "the calibration digest map no longer records a digest for a "
-            "prop the frozen route table routes 'raw'. One added condition "
-            "on the comprehension that builds notes['calibration_hashes'], "
-            "reading the same FROZEN_CALIBRATION_ROUTES table the loop above "
-            "it already branches on. Nothing is fitted, refitted, "
-            "recalibrated or routed differently: a raw entry is the "
-            "two-key literal the loop writes when it declines to fit, and "
-            "hashing it was recording evidence of a calibration that does "
-            "not exist. check_calibration_valid reads a digest's presence "
-            "as the fit having routed that prop to 'prop', so the digest "
-            "failed the candidate for a methodology change that had not "
-            "happened, and the failure took the incumbent's serving, "
-            "publication and grading down with it. Every prop-routed "
-            "digest is the byte-identical hash of the byte-identical entry"
-        ),
-        "scripts/15_price_markets.py": (
-            "a combination prop now publishes the mean of the distribution "
-            "its lines were priced from instead of a null model_projection. "
-            "The mean is taken inside main, from the engine price_combo_lines "
-            "itself selects on the same threshold -- independent_combo_pmf "
-            "under independence and simulate_combo_values' own draws under "
-            "dependence -- both reached by named import, so no second "
-            "definition of a combination's distribution exists and "
-            "src/nba_prop_quant/pricing.py stays undeclarable and "
-            "byte-identical to production. The added statements name "
-            "model_projection, which is declared serving plumbing. Every "
-            "line production has survives, including the null write, which is "
-            "now the column's starting value and is what a row the pricing "
-            "lookup found no price for still carries; every function except "
-            "main is syntax-tree-identical to production, which the "
-            "branch-safety tests pin. No probability, price, edge, EV, "
-            "quantile, line, calibration, dependence coefficient, simulation "
-            "count or routing rule is computed or changed, every single-stat "
-            "projection is the column it already was, and the published "
-            "figure is required to equal the distribution mean "
-            "ops/nba_distribution_publication.py records for the same wager"
+        "src/nba_prop_quant/availability.py": (
+            "the freed-minute pool is now the minutes the surviving "
+            "team-mates' priors still assign to the absentee, instead of his "
+            "whole projected total. One added condition inside the one exempt "
+            "function, reading prior_participation_rate, which is declared "
+            "serving plumbing. The unweighted sum production has is the line "
+            "above it and is still what runs when the column is absent, so a "
+            "caller that does not supply the share gets production's "
+            "behaviour exactly. Nothing else in the function moves: the "
+            "elasticity weights, the six allocation passes, the 42-minute "
+            "cap, the OUT zeroing and the usage multiplier are "
+            "byte-identical, _is_out and OUT_PATTERNS are outside the "
+            "function and syntax-tree-identical, and every line production "
+            "has survives. No rate model, target model, calibration, PMF, "
+            "price, probability, edge, EV, line or Gate 3 route is computed "
+            "or changed, and a team whose absentees all appeared throughout "
+            "the prior window is adjusted exactly as production adjusts it"
         ),
         "src/nba_prop_quant/slate.py": (
-            "the live builder now takes its rolling priors over "
-            "build_base_frame's played-player-game population instead of "
-            "over BALLDONTLIE's whole stats table, and restricts the "
-            "advanced history to the same played keys build_base_frame "
-            "restricts it to. Two added statements in the one exempt "
-            "function, each naming one of the two declared names, plus the "
-            "two functions they name. The restriction is taken after "
-            "assert_slate_inputs_precede_slate rather than before it, so a "
-            "same-day or later-day row cannot evade the leakage guard by "
-            "being a row for a player who did not play. Every line "
-            "production has survives and every other function in the module "
-            "is syntax-tree-identical to production, which the branch-safety "
-            "tests pin. No feature definition, prior, window, weight, "
-            "threshold, probability, price, edge, EV, quantile, line, "
-            "distribution, simulation count or routing rule is computed or "
-            "changed, and for a history in which nobody missed a game the "
-            "served frame is identical column for column"
+            "the live builder now carries each player's share of his team's "
+            "recent games to the availability layer that decides what an "
+            "absence frees. One added statement in the one exempt function "
+            "and one added key in the row it assembles, both naming declared "
+            "plumbing, plus the function they name. The share is computed "
+            "over the same played-game population and the same span the "
+            "minutes priors beside it already use, from the same already-"
+            "leakage-checked history, so it introduces no new input and no "
+            "new window. Every line production has survives and every other "
+            "function in the module is syntax-tree-identical to production, "
+            "which the branch-safety tests pin. No feature definition, "
+            "prior, window, weight, threshold, probability, price, edge, EV, "
+            "quantile, line, distribution, simulation count or routing rule "
+            "is computed or changed, the added column is not in any fitted "
+            "model's feature list and ModelBundle.predict selects by name, "
+            "so no model is shown anything new"
         ),
         "models/frozen_manifests/"
         "nba_prop_quant_v2_adaptive_serving_source_contract.json": (
-            "relocks src/nba_prop_quant/slate.py at version 8 and "
-            "scripts/15_price_markets.py at version 9, and records both "
-            "divergences, which is what this registry exists for: its own "
-            "purpose requires every difference from the historical reference "
-            "to be enumerated and justified in it. The historical reference "
-            "hashes are untouched, no locked file is dropped, the divergence "
-            "count is unchanged because both files were already declared "
-            "divergences, and every invariant flag -- feature definitions, "
-            "training feature definitions, model mathematics, mean-model "
-            "routing, marginal family, calibration, dependence, Gate 3 "
-            "routing, fitted artifacts -- stays false"
-        ),
-        "docs/GO_LIVE_CHECKLIST.md": (
-            "a new plain-language statement of what enabling live Wizard of "
-            "Odds publishing requires, for a reader without the context to "
-            "assemble it from the publishing switch, the destinations "
-            "registry and the publisher's own gating. It reports the state "
-            "those files already hold and grants nothing: no switch, token, "
-            "approval variable, destination, transport or publication "
-            "semantic is reached by adding a document, and live publication "
-            "stays disabled with its approval token unissued. Documentation "
-            "only -- no executable path reads it"
+            "relocks src/nba_prop_quant/slate.py at the bytes above and "
+            "records the second reason that file diverges from the "
+            "historical reference, which is what this registry exists for: "
+            "its own purpose requires every difference to be enumerated and "
+            "justified in it. The historical reference hashes are untouched, "
+            "no locked file is dropped or added, the divergence count is "
+            "unchanged because the file was already a declared divergence, "
+            "and every invariant flag -- feature definitions, training "
+            "feature definitions, model mathematics, mean-model routing, "
+            "marginal family, calibration, dependence, Gate 3 routing, "
+            "fitted artifacts -- stays false"
         ),
         "models/frozen_manifests/"
         "nba_prop_quant_v2_adaptive_update_protocol.json": (
