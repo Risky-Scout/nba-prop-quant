@@ -314,6 +314,52 @@ def _final_ewm_by_player(
     return result
 
 
+def _prior_window_participation(
+    stats: pd.DataFrame,
+    span: int = 10,
+) -> dict[tuple[int, int], float]:
+    """Share of each team's most recent ``span`` games a player appeared in.
+
+    Every minutes prior a surviving team-mate carries -- ``prior_minutes10``,
+    the decay state, the Kalman state -- is an EWM over appearances with this
+    same span. So a team-mate who was already absent across this window is
+    absent from those priors too: whatever he would have played was already
+    taken by the rotation that actually played, and the priors record the
+    rotation that played. Only a player who was present in the window holds
+    minutes those priors still assign to him.
+
+    Keyed by ``(team_id, player_id)`` and missing for a player with no
+    appearance for that team in the window, which is the same answer for a
+    player who never played, a player absent all window, and a player who has
+    just changed teams: none of them hold minutes in the survivors' priors.
+    """
+    participation: dict[tuple[int, int], float] = {}
+
+    for team_id, team in stats.groupby("team_id", sort=False):
+        window = set(
+            team[["game_id", "date"]]
+            .drop_duplicates("game_id")
+            .sort_values(["date", "game_id"])
+            .tail(span)["game_id"]
+        )
+
+        if not window:
+            continue
+
+        appearances = (
+            team[team["game_id"].isin(window)]
+            .groupby("player_id")["game_id"]
+            .nunique()
+        )
+
+        for player_id, played in appearances.items():
+            participation[(int(team_id), int(player_id))] = float(played) / float(
+                len(window)
+            )
+
+    return participation
+
+
 def _latest_team_context(stats: pd.DataFrame) -> dict[int, dict[str, float]]:
     sum_cols = [
         "pts", "reb", "ast", "stl", "blk", "fg3m", "fga", "fta", "oreb", "turnover"
@@ -768,6 +814,7 @@ def build_upcoming_slate_features(
         stats[temp_col] = pd.to_numeric(stats[stat], errors="coerce") / stats["minutes"].clip(lower=1.0)
         player_rate_maps[stat] = _final_ewm_by_player(stats, temp_col)
     prior_minutes = _final_ewm_by_player(stats, "minutes")
+    prior_participation = _prior_window_participation(stats)
 
     last_rows = (
         stats.sort_values(["player_id", "date", "game_id"])
@@ -874,6 +921,10 @@ def build_upcoming_slate_features(
                     "pos_F": int("F" in position),
                     "pos_C": int("C" in position),
                     "prior_minutes10": prior_minutes.get(player_id, league_prior_minutes),
+                    "prior_participation_rate": prior_participation.get(
+                        (team_id, player_id),
+                        0.0,
+                    ),
                 }
 
                 current_season_games = stats[

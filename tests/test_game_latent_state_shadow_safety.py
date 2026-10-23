@@ -515,14 +515,23 @@ def test_only_the_model_agreement_check_is_declarable_in_the_page():
 
 
 def test_only_the_slate_builder_is_declarable_among_serving_sources():
-    """The serving-source carve-out is one named module, not the closure.
+    """The serving-source carve-out is two named modules, not the closure.
 
-    Everything the serving scripts import is undeclarable, and this is the one
-    exception. The test spells out what stays shut rather than only what
+    Everything the serving scripts import is undeclarable, and these are the
+    exceptions. The test spells out what stays shut rather than only what
     opened, because the failure mode is the carve-out quietly growing to cover
     the model, the copula or the pricing path.
+
+    The second module is the availability adjustment, which is where an
+    absence is turned into minutes for somebody else. It is named for the same
+    reason the slate builder is: the quantity the fitted models were shown and
+    the quantity served have to be the same one, and the pool an absence frees
+    is summed there and nowhere else. The two modules named here are the two
+    that read the appearance-only priors; the modules that decide what a
+    projection, a distribution or a price *is* are all in ``still_shut``
+    below, and the list is checked member by member rather than by count.
     """
-    assert len(ADDITIVE_ONLY_SERVING_SOURCES) == 1
+    assert len(ADDITIVE_ONLY_SERVING_SOURCES) == 2
 
     for relative in ADDITIVE_ONLY_SERVING_SOURCES:
         assert relative.startswith("src/nba_prop_quant/")
@@ -530,6 +539,11 @@ def test_only_the_slate_builder_is_declarable_among_serving_sources():
         # Still measured as serving-reachable: the carve-out is an exception
         # layered on the measurement, not a hole in it.
         assert relative in UNDECLARABLE_PRODUCTION_SOURCES
+
+    assert set(ADDITIVE_ONLY_SERVING_SOURCES) == {
+        "src/nba_prop_quant/slate.py",
+        "src/nba_prop_quant/availability.py",
+    }
 
     still_shut = UNDECLARABLE_PRODUCTION_SOURCES - set(ADDITIVE_ONLY_SERVING_SOURCES)
 
