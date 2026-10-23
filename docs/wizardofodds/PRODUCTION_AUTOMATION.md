@@ -531,3 +531,26 @@ That is the division this section exists to draw: **the destination is
 engineering and the activation is a decision.** A reviewed activation sets the
 switch and supplies the two variables. It writes no code, configures no
 destination, copies no file by hand and rebuilds no page.
+
+## Segment cancellations, 2026-10-22 and 2026-10-23
+
+Two evenings were lost to a cancellation rather than to any gate, and the
+shape is identical both times: readiness passed, the controller entered its
+sleep, and the job's capture step was cancelled before the first T-20 window.
+
+| Slate | Run | Step started | Cancelled | Window it never reached |
+| --- | --- | --- | --- | --- |
+| 2026-10-22 | `39840850425` | 19:31:56Z | 22:29:23Z | 22:40Z |
+| 2026-10-23 | `40016015624` | 20:03:14Z | 21:31:59Z | 22:40Z |
+
+In both cases the runner stayed healthy -- the post-job steps completed
+normally -- and in both cases the diagnostics upload then failed with
+`403 Forbidden: job is completed`, so the run left no artifact either.
+
+A cancelled segment has no automatic successor. The three scheduled segments
+are half-open and non-overlapping by construction, so the windows the
+cancelled segment owned belong to no other run, and the next scheduled
+segment will not pick them up. Until that is addressed, recovering a
+cancelled evening means getting a new job onto the production runner inside
+the remaining window, and the only trigger available without write access to
+the Actions API is a push to the production branch.
