@@ -250,6 +250,34 @@ jobs:
             --frozen-bundle-root "$FROZEN_RUNTIME_BUNDLE_ROOT" \
             --summary-path "$GITHUB_STEP_SUMMARY"
 
+      # The serving entry point writes its receipt where it is told to, and
+      # that is a per-run temporary directory. What the T-20 controller reads
+      # is the durable copy under the data root, and in the lifecycle that
+      # copy is made by the grading step. A refresh runs no grading step, so
+      # it makes the copy itself -- to the same path, by the same convention.
+      # Without this the receipt is re-issued and the controller never sees
+      # it, which is a silent no-op and exactly the failure mode this whole
+      # workflow exists to remove. The assertion below is what catches it.
+      - name: Publish the re-issued receipt to the durable data root
+        if: steps.authorise.outputs.refresh_required == 'true'
+        env:
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+        run: |
+          set -euo pipefail
+          SOURCE="$RUNNER_TEMP/run/incumbent_serving.json"
+          RECEIPTS="$NBA_PROP_DATA_DIR/processed/incumbent_serving"
+          if [ ! -f "$SOURCE" ]; then
+            echo "refusing: $SOURCE was not written, so there is no receipt to publish"
+            exit 1
+          fi
+          mkdir -p "$RECEIPTS"
+          # Written beside the target and moved, so a reader never sees a
+          # half-written receipt for a slate it is about to serve.
+          cp "$SOURCE" "$RECEIPTS/${{ steps.slate.outputs.slate_date }}.json.tmp"
+          mv "$RECEIPTS/${{ steps.slate.outputs.slate_date }}.json.tmp" \
+             "$RECEIPTS/${{ steps.slate.outputs.slate_date }}.json"
+          echo "Published $RECEIPTS/${{ steps.slate.outputs.slate_date }}.json"
+
       # Proves the thing this whole workflow exists to achieve, read back off
       # the durable receipt rather than assumed from the step above exiting 0.
       - name: Prove the receipt now describes this production SHA

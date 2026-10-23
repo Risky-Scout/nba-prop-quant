@@ -604,6 +604,37 @@ def test_the_refresh_proves_the_receipt_it_wrote(workflow):
     assert "ops/assert_production_readiness.py" in commands
 
 
+def test_the_refresh_publishes_the_receipt_where_the_controller_reads_it(
+    workflow,
+):
+    """The serving entry point writes to a temporary directory.
+
+    In the lifecycle the durable copy is made by the grading step. A refresh
+    runs no grading step, so it must make the copy itself or the re-issued
+    receipt is invisible to the controller and the refresh is a silent no-op.
+    """
+    steps = workflow["jobs"]["readiness"]["steps"]
+
+    commands = "\n".join(step.get("run", "") for step in steps)
+
+    assert "processed/incumbent_serving" in commands
+
+    publish = next(
+        step
+        for step in steps
+        if "durable data root" in step.get("name", "")
+    )
+
+    # Ordered: published before it is asserted, and asserted at all.
+    names = [step.get("name", "") for step in steps]
+
+    assert names.index(publish["name"]) < next(
+        index
+        for index, step in enumerate(steps)
+        if "assert_production_readiness.py" in step.get("run", "")
+    )
+
+
 def test_the_eligibility_assertion_does_no_checking_of_its_own():
     """It must ask the controller's gate, not re-implement it."""
     source = (PROJECT / "ops" / "assert_production_readiness.py").read_text()
