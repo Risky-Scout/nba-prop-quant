@@ -293,6 +293,42 @@ jobs:
             --status-path "$RUNNER_TEMP/run/readiness_assertion.json" \
             --summary-path "$GITHUB_STEP_SUMMARY"
 
+      # Read-only, and run whether or not a refresh was required. Only this
+      # machine can answer what it kept for a slate, and that answer is what
+      # decides whether a missing evening has an immutable pre-tip source to
+      # reconstruct from or must stay empty. Asking on every job that lands
+      # here is the cheapest way to never have to guess.
+      - name: Inventory the evidence this host holds for recent slates
+        if: always()
+        env:
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/run"
+          DATES=()
+          for BACK in 0 1 2 3 4 5 6; do
+            # BSD date on the production Mac, GNU date anywhere else.
+            DAY="$(TZ=America/New_York date -v-"${BACK}"d +%F 2>/dev/null \
+              || TZ=America/New_York date -d "-${BACK} day" +%F)"
+            DATES+=( --slate-date "$DAY" )
+          done
+          python ops/inventory_slate_evidence.py \
+            --data-root "$NBA_PROP_DATA_DIR" \
+            "${DATES[@]}" \
+            --receipt-path "$RUNNER_TEMP/run/slate_evidence_inventory.json" \
+            > /dev/null
+          python - <<'PY'
+          import json, os, pathlib
+          report = json.loads(
+              pathlib.Path(
+                  os.environ["RUNNER_TEMP"], "run",
+                  "slate_evidence_inventory.json",
+              ).read_text(encoding="utf-8")
+          )
+          for slate in report["slates"]:
+              print(slate["slate_date"], slate["classification"])
+          PY
+
       - name: Upload the refresh diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -437,6 +473,16 @@ jobs:
             --run-dir "$RUNNER_TEMP/t20" \
             --receipt-path "$RUNNER_TEMP/t20/t20_controller.json" \
             --summary-path "$GITHUB_STEP_SUMMARY"
+
+      - name: Collect the durable evidence record for upload
+        if: always()
+        env:
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+          SLATE: ${{ steps.probe.outputs.slate_date || needs.readiness.outputs.slate_date }}
+        run: |
+          set -euo pipefail
+          bash ops/collect_t20_evidence.sh "$NBA_PROP_DATA_DIR" "$SLATE" \
+            "$RUNNER_TEMP/t20/evidence"
 
       - name: Upload the segment diagnostics
         if: always()

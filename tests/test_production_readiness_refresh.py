@@ -643,3 +643,67 @@ def test_the_eligibility_assertion_does_no_checking_of_its_own():
 
     for invented in ("production_code_sha\"]", "OUTCOMES_THAT_PROVE"):
         assert invented not in source
+
+
+# ----------------------------------------------------------------------
+# the evidence this host holds
+# ----------------------------------------------------------------------
+
+
+def test_every_job_that_lands_on_the_host_inventories_what_it_kept(workflow):
+    """Only the machine can answer it, so every job on it asks."""
+    steps = workflow["jobs"]["readiness"]["steps"]
+
+    inventory = next(
+        step
+        for step in steps
+        if "ops/inventory_slate_evidence.py" in step.get("run", "")
+    )
+
+    # Read-only diagnostics, so a failed refresh still reports the state of
+    # the host rather than reporting nothing.
+    assert inventory["if"] == "always()"
+
+
+def test_both_t20_paths_collect_the_durable_evidence_record():
+    for path in (
+        WORKFLOW,
+        PROJECT / ".github" / "workflows" / "nba_t20_production.yml",
+    ):
+        definition = yaml.safe_load(path.read_text())
+
+        collectors = [
+            step
+            for job in definition["jobs"].values()
+            for step in job["steps"]
+            if "ops/collect_t20_evidence.sh" in step.get("run", "")
+        ]
+
+        assert len(collectors) == 1, path.name
+
+        # A cancelled or refused segment is exactly when the record matters.
+        assert collectors[0]["if"] == "always()", path.name
+
+
+def test_the_controller_records_the_ledger_before_it_consults_the_gate():
+    """The 2026-10-21 and 2026-10-23 evenings recorded nothing at all."""
+    source = (
+        PROJECT / "ops" / "run_t20_production_controller.py"
+    ).read_text()
+
+    opened = source.index("EVENT_SEGMENT_OPENED,")
+
+    gate = source.index("readiness = morning_readiness(")
+
+    assert opened < gate
+
+
+def test_the_ledger_writes_only_to_the_data_root():
+    source = (PROJECT / "ops" / "t20_evidence_ledger.py").read_text()
+
+    assert 'LEDGER_RELATIVE = pathlib.Path("processed") / "t20_evidence"' in (
+        source
+    )
+
+    # Not RUNNER_TEMP, which is what a cancelled job loses.
+    assert "RUNNER_TEMP" not in source

@@ -84,6 +84,25 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
+if str(PROJECT_ROOT / "ops") not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT / "ops"))
+
+# Standard library only, so the probe keeps paying nothing for it.
+from t20_evidence_ledger import (  # noqa: E402
+    EVENT_DISTRIBUTIONS_DERIVED,
+    EVENT_FEED_PUBLISHED,
+    EVENT_PAGE_PUBLISHED,
+    EVENT_PUBLICATION_SKIPPED,
+    EVENT_READINESS_PROVEN,
+    EVENT_SEGMENT_CLOSED,
+    EVENT_SEGMENT_OPENED,
+    EVENT_SEGMENT_PLANNED,
+    EVENT_SEGMENT_REFUSED,
+    EVENT_SLATE_SERVED,
+    EVENT_WINDOW_CAPTURED,
+    EvidenceLedger,
+)
+
 # Deliberately the only package import at module scope. ``snapshot_schedule``
 # is standard library only, which is what lets the segment probe run before
 # the scientific environment is installed -- and the probe exists so that an
@@ -716,6 +735,7 @@ class T20Controller:
         sleep: Callable[[float], None] | None = None,
         schedule_source: Callable[[str], list[dict[str, Any]]] | None = None,
         run_command: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+        ledger: EvidenceLedger | None = None,
     ) -> None:
         if offset_minutes not in CAPTURE_OFFSETS_MINUTES:
             raise ControllerRefused(
@@ -763,6 +783,15 @@ class T20Controller:
 
         self.capture_run_path = (
             self.snapshot_dir / "capture_runs" / f"{self.slate_date}.jsonl"
+        )
+
+        self.ledger = ledger or EvidenceLedger(
+            data_root=self.data_root,
+            slate_date=self.slate_date,
+            production_sha=self.production_sha,
+            segment_start_utc=self.segment_start.isoformat(),
+            segment_end_utc=self.segment_end.isoformat(),
+            clock=self.clock,
         )
 
         self.captures: list[dict[str, Any]] = []
@@ -840,10 +869,55 @@ class T20Controller:
     def run(self) -> dict[str, Any]:
         started_at = self.clock()
 
+        # First, before the schedule is read and before readiness is
+        # consulted, because the two evenings that left no evidence at all
+        # both ended before either of those finished.
+        self.ledger.record(
+            EVENT_SEGMENT_OPENED,
+            {
+                "offset_minutes": self.offset_minutes,
+                "started_at_utc": started_at.isoformat(),
+            },
+        )
+
+        try:
+            return self._run(started_at)
+
+        # BaseException, not Exception: a cancelled Actions job interrupts the
+        # step with SIGINT, which arrives here as KeyboardInterrupt out of
+        # ``time.sleep``, and that is precisely the 2026-10-22 case this
+        # record exists for. Recorded, then re-raised unchanged.
+        except BaseException as error:
+            self.ledger.record(
+                EVENT_SEGMENT_REFUSED,
+                {
+                    "captures_completed": len(self.captures),
+                    "error": type(error).__name__,
+                    "message": str(error)[:4000],
+                    "outcome": getattr(error, "outcome", OUTCOME_FAILED),
+                },
+            )
+
+            raise
+
+    def _run(self, started_at: datetime) -> dict[str, Any]:
         plan = self.plan()
 
+        self.ledger.record(
+            EVENT_SEGMENT_PLANNED,
+            {
+                "already_completed_windows": plan[
+                    "already_completed_windows"
+                ],
+                "games_discovered": plan["games_discovered"],
+                "pending_windows": plan["pending_windows"],
+                "t20_windows_for_slate": plan["t20_windows_for_slate"],
+                "t20_windows_in_segment": plan["t20_windows_in_segment"],
+            },
+        )
+
         if not plan["pending_rows"]:
-            return self._receipt(
+            receipt = self._receipt(
                 plan=plan,
                 started_at=started_at,
                 outcome=OUTCOME_NO_WINDOWS,
@@ -855,6 +929,10 @@ class T20Controller:
                 ),
             )
 
+            self._close(receipt)
+
+            return receipt
+
         # Only now, with work to do, is the morning handoff required. A day
         # with nothing to capture must not be reported as a lifecycle failure.
         readiness = morning_readiness(
@@ -864,9 +942,20 @@ class T20Controller:
             project_root=self.project_root,
         )
 
+        self.ledger.record(
+            EVENT_READINESS_PROVEN,
+            {
+                "incumbent_version": readiness.get("incumbent_version"),
+                "recorded_production_code_sha": readiness.get(
+                    "production_code_sha"
+                ),
+                "serving_bundle_root": readiness.get("serving_bundle_root"),
+            },
+        )
+
         self._work(plan, readiness)
 
-        return self._receipt(
+        receipt = self._receipt(
             plan=plan,
             started_at=started_at,
             outcome=OUTCOME_SEGMENT_COMPLETE,
@@ -876,6 +965,26 @@ class T20Controller:
                 "to the canary destination"
             ),
             readiness=readiness,
+        )
+
+        self._close(receipt)
+
+        return receipt
+
+    def _close(self, receipt: dict[str, Any]) -> None:
+        self.ledger.preserve_receipt("t20_controller", receipt)
+
+        self.ledger.record(
+            EVENT_SEGMENT_CLOSED,
+            {
+                "captures_completed": len(self.captures),
+                "outcome": receipt["final_outcome"],
+                "releases": [
+                    record.get("release_id")
+                    for record in self.feed
+                    if record.get("release_id")
+                ],
+            },
         )
 
     def _work(self, plan: dict[str, Any], readiness: dict[str, Any]) -> None:
@@ -1078,6 +1187,12 @@ class T20Controller:
             }
         )
 
+        # Recorded before serving, so a slate whose capture succeeded and
+        # whose serving then failed still proves the capture was taken. The
+        # capture ids name bundles in the append-only snapshot tree, which is
+        # where the T-20 market inputs themselves already live.
+        self.ledger.record(EVENT_WINDOW_CAPTURED, self.captures[-1])
+
         self._serve_and_publish(stage_dir, readiness=readiness)
 
     def _verify_captured(
@@ -1234,6 +1349,36 @@ class T20Controller:
             }
         )
 
+        self.ledger.preserve_receipt("incumbent_serving", served)
+
+        # The two artifacts the serving scripts write are one file per slate
+        # date, and this method runs once per capture group, so without this
+        # copy the next group's serving overwrites this group's predictions
+        # and the model's output for the earlier tips is gone.
+        preserved = [
+            self.ledger.preserve_artifact(
+                f"group-{len(self.serving):02d}-{label}",
+                Path(str((served.get(key) or {}).get("path") or "")),
+            )
+            for label, key in (
+                ("projections", "prediction_artifact"),
+                ("priced_markets", "priced_market_artifact"),
+            )
+        ]
+
+        self.ledger.record(
+            EVENT_SLATE_SERVED,
+            {
+                "incumbent_version": served.get("incumbent_version"),
+                "input_state_fingerprint": served.get(
+                    "input_state_fingerprint"
+                ),
+                "model_authority": served.get("model_authority"),
+                "outcome": outcome,
+                "preserved_artifacts": preserved,
+            },
+        )
+
         self._stage(
             str(DISTRIBUTION_ENTRY_POINT),
             [
@@ -1253,6 +1398,10 @@ class T20Controller:
                 "outcome": "DERIVED",
                 "slate_date": self.slate_date,
             }
+        )
+
+        self.ledger.record(
+            EVENT_DISTRIBUTIONS_DERIVED, self.distributions[-1]
         )
 
         priced_digest = self.serving[-1]["priced_market_artifact_sha256"]
@@ -1276,6 +1425,8 @@ class T20Controller:
                         "slate_date": self.slate_date,
                     }
                 )
+
+            self.ledger.record(EVENT_PUBLICATION_SKIPPED, self.feed[-1])
 
             return
 
@@ -1318,6 +1469,10 @@ class T20Controller:
                 "slate_date": str(published.get("slate_date") or ""),
             }
         )
+
+        self.ledger.preserve_receipt("wizardofodds_feed", published)
+
+        self.ledger.record(EVENT_FEED_PUBLISHED, self.feed[-1])
 
         if str(published.get("outcome") or "") != PUBLICATION_OUTCOME_PUBLISHED:
             raise ControllerRefused(
@@ -1363,6 +1518,10 @@ class T20Controller:
                 "slate_date": str(page.get("slate_date") or ""),
             }
         )
+
+        self.ledger.preserve_receipt("wizardofodds_page", page)
+
+        self.ledger.record(EVENT_PAGE_PUBLISHED, self.page[-1])
 
         self._published_priced_digest = priced_digest or None
 
@@ -1414,6 +1573,13 @@ class T20Controller:
             "captures": self.captures,
             "deferred_to_later_segment": self.deferred,
             "distribution_outcomes": self.distributions,
+            # Where the record is, not what it says: this receipt is built
+            # before the closing record is written, so any count taken here
+            # would be one short of the truth.
+            "evidence_ledger": {
+                "ledger_path": str(self.ledger.ledger_path),
+                "slate_dir": str(self.ledger.slate_dir),
+            },
             "feed_publication_outcomes": self.feed,
             "final_outcome": outcome,
             "finish_time_utc": finished_at.isoformat(),

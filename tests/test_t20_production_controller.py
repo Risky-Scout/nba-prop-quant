@@ -282,16 +282,38 @@ class World:
             json.dumps(served_ids).encode("utf-8")
         ).hexdigest()
 
+        # The real serving scripts write one file per slate date, which is
+        # why a later group overwrites an earlier group's predictions. The
+        # fake does the same, so the preservation the controller performs is
+        # tested against that behaviour rather than around it.
+        artifacts = {
+            "prediction_artifact": ("projections", served_ids),
+            "priced_market_artifact": ("priced_markets", served_ids),
+        }
+
+        written: dict[str, dict | None] = {}
+
+        for key, (folder, payload) in artifacts.items():
+            if outcome != "SERVED":
+                written[key] = None
+
+                continue
+
+            path = self.data_root / "processed" / folder / f"{SLATE}.parquet"
+
+            path.parent.mkdir(parents=True, exist_ok=True)
+
+            path.write_text(
+                json.dumps({folder: payload}), encoding="utf-8"
+            )
+
+            written[key] = {"path": str(path), "sha256": digest}
+
         receipt = {
             "outcome": outcome,
             "slate_date": self._value(command, "--slate-date"),
             "served_game_ids": served_ids,
-            "prediction_artifact": (
-                {"sha256": digest} if outcome == "SERVED" else None
-            ),
-            "priced_market_artifact": (
-                {"sha256": digest} if outcome == "SERVED" else None
-            ),
+            **written,
         }
 
         receipt_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1728,3 +1750,268 @@ def test_the_receipt_carries_everything_a_segment_must_record(tmp_path):
     assert controller.render(receipt).startswith(
         "## NBA T-20 production controller"
     )
+
+
+# ----------------------------------------------------------------------
+# the durable evidence ledger
+#
+# The three evenings this season that left no evidence ended in three
+# different ways -- a refusal before any capture, a cancellation between two
+# sleeps, and a refusal caused by a merge -- and what they had in common was
+# that the controller's only durable output came at the end. These assert
+# that each of those three endings now leaves a record in the data root.
+# ----------------------------------------------------------------------
+
+
+def ledger_events(world: World) -> list[str]:
+    path = (
+        world.data_root / "processed" / "t20_evidence" / f"{SLATE}.jsonl"
+    )
+
+    if not path.exists():
+        return []
+
+    return [
+        json.loads(line)["event"]
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def test_a_segment_refused_before_any_capture_still_records_itself(tmp_path):
+    """The 2026-10-21 and 2026-10-23 endings."""
+    clock = Clock(at(19, 25))
+
+    world = World(tmp_path, schedules=[[game(101, at(23, 0))]], clock=clock)
+
+    with pytest.raises(controller.ControllerRefused):
+        build(
+            world,
+            clock=clock,
+            segment_start=SEGMENT_2[0],
+            segment_end=SEGMENT_2[1],
+        ).run()
+
+    assert world.commands == []
+
+    assert ledger_events(world) == [
+        "SEGMENT_OPENED",
+        "SEGMENT_PLANNED",
+        "SEGMENT_REFUSED",
+    ]
+
+    refusal = json.loads(
+        (
+            world.data_root
+            / "processed"
+            / "t20_evidence"
+            / f"{SLATE}.jsonl"
+        )
+        .read_text(encoding="utf-8")
+        .splitlines()[-1]
+    )
+
+    assert (
+        refusal["detail"]["outcome"] == controller.OUTCOME_MORNING_NOT_READY
+    )
+
+    assert refusal["detail"]["captures_completed"] == 0
+
+    # The twelve games it was about to abandon are named, so the slate is
+    # recoverable from the record rather than only from the schedule.
+    planned = json.loads(
+        (
+            world.data_root
+            / "processed"
+            / "t20_evidence"
+            / f"{SLATE}.jsonl"
+        )
+        .read_text(encoding="utf-8")
+        .splitlines()[1]
+    )
+
+    assert planned["detail"]["pending_windows"] == ["101:T-20m"]
+
+    assert planned["detail"]["games_discovered"] == 1
+
+
+def test_a_cancelled_segment_records_the_cancellation(tmp_path):
+    """The 2026-10-22 ending: killed between two sleeps, eleven minutes out."""
+    clock = Clock(at(19, 25))
+
+    world = World(tmp_path, schedules=[[game(101, at(23, 0))]], clock=clock)
+
+    write_morning_receipt(world)
+
+    def cancelled(seconds: float) -> None:
+        raise KeyboardInterrupt("the operation was canceled")
+
+    segment = controller.T20Controller(
+        slate_date=SLATE,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+        data_root=world.data_root,
+        production_sha=PRODUCTION_SHA,
+        run_dir=tmp_path / "run",
+        clock=clock,
+        sleep=cancelled,
+        schedule_source=world.schedule_source,
+        run_command=world,
+    )
+
+    with pytest.raises(KeyboardInterrupt):
+        segment.run()
+
+    assert ledger_events(world) == [
+        "SEGMENT_OPENED",
+        "SEGMENT_PLANNED",
+        "READINESS_PROVEN",
+        "SEGMENT_REFUSED",
+    ]
+
+
+def test_a_complete_segment_records_the_whole_chain(tmp_path):
+    clock = Clock(at(19, 25))
+
+    world = World(tmp_path, schedules=[[game(101, at(23, 0))]], clock=clock)
+
+    write_morning_receipt(world)
+
+    receipt = build(
+        world,
+        clock=clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    assert ledger_events(world) == [
+        "SEGMENT_OPENED",
+        "SEGMENT_PLANNED",
+        "READINESS_PROVEN",
+        "WINDOW_CAPTURED",
+        "SLATE_SERVED",
+        "DISTRIBUTIONS_DERIVED",
+        "FEED_PUBLISHED",
+        "PAGE_PUBLISHED",
+        "SEGMENT_CLOSED",
+    ]
+
+    # In the data root beside the snapshots and the parquet, not in the
+    # runner's temporary directory, which is what a cancelled job loses.
+    assert receipt["evidence_ledger"]["ledger_path"].startswith(
+        str(world.data_root)
+    )
+
+
+def test_each_groups_predictions_are_kept_before_the_next_overwrites_them(
+    tmp_path,
+):
+    """Serving writes one file per slate date; the groups would collide."""
+    clock = Clock(at(19, 25))
+
+    games = [
+        game(101, at(23, 0)),
+        game(102, at(23, 30), home=3, away=4),
+        game(103, at(2, 0, day=21), home=5, away=6),
+    ]
+
+    world = World(tmp_path, schedules=[games], clock=clock)
+
+    write_morning_receipt(world)
+
+    build(
+        world,
+        clock=clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=at(5, 25, day=21),
+    ).run()
+
+    kept = sorted(
+        path.name
+        for path in (
+            world.data_root
+            / "processed"
+            / "t20_evidence"
+            / SLATE
+            / "artifacts"
+        ).iterdir()
+    )
+
+    # Three groups, two artifacts each, every one a distinct slate.
+    assert len(kept) == 6
+
+    assert sum(name.startswith("group-01-") for name in kept) == 2
+
+    assert sum(name.startswith("group-03-") for name in kept) == 2
+
+    # The live file holds only the last group. The earlier ones survive here.
+    live = (
+        world.data_root / "processed" / "priced_markets" / f"{SLATE}.parquet"
+    )
+
+    assert json.loads(live.read_text(encoding="utf-8")) == {
+        "priced_markets": [101, 102, 103]
+    }
+
+    preserved = {
+        json.loads(
+            (
+                world.data_root
+                / "processed"
+                / "t20_evidence"
+                / SLATE
+                / "artifacts"
+                / name
+            ).read_text(encoding="utf-8")
+        )["priced_markets"][-1]
+        for name in kept
+        if "priced_markets" in name
+    }
+
+    assert preserved == {101, 102, 103}
+
+
+def test_every_served_and_published_receipt_is_kept_in_full(tmp_path):
+    clock = Clock(at(19, 25))
+
+    world = World(tmp_path, schedules=[[game(101, at(23, 0))]], clock=clock)
+
+    write_morning_receipt(world)
+
+    build(
+        world,
+        clock=clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    labels = sorted(
+        path.name.split("__")[-1]
+        for path in (
+            world.data_root
+            / "processed"
+            / "t20_evidence"
+            / SLATE
+            / "receipts"
+        ).iterdir()
+    )
+
+    assert labels == [
+        "incumbent_serving.json",
+        "t20_controller.json",
+        "wizardofodds_feed.json",
+        "wizardofodds_page.json",
+    ]
+
+
+def test_the_probe_leaves_no_evidence_tree_behind(tmp_path):
+    """Three probes a day on an off slate must not create a slate record."""
+    clock = Clock(at(19, 25))
+
+    world = World(tmp_path, schedules=[[game(101, at(23, 0))]], clock=clock)
+
+    build(
+        world, clock=clock, segment_start=SEGMENT_1[0], segment_end=SEGMENT_1[1]
+    ).plan()
+
+    assert not (world.data_root / "processed" / "t20_evidence").exists()
