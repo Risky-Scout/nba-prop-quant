@@ -37,6 +37,39 @@ DEFAULT_CONTRACT = (
     "nba_prop_quant_v2_gate3_runtime_contract.json"
 )
 
+DEFAULT_ADAPTIVE_SERVING_CONTRACT = (
+    "models/frozen_manifests/"
+    "nba_prop_quant_v2_adaptive_serving_source_contract.json"
+)
+
+#: The only surface on which a historically byte-pinned file may be relocked
+#: to newer bytes. The historical contract's byte-pin over a library module
+#: under ``src/`` is the mathematics lock and this mechanism may not move it;
+#: its byte-pin over a command-line driver under ``scripts/`` is a deployment
+#: lock, and those have to move, because two of the divergences that exist are
+#: the ``--frozen-bundle-root`` argument without which no bundle is usable at
+#: all. A file the historical contract never byte-pinned is not constrained
+#: here: it had no anchor pin to relock.
+DIVERGEABLE_PINNED_PREFIX = "scripts/"
+
+#: Invariants the adaptive serving source contract must still assert before a
+#: declared divergence may be packaged. Every one is a statement that the
+#: mathematics did not move; a divergence that needed any of them relaxed is a
+#: model change and belongs in a new freeze, not in a serving-correctness lock.
+REQUIRED_ADAPTIVE_INVARIANTS = (
+    "calibration_methodology_changed",
+    "dependence_methodology_changed",
+    "feature_definitions_changed",
+    "fitted_model_artifacts_changed",
+    "gate3_routing_changed",
+    "marginal_family_changed",
+    "mean_model_routing_changed",
+    "model_family_or_routing_changed",
+    "model_mathematics_changed",
+    "t20_certification_protocol_changed",
+    "training_feature_definitions_changed",
+)
+
 RUNTIME_MANIFEST_NAME = "RUNTIME_MANIFEST.json"
 RUNTIME_SHA256SUMS_NAME = "RUNTIME_SHA256SUMS.txt"
 
@@ -111,6 +144,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=(
             "Runtime contract JSON. "
             f"Defaults to <project-root>/{DEFAULT_CONTRACT}."
+        ),
+    )
+
+    parser.add_argument(
+        "--adaptive-serving-contract",
+        type=Path,
+        default=None,
+        help=(
+            "Adaptive serving source contract JSON, which pins the source "
+            "adaptive production actually serves and enumerates every "
+            "difference from the historical architecture reference. "
+            f"Defaults to <project-root>/{DEFAULT_ADAPTIVE_SERVING_CONTRACT}."
         ),
     )
 
@@ -309,6 +354,231 @@ def verify_frozen_model_sources(
         )
 
     return verified
+
+
+def verify_adaptive_serving_sources(
+    root: Path,
+    adaptive: dict[str, Any],
+    *,
+    anchor_commit: str,
+    historical_contract_path: Path,
+    historically_pinned: Iterable[str],
+) -> dict[str, Any]:
+    """Fail unless every serving source matches the adaptive serving contract.
+
+    A serving-correctness fix in a file the historical contract byte-pins
+    cannot be packaged against the anchor commit, because the whole point of
+    the fix is that the anchor bytes were wrong. Two of the divergences this
+    discharges are the ``--frozen-bundle-root`` argument, without which the
+    entry points resolve the frozen manifest against the working directory and
+    no bundle can be used at all -- so the anchor-only check could not be
+    satisfied by any tree that could actually serve.
+
+    This is a second pin, not the absence of one. Every locked file is still
+    verified byte-exactly, against a hash recorded in a reviewed committed
+    contract rather than against a git blob, and the locked set is a superset
+    of the historically pinned set. The anchor keeps its own job: the contract
+    must still record each file's anchor bytes, those must still be the bytes
+    at the anchor commit, and a file claimed to diverge must genuinely differ
+    from them, so the exemption cannot wave an unchanged file through.
+    """
+
+    problems: list[str] = []
+
+    reference = str(adaptive.get("historical_architecture_reference") or "")
+
+    if reference != str(anchor_commit):
+        problems.append(
+            "the adaptive serving contract is anchored to "
+            f"{reference[:12] or '<nothing>'} but the runtime contract's "
+            f"model source commit is {str(anchor_commit)[:12]}"
+        )
+
+    recorded = str(adaptive.get("historical_contract_sha256") or "")
+
+    observed = sha256_file(historical_contract_path)
+
+    if recorded != observed:
+        problems.append(
+            "the adaptive serving contract records historical contract "
+            f"sha256 {recorded[:12] or '<nothing>'} but "
+            f"{historical_contract_path.name} hashes to {observed[:12]}"
+        )
+
+    locked = adaptive.get("locked_serving_source_files")
+
+    if not isinstance(locked, dict) or not locked:
+        raise BuildError(
+            "The adaptive serving source contract locks no serving source, "
+            "so it pins nothing and cannot authorise a divergence."
+        )
+
+    pinned = set(historically_pinned)
+
+    uncovered = sorted(pinned - set(locked))
+
+    if uncovered:
+        problems.append(
+            "the adaptive serving contract does not lock every historically "
+            f"pinned source: {uncovered}"
+        )
+
+    declared = adaptive.get("diverged_from_historical_reference")
+
+    if not isinstance(declared, list):
+        raise BuildError(
+            "The adaptive serving source contract declares no divergence "
+            "list, so no difference from the anchor is accounted for."
+        )
+
+    declared_set = set(declared)
+
+    if adaptive.get("divergence_count") != len(declared):
+        problems.append(
+            f"the adaptive serving contract declares {len(declared)} "
+            f"divergence(s) but counts {adaptive.get('divergence_count')}"
+        )
+
+    unlocked = sorted(declared_set - set(locked))
+
+    if unlocked:
+        problems.append(
+            f"divergence(s) declared but not locked: {unlocked}"
+        )
+
+    undivergeable = sorted(
+        relative
+        for relative in declared_set & pinned
+        if not relative.startswith(DIVERGEABLE_PINNED_PREFIX)
+    )
+
+    if undivergeable:
+        problems.append(
+            "the runtime contract byte-pins these to the architecture "
+            "reference and this mechanism may not relock them, because they "
+            "are the mathematics rather than a command-line driver: "
+            f"{undivergeable}"
+        )
+
+    invariants = adaptive.get("invariants")
+
+    if not isinstance(invariants, dict):
+        raise BuildError(
+            "The adaptive serving source contract asserts no invariants, so "
+            "nothing states that the mathematics did not move."
+        )
+
+    for name in REQUIRED_ADAPTIVE_INVARIANTS:
+        if invariants.get(name) is not False:
+            problems.append(
+                f"the adaptive serving contract does not assert {name} is "
+                f"false, it says {invariants.get(name)!r}"
+            )
+
+    verified: dict[str, str] = {}
+
+    for relative, entry in sorted(locked.items()):
+        path = root / relative
+
+        if not path.exists():
+            problems.append(f"{relative}: missing from the worktree")
+            continue
+
+        if not isinstance(entry, dict):
+            problems.append(f"{relative}: malformed lock entry")
+            continue
+
+        current = str(entry.get("current_sha256") or "")
+
+        historical = str(entry.get("historical_reference_sha256") or "")
+
+        actual = sha256_file(path)
+
+        if actual != current:
+            problems.append(
+                f"{relative}: differs from the adaptive serving contract's "
+                f"locked {current[:12] or '<nothing>'}"
+            )
+            continue
+
+        blob = subprocess.run(
+            ["git", "cat-file", "blob", f"{anchor_commit}:{relative}"],
+            cwd=root,
+            capture_output=True,
+            check=False,
+        )
+
+        if blob.returncode != 0:
+            problems.append(
+                f"{relative}: absent from the anchor commit "
+                f"{str(anchor_commit)[:12]}, so its recorded historical "
+                "bytes cannot be checked"
+            )
+            continue
+
+        if sha256_bytes(blob.stdout) != historical:
+            problems.append(
+                f"{relative}: the contract's recorded anchor bytes are not "
+                f"the bytes at {str(anchor_commit)[:12]}"
+            )
+            continue
+
+        matches = entry.get("matches_historical_reference")
+
+        if matches is not (current == historical):
+            problems.append(
+                f"{relative}: claims matches_historical_reference="
+                f"{matches!r} but current and anchor hashes say "
+                f"{current == historical!r}"
+            )
+            continue
+
+        if (relative in declared_set) is not (current != historical):
+            problems.append(
+                f"{relative}: "
+                + (
+                    "is declared a divergence but is byte-identical to the "
+                    "anchor"
+                    if relative in declared_set
+                    else "differs from the anchor without being declared a "
+                    "divergence"
+                )
+            )
+            continue
+
+        if current != historical and not str(
+            entry.get("divergence_reason") or ""
+        ).strip():
+            problems.append(
+                f"{relative}: diverges from the anchor with no justification"
+            )
+            continue
+
+        if entry.get("historically_byte_pinned") is not (relative in pinned):
+            problems.append(
+                f"{relative}: claims historically_byte_pinned="
+                f"{entry.get('historically_byte_pinned')!r} but the runtime "
+                f"contract says {relative in pinned!r}"
+            )
+            continue
+
+        verified[relative] = actual
+
+    if problems:
+        raise BuildError(
+            "Adaptive serving source verification failed:\n  "
+            + "\n  ".join(problems)
+        )
+
+    return {
+        "contract_name": str(adaptive.get("contract_name") or ""),
+        "contract_version": int(adaptive.get("contract_version") or 0),
+        "historical_architecture_reference": reference,
+        "historical_contract_sha256": recorded,
+        "verified": True,
+        "diverged_from_historical_reference": sorted(declared_set),
+        "files": dict(sorted(verified.items())),
+    }
 
 
 def verify_sha256sums_group(root: Path, relative_sums: str) -> int:
@@ -720,6 +990,7 @@ def build_manifest(
     provenance: dict[str, Any],
     gate3: dict[str, Any],
     frozen_sources: dict[str, str],
+    adaptive_sources: dict[str, Any],
     absent_optional: list[str],
     dependency_lock: dict[str, Any],
     runtime_version: int,
@@ -795,11 +1066,16 @@ def build_manifest(
         "prospective_claim_allowed": False,
         "auto_bet": False,
         "betting_threshold_frozen": False,
+        # Only the files still byte-identical to the anchor commit. A file the
+        # adaptive serving contract declares as diverged is absent here and
+        # pinned in the block below instead, so this block never claims the
+        # anchor verified something it did not.
         "frozen_model_source_verification": {
             "commit": provenance["model_source_commit"],
             "verified": True,
             "files": dict(sorted(frozen_sources.items())),
         },
+        "adaptive_serving_source_verification": adaptive_sources,
         "environment": {
             "python_version": platform.python_version(),
             "python_implementation": platform.python_implementation(),
@@ -1039,6 +1315,48 @@ def roundtrip_verify(
             ),
         }
 
+        adaptive = reloaded.get("adaptive_serving_source_verification")
+
+        if not isinstance(adaptive, dict) or adaptive.get("verified") is not True:
+            raise BuildError(
+                "Round-trip manifest carries no verified adaptive serving "
+                "source record, so the bundle does not say which source it "
+                "was packaged from."
+            )
+
+        if adaptive.get("historical_architecture_reference") != contract[
+            "model_source_commit"
+        ]:
+            raise BuildError(
+                "Round-trip adaptive serving anchor mismatch: "
+                f"{adaptive.get('historical_architecture_reference')!r} is "
+                f"not {contract['model_source_commit']!r}"
+            )
+
+        anchored = set(reloaded["frozen_model_source_verification"]["files"])
+
+        diverged = set(
+            adaptive.get("diverged_from_historical_reference") or []
+        )
+
+        if anchored & diverged:
+            raise BuildError(
+                "Round-trip manifest claims the anchor verified a declared "
+                f"divergence: {sorted(anchored & diverged)}"
+            )
+
+        unaccounted = sorted(
+            set(contract["frozen_model_source_files"])
+            - anchored
+            - set(adaptive.get("files") or {})
+        )
+
+        if unaccounted:
+            raise BuildError(
+                "Round-trip manifest pins neither the anchor bytes nor an "
+                f"adaptive lock for: {unaccounted}"
+            )
+
         for name, (observed, expected) in checks.items():
             if observed != expected:
                 raise BuildError(
@@ -1086,6 +1404,7 @@ def build_runtime_bundle(
     output_dir: Path,
     contract_path: Path,
     gate3_artifact_dir: Path,
+    adaptive_contract_path: Path | None = None,
     pip_freeze: Path | None = None,
     runtime_version: int | None = None,
     allow_dirty: bool = False,
@@ -1098,8 +1417,20 @@ def build_runtime_bundle(
     contract_path = contract_path.expanduser().resolve()
     gate3_artifact_dir = gate3_artifact_dir.expanduser().resolve()
 
+    adaptive_contract_path = (
+        adaptive_contract_path
+        if adaptive_contract_path is not None
+        else project_root / DEFAULT_ADAPTIVE_SERVING_CONTRACT
+    ).expanduser().resolve()
+
     if not contract_path.exists():
         raise BuildError(f"Runtime contract missing: {contract_path}")
+
+    if not adaptive_contract_path.exists():
+        raise BuildError(
+            "Adaptive serving source contract missing: "
+            f"{adaptive_contract_path}"
+        )
 
     contract = load_json(contract_path)
 
@@ -1111,10 +1442,30 @@ def build_runtime_bundle(
         allow_dirty=allow_dirty,
     )
 
+    adaptive_contract = load_json(adaptive_contract_path)
+
+    adaptive_sources = verify_adaptive_serving_sources(
+        project_root,
+        adaptive_contract,
+        anchor_commit=str(contract["model_source_commit"]),
+        historical_contract_path=contract_path,
+        historically_pinned=contract["frozen_model_source_files"],
+    )
+
+    # The anchor check keeps its original strictness over every historically
+    # pinned file the adaptive contract does not declare as diverged. A file
+    # it does declare is pinned by the check above instead, to the hash that
+    # contract records, so no file loses a byte-exact pin here.
+    diverged = set(adaptive_sources["diverged_from_historical_reference"])
+
     frozen_sources = verify_frozen_model_sources(
         project_root,
         str(contract["model_source_commit"]),
-        contract["frozen_model_source_files"],
+        [
+            relative
+            for relative in contract["frozen_model_source_files"]
+            if relative not in diverged
+        ],
     )
 
     checksum_groups = {
@@ -1179,6 +1530,7 @@ def build_runtime_bundle(
         provenance=provenance,
         gate3=gate3,
         frozen_sources=frozen_sources,
+        adaptive_sources=adaptive_sources,
         absent_optional=absent_optional,
         dependency_lock=dependency_lock,
         runtime_version=(
@@ -1213,6 +1565,7 @@ def build_runtime_bundle(
 
     return {
         "archive_path": archive_path,
+        "adaptive_contract_path": adaptive_contract_path,
         "archive_sha256": sha256_file(archive_path),
         "checksum_groups": checksum_groups,
         "contract_path": contract_path,
@@ -1250,6 +1603,20 @@ def print_summary(result: dict[str, Any]) -> None:
     )
     print(f"Prospective claim       : {manifest['prospective_claim_allowed']}")
     print(f"auto_bet                : {manifest['auto_bet']}")
+
+    adaptive = manifest["adaptive_serving_source_verification"]
+
+    print(
+        "Serving source lock     : "
+        f"{adaptive['contract_name']} v{adaptive['contract_version']}, "
+        f"{len(adaptive['files'])} file(s) pinned, "
+        f"{len(adaptive['diverged_from_historical_reference'])} declared "
+        "divergence(s) from the anchor"
+    )
+
+    for relative in adaptive["diverged_from_historical_reference"]:
+        print(f"  diverged: {relative}")
+
     print()
 
     print("Frozen integrity groups (permanent manifest['files'] hash set):")
@@ -1330,6 +1697,12 @@ def main(argv: list[str] | None = None) -> int:
         else project_root / DEFAULT_CONTRACT
     )
 
+    adaptive_contract_path = (
+        args.adaptive_serving_contract
+        if args.adaptive_serving_contract is not None
+        else project_root / DEFAULT_ADAPTIVE_SERVING_CONTRACT
+    )
+
     gate3_artifact_dir = (
         args.gate3_artifact_dir
         if args.gate3_artifact_dir is not None
@@ -1343,6 +1716,7 @@ def main(argv: list[str] | None = None) -> int:
             data_dir=data_dir,
             output_dir=args.output_dir,
             contract_path=contract_path,
+            adaptive_contract_path=adaptive_contract_path,
             gate3_artifact_dir=gate3_artifact_dir,
             pip_freeze=args.pip_freeze,
             runtime_version=args.runtime_version,

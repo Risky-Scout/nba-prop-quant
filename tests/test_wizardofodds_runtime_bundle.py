@@ -243,6 +243,68 @@ def synthetic_contract(model_source_commit: str) -> dict:
     }
 
 
+ADAPTIVE_INVARIANTS = {
+    name: False for name in builder.REQUIRED_ADAPTIVE_INVARIANTS
+}
+
+
+def synthetic_adaptive_contract(
+    project: Path,
+    *,
+    anchor: str,
+    contract_path: Path,
+    historically_pinned: list[str],
+    locked: list[str],
+    diverged: list[str],
+) -> dict:
+    """An adaptive serving source contract describing a synthetic worktree.
+
+    Hashes are read from the worktree and from the anchor's blobs rather than
+    restated, so a test that changes a locked file and regenerates this gets a
+    contract that is internally consistent and still has to satisfy every
+    cross-check the builder performs.
+    """
+
+    pinned = set(historically_pinned)
+
+    entries = {}
+
+    for relative in sorted(locked):
+        current = sha256_bytes((project / relative).read_bytes())
+
+        historical = sha256_bytes(
+            subprocess.run(
+                ["git", "cat-file", "blob", f"{anchor}:{relative}"],
+                cwd=project,
+                capture_output=True,
+                check=True,
+            ).stdout
+        )
+
+        entries[relative] = {
+            "current_sha256": current,
+            "historical_reference_sha256": historical,
+            "historically_byte_pinned": relative in pinned,
+            "matches_historical_reference": current == historical,
+        }
+
+        if current != historical:
+            entries[relative]["divergence_reason"] = (
+                "synthetic serving-correctness fix"
+            )
+
+    return {
+        "contract_name": "synthetic_adaptive_serving_source_contract",
+        "contract_version": 1,
+        "diverged_from_historical_reference": sorted(diverged),
+        "divergence_count": len(diverged),
+        "historical_architecture_reference": anchor,
+        "historical_contract_sha256": sha256_bytes(contract_path.read_bytes()),
+        "invariants": dict(ADAPTIVE_INVARIANTS),
+        "locked_serving_source_files": entries,
+    }
+
+
 @pytest.fixture
 def workspace(tmp_path: Path) -> dict:
     """A minimal synthetic project root, model dir and data dir."""
@@ -371,6 +433,27 @@ def workspace(tmp_path: Path) -> dict:
         + "\n",
     )
 
+    adaptive_contract_path = project / "adaptive_serving_contract.json"
+
+    pinned = synthetic_contract(model_commit)["frozen_model_source_files"]
+
+    write(
+        adaptive_contract_path,
+        json.dumps(
+            synthetic_adaptive_contract(
+                project,
+                anchor=model_commit,
+                contract_path=contract_path,
+                historically_pinned=pinned,
+                locked=[*pinned, "src/nba_prop_quant/__init__.py"],
+                diverged=[],
+            ),
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+    )
+
     git(project, "add", "-A")
     git(project, "commit", "-q", "-m", "runtime contract")
 
@@ -380,6 +463,8 @@ def workspace(tmp_path: Path) -> dict:
         "data_dir": data_dir,
         "output_dir": output_dir,
         "contract_path": contract_path,
+        "adaptive_contract_path": adaptive_contract_path,
+        "historically_pinned": pinned,
         "model_commit": model_commit,
         "gate3_artifact_dir": gate3,
     }
@@ -392,6 +477,7 @@ def build(workspace: dict, **overrides):
         "data_dir": workspace["data_dir"],
         "output_dir": workspace["output_dir"],
         "contract_path": workspace["contract_path"],
+        "adaptive_contract_path": workspace["adaptive_contract_path"],
         "gate3_artifact_dir": workspace["gate3_artifact_dir"],
     }
 
@@ -412,8 +498,81 @@ def patch_contract(workspace: dict, mutate) -> None:
         encoding="utf-8",
     )
 
+    # The adaptive contract hashes the historical contract it promises not to
+    # amend, so it has to be reissued whenever that file is rewritten or the
+    # build would fail on the stale hash rather than on what the test changed.
+    relock(workspace)
+
+
+def patch_adaptive(workspace: dict, mutate) -> None:
+    adaptive = json.loads(
+        workspace["adaptive_contract_path"].read_text(encoding="utf-8")
+    )
+
+    mutate(adaptive)
+
+    workspace["adaptive_contract_path"].write_text(
+        json.dumps(adaptive, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
     git(workspace["project"], "add", "-A")
-    git(workspace["project"], "commit", "-q", "-m", "adjust contract")
+    git(workspace["project"], "commit", "-q", "-m", "adjust adaptive contract")
+
+
+def relock(workspace: dict, *, diverged: list[str] | None = None) -> dict:
+    """Reissue the adaptive contract from the worktree as it stands now."""
+
+    locked = sorted(
+        json.loads(
+            workspace["adaptive_contract_path"].read_text(encoding="utf-8")
+        )["locked_serving_source_files"]
+    )
+
+    if diverged is None:
+        diverged = [
+            relative
+            for relative in locked
+            if sha256_bytes((workspace["project"] / relative).read_bytes())
+            != sha256_bytes(
+                subprocess.run(
+                    [
+                        "git",
+                        "cat-file",
+                        "blob",
+                        f"{workspace['model_commit']}:{relative}",
+                    ],
+                    cwd=workspace["project"],
+                    capture_output=True,
+                    check=True,
+                ).stdout
+            )
+        ]
+
+    adaptive = synthetic_adaptive_contract(
+        workspace["project"],
+        anchor=workspace["model_commit"],
+        contract_path=workspace["contract_path"],
+        # Read from the contract as it stands rather than from the fixture's
+        # original list: historically_byte_pinned has to agree with whatever
+        # the runtime contract pins right now, and a test that narrowed it is
+        # testing something else.
+        historically_pinned=json.loads(
+            workspace["contract_path"].read_text(encoding="utf-8")
+        )["frozen_model_source_files"],
+        locked=locked,
+        diverged=diverged,
+    )
+
+    workspace["adaptive_contract_path"].write_text(
+        json.dumps(adaptive, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    git(workspace["project"], "add", "-A")
+    git(workspace["project"], "commit", "-q", "-m", "relock serving sources")
+
+    return adaptive
 
 
 HISTORICAL_STAGED_PATHS = [
@@ -1030,6 +1189,13 @@ def test_real_contract_generates_metadata_pinned_to_the_model_anchor(tmp_path):
             "deployment_manifest_sha256": "0" * 64,
         },
         frozen_sources={},
+        adaptive_sources=builder.verify_adaptive_serving_sources(
+            PROJECT,
+            adaptive_serving_contract(),
+            anchor_commit=contract["model_source_commit"],
+            historical_contract_path=REAL_CONTRACT_PATH,
+            historically_pinned=contract["frozen_model_source_files"],
+        ),
         absent_optional=[],
         dependency_lock={},
         runtime_version=int(contract["runtime_version"]),
@@ -1045,6 +1211,12 @@ def test_real_contract_generates_metadata_pinned_to_the_model_anchor(tmp_path):
     assert manifest["auto_bet"] is False
     assert manifest["gate3_policy"] == GATE3_POLICY
     assert manifest["contract_version"] == contract["contract_version"]
+
+    adaptive = manifest["adaptive_serving_source_verification"]
+
+    assert adaptive["verified"] is True
+    assert adaptive["historical_architecture_reference"] == FROZEN_MODEL_COMMIT
+    assert set(adaptive["files"]) >= set(contract["frozen_model_source_files"])
 
     assert manifest["rolling_integrity_groups"] == ["runtime_data"]
     assert "runtime_data" not in manifest["frozen_integrity_groups"]
@@ -1066,6 +1238,434 @@ def test_generated_manifest_records_both_integrity_domains(workspace):
     assert "runtime_data" not in frozen
     assert set(frozen) & set(rolling) == set()
     assert set(manifest["files"]) <= set(frozen)
+
+
+# ---------------------------------------------------------------------------
+# The adaptive serving source lock the builder now reads
+# ---------------------------------------------------------------------------
+
+
+def diverge_entry_point(workspace: dict) -> str:
+    """Change a pinned entry point after the anchor, the way production did."""
+
+    relative = "scripts/15_price_markets.py"
+
+    write(
+        workspace["project"] / relative,
+        "# price\n# --frozen-bundle-root, so the bundle can be used at all\n",
+    )
+
+    git(workspace["project"], "add", "-A")
+    git(workspace["project"], "commit", "-q", "-m", "serving correction")
+
+    return relative
+
+
+def test_a_diverged_entry_point_can_be_packaged_once_it_is_declared(workspace):
+    """The blocker: the anchor check alone cannot pass on a serving tree.
+
+    Two of production's real divergences add ``--frozen-bundle-root``, without
+    which the entry points resolve the frozen manifest against the working
+    directory and no bundle is usable. The anchor-only check therefore refused
+    the only source able to consume its own output.
+    """
+
+    relative = diverge_entry_point(workspace)
+
+    with pytest.raises(builder.BuildError, match="locked"):
+        build(workspace)
+
+    relock(workspace)
+
+    manifest = build(workspace)["manifest"]
+
+    adaptive = manifest["adaptive_serving_source_verification"]
+
+    assert adaptive["verified"] is True
+    assert adaptive["diverged_from_historical_reference"] == [relative]
+
+    # Still pinned, just not to the anchor: the lock carries this file's bytes.
+    assert adaptive["files"][relative] == sha256_bytes(
+        (workspace["project"] / relative).read_bytes()
+    )
+
+    # And the anchor block no longer claims to have verified it.
+    anchored = manifest["frozen_model_source_verification"]["files"]
+
+    assert relative not in anchored
+    assert "src/nba_prop_quant/production.py" in anchored
+
+
+def test_every_pinned_file_stays_pinned_by_one_block_or_the_other(workspace):
+    diverge_entry_point(workspace)
+
+    relock(workspace)
+
+    manifest = build(workspace)["manifest"]
+
+    contract = json.loads(
+        workspace["contract_path"].read_text(encoding="utf-8")
+    )
+
+    anchored = set(manifest["frozen_model_source_verification"]["files"])
+
+    locked = set(manifest["adaptive_serving_source_verification"]["files"])
+
+    assert set(contract["frozen_model_source_files"]) <= anchored | locked
+
+    # The lock is the wider of the two: it also covers serving sources the
+    # historical contract staged into the bundle but never byte-pinned.
+    assert locked > set(contract["frozen_model_source_files"])
+
+
+def test_an_undeclared_divergence_still_fails_the_build(workspace):
+    relative = diverge_entry_point(workspace)
+
+    relock(workspace, diverged=[])
+
+    with pytest.raises(
+        builder.BuildError,
+        match="differs from the anchor without being declared",
+    ):
+        build(workspace)
+
+    assert relative
+
+
+def test_declaring_an_unchanged_file_as_diverged_fails_the_build(workspace):
+    def mutate(adaptive):
+        adaptive["diverged_from_historical_reference"] = [
+            "scripts/10_predict_slate.py"
+        ]
+        adaptive["divergence_count"] = 1
+
+    patch_adaptive(workspace, mutate)
+
+    with pytest.raises(
+        builder.BuildError,
+        match="declared a divergence but is byte-identical to the anchor",
+    ):
+        build(workspace)
+
+
+def test_a_divergence_without_a_justification_fails_the_build(workspace):
+    relative = diverge_entry_point(workspace)
+
+    relock(workspace)
+
+    def mutate(adaptive):
+        adaptive["locked_serving_source_files"][relative][
+            "divergence_reason"
+        ] = "   "
+
+    patch_adaptive(workspace, mutate)
+
+    with pytest.raises(
+        builder.BuildError,
+        match="diverges from the anchor with no justification",
+    ):
+        build(workspace)
+
+
+def test_a_lock_anchored_elsewhere_fails_the_build(workspace):
+    def mutate(adaptive):
+        adaptive["historical_architecture_reference"] = "0" * 40
+
+    patch_adaptive(workspace, mutate)
+
+    with pytest.raises(
+        builder.BuildError,
+        match="adaptive serving contract is anchored to",
+    ):
+        build(workspace)
+
+
+def test_a_lock_that_does_not_hash_the_contract_it_cites_fails(workspace):
+    """The lock promises not to amend the historical contract.
+
+    It records that contract's hash to make the promise checkable, so a lock
+    carried over to a rewritten historical contract must be refused rather
+    than silently reinterpreting it.
+    """
+
+    def mutate(adaptive):
+        adaptive["historical_contract_sha256"] = "0" * 64
+
+    patch_adaptive(workspace, mutate)
+
+    with pytest.raises(
+        builder.BuildError,
+        match="records historical contract sha256",
+    ):
+        build(workspace)
+
+
+def test_recorded_anchor_bytes_must_really_be_the_anchors(workspace):
+    def mutate(adaptive):
+        adaptive["locked_serving_source_files"][
+            "src/nba_prop_quant/production.py"
+        ]["historical_reference_sha256"] = "0" * 64
+
+    patch_adaptive(workspace, mutate)
+
+    with pytest.raises(
+        builder.BuildError,
+        match="recorded anchor bytes are not the bytes at",
+    ):
+        build(workspace)
+
+
+def test_a_lock_that_misses_a_pinned_file_fails_the_build(workspace):
+    def mutate(adaptive):
+        del adaptive["locked_serving_source_files"][
+            "src/nba_prop_quant/production.py"
+        ]
+
+    patch_adaptive(workspace, mutate)
+
+    with pytest.raises(
+        builder.BuildError,
+        match="does not lock every historically pinned source",
+    ):
+        build(workspace)
+
+
+def test_a_lock_that_stops_asserting_the_mathematics_held_fails(workspace):
+    for name in builder.REQUIRED_ADAPTIVE_INVARIANTS:
+
+        def mutate(adaptive, _name=name):
+            adaptive["invariants"][_name] = True
+
+        workspace_copy = dict(workspace)
+
+        patch_adaptive(workspace_copy, mutate)
+
+        with pytest.raises(
+            builder.BuildError,
+            match=f"does not assert {name} is false",
+        ):
+            build(workspace_copy)
+
+        def restore(adaptive, _name=name):
+            adaptive["invariants"][_name] = False
+
+        patch_adaptive(workspace_copy, restore)
+
+
+def test_a_miscounted_divergence_list_fails_the_build(workspace):
+    def mutate(adaptive):
+        adaptive["divergence_count"] = 7
+
+    patch_adaptive(workspace, mutate)
+
+    with pytest.raises(
+        builder.BuildError,
+        match="declares 0 divergence\\(s\\) but counts 7",
+    ):
+        build(workspace)
+
+
+def test_a_missing_lock_fails_the_build(workspace):
+    workspace["adaptive_contract_path"].unlink()
+
+    git(workspace["project"], "add", "-A")
+    git(workspace["project"], "commit", "-q", "-m", "drop the lock")
+
+    with pytest.raises(
+        builder.BuildError,
+        match="Adaptive serving source contract missing",
+    ):
+        build(workspace)
+
+
+def test_the_bundle_records_which_lock_packaged_it(workspace):
+    diverge_entry_point(workspace)
+
+    adaptive_contract = relock(workspace)
+
+    result = build(workspace)
+
+    bundle = extract(workspace, result)
+
+    reloaded = json.loads(
+        (bundle / builder.RUNTIME_MANIFEST_NAME).read_text(encoding="utf-8")
+    )
+
+    recorded = reloaded["adaptive_serving_source_verification"]
+
+    assert recorded["contract_name"] == adaptive_contract["contract_name"]
+    assert recorded["contract_version"] == adaptive_contract["contract_version"]
+    assert recorded["historical_contract_sha256"] == sha256_bytes(
+        workspace["contract_path"].read_bytes()
+    )
+
+    # The frozen verifier still accepts the bundle: the new block is metadata
+    # beside the hash set, not a change to it.
+    assert verify_frozen_manifest(bundle)["freeze_id"] == (
+        result["manifest"]["freeze_id"]
+    )
+
+
+def test_the_real_lock_lets_the_real_contract_be_packaged():
+    """The blocker, on the real tree rather than a fixture.
+
+    The anchor-only check fails on the three serving scripts production
+    corrected. Splitting the same nine files between the two pins leaves every
+    one of them byte-verified and nothing unaccounted for.
+    """
+
+    contract = json.loads(REAL_CONTRACT_PATH.read_text(encoding="utf-8"))
+
+    anchor = contract["model_source_commit"]
+
+    pinned = contract["frozen_model_source_files"]
+
+    with pytest.raises(builder.BuildError) as refusal:
+        builder.verify_frozen_model_sources(PROJECT, anchor, pinned)
+
+    for relative in (
+        "scripts/10_predict_slate.py",
+        "scripts/11_collect_snapshots.py",
+        "scripts/15_price_markets.py",
+    ):
+        assert relative in str(refusal.value)
+
+    adaptive = builder.verify_adaptive_serving_sources(
+        PROJECT,
+        adaptive_serving_contract(),
+        anchor_commit=anchor,
+        historical_contract_path=REAL_CONTRACT_PATH,
+        historically_pinned=pinned,
+    )
+
+    diverged = set(adaptive["diverged_from_historical_reference"])
+
+    anchored = builder.verify_frozen_model_sources(
+        PROJECT,
+        anchor,
+        [relative for relative in pinned if relative not in diverged],
+    )
+
+    assert set(pinned) <= set(anchored) | set(adaptive["files"])
+    assert set(anchored) & diverged == set()
+    assert len(adaptive["files"]) > len(pinned)
+
+
+def test_the_real_lock_diverges_only_on_command_line_drivers():
+    """The mathematics is still anchor-pinned and cannot be relocked."""
+
+    contract = json.loads(REAL_CONTRACT_PATH.read_text(encoding="utf-8"))
+
+    pinned = set(contract["frozen_model_source_files"])
+
+    adaptive = adaptive_serving_contract()
+
+    for relative in adaptive["diverged_from_historical_reference"]:
+        if relative in pinned:
+            assert relative.startswith(builder.DIVERGEABLE_PINNED_PREFIX)
+
+    mathematics = sorted(
+        relative
+        for relative in pinned
+        if not relative.startswith(builder.DIVERGEABLE_PINNED_PREFIX)
+    )
+
+    assert mathematics == [
+        "src/nba_prop_quant/distributions.py",
+        "src/nba_prop_quant/gate3_v2.py",
+        "src/nba_prop_quant/pricing.py",
+        "src/nba_prop_quant/production.py",
+        "src/nba_prop_quant/prospective_snapshot.py",
+    ]
+
+    builder.verify_frozen_model_sources(
+        PROJECT,
+        contract["model_source_commit"],
+        mathematics,
+    )
+
+
+def test_the_deferred_obligation_is_recorded_as_discharged():
+    """The limitation note must track reality, in both directions.
+
+    Version 9 recorded the builder as unable to package this source. The
+    builder now reads the contract, so a note still saying otherwise would be
+    the misleading half of the same problem.
+    """
+
+    adaptive = adaptive_serving_contract()
+
+    limitation = adaptive["known_limitation"]
+
+    assert "19_build_wizardofodds_runtime_bundle.py" in limitation
+    assert "Step 3D" in limitation
+    assert "discharged" in limitation
+
+    history = adaptive["contract_version_history"]
+
+    assert str(adaptive["contract_version"]) in history
+    assert "Step 3D" in history[str(adaptive["contract_version"])]
+
+    builder_source = BUILDER_PATH.read_text(encoding="utf-8")
+
+    assert "nba_prop_quant_v2_adaptive_serving_source_contract" in builder_source
+
+    addendum = (
+        PROJECT
+        / "docs"
+        / "wizardofodds"
+        / "V2_REFERENCE_PROVENANCE_ADDENDUM.md"
+    ).read_text(encoding="utf-8")
+
+    assert "19_build_wizardofodds_runtime_bundle.py" in addendum
+    assert "adaptive_serving_source_verification" in addendum
+
+
+#: Digest of every lock-bearing field of the adaptive serving source contract
+#: as version 9 recorded them, taken before the Step 3D obligation was
+#: discharged. Pinned as a literal rather than read from a git ref so it stays
+#: meaningful after this lands and the ref moves on.
+ADAPTIVE_LOCK_DIGEST_AT_VERSION_NINE = (
+    "23d63c9f854be2f134c6c06b91dfeb8c15d038d1963c6e3dc6f8706495072a98"
+)
+
+ADAPTIVE_LOCK_BEARING_FIELDS = (
+    "coverage_basis",
+    "diverged_from_historical_reference",
+    "divergence_count",
+    "historical_architecture_reference",
+    "historical_contract_sha256",
+    "invariant_basis",
+    "invariants",
+    "locked_serving_source_files",
+)
+
+
+def test_discharging_the_obligation_moved_no_lock():
+    """The contract edit must be the note and the version, nothing else.
+
+    Every lock, hash, divergence and invariant has to be what version 9
+    recorded, so teaching the builder to read this contract cannot have
+    quietly relocked anything on the way.
+    """
+
+    adaptive = adaptive_serving_contract()
+
+    subset = {
+        field: adaptive[field] for field in ADAPTIVE_LOCK_BEARING_FIELDS
+    }
+
+    digest = hashlib.sha256(
+        json.dumps(subset, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
+    ).hexdigest()
+
+    assert digest == ADAPTIVE_LOCK_DIGEST_AT_VERSION_NINE
+
+    # And the version did move, so the edit is not passing itself off as the
+    # reviewed version 9 contract.
+    assert adaptive["contract_version"] > 9
 
 
 def test_runtime_data_is_bundled_under_data_prefix(workspace):
@@ -1381,6 +1981,15 @@ def test_absent_optional_artifact_is_recorded_not_fatal(workspace):
 
 
 def test_changed_mathematical_source_fails(workspace):
+    """An edit to a mathematical source is refused, declared or not.
+
+    Undeclared, the serving lock catches it, because that lock covers more
+    files than the anchor one does. Declared and relocked -- the loophole the
+    adaptive mechanism would otherwise open -- the builder still refuses,
+    because a library module under ``src/`` that the runtime contract
+    byte-pins is the mathematics and nothing may relock it.
+    """
+
     write(
         workspace["project"] / "src/nba_prop_quant/production.py",
         "TARGETS = ['pts', 'reb']  # unauthorised model change\n",
@@ -1391,7 +2000,15 @@ def test_changed_mathematical_source_fails(workspace):
 
     with pytest.raises(
         builder.BuildError,
-        match="Frozen mathematical model source verification failed",
+        match="differs from the adaptive serving contract's locked",
+    ):
+        build(workspace)
+
+    relock(workspace)
+
+    with pytest.raises(
+        builder.BuildError,
+        match="may not relock them, because they are the mathematics",
     ):
         build(workspace)
 
