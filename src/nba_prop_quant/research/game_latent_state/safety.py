@@ -161,6 +161,19 @@ SERVING_SOURCE_EXEMPT_FUNCTIONS: tuple[str, ...] = (
 #: there is no new rule here, only training's own population reaching the
 #: path that serves it -- and neither can reach a probability, a price, an
 #: edge, an EV or a route.
+#:
+#: ``_prior_window_participation`` and ``prior_participation_rate`` are the
+#: population names again, read from the other side. Those same appearance-only
+#: priors answer "what did this player play when he played", and the
+#: availability layer was reading them as "what is this player's to vacate" --
+#: so an absentee the priors had already written out of the rotation freed his
+#: minutes a second time, onto team-mates whose priors already held them. The
+#: share names which of a team's recent games a player was actually in, over
+#: the same window and the same appearance population those priors are built
+#: from. It states no threshold and no weight: it is a count of games over a
+#: count of games, taken at the span the EWM already uses, and the minutes it
+#: governs are the ones the existing elasticity allocation was already
+#: handing out.
 DECLARED_SERVING_PLUMBING_NAMES: tuple[str, ...] = (
     "frozen_bundle_root",
     "history_games",
@@ -174,6 +187,8 @@ DECLARED_SERVING_PLUMBING_NAMES: tuple[str, ...] = (
     "tip_off_utc",
     "played_player_games",
     "played_advanced_rows",
+    "_prior_window_participation",
+    "prior_participation_rate",
 )
 
 #: The serving *orchestrator* a declaration may name, and only additively.

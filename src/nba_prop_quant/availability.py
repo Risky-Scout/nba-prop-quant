@@ -45,7 +45,26 @@ def apply_current_injury_adjustment(
         out = team["availability_out"].to_numpy(dtype=bool)
 
         adjusted = base.copy()
-        freed = float(adjusted[out].sum())
+        # An OUT player only frees minutes the survivors' priors still assign
+        # to him. Those priors are EWMs over the appearances in a recent window,
+        # so a team-mate who was already absent across that window has already
+        # had his minutes absorbed by the rotation the priors were built from,
+        # and crediting them again adds minutes the team never had. Weighting
+        # by his presence in that window keeps a genuinely new absence at full
+        # value, drops an established one to nothing, and prorates the rest.
+        # Absent the column, every OUT player counts in full, which is the
+        # unweighted behaviour.
+        if "prior_participation_rate" in team.columns:
+            represented = (
+                pd.to_numeric(team["prior_participation_rate"], errors="coerce")
+                .fillna(0.0)
+                .clip(lower=0.0, upper=1.0)
+                .to_numpy(dtype=float)
+            )
+        else:
+            represented = np.ones(len(team), dtype=float)
+
+        freed = float((base[out] * represented[out]).sum())
         adjusted[out] = 0.0
 
         healthy = ~out
