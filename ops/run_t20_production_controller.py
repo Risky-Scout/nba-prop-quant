@@ -167,6 +167,19 @@ SERVING_OUTCOME_NO_GAMES = "NO_GAMES_ON_SLATE"
 OUTCOME_NO_WINDOWS = "NO_T20_WINDOWS_IN_SEGMENT"
 OUTCOME_SEGMENT_COMPLETE = "T20_SEGMENT_COMPLETE"
 OUTCOME_MORNING_NOT_READY = "MORNING_PRODUCTION_NOT_READY"
+
+#: Distinguished from the outcome above because the operator action differs.
+#: ``MORNING_PRODUCTION_NOT_READY`` means no proof of a verified incumbent
+#: exists for this slate and the morning lifecycle has to run. This one means
+#: the proof exists and is sound, and the only thing wrong with it is that
+#: accepted production code was merged forward after it was written -- so the
+#: supported action is the readiness refresh, not a lifecycle run. Both still
+#: refuse to serve: the receipt is required either way and neither is bypassed.
+OUTCOME_MORNING_STALE_AFTER_MERGE = "MORNING_PRODUCTION_STALE_AFTER_MERGE"
+
+#: The workflow that re-issues the receipt, named in the refusal so the
+#: message says what to do rather than only what is wrong.
+READINESS_REFRESH_WORKFLOW = "nba_production_readiness_refresh.yml"
 OUTCOME_REQUIRED_SNAPSHOT_MISSING = "REQUIRED_T20_SNAPSHOT_MISSING"
 OUTCOME_MISSED_WINDOW = "MISSED_T20_WINDOW"
 OUTCOME_UNSUPPORTED_TIME = "UNSUPPORTED_T20_TIME"
@@ -445,8 +458,48 @@ def resolve_snapshot_dir(data_root: Path) -> Path:
 # ----------------------------------------------------------------------
 
 
+def _recorded_sha_is_ancestor(
+    project_root: Path, *, recorded_sha: str, production_sha: str
+) -> bool:
+    """Whether the receipt's code is strictly behind the code about to serve.
+
+    Answered from git rather than inferred, and answered quietly: this only
+    decides which refusal the operator is handed, so a repository git cannot
+    read is not an error here -- it just means the staleness cannot be
+    attributed to a merge, and the general refusal is the right one.
+    """
+    if not recorded_sha or recorded_sha == production_sha:
+        return False
+
+    for candidate in (recorded_sha, production_sha):
+        if (
+            subprocess.run(
+                ("git", "cat-file", "-e", f"{candidate}^{{commit}}"),
+                cwd=project_root,
+                capture_output=True,
+                check=False,
+            ).returncode
+            != 0
+        ):
+            return False
+
+    return (
+        subprocess.run(
+            ("git", "merge-base", "--is-ancestor", recorded_sha, production_sha),
+            cwd=project_root,
+            capture_output=True,
+            check=False,
+        ).returncode
+        == 0
+    )
+
+
 def morning_readiness(
-    *, data_root: Path, slate_date: str, production_sha: str
+    *,
+    data_root: Path,
+    slate_date: str,
+    production_sha: str,
+    project_root: Path = PROJECT_ROOT,
 ) -> dict[str, Any]:
     """Prove, from durable state, that this morning established the incumbent.
 
@@ -463,6 +516,15 @@ def morning_readiness(
     date, or produced by another production SHA, does not prove the runtime
     serving is about to load was verified, and a controller that accepted it
     would be reusing yesterday's proof.
+
+    One mismatch is singled out and still refused. When the recorded SHA is a
+    strict ancestor of the running one, the receipt is sound and the only
+    thing wrong with it is that accepted production code was merged after it
+    was written. That is a routine event with a supported remedy -- the
+    readiness refresh re-issues the receipt under the new revision -- and
+    telling the two cases apart is the difference between an operator running
+    the right thing and an operator losing an evening's slate. The refusal
+    still happens: nothing here serves on a receipt that describes other code.
     """
     path = Path(data_root) / MORNING_RECEIPT_RELATIVE / f"{slate_date}.json"
 
@@ -497,6 +559,25 @@ def morning_readiness(
     recorded_sha = str(receipt.get("production_code_sha") or "")
 
     if recorded_sha != str(production_sha):
+        if _recorded_sha_is_ancestor(
+            Path(project_root),
+            recorded_sha=recorded_sha,
+            production_sha=str(production_sha),
+        ):
+            raise ControllerRefused(
+                OUTCOME_MORNING_STALE_AFTER_MERGE,
+                f"the readiness receipt for {slate_date} is sound but stale: "
+                f"{path} was produced by production SHA {recorded_sha}, "
+                f"accepted production code has since moved forward to "
+                f"{production_sha}, and the runtime that receipt verified is "
+                "therefore not the code about to serve. This is the one "
+                "staleness with a supported remedy: run "
+                f"{READINESS_REFRESH_WORKFLOW} to re-issue the receipt under "
+                "the current revision, which re-verifies the frozen runtime "
+                "and fails closed if any fitted artifact moved. Serving is "
+                "refused until it has",
+            )
+
         raise refuse(
             f"{path} was produced by production SHA "
             f"{recorded_sha or 'nothing'} and this run is "
@@ -780,6 +861,7 @@ class T20Controller:
             data_root=self.data_root,
             slate_date=self.slate_date,
             production_sha=self.production_sha,
+            project_root=self.project_root,
         )
 
         self._work(plan, readiness)

@@ -1,0 +1,420 @@
+name: NBA production readiness refresh
+
+# WHAT THIS IS FOR
+# ----------------
+#
+# `nba_production_lifecycle.yml` writes the durable serving receipt once a day
+# at 09:37 UTC, and `nba_t20_production.yml` refuses to serve unless that
+# receipt was produced by the exact production SHA the controller is running.
+# That gate is correct and is not weakened here.
+#
+# The gate had one consequence nobody chose: accepted code merged to
+# production/wizardofodds-integration *after* the morning run invalidated the
+# receipt for the rest of that day, so every remaining T-20 segment refused
+# with MORNING_PRODUCTION_NOT_READY and the evening's whole slate silently
+# produced no forecast. It cost 2026-10-21, 2026-10-22, and the late game of
+# 2026-10-20.
+#
+# So any change landing on the production branch now re-establishes that day's
+# readiness under the new SHA, and then picks up the rest of the evening's
+# T-20 windows that the refused segment would otherwise have abandoned.
+#
+# WHAT IT IS NOT
+# --------------
+#
+# Not a second lifecycle. It does not refresh the rolling season state, does
+# not run the adaptive protocol, does not fit, grade or shadow anything, and
+# does not promote a candidate. A source SHA moving forward is not evidence
+# about the model. `ops/refresh_production_readiness.py` decides whether the
+# morning run's own recorded readiness may be re-issued under the new SHA, and
+# fails closed if the fitted artifacts moved, if the governance contracts no
+# longer hold, if the code did not move strictly forward, or if the run being
+# carried forward never proved readiness in the first place.
+#
+# The receipt itself is then written by the same entry point the morning
+# lifecycle uses, into the same durable location, with the same checks.
+
+on:
+  push:
+    branches:
+      - production/wizardofodds-integration
+
+  workflow_dispatch:
+    inputs:
+      slate_date:
+        description: 'Slate date YYYY-MM-DD. Defaults to today in US/Eastern.'
+        type: string
+        required: false
+      production_ref:
+        description: 'Authoritative production ref to check out'
+        type: string
+        required: false
+        default: production/wizardofodds-integration
+      t20_catchup:
+        description: 'After refreshing, pick up the rest of this evening''s T-20 windows'
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  readiness:
+    name: Re-establish production readiness
+    # The durable state backend. The receipt this job re-issues is read off
+    # this machine's filesystem by the T-20 controller, so it has to be
+    # written here and nowhere else.
+    runs-on:
+      - self-hosted
+      - nba-production
+    timeout-minutes: 90
+    environment: wizardofodds-production
+
+    # The same group the once-daily lifecycle takes. Concurrency groups are
+    # repository-wide, so naming it here is what stops a refresh racing the
+    # morning run for the registry and the rolling tree. Queued, not
+    # cancelled: a cancelled refresh could leave the receipt describing
+    # neither SHA.
+    concurrency:
+      group: nba-production-lifecycle
+      cancel-in-progress: false
+
+    outputs:
+      sha: ${{ steps.checkout.outputs.sha }}
+      slate_date: ${{ steps.slate.outputs.slate_date }}
+      outcome: ${{ steps.authorise.outputs.outcome }}
+
+    env:
+      PRODUCTION_REF: ${{ inputs.production_ref || 'production/wizardofodds-integration' }}
+
+    steps:
+      - name: Check out the authoritative production code
+        uses: actions/checkout@v4
+        with:
+          # A push event already points at the production branch; a manual run
+          # names it. Either way it is named rather than inherited.
+          ref: ${{ inputs.production_ref || 'production/wizardofodds-integration' }}
+          fetch-depth: 0
+
+      - name: Record and verify the production checkout
+        id: checkout
+        run: |
+          set -euo pipefail
+          SHA="$(git rev-parse HEAD)"
+          REF="$(git rev-parse --abbrev-ref HEAD)"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Production code SHA: $SHA"
+          echo "Checked-out ref: $REF"
+          echo "Triggered by: ${{ github.event_name }}"
+          if [ "$REF" != "$PRODUCTION_REF" ]; then
+            echo "refusing: the checkout is $REF, not the requested $PRODUCTION_REF"
+            exit 1
+          fi
+          if [ "$(git rev-parse "$PRODUCTION_REF")" != "$SHA" ]; then
+            echo "refusing: $PRODUCTION_REF does not resolve to $SHA"
+            exit 1
+          fi
+
+      # The slate the receipt is about. Derived in America/New_York, never
+      # from the UTC calendar date, because a refresh triggered late in the
+      # evening UTC is still about that evening's slate.
+      - name: Resolve the slate date
+        id: slate
+        run: |
+          set -euo pipefail
+          if [ -n "${{ inputs.slate_date }}" ]; then
+            SLATE="${{ inputs.slate_date }}"
+          else
+            SLATE="$(TZ=America/New_York date +%F)"
+          fi
+          echo "slate_date=$SLATE" >> "$GITHUB_OUTPUT"
+          echo "Slate date: $SLATE"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Its own environment, for the reason the lifecycle documents: on this
+      # long-lived Mac a bare install resolves to machine-global site-packages.
+      - name: Create the run environment
+        id: venv
+        run: |
+          set -euo pipefail
+          VENV="$RUNNER_TEMP/readiness-venv"
+          BOOTSTRAP="$(python -c 'import sys; print(sys.executable)')"
+          echo "Bootstrap interpreter: $BOOTSTRAP"
+          "$BOOTSTRAP" -m venv --clear "$VENV"
+          echo "venv=$VENV" >> "$GITHUB_OUTPUT"
+          echo "architecture=$(uname -m)" >> "$GITHUB_OUTPUT"
+          echo "$VENV/bin" >> "$GITHUB_PATH"
+
+      # The gatekeeper imports only the standard library and reads git, so it
+      # runs before the scientific stack is installed. A refusal therefore
+      # costs seconds rather than a full install.
+      - name: Authorise the readiness refresh
+        id: authorise
+        env:
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/run"
+          python ops/refresh_production_readiness.py \
+            --slate-date "${{ steps.slate.outputs.slate_date }}" \
+            --data-root "$NBA_PROP_DATA_DIR" \
+            --production-sha "${{ steps.checkout.outputs.sha }}" \
+            --refresh-status-path "$RUNNER_TEMP/run/refresh_carried_forward.json" \
+            --decision-path "$RUNNER_TEMP/run/readiness_refresh_decision.json" \
+            --github-output "$GITHUB_OUTPUT" \
+            --summary-path "$GITHUB_STEP_SUMMARY"
+
+      - name: Install the production package
+        if: steps.authorise.outputs.refresh_required == 'true'
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Verify the production interpreter is isolated
+        if: steps.authorise.outputs.refresh_required == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/run"
+          python ops/verify_production_interpreter.py \
+            --expected-venv "${{ steps.venv.outputs.venv }}" \
+            --expected-architecture "${{ steps.venv.outputs.architecture }}" \
+            --production-sha "${{ steps.checkout.outputs.sha }}" \
+            --status-path "$RUNNER_TEMP/run/interpreter.json" \
+            --summary-path "$GITHUB_STEP_SUMMARY"
+
+      # Fails closed when no durable backend is configured, exactly as it does
+      # for the lifecycle, so nothing below can half-write production state.
+      - name: Preflight
+        if: steps.authorise.outputs.refresh_required == 'true'
+        env:
+          BDL_API_KEY: ${{ secrets.BDL_API_KEY }}
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+          NBA_PROP_FIT_REGISTRY_DIR: ${{ vars.NBA_PROP_FIT_REGISTRY_DIR }}
+          NBA_PROP_WORK_DIR: ${{ vars.NBA_PROP_WORK_DIR }}
+        run: |
+          set -euo pipefail
+          python ops/production_lifecycle_preflight.py \
+            --mode production \
+            --expected-ref "$PRODUCTION_REF" \
+            --summary-path "$GITHUB_STEP_SUMMARY" \
+            --status-path "$RUNNER_TEMP/run/preflight.json"
+
+      # Re-verifies every frozen artifact on disk against the manifest and
+      # exports FROZEN_RUNTIME_MODEL_DIR / FROZEN_RUNTIME_BUNDLE_ROOT. This is
+      # the step that makes the re-issued receipt mean what the morning one
+      # meant: the runtime it names verified during this job.
+      - name: Install the verified frozen runtime bundle
+        if: steps.authorise.outputs.refresh_required == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NBA_PROP_WORK_DIR: ${{ vars.NBA_PROP_WORK_DIR }}
+        run: |
+          set -euo pipefail
+          python ops/install_frozen_model_artifacts.py \
+            --runtime-root "$NBA_PROP_WORK_DIR" \
+            --repository "$GITHUB_REPOSITORY" \
+            --receipt-path "$RUNNER_TEMP/run/frozen_runtime_bundle.json" \
+            --summary-path "$GITHUB_STEP_SUMMARY" \
+            --github-env "$GITHUB_ENV"
+
+      # The same entry point the morning lifecycle serves with, writing the
+      # same durable receipt in the same place. The only thing that differs is
+      # where the refresh classification came from: this run carries forward
+      # the one the morning run recorded for this slate rather than running a
+      # second same-day refresh, which would classify as no-new-data and be
+      # refused for a reason unrelated to readiness.
+      - name: Re-issue the readiness receipt under the current production SHA
+        if: steps.authorise.outputs.refresh_required == 'true'
+        env:
+          BDL_API_KEY: ${{ secrets.BDL_API_KEY }}
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+          NBA_PROP_FIT_REGISTRY_DIR: ${{ vars.NBA_PROP_FIT_REGISTRY_DIR }}
+        run: |
+          set -euo pipefail
+          python ops/run_incumbent_production_serving.py \
+            --slate-date "${{ steps.slate.outputs.slate_date }}" \
+            --data-root "$NBA_PROP_DATA_DIR" \
+            --registry-root "$NBA_PROP_FIT_REGISTRY_DIR" \
+            --refresh-status "$RUNNER_TEMP/run/refresh_carried_forward.json" \
+            --production-sha "${{ steps.checkout.outputs.sha }}" \
+            --receipt-path "$RUNNER_TEMP/run/incumbent_serving.json" \
+            --model-dir "$FROZEN_RUNTIME_MODEL_DIR" \
+            --frozen-bundle-root "$FROZEN_RUNTIME_BUNDLE_ROOT" \
+            --summary-path "$GITHUB_STEP_SUMMARY"
+
+      # Proves the thing this whole workflow exists to achieve, read back off
+      # the durable receipt rather than assumed from the step above exiting 0.
+      - name: Prove the receipt now describes this production SHA
+        if: steps.authorise.outputs.refresh_required == 'true'
+        env:
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+        run: |
+          set -euo pipefail
+          python ops/assert_production_readiness.py \
+            --slate-date "${{ steps.slate.outputs.slate_date }}" \
+            --data-root "$NBA_PROP_DATA_DIR" \
+            --production-sha "${{ steps.checkout.outputs.sha }}" \
+            --status-path "$RUNNER_TEMP/run/readiness_assertion.json" \
+            --summary-path "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the refresh diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nba-readiness-refresh-${{ github.run_id }}
+          path: ${{ runner.temp }}/run
+          retention-days: 14
+          if-no-files-found: warn
+
+  # The segment that was already running when the merge landed has refused and
+  # abandoned the rest of its windows. Nothing would otherwise pick them up
+  # until the next scheduled segment, so this does.
+  t20_catchup:
+    name: Pick up the rest of this evening's T-20 windows
+    needs: readiness
+    if: >-
+      always()
+      && needs.readiness.result == 'success'
+      && (github.event_name != 'workflow_dispatch' || inputs.t20_catchup)
+    runs-on:
+      - self-hosted
+      - nba-production
+    timeout-minutes: 340
+    environment: wizardofodds-production
+
+    # The group the scheduled T-20 workflow takes. Repository-wide, so this is
+    # what guarantees a catch-up and a scheduled segment never capture the
+    # same window concurrently: whichever starts second waits.
+    concurrency:
+      group: nba-t20-production
+      cancel-in-progress: false
+
+    env:
+      PRODUCTION_REF: ${{ inputs.production_ref || 'production/wizardofodds-integration' }}
+
+    steps:
+      - name: Check out the authoritative production code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.production_ref || 'production/wizardofodds-integration' }}
+          fetch-depth: 0
+
+      - name: Record and verify the production checkout
+        id: checkout
+        run: |
+          set -euo pipefail
+          SHA="$(git rev-parse HEAD)"
+          REF="$(git rev-parse --abbrev-ref HEAD)"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          if [ "$REF" != "$PRODUCTION_REF" ]; then
+            echo "refusing: the checkout is $REF, not the requested $PRODUCTION_REF"
+            exit 1
+          fi
+          # The readiness receipt was re-issued for the SHA that job checked
+          # out. If production moved again in between, this run's code is not
+          # the code that receipt describes and the controller would refuse
+          # anyway; refusing here says why.
+          if [ "$SHA" != "${{ needs.readiness.outputs.sha }}" ]; then
+            echo "refusing: readiness was re-established for ${{ needs.readiness.outputs.sha }} and this checkout is $SHA"
+            exit 1
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Create the run environment
+        id: venv
+        run: |
+          set -euo pipefail
+          VENV="$RUNNER_TEMP/t20-catchup-venv"
+          BOOTSTRAP="$(python -c 'import sys; print(sys.executable)')"
+          "$BOOTSTRAP" -m venv --clear "$VENV"
+          echo "venv=$VENV" >> "$GITHUB_OUTPUT"
+          echo "$VENV/bin" >> "$GITHUB_PATH"
+
+      - name: Install the segment probe's dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install 'httpx>=0.27' 'tenacity>=9.0'
+
+      # The catch-up owns from now to the end of the scheduled segment that
+      # contains now, and not one minute further. Two properties follow and
+      # both matter:
+      #
+      #   - a T-20 window that already passed while readiness was broken is
+      #     before the segment start, so it is outside this segment and the
+      #     controller does not refuse the evening over a window nothing can
+      #     capture any more. It stays uncaptured and visibly missing, which
+      #     is the honest record;
+      #   - the next scheduled segment still owns its own windows, so no
+      #     window is owned by two runs.
+      - name: Resolve the catch-up segment
+        id: segment
+        run: |
+          set -euo pipefail
+          python ops/resolve_t20_catchup_segment.py \
+            --github-output "$GITHUB_OUTPUT" \
+            --summary-path "$GITHUB_STEP_SUMMARY"
+
+      - name: Probe the catch-up segment for uncaptured T-20 work
+        id: probe
+        env:
+          BDL_API_KEY: ${{ secrets.BDL_API_KEY }}
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/t20"
+          python ops/run_t20_production_controller.py \
+            --probe-only \
+            --segment-start-utc "${{ steps.segment.outputs.segment_start_utc }}" \
+            --segment-end-utc "${{ steps.segment.outputs.segment_end_utc }}" \
+            --slate-date "${{ needs.readiness.outputs.slate_date }}" \
+            --data-root "$NBA_PROP_DATA_DIR" \
+            --production-sha "${{ steps.checkout.outputs.sha }}" \
+            --receipt-path "$RUNNER_TEMP/t20/segment_probe.json" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Install the production package
+        if: steps.probe.outputs.t20_work == 'true'
+        run: |
+          set -euo pipefail
+          python -m pip install -e .
+
+      - name: Capture T-20, serve the slate and publish the canary
+        if: steps.probe.outputs.t20_work == 'true'
+        env:
+          BDL_API_KEY: ${{ secrets.BDL_API_KEY }}
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+          NBA_PROP_FIT_REGISTRY_DIR: ${{ vars.NBA_PROP_FIT_REGISTRY_DIR }}
+          NBA_WOO_SSH_PRIVATE_KEY: ${{ secrets.NBA_WOO_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          python ops/run_t20_production_controller.py \
+            --segment-start-utc "${{ steps.probe.outputs.segment_start_utc }}" \
+            --segment-end-utc "${{ steps.probe.outputs.segment_end_utc }}" \
+            --slate-date "${{ steps.probe.outputs.slate_date }}" \
+            --data-root "$NBA_PROP_DATA_DIR" \
+            --registry-root "$NBA_PROP_FIT_REGISTRY_DIR" \
+            --production-sha "${{ steps.checkout.outputs.sha }}" \
+            --run-dir "$RUNNER_TEMP/t20" \
+            --receipt-path "$RUNNER_TEMP/t20/t20_controller.json" \
+            --summary-path "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the segment diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nba-t20-catchup-${{ github.run_id }}
+          path: ${{ runner.temp }}/t20
+          retention-days: 14
+          if-no-files-found: warn
