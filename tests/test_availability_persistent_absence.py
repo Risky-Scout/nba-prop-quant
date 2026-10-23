@@ -341,12 +341,20 @@ def dynamic_params() -> dict:
 def test_slate_builder_emits_a_zero_share_for_a_player_with_no_history(
     dynamic_params: dict,
 ) -> None:
-    """The never-played case end to end: fallback minutes, zero share.
+    """The never-played case end to end: no minutes prior, zero share.
 
     This is the October 20 shape. The roster carries a player the history has
-    never seen, so his minutes prior falls back to the league mean and is
-    emphatically not zero, while his participation share is zero because he
-    appears in no game the survivors' priors were built over.
+    never seen, so his participation share is zero because he appears in no
+    game the survivors' priors were built over.
+
+    His minutes prior is missing rather than the league mean, which is the
+    separate no-history fix one question further down and is asserted here
+    because the two have to compose: the share is what stops a never-played
+    player freeing minutes at all, and it has to keep doing that whatever his
+    own prior says. He still reaches the availability layer with a projected
+    total -- the fitted model scores the row from the rest of its features --
+    so the guard is still the thing standing between that total and his
+    team-mates.
     """
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -383,7 +391,7 @@ def test_slate_builder_emits_a_zero_share_for_a_player_with_no_history(
 
     assert not row.empty, "the slate does not hold the roster newcomer"
     assert row["prior_participation_rate"].item() == pytest.approx(0.0)
-    assert row["prior_minutes10"].item() > 0.0
+    assert pd.isna(row["prior_minutes10"].item())
 
     established = live[live["player_id"].eq(HOME * 10 + 1)]
 

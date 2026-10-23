@@ -204,6 +204,20 @@ SERVING_SOURCE_EXEMPT_FUNCTIONS: tuple[str, ...] = (
 #: count of games, taken at the span the EWM already uses, and the minutes it
 #: governs are the ones the existing elasticity allocation was already
 #: handing out.
+#:
+#: ``NO_APPEARANCE_PRIOR`` is the population names a third time, and the last
+#: place that argument reaches: not which rows a prior averages over, nor what
+#: an absence frees, but what one of those priors is worth when the player has
+#: no appearances to average. ``build_base_frame`` takes ``prior_minutes10``
+#: and every ``prior_*_rate10`` through a lagged EWM, so a first NBA
+#: appearance is fit with all of them missing and the fitted models hold a
+#: learned branch for that row; the live builder substituted the played
+#: population's league mean instead. That is not a neutral stand-in. It is
+#: what a rotation regular's prior looks like, so a player nobody has seen was
+#: scored as one with twenty-three minutes a night behind him. The name states
+#: no value of its own -- it is ``nan``, which is what training already puts
+#: there -- and it cannot reach a probability, a price, an edge, an EV or a
+#: route.
 DECLARED_SERVING_PLUMBING_NAMES: tuple[str, ...] = (
     "frozen_bundle_root",
     "history_games",
@@ -219,6 +233,7 @@ DECLARED_SERVING_PLUMBING_NAMES: tuple[str, ...] = (
     "played_advanced_rows",
     "_prior_window_participation",
     "prior_participation_rate",
+    "NO_APPEARANCE_PRIOR",
 )
 
 #: The serving *orchestrator* a declaration may name, and only additively.
@@ -745,13 +760,46 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: grading entry point's one entry was retired in turn and is owned below,
 #: which is the reason that entry itself gave.
 #:
-#: This branch declares the slate module, the availability module and both
-#: serving-source registries, widens the serving-source carve-out to a second
-#: module and a second exempt function, and widens the slate builder's
-#: plumbing names by two, all named above. What it corrects is the same defect
-#: the carve-out's first two uses corrected, one layer downstream of the
-#: population fix: the appearance-only priors are the right population, and
-#: the availability layer was reading them as a claim they do not make.
+#: The persistent-absence branch's four entries were retired in turn when
+#: they landed. All four -- the slate module, the availability module and both
+#: serving-source registries -- are pre-existing production files that lineage
+#: changed rather than introduced and are recorded nowhere, which is why this
+#: branch declares again the three of them it touches. It does not touch the
+#: availability module, so that entry is retired and not replaced.
+#:
+#: This branch declares the slate module and both serving-source registries,
+#: and widens the slate builder's plumbing names by one, all named above.
+#: What it corrects is the population argument's last stop: not which
+#: player-games a prior averages over, which the played-game population fix
+#: settled, nor what an absence frees, which the branch before this one
+#: settled, but what one of those priors is worth for a player who has no
+#: games to average.
+#:
+#: ``build_base_frame`` takes ``prior_minutes10`` and all eleven
+#: ``prior_*_rate10`` columns through a lagged EWM, so a player's first NBA
+#: appearance is fit with every one of them missing -- 2,542 rows of the
+#: 667,556 the corpus holds -- and the fitted minutes model, an
+#: ``XGBRegressor``, holds a learned branch for exactly that row. The live
+#: builder substituted the played population's mean minutes instead. That is
+#: not a neutral stand-in for a missing value: it is what a rotation
+#: regular's prior looks like, so a player nobody has seen was scored as one
+#: with twenty-three minutes a night behind him. On October 20 every
+#: no-history player was served 23.3218 and the five who appeared were
+#: projected 17.5 to 18.9 minutes against 1, 1, 1, 1 and 11 realized.
+#:
+#: Measured on the frozen minutes model over the first-appearance rows of
+#: 2021-22 through 2024-25, serving the value training states instead moves
+#: the cohort's bias from +8.4003 to +1.0894 minutes, its MAE from 10.4440 to
+#: 5.8860 and its RMSE from 11.3570 to 7.5324, on 417 rows and 333 of them
+#: individually closer. The 2025-26 confirmation, run once after the choice
+#: was frozen, moves bias from +5.9914 to -1.0546, MAE from 8.9409 to 6.1100
+#: and RMSE from 10.0863 to 7.9295 on 103 rows.
+#:
+#: Like the two fixes before it the rule stays where production states it:
+#: ``features.py`` is byte-identical to production, the value served is the
+#: one it already produces, and a player with any appearance at all is
+#: untouched because the condition is ``not games_prior`` and ``games_prior``
+#: is the count the module already computes.
 #:
 #: The population fix itself corrected the fourth instance of one defect: a
 #: feature the fitted models were shown one definition of, served under
@@ -825,46 +873,34 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: column it already was.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
-        "src/nba_prop_quant/availability.py": (
-            "the freed-minute pool is now the minutes the surviving "
-            "team-mates' priors still assign to the absentee, instead of his "
-            "whole projected total. One added condition inside the one exempt "
-            "function, reading prior_participation_rate, which is declared "
-            "serving plumbing. The unweighted sum production has is the line "
-            "above it and is still what runs when the column is absent, so a "
-            "caller that does not supply the share gets production's "
-            "behaviour exactly. Nothing else in the function moves: the "
-            "elasticity weights, the six allocation passes, the 42-minute "
-            "cap, the OUT zeroing and the usage multiplier are "
-            "byte-identical, _is_out and OUT_PATTERNS are outside the "
-            "function and syntax-tree-identical, and every line production "
-            "has survives. No rate model, target model, calibration, PMF, "
-            "price, probability, edge, EV, line or Gate 3 route is computed "
-            "or changed, and a team whose absentees all appeared throughout "
-            "the prior window is adjusted exactly as production adjusts it"
-        ),
         "src/nba_prop_quant/slate.py": (
-            "the live builder now carries each player's share of his team's "
-            "recent games to the availability layer that decides what an "
-            "absence frees. One added statement in the one exempt function "
-            "and one added key in the row it assembles, both naming declared "
-            "plumbing, plus the function they name. The share is computed "
-            "over the same played-game population and the same span the "
-            "minutes priors beside it already use, from the same already-"
-            "leakage-checked history, so it introduces no new input and no "
-            "new window. Every line production has survives and every other "
-            "function in the module is syntax-tree-identical to production, "
-            "which the branch-safety tests pin. No feature definition, "
-            "prior, window, weight, threshold, probability, price, edge, EV, "
-            "quantile, line, distribution, simulation count or routing rule "
-            "is computed or changed, the added column is not in any fitted "
-            "model's feature list and ModelBundle.predict selects by name, "
-            "so no model is shown anything new"
+            "a player with no NBA appearance is now served the value "
+            "training states for an appearance-only prior, which is no "
+            "value, instead of the played population's mean minutes. One "
+            "added condition inside the one exempt function and one added "
+            "module constant, NO_APPEARANCE_PRIOR, which is declared serving "
+            "plumbing and is nan. The lines production has are the two above "
+            "it and both survive, so the substitution is still what runs for "
+            "every player with any appearance at all: the condition is not "
+            "games_prior, and games_prior is the career count the module "
+            "already computes from the same already-leakage-checked, "
+            "already-played-filtered history. build_base_frame takes these "
+            "same columns through a lagged EWM, so a first appearance is fit "
+            "with all of them missing and the fitted minutes model holds a "
+            "learned branch for that row; features.py is byte-identical to "
+            "production and the authority on what the value is. Every other "
+            "function in the module is syntax-tree-identical to production "
+            "and every module constant production has is unmoved, which the "
+            "branch-safety tests pin. No feature definition, prior, window, "
+            "span, weight, threshold, probability, price, edge, EV, "
+            "quantile, line, distribution, simulation count, calibration or "
+            "Gate 3 route is computed or changed, and no fitted artifact is "
+            "touched"
         ),
         "models/frozen_manifests/"
         "nba_prop_quant_v2_adaptive_serving_source_contract.json": (
             "relocks src/nba_prop_quant/slate.py at the bytes above and "
-            "records the second reason that file diverges from the "
+            "records the third reason that file diverges from the "
             "historical reference, which is what this registry exists for: "
             "its own purpose requires every difference to be enumerated and "
             "justified in it. The historical reference hashes are untouched, "

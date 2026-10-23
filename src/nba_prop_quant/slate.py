@@ -53,6 +53,15 @@ GAME_CONTEXT_PROGRESS: tuple[str, ...] = (
     "visitor_season_progress",
 )
 
+# What an appearance-only prior is worth for a player with no appearances.
+# build_base_frame defines prior_minutes10 and every prior_*_rate10 as a
+# lagged EWM over the player's own games, so a player's first NBA appearance
+# is fit with all of them missing and the fitted models hold a learned branch
+# for that row. Missing is the value training states here, not the absence of
+# one, and standing a league average in its place describes a player who has
+# been playing rather than a player nobody has seen.
+NO_APPEARANCE_PRIOR = np.nan
+
 
 class SlateDateError(ValueError):
     """A value could not be resolved to an unambiguous NBA slate date."""
@@ -941,6 +950,22 @@ def build_upcoming_slate_features(
                         player_id,
                         league_rate_prior.get(stat, np.nan),
                     )
+
+                # The population argument the two fixes above make, one
+                # feature value along. Those priors are EWMs over a player's
+                # own appearances, and a player with none has no value for
+                # them: training leaves every one of them missing on a first
+                # appearance, and the models were fit that way. The league
+                # mean the lines above substitute is a number no training row
+                # in this condition ever carried, and it is not a neutral one
+                # -- it is what a rotation regular's prior looks like, so a
+                # debut was being scored as a player with twenty-three
+                # minutes a night behind him. The 23.32 the models saw for
+                # every no-history player on October 20 is that number.
+                if not games_prior:
+                    row["prior_minutes10"] = NO_APPEARANCE_PRIOR
+                    for stat in player_rate_maps:
+                        row[f"prior_{stat}_rate10"] = NO_APPEARANCE_PRIOR
 
                 row.update(team_context.get(team_id, {}))
                 opp_context = team_context.get(opponent_id, {})
