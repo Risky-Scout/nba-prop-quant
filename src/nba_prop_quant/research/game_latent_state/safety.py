@@ -788,12 +788,17 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: rather than introduced and are recorded nowhere, so touching any of them
 #: again requires declaring it again.
 #:
-#: This branch declares the capture entry point and both serving-source
-#: registries, and widens the capture entry point's selection names by one,
-#: all named above. It is the first use of the capture carve-out for a
-#: defect rather than for an argument, and the defect is one the carve-out's
-#: own text did not anticipate: not what the collector captures, nor which
-#: window it captures, but what happens when two sweeps capture at once.
+#: This branch declares the capture entry point, the T-20 controller and
+#: both serving-source registries, and widens the capture entry point's
+#: selection names by one, all named above. The controller is owned below,
+#: which is the reason it is declared again. The two defects it fixes are
+#: the two halves of one evening: the first made a window unpriceable, the
+#: second made that invisible and permanent.
+#:
+#: The first is the capture carve-out's first use for a defect rather than
+#: for an argument, and the defect is one the carve-out's own text did not
+#: anticipate: not what the collector captures, nor which window it
+#: captures, but what happens when two sweeps capture at once.
 #:
 #: A scheduled sweep decides which windows are unclaimed by reading the
 #: capture-run log, then collects for as long as the slate takes, then
@@ -834,8 +839,66 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: EV, quantile, line, distribution, calibration, dependence coefficient,
 #: Gate 3 route or publication rule is computed or changed anywhere in this
 #: change, and no fitted artifact is touched.
+#:
+#: The second defect is the durability one, and it is the one that made the
+#: first unrecoverable. Completion was recorded on capture and nowhere else:
+#: ``completed_window_ids`` reads the collector's capture log, and both the
+#: collector and the controller treat a window in it as done. That is right
+#: for capture, which is the input, and wrong for the question a run is
+#: answering, which is whether anybody was served. So a run that captured a
+#: window and then died in serving left that window indistinguishable from
+#: one a release carried. The next run's probe saw it under
+#: ``already_completed_windows``, found nothing pending, and exited a green
+#: no-op. Three games were captured, marked complete, never priced, and
+#: absent from the published feed with nothing anywhere saying which three.
+#:
+#: Publication is now recorded too, separately and durably, as an
+#: append-only row per published release under
+#: ``<data_root>/processed/t20_served_windows/``. The capture log is not
+#: touched and stays the capture authority: this is a second fact beside it,
+#: not a rewrite of it. A window that is captured and that no row names is
+#: reported by the probe, named in the receipt and shown in the job summary,
+#: makes the probe ask for the full job, and is recovered by the next run --
+#: which verifies the existing captures through ``select_capture_bundle``
+#: and then runs the same serving and publication entry points, with no
+#: collector invocation and nothing slept for. Nothing in it can fabricate,
+#: re-time or relabel a snapshot, and a window with no capture is not made
+#: recoverable by any of it. A segment that nonetheless ends with such a
+#: window reports ``T20_CAPTURED_WINDOWS_UNSERVED`` and exits non-zero,
+#: which is the first thing that has ever consulted ``OUTCOMES_THAT_SUCCEED``.
+#:
+#: No workflow changes. The probe already decides whether the heavy job
+#: starts, so teaching it that an unpublished capture is work keeps the
+#: schedule the production branch runs byte-identical.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
+        "ops/run_t20_production_controller.py": (
+            "a T-20 window that was captured and that no release carries is "
+            "now a state the controller can see, report and recover from. "
+            "Publication is recorded on publication, as an append-only row "
+            "per published release under processed/t20_served_windows/, "
+            "beside the morning receipt this controller already reads from "
+            "the same durable data root. The collector's capture log is not "
+            "written, read differently or depended on less: it remains the "
+            "capture authority and completed_window_ids is unchanged. plan() "
+            "gains the slate-wide set of captured-but-unpublished windows, "
+            "run() serves and publishes them before its own group work with "
+            "no collector invocation and no sleep, the probe reports them "
+            "and asks for the job, the receipt and the summary name them, a "
+            "refusal carries them out with it, and a segment that still has "
+            "one reports T20_CAPTURED_WINDOWS_UNSERVED and exits non-zero. "
+            "Recovery proves the capture through _verify_captured, which is "
+            "select_capture_bundle, so a capture that is not exactly one "
+            "scheduled pre-tip capture of that window with matching "
+            "component digests refuses here rather than being published. "
+            "Nothing here captures, so nothing here can fabricate, re-time "
+            "or relabel a snapshot or let a later snapshot stand in for a "
+            "T-20 one. No existing refusal, outcome, readiness check, "
+            "ordering or publication idempotency rule is removed or "
+            "weakened, publication stays canary-only with no mode argument, "
+            "and no probability, price, edge, EV, model, calibration or "
+            "Gate 3 route is computed anywhere in this file"
+        ),
         "scripts/11_collect_snapshots.py": (
             "two scheduled sweeps of one slate can no longer both record a "
             "claim to the same capture window. One added context manager, "

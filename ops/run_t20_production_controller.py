@@ -129,6 +129,36 @@ PUBLICATION_ENTRY_POINT = Path("ops") / "run_wizardofodds_publication.py"
 #: make every scheduled run an activation decision.
 PUBLICATION_MODE = "canary"
 
+#: Where this controller durably records which T-20 windows a published
+#: release actually carried.
+#:
+#: Completion was recorded on capture and nowhere else. ``completed_window_ids``
+#: reads the collector's append-only capture-run log, and both the collector
+#: and :meth:`T20Controller.plan` treat a window in it as done -- which is
+#: right for *capture* and wrong for the question a run has to answer, because
+#: the capture is the input to serving rather than the result of it. A run that
+#: captured a window and then died before publishing left that window looking
+#: identical to one that had been served, so the next run saw it in
+#: ``already_completed_windows``, had nothing pending, and exited a green no-op.
+#:
+#: That is how 2026-10-23 ended. The 01:40Z window for the three games tipping
+#: at 02:00 UTC was captured, serving raised on the duplicate capture above,
+#: and the scheduled run twenty seconds later reported success with nine of
+#: twelve games published and no statement anywhere about the other three.
+#:
+#: So publication is recorded too, separately and durably: one row per
+#: successful publication, beside the morning receipt in the same durable data
+#: root, append-only for the same reason the capture log is. The capture log is
+#: untouched and remains the capture authority -- nothing here may retract,
+#: re-time or relabel a snapshot, and a window with no capture is not made
+#: recoverable by anything in this file.
+SERVED_WINDOWS_RELATIVE = Path("processed") / "t20_served_windows"
+
+#: The row type in that ledger, so a reader can tell its rows from anything a
+#: later writer adds to the same tree, exactly as ``snapshot_type`` does for
+#: the capture log.
+SERVED_RECORD_TYPE = "t20_windows_served"
+
 #: Where the morning lifecycle's own serving receipt is durably kept. Written
 #: by the lifecycle's grading step, which copies the run-temporary receipt
 #: into the durable data root so a slate can be graded on a later day. That
@@ -185,6 +215,13 @@ OUTCOME_MISSED_WINDOW = "MISSED_T20_WINDOW"
 OUTCOME_UNSUPPORTED_TIME = "UNSUPPORTED_T20_TIME"
 OUTCOME_FAILED = "T20_CONTROLLER_FAILED"
 
+#: A segment that finishes with a capture of this slate that no release
+#: carries. Distinguished from every refusal above because nothing refused:
+#: the capture is sound, the recovery was attempted, and it did not get all
+#: the way to a publication. It is not a success either, which is the whole
+#: point -- the state it names is the one that was previously invisible.
+OUTCOME_CAPTURED_NOT_SERVED = "T20_CAPTURED_WINDOWS_UNSERVED"
+
 OUTCOMES_THAT_SUCCEED: frozenset[str] = frozenset(
     {OUTCOME_NO_WINDOWS, OUTCOME_SEGMENT_COMPLETE}
 )
@@ -198,12 +235,21 @@ EXIT_FAILED = 1
 
 
 class ControllerRefused(RuntimeError):
-    """A fail-closed refusal carrying the outcome it must be reported as."""
+    """A fail-closed refusal carrying the outcome it must be reported as.
+
+    It also carries what the run was leaving behind. A refusal that happens
+    after a capture is the case that cost 2026-10-23 three games, and the
+    receipt it wrote said only that serving had failed -- so the windows the
+    run had captured and would never publish were named nowhere, by the run
+    that lost them or by the one that followed it.
+    """
 
     def __init__(self, outcome: str, message: str) -> None:
         super().__init__(message)
 
         self.outcome = outcome
+
+        self.captured_unserved_windows: list[str] = []
 
 
 # ----------------------------------------------------------------------
@@ -422,6 +468,44 @@ def completed_window_ids(capture_run_path: Path) -> set[str]:
             completed.add(str(window_id))
 
     return completed
+
+
+def served_window_ids(served_path: Path) -> set[str]:
+    """The windows some published release of this slate actually carried.
+
+    The second half of "is this window done", and the half nothing recorded.
+    :func:`completed_window_ids` answers whether a capture exists, which is a
+    fact about the input; this answers whether that input ever reached a
+    reader, which is the fact a run is actually responsible for.
+
+    Read the same way and for the same reason: an append-only log of what
+    happened, tolerant of a line a killed process never finished writing,
+    because a torn last line must not hide the rows before it.
+    """
+    if not served_path.exists():
+        return set()
+
+    served: set[str] = set()
+
+    for line in served_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+
+        if not isinstance(row, dict):
+            continue
+
+        if row.get("record_type") != SERVED_RECORD_TYPE:
+            continue
+
+        for window_id in row.get("window_ids") or []:
+            served.add(str(window_id))
+
+    return served
 
 
 def resolve_snapshot_dir(data_root: Path) -> Path:
@@ -765,7 +849,15 @@ class T20Controller:
             self.snapshot_dir / "capture_runs" / f"{self.slate_date}.jsonl"
         )
 
+        self.served_path = (
+            self.data_root
+            / SERVED_WINDOWS_RELATIVE
+            / f"{self.slate_date}.jsonl"
+        )
+
         self.captures: list[dict[str, Any]] = []
+        self.recovered: list[dict[str, Any]] = []
+        self.publications: list[dict[str, Any]] = []
         self.serving: list[dict[str, Any]] = []
         self.distributions: list[dict[str, Any]] = []
         self.feed: list[dict[str, Any]] = []
@@ -819,6 +911,14 @@ class T20Controller:
             row for row in owned if str(row["window_id"]) not in completed
         ]
 
+        # Slate-wide rather than segment-wide, and deliberately. A window
+        # captured and never published was lost by whichever run owned it,
+        # and the run that can do something about it is any later one --
+        # including one in a different segment. Scoping this to the segment
+        # would mean the only run allowed to recover a window is the one that
+        # already failed to publish it.
+        unserved = self._unserved_rows(rows, completed=completed)
+
         return {
             "games_discovered": len(games),
             "t20_windows_for_slate": [str(row["window_id"]) for row in rows],
@@ -830,10 +930,38 @@ class T20Controller:
                 for row in owned
                 if str(row["window_id"]) in completed
             ),
+            "captured_unserved_windows": [
+                str(row["window_id"]) for row in unserved
+            ],
             "pending_windows": [str(row["window_id"]) for row in pending],
             "rows": rows,
             "pending_rows": pending,
+            "unserved_rows": unserved,
         }
+
+    def _unserved_rows(
+        self,
+        rows: Sequence[dict[str, Any]],
+        *,
+        completed: set[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """This slate's windows that are captured and that nothing published.
+
+        Both facts are read from durable state rather than from this run's
+        own memory, because the run that left a window in this state is by
+        construction a run that did not get to write a receipt.
+        """
+        if completed is None:
+            completed = completed_window_ids(self.capture_run_path)
+
+        served = served_window_ids(self.served_path)
+
+        return [
+            row
+            for row in rows
+            if str(row["window_id"]) in completed
+            and str(row["window_id"]) not in served
+        ]
 
     # -- the segment ---------------------------------------------------
 
@@ -842,7 +970,7 @@ class T20Controller:
 
         plan = self.plan()
 
-        if not plan["pending_rows"]:
+        if not plan["pending_rows"] and not plan["unserved_rows"]:
             return self._receipt(
                 plan=plan,
                 started_at=started_at,
@@ -850,8 +978,10 @@ class T20Controller:
                 reason=(
                     f"the segment {self.segment_start.isoformat()} to "
                     f"{self.segment_end.isoformat()} contains no uncaptured "
-                    f"T-{self.offset_minutes} window for {self.slate_date}, "
-                    "so no capture, serving or publication was performed"
+                    f"T-{self.offset_minutes} window for {self.slate_date} "
+                    "and no capture of that slate is waiting to be "
+                    "published, so no capture, serving or publication was "
+                    "performed"
                 ),
             )
 
@@ -864,7 +994,48 @@ class T20Controller:
             project_root=self.project_root,
         )
 
-        self._work(plan, readiness)
+        # Recovery first. These windows are already past their T-20 time, so
+        # nothing is gained by making them wait behind a group that is still
+        # in the future, and the games they belong to may be about to tip.
+        try:
+            if plan["unserved_rows"]:
+                self._recover(plan["unserved_rows"], readiness=readiness)
+
+            self._work(plan, readiness)
+        except ControllerRefused as error:
+            # A refusal after a capture is the shape the incident had. The
+            # refusal itself stands -- nothing is downgraded and nothing is
+            # retried here -- but it leaves with the windows it is
+            # abandoning attached, so the receipt and the job summary name
+            # them instead of the operator having to read the capture log
+            # against the published feed.
+            error.captured_unserved_windows = [
+                str(row["window_id"])
+                for row in self._unserved_rows(plan["rows"])
+            ]
+
+            raise
+
+        outstanding = [
+            str(row["window_id"])
+            for row in self._unserved_rows(plan["rows"])
+        ]
+
+        if outstanding:
+            return self._receipt(
+                plan=plan,
+                started_at=started_at,
+                outcome=OUTCOME_CAPTURED_NOT_SERVED,
+                reason=(
+                    f"{len(outstanding)} T-{self.offset_minutes} capture(s) "
+                    f"of {self.slate_date} exist and no release carries "
+                    f"them: {', '.join(outstanding)}. The captures are "
+                    "sound and stay exactly as they were taken; a later run "
+                    "will serve and publish from them without recapturing. "
+                    "This segment is not reported as a success"
+                ),
+                readiness=readiness,
+            )
 
         return self._receipt(
             plan=plan,
@@ -872,11 +1043,67 @@ class T20Controller:
             outcome=OUTCOME_SEGMENT_COMPLETE,
             reason=(
                 f"{len(self.captures)} T-{self.offset_minutes} capture(s) "
-                f"completed for {self.slate_date}, each served and published "
-                "to the canary destination"
+                f"completed for {self.slate_date}"
+                + (
+                    f" and {len(plan['captured_unserved_windows'])} earlier "
+                    "capture(s) recovered"
+                    if self.recovered
+                    else ""
+                )
+                + ", each served and published to the canary destination"
             ),
             readiness=readiness,
         )
+
+    def _recover(
+        self, rows: Sequence[dict[str, Any]], *, readiness: dict[str, Any]
+    ) -> None:
+        """Publish captures an earlier run made and never got to publish.
+
+        No collector is invoked and nothing sleeps. The windows are past
+        their T-20 time by definition -- that is what makes them
+        unrecoverable by capture -- and a snapshot taken now would be a
+        snapshot of now, so there is nothing here that could produce one,
+        relabel one or re-time one. What this does is exactly what a second
+        due group in the same segment already does: prove the existing
+        captures are the ones pricing accepts, then run the same serving and
+        publication entry points over the slate, which enumerate every
+        eligible capture and publish the whole priced artifact.
+
+        The proof is :meth:`_verify_captured`, which is ``select_capture_bundle``
+        and therefore still requires exactly one scheduled capture per
+        window, no recorded errors, every component digest recomputed and
+        the capture pre-tip. A capture that has stopped being eligible
+        refuses here rather than being published.
+        """
+        stage_dir = self.run_dir / "recovery"
+
+        stage_dir.mkdir(parents=True, exist_ok=True)
+
+        window_ids = sorted(str(row["window_id"]) for row in rows)
+
+        game_ids = sorted(int(row["game_id"]) for row in rows)
+
+        bundles = self._verify_captured(game_ids, window_ids=window_ids)
+
+        self.recovered.append(
+            {
+                "capture_ids": sorted(
+                    {bundle["capture_id"] for bundle in bundles}
+                ),
+                "game_ids": game_ids,
+                "recovered_at_utc": self.clock().isoformat(),
+                "reason": (
+                    "these windows were captured by an earlier run that did "
+                    "not publish them, so they are served from the captures "
+                    "that already exist"
+                ),
+                "verified_bundles": bundles,
+                "window_ids": window_ids,
+            }
+        )
+
+        self._serve_and_publish(stage_dir, readiness=readiness)
 
     def _work(self, plan: dict[str, Any], readiness: dict[str, Any]) -> None:
         rows = {str(row["window_id"]): row for row in plan["pending_rows"]}
@@ -1277,6 +1504,15 @@ class T20Controller:
                     }
                 )
 
+            # Still recorded as served. Byte-identical priced output is the
+            # evidence that the release already published carries exactly
+            # these windows; skipping the ledger row here would leave them
+            # looking unpublished and send the next run round again.
+            self._record_served_windows(
+                publication_outcome=PUBLICATION_OUTCOME_SKIPPED,
+                priced_digest=priced_digest,
+            )
+
             return
 
         feed_command = [
@@ -1364,7 +1600,68 @@ class T20Controller:
             }
         )
 
+        self._record_served_windows(
+            publication_outcome=PUBLICATION_OUTCOME_PUBLISHED,
+            priced_digest=priced_digest,
+            release_id=self.feed[-1]["release_id"],
+            page_sha256=self.page[-1]["page_sha256"],
+        )
+
         self._published_priced_digest = priced_digest or None
+
+    def _record_served_windows(
+        self,
+        *,
+        publication_outcome: str,
+        priced_digest: str,
+        release_id: str = "",
+        page_sha256: str = "",
+    ) -> None:
+        """Write down which T-20 windows the release just published carries.
+
+        Every T-20 window the capture log holds for this slate, because that
+        is exactly the set serving consumed: ``ProspectiveSnapshotClient``
+        enumerates the scheduled windows at this offset in that log and
+        builds a bundle for every one of them with no branch that skips one,
+        ``15_price_markets.py`` rewrites the whole priced artifact, and the
+        feed publishes every row in it. A window the capture log holds that
+        serving could not have used would have refused the run rather than
+        reaching this line.
+
+        Appended and fsynced, one row, never rewritten. The claim it makes
+        is about what a release carried, so a row may not be withdrawn by a
+        later run any more than a capture may.
+        """
+        windows = sorted(
+            window_id
+            for window_id in completed_window_ids(self.capture_run_path)
+            if window_id.endswith(f":T-{self.offset_minutes}m")
+        )
+
+        row = {
+            "offset_minutes": self.offset_minutes,
+            "page_sha256": str(page_sha256),
+            "priced_market_artifact_sha256": str(priced_digest or ""),
+            "production_sha": self.production_sha,
+            "publication_mode": PUBLICATION_MODE,
+            "publication_outcome": str(publication_outcome),
+            "record_type": SERVED_RECORD_TYPE,
+            "recorded_at_utc": self.clock().isoformat(),
+            "release_id": str(release_id),
+            "slate_date": self.slate_date,
+            "window_ids": windows,
+        }
+
+        self.served_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with self.served_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(row, sort_keys=True) + "\n")
+
+            handle.flush()
+
+            os.fsync(handle.fileno())
+
+        self.publications.append(row)
 
     def _read_receipt(self, path: Path, *, what: str) -> dict[str, Any]:
         if not path.exists():
@@ -1402,6 +1699,15 @@ class T20Controller:
 
         return {
             "already_completed_windows": plan["already_completed_windows"],
+            # What a run that captured and did not publish leaves behind,
+            # stated after the work rather than copied from the plan: the
+            # whole point is whether anything is *still* in that state.
+            "captured_unserved_windows": [
+                str(row["window_id"])
+                for row in self._unserved_rows(plan["rows"])
+            ],
+            "recovered_windows": self.recovered,
+            "served_window_records": self.publications,
             "capture_ids": sorted(
                 {
                     capture_id
@@ -1463,6 +1769,20 @@ def render(receipt: dict[str, Any]) -> str:
         (
             "already captured",
             ", ".join(receipt.get("already_completed_windows") or [])
+            or "none",
+        ),
+        (
+            "recovered without recapture",
+            ", ".join(
+                window_id
+                for record in receipt.get("recovered_windows") or []
+                for window_id in record.get("window_ids") or []
+            )
+            or "none",
+        ),
+        (
+            "captured but unserved",
+            ", ".join(receipt.get("captured_unserved_windows") or [])
             or "none",
         ),
         ("captures completed", receipt.get("captures_completed")),
@@ -1642,9 +1962,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
     return {
         "already_completed_windows": plan["already_completed_windows"],
+        "captured_unserved_windows": plan["captured_unserved_windows"],
         "final_outcome": (
             OUTCOME_NO_WINDOWS
-            if not plan["pending_rows"]
+            if not plan["pending_rows"] and not plan["unserved_rows"]
             else "T20_WORK_IN_SEGMENT"
         ),
         "games_discovered": plan["games_discovered"],
@@ -1656,6 +1977,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             f"{len(plan['pending_windows'])} uncaptured "
             f"T-{controller.offset_minutes} window(s) fall in "
             f"{segment_start.isoformat()} to {segment_end.isoformat()}"
+            + (
+                f", and {len(plan['captured_unserved_windows'])} captured "
+                f"window(s) of {slate_date} are not carried by any "
+                "release and can be served from the captures that already "
+                "exist"
+                if plan["captured_unserved_windows"]
+                else ""
+            )
         ),
         "segment_end_utc": segment_end.isoformat(),
         "segment_start_utc": segment_start.isoformat(),
@@ -1670,15 +1999,23 @@ def _github_output(args: argparse.Namespace, receipt: dict[str, Any]) -> None:
 
     pending = receipt.get("pending_windows") or []
 
+    # A captured window no release carries is work in this segment too, and
+    # it is work the probe has to ask for: the full job is what has the
+    # environment to serve and publish from an existing capture, and the
+    # probe is the only thing that can start it. Expressed here rather than
+    # in the workflow so the schedule the production branch runs is unchanged.
+    unserved = receipt.get("captured_unserved_windows") or []
+
     _write(
         args.github_output,
         "\n".join(
             [
-                f"t20_work={'true' if pending else 'false'}",
+                f"t20_work={'true' if pending or unserved else 'false'}",
                 f"segment_start_utc={receipt['segment_start_utc']}",
                 f"segment_end_utc={receipt['segment_end_utc']}",
                 f"slate_date={receipt['slate_date']}",
                 f"pending_windows={len(pending)}",
+                f"captured_unserved_windows={len(unserved)}",
             ]
         )
         + "\n",
@@ -1695,7 +2032,10 @@ def main(argv: list[str] | None = None) -> int:
     except (ControllerRefused, OSError) as error:
         outcome = getattr(error, "outcome", OUTCOME_FAILED)
 
+        unserved = list(getattr(error, "captured_unserved_windows", []) or [])
+
         failure = {
+            "captured_unserved_windows": unserved,
             "error": type(error).__name__,
             "final_outcome": outcome,
             "message": str(error),
@@ -1711,7 +2051,16 @@ def main(argv: list[str] | None = None) -> int:
 
         _write(
             args.summary_path,
-            f"## NBA T-20 production controller\n\n{outcome}: {error}\n",
+            f"## NBA T-20 production controller\n\n{outcome}: {error}\n"
+            + (
+                "\ncaptured but unserved: "
+                + ", ".join(unserved)
+                + ". These captures exist and no release carries them; a "
+                "later run of this controller will serve and publish from "
+                "them without recapturing.\n"
+                if unserved
+                else ""
+            ),
             append=True,
         )
 
@@ -1732,6 +2081,17 @@ def main(argv: list[str] | None = None) -> int:
         _write(args.summary_path, render(receipt), append=True)
 
     print(json.dumps(receipt, indent=2, sort_keys=True))
+
+    # The probe reports work rather than performing it, so "there is work"
+    # is its success. For a segment run, OUTCOMES_THAT_SUCCEED is the list
+    # of endings that are actually an ending -- it has always said so and
+    # nothing consulted it, which is how a segment that captured three games
+    # and published none of them exited 0.
+    if (
+        not args.probe_only
+        and receipt.get("final_outcome") not in OUTCOMES_THAT_SUCCEED
+    ):
+        return EXIT_FAILED
 
     return EXIT_OK
 
