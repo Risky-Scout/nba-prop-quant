@@ -340,6 +340,41 @@ ADDITIVE_ONLY_CAPTURE_ENTRY_POINTS: tuple[str, ...] = (
     "scripts/11_collect_snapshots.py",
 )
 
+#: The deployment-integrity tool under ``scripts/`` that packages the frozen
+#: model rather than computing anything with it.
+#:
+#: ``scripts/`` was undeclarable apart from the serving entry points and the
+#: collector, and the same conflation that made those unfixable made this one
+#: unfixable too: it reads the same for the numbers a script computes and the
+#: bytes a script verifies. This script computes nothing. Its own module
+#: docstring states it "performs no training, fitting, selection or
+#: recalibration, and it never contacts an external API", a test pins that it
+#: cannot reach the network at all, and nothing on the serving path imports
+#: it. What it does is verify and archive the already-frozen model, so the
+#: lifecycle has a bundle to install.
+#:
+#: It could not do that. It verified the nine files
+#: :data:`DECLARABLE_SERVING_SOURCE_REGISTRIES`' first entry locks against the
+#: architecture reference alone, and three of them had been corrected under
+#: that very registry, so every build refused. The refusal was unsatisfiable
+#: rather than merely strict: two of those corrections add the
+#: ``--frozen-bundle-root`` argument without which the entry points resolve
+#: the frozen manifest against the working directory, so the only tree able to
+#: serve was the one tree it would not package. The registry's own
+#: ``known_limitation`` named teaching this script about it as the deferred
+#: deployment obligation, and a declaration was the only reviewed way in.
+#:
+#: So it is declarable, and the carve-out is narrower in risk than the three
+#: before it, because the file is not on the serving path and holds no model
+#: state. The rest of ``scripts/`` remains undeclarable, and what this script
+#: may do with the registry is itself bounded: a library module under ``src/``
+#: that the historical runtime contract byte-pins can never be relocked, so
+#: the mathematics stays pinned to the architecture reference and no
+#: declaration here can move it.
+DECLARABLE_DEPLOYMENT_PACKAGING_TOOLS: tuple[str, ...] = (
+    "scripts/19_build_wizardofodds_runtime_bundle.py",
+)
+
 #: The only functions in the declared capture entry point whose bodies may
 #: differ from production. ``parse_args`` is where the offset argument is
 #: declared and ``main`` is where it narrows the due list; computing the
@@ -357,15 +392,30 @@ CAPTURE_ENTRY_POINT_EXEMPT_FUNCTIONS: tuple[str, ...] = (
 #: whose subject is which windows a scheduled capture records. The way this
 #: exemption would widen is by coming to change *what* is captured rather than
 #: *which window* it is recorded against, and the defence is that each added
-#: statement has to name one of these. All of them are the offset narrowing:
-#: the argument under both the spellings it appears in, the validator that
-#: refuses an offset the schedule does not define, and the local the due list
-#: is filtered by.
+#: statement has to name one of these. The first four are the offset
+#: narrowing: the argument under both the spellings it appears in, the
+#: validator that refuses an offset the schedule does not define, and the
+#: local the due list is filtered by.
+#:
+#: ``capture_window_claim`` is the same subject read from the other side, and
+#: the only name here that is about concurrency rather than selection. Which
+#: windows a sweep records was decided by reading ``completed_window_ids``,
+#: collecting, and then appending, with nothing holding the capture-run log
+#: across the three. Two sweeps whose collections overlap therefore both read
+#: a window as unclaimed and both record it, and ``select_capture_bundle``
+#: refuses an ambiguous window permanently, because the log is append-only
+#: and both captures are genuine. On 2026-10-23 that cost three games every
+#: prediction they would have had. The name is an exclusive ``flock`` held
+#: across the sweep and nothing else: it captures no component the collector
+#: did not already capture, writes no key the envelope did not already have,
+#: moves no digest, no grace window and no due-window rule, and decides only
+#: which of two simultaneous sweeps is the one that records.
 DECLARED_CAPTURE_SELECTION_NAMES: tuple[str, ...] = (
     "--offset-minutes",
     "offset_minutes",
     "selected_offsets",
     "offsets",
+    "capture_window_claim",
 )
 
 #: The *publication transport* a declaration may name, and only additively.
@@ -767,153 +817,96 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: branch declares again the three of them it touches. It does not touch the
 #: availability module, so that entry is retired and not replaced.
 #:
-#: This branch declares the slate module and both serving-source registries,
-#: and widens the slate builder's plumbing names by one, all named above.
-#: What it corrects is the population argument's last stop: not which
-#: player-games a prior averages over, which the played-game population fix
-#: settled, nor what an absence frees, which the branch before this one
-#: settled, but what one of those priors is worth for a player who has no
-#: games to average.
+#: The no-appearance-prior branch's three entries were retired in turn when
+#: they landed. All three -- the slate module and both serving-source
+#: registries -- are pre-existing production files that lineage changed
+#: rather than introduced and are recorded nowhere, so touching any of them
+#: again requires declaring it again.
 #:
-#: ``build_base_frame`` takes ``prior_minutes10`` and all eleven
-#: ``prior_*_rate10`` columns through a lagged EWM, so a player's first NBA
-#: appearance is fit with every one of them missing -- 2,542 rows of the
-#: 667,556 the corpus holds -- and the fitted minutes model, an
-#: ``XGBRegressor``, holds a learned branch for exactly that row. The live
-#: builder substituted the played population's mean minutes instead. That is
-#: not a neutral stand-in for a missing value: it is what a rotation
-#: regular's prior looks like, so a player nobody has seen was scored as one
-#: with twenty-three minutes a night behind him. On October 20 every
-#: no-history player was served 23.3218 and the five who appeared were
-#: projected 17.5 to 18.9 minutes against 1, 1, 1, 1 and 11 realized.
+#: This branch declares the capture entry point, the T-20 controller and
+#: both serving-source registries, and widens the capture entry point's
+#: selection names by one, all named above. The controller is owned below,
+#: which is the reason it is declared again. The two defects it fixes are
+#: the two halves of one evening: the first made a window unpriceable, the
+#: second made that invisible and permanent.
 #:
-#: Measured on the frozen minutes model over the first-appearance rows of
-#: 2021-22 through 2024-25, serving the value training states instead moves
-#: the cohort's bias from +8.4003 to +1.0894 minutes, its MAE from 10.4440 to
-#: 5.8860 and its RMSE from 11.3570 to 7.5324, on 417 rows and 333 of them
-#: individually closer. The 2025-26 confirmation, run once after the choice
-#: was frozen, moves bias from +5.9914 to -1.0546, MAE from 8.9409 to 6.1100
-#: and RMSE from 10.0863 to 7.9295 on 103 rows.
+#: The first is the capture carve-out's first use for a defect rather than
+#: for an argument, and the defect is one the carve-out's own text did not
+#: anticipate: not what the collector captures, nor which window it
+#: captures, but what happens when two sweeps capture at once.
 #:
-#: Like the two fixes before it the rule stays where production states it:
-#: ``features.py`` is byte-identical to production, the value served is the
-#: one it already produces, and a player with any appearance at all is
-#: untouched because the condition is ``not games_prior`` and ``games_prior``
-#: is the count the module already computes.
+#: A scheduled sweep decides which windows are unclaimed by reading the
+#: capture-run log, then collects for as long as the slate takes, then
+#: appends its own claim. Nothing holds the log across those three steps, so
+#: two sweeps whose collections overlap both read the window as unclaimed
+#: and both record it. ``select_capture_bundle`` requires exactly one
+#: scheduled capture per window and refuses two, which is correct and which
+#: is permanent: the log is append-only, both captures are genuine
+#: point-in-time data, and nothing may retract or relabel either. The window
+#: becomes unpriceable for the rest of the slate's life.
 #:
-#: The population fix itself corrected the fourth instance of one defect: a
-#: feature the fitted models were shown one definition of, served under
-#: another. The first three
-#: were definitions -- the competition-regime flags, then
-#: ``season_progress``. This one is the population every definition is taken
-#: over. ``build_base_frame`` opens by keeping only the player-games with
-#: minutes on them, so every rolling prior, decay state and Kalman state the
-#: models were fit on is an average over appearances. BALLDONTLIE returns a
-#: row per rostered player, the live builder read that table whole, and so
-#: every game a player missed entered his per-minute EWMs as a zero and his
-#: minutes EWM as a zero.
+#: That is not hypothetical. On 2026-10-23 a catch-up run and the scheduled
+#: segment run both swept the 01:40Z window, serving raised
+#: ``21717943:T-20m: expected exactly one scheduled capture, found 2``, and
+#: the three games tipping at 02:00 UTC were captured, marked complete and
+#: never priced. The published canary carried nine of the slate's twelve
+#: games and nothing in either run's receipt said which three were missing.
 #:
-#: Like ``season_progress``, it refused nothing and announced nothing: it
-#: served the models numbers they were not fit on. Unlike it, the error has a
-#: direction, because every target here is a count and the contamination can
-#: only subtract -- and it is selective, because it scales with how much of a
-#: player's recent history is absence. So the durable players were priced
-#: correctly, the absence-prone ones were marked down, and the output read as
-#: a model with a view on the under rather than as a model with a defect. On
-#: opening night, when every player's most recent rows are the end of a
-#: season he may have missed, that is most of the slate.
+#: The fix is an exclusive ``flock`` on a lock file beside the capture-run
+#: log, taken before the log is read and released after the claim is
+#: appended, so the second sweep reads the claim set the first one left
+#: rather than the one it found and captures nothing. It is held across the
+#: collection rather than only across the append because a capture's
+#: component digests are recomputed from every row carrying its
+#: ``captured_at``: two sweeps invoked with the same instant write into one
+#: another's digests whatever either of them claims, so claiming later would
+#: have replaced an ambiguous window with a corrupt one. The wait is bounded
+#: by the capture grace window, which is the span in which a due window may
+#: legitimately be captured at all, and a sweep that cannot get the claim
+#: inside it refuses and exits non-zero rather than appending a second claim.
 #:
-#: The fix is the one the carve-out exists for and the same shape as the last
-#: two: the rule stays where production states it, and only training's own
-#: population reaches the path that serves it. ``features.py``, ``decay.py``,
-#: ``kalman.py``, ``game_context.py``, ``model.py``, ``production.py``,
-#: ``pricing.py`` and ``distributions.py`` are all byte-identical to
-#: production, which the branch-safety tests and the targeted tests both pin.
-#: No feature definition, window, weight, threshold, distribution, price,
-#: probability, simulation count, Gate 3 route, calibration or publication
-#: rule is touched anywhere in this change. No fitted artifact moves. What
-#: changes is which player-games the live builder averages over, and it
-#: changes to the set training averaged over.
+#: Nothing about what is captured moves. Every component, every API call,
+#: every digest, the grace window, the due-window rule and all sixteen keys
+#: of the ``capture_run`` envelope are the ones production has, which the
+#: branch-safety tests and the capture-policy tests both pin; every function
+#: in the file except ``parse_args`` and ``main`` is syntax-tree-identical to
+#: production and neither of those lost a line. No probability, price, edge,
+#: EV, quantile, line, distribution, calibration, dependence coefficient,
+#: Gate 3 route or publication rule is computed or changed anywhere in this
+#: change, and no fitted artifact is touched.
 #:
-#: The pricing entry point's third declared use is a publication defect with
-#: the same shape as the first: a quantity that already existed on the path
-#: was not carried to the stage that publishes it.
+#: The second defect is the durability one, and it is the one that made the
+#: first unrecoverable. Completion was recorded on capture and nowhere else:
+#: ``completed_window_ids`` reads the collector's capture log, and both the
+#: collector and the controller treat a window in it as done. That is right
+#: for capture, which is the input, and wrong for the question a run is
+#: answering, which is whether anybody was served. So a run that captured a
+#: window and then died in serving left that window indistinguishable from
+#: one a release carried. The next run's probe saw it under
+#: ``already_completed_windows``, found nothing pending, and exited a green
+#: no-op. Three games were captured, marked complete, never priced, and
+#: absent from the published feed with nothing anywhere saying which three.
 #:
-#: ``model_projection`` is the one column naming the model's central forecast
-#: for a wager, and the pricing script wrote null into it for every
-#: combination prop. The reason recorded in place was that a combination is
-#: priced from a joint distribution over its components and that no central
-#: forecast of the combined total exists on this path. The second half of
-#: that was wrong: a distribution has a mean, the pricing step is the stage
-#: that builds the combination's distribution at all, and
-#: ``ops/nba_distribution_publication.py`` was already publishing that mean
-#: beside the price under ``distribution_mean``. So the figure existed, was
-#: already published one field away, and the column a bettor reads it from
-#: said there was none -- which on the public page is an empty Model
-#: Projection cell for five of the eleven prop families the model prices.
+#: Publication is now recorded too, separately and durably, as an
+#: append-only row per published release under
+#: ``<data_root>/processed/t20_served_windows/``. The capture log is not
+#: touched and stays the capture authority: this is a second fact beside it,
+#: not a rewrite of it. A window that is captured and that no row names is
+#: reported by the probe, named in the receipt and shown in the job summary,
+#: makes the probe ask for the full job, and is recovered by the next run --
+#: which verifies the existing captures through ``select_capture_bundle``
+#: and then runs the same serving and publication entry points, with no
+#: collector invocation and nothing slept for. Nothing in it can fabricate,
+#: re-time or relabel a snapshot, and a window with no capture is not made
+#: recoverable by any of it. A segment that nonetheless ends with such a
+#: window reports ``T20_CAPTURED_WINDOWS_UNSERVED`` and exits non-zero,
+#: which is the first thing that has ever consulted ``OUTCOMES_THAT_SUCCEED``.
 #:
-#: The fix takes the mean from whichever engine priced the row, on
-#: ``price_combo_lines``' own branch and threshold: the convolution of the
-#: component marginals under independence, and the mean of the very draws the
-#: simulation priced from under dependence. Taking it from the engine rather
-#: than adding up the component means is a choice about which number is
-#: published and not about which is right -- a Gaussian copula couples the
-#: components' ranks and moves no mass within any component's marginal, so
-#: the sum's mean is the sum of the component means at every dependence
-#: coefficient -- but only the engine's answer is the mean of the
-#: distribution published beside it, and on the frozen policy's one dependent
-#: combination the two differ by the simulation's own sampling error.
-#:
-#: Nothing in ``pricing.py`` moves: it stays undeclarable and
-#: byte-identical to production, and both engines are reached by named import
-#: so no second definition of a combination's distribution exists. No
-#: probability, price, edge, EV, quantile, line, calibration, dependence
-#: coefficient, simulation count or routing rule is computed or changed
-#: anywhere in this change, and every single-stat row's projection is the
-#: column it already was.
+#: No workflow changes. The probe already decides whether the heavy job
+#: starts, so teaching it that an unpublished capture is work keeps the
+#: schedule the production branch runs byte-identical.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
-        "ops/wizardofodds_destinations.json": (
-            "six added named destinations, three feed and three page, one "
-            "pair for each of the T-180, T-90 and T-45 advisory capture "
-            "windows. Purely additive: every destination production has is "
-            "byte-identical, including both live destinations, the disabled "
-            "live switch, the transport allow-list and the contract version. "
-            "Each added destination is mode canary and each is confined to "
-            "its own canary_subpath, canary-advisory/t180m and its two "
-            "siblings, which is what makes an advisory release structurally "
-            "unable to reach the T-20 record: published_root is public_target "
-            "joined to the confinement, neither the advisory root nor the "
-            "T-20 root is a prefix of the other, and every pointer the "
-            "publisher writes -- current.json, previous.json, the canary "
-            "attestation, the audit log -- is written inside the served root. "
-            "Each also carries its own release_prefix, which is what labels "
-            "the release with the offset it was captured at. No live "
-            "destination, no credential, no host and no activation material "
-            "is added or changed"
-        ),
-        "ops/run_advisory_window_serving.py": (
-            "a new file. Serves one slate from one early capture window by "
-            "importing ops/run_incumbent_production_serving.py and calling "
-            "that module's own slate_readiness, resolve_incumbent, serve and "
-            "build_receipt, so there is no second definition of what the "
-            "incumbent is and the serving orchestrator is unchanged byte for "
-            "byte. The only difference from production serving is that "
-            "--snapshot-offset-minutes is passed through to the two scripts "
-            "that already accepted it. Refuses an offset outside "
-            "CAPTURE_OFFSETS_MINUTES, refuses the production offset of 20 "
-            "specifically, refuses a window id ending :T-20m before it "
-            "refuses one belonging to any other offset, and refuses a "
-            "receipt path equal to or inside processed/incumbent_serving, "
-            "which is the durable record readiness is proven from. Cannot "
-            "predict differently, cannot price differently, cannot promote, "
-            "and names no live destination, no --mode live and neither "
-            "publication activation variable. No feature definition, prior, "
-            "window, span, weight, threshold, probability, price, edge, EV, "
-            "quantile, line, distribution, simulation count, calibration or "
-            "Gate 3 route is computed or changed, and no fitted artifact is "
-            "touched"
-        ),
         "ops/wizardofodds_publishing_switch.json": (
             "three fields inside modes.live and nothing else: state from "
             "DISABLED to ENABLED, approval_token from the placeholder that "
@@ -924,16 +917,16 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
             "only one a commit can hold: the other two are "
             "NBA_PROP_WOO_PUBLISH and NBA_PROP_WOO_PUBLISH_APPROVAL in the "
             "wizardofodds-production GitHub environment, which no file in "
-            "this repository can set. PublishingSwitch.enabled is state AND "
-            "no blockers and both variables are blockers until they are set "
-            "and agree, so the gate is not opened by this change and every "
-            "live publication still refuses by name. modes.canary, "
-            "what_enabling_live_requires, the contract version, the approved "
-            "freeze, both schema versions, published_authority incumbent and "
-            "candidate_authority shadow_only are all byte-identical to "
-            "production, which the narrowed numerical pin checks field by "
-            "field. No destination, credential, host, model artifact or "
-            "number is touched"
+            "this repository can set. PublishingSwitch.enabled is the state "
+            "AND an empty blocker list, and both variables are blockers "
+            "until they are set and agree, so the gate is not opened by this "
+            "change and every live publication still refuses by name. "
+            "modes.canary, what_enabling_live_requires, the contract "
+            "version, the approved freeze, both schema versions, "
+            "published_authority incumbent and candidate_authority "
+            "shadow_only are all byte-identical to production, which the "
+            "narrowed numerical pin checks field by field. No destination, "
+            "credential, host, model artifact or number is touched"
         ),
         "ops/run_progressive_live_refresh.py": (
             "a new file, and the only thing the decision above authorises. "
@@ -973,8 +966,8 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
             "repository variable and NBA_PROP_WOO_PUBLISH_APPROVAL from a "
             "secret, both in the wizardofodds-production environment the job "
             "already names. Necessary and not avoidable in code: GitHub does "
-            "not put vars or secrets into a step's process unless the step "
-            "binds them, and the publisher reads the approval out of "
+            "not put a variable or a secret into a step's process unless the "
+            "step binds it, and the publisher reads the approval out of "
             "os.environ. Strictly additive -- no cron, trigger, permission, "
             "concurrency group, runner label, checkout ref, step, order or "
             "existing env entry changes, which the additive-only line-set "
@@ -985,90 +978,66 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
             "on a command line"
         ),
         "ops/run_t20_production_controller.py": (
-            "additive advisory scheduling inside the segment the controller "
-            "already owns, and the live refresh after each window's canary. "
-            "The T-20 loop is unchanged except for one added "
-            "call that fills the gap before its existing sleep; every T-20 "
-            "refusal, every T-20 receipt field and the cumulative re-serving "
-            "it performs are untouched, which the 55 existing tests in "
-            "tests/test_t20_production_controller.py pin. What is added: the "
-            "advisory offsets as a module constant rather than an input, "
-            "because a scheduled event fires from the default branch and so "
-            "would never pass one; a ten-minute reservation before every "
-            "T-20 capture the segment still owns, inside which no advisory "
-            "serve may start, re-checked at every stage boundary; the "
-            "advisory destination names, held apart from the T-20 names and "
-            "refused if they are ever the T-20 ones; a refusal to write a "
-            "T-20 window id from an advisory run; and a refusal in "
-            "morning_readiness against a serving receipt carrying the "
-            "advisory marker, so the production record cannot be proven from "
-            "an advisory one. An advisory failure degrades the segment report "
-            "and does not fail the segment, which is the asymmetry the "
-            "advisory path's claim on reliability rests on. What the live "
-            "chain adds is one more non-blocking call after each of the four "
-            "windows has published and validated its canary: it invokes "
-            "ops/run_progressive_live_refresh.py for that window, then the "
-            "frozen publication script's live page stage pinned to the "
-            "receipt the refresh wrote. The call can never raise, a live "
-            "fault degrades the segment report under its own outcome exactly "
-            "as an advisory fault does, and the canary a window already "
-            "published is never withdrawn, re-published or re-derived "
-            "because of it. The controller decides nothing about the live "
-            "release itself -- not the digest, not the ordering, not the "
-            "approval -- it hands over the window's own canary and serving "
-            "receipts and reports what came back. No model, no "
-            "calibration, no price and no routing is reached from here"
+            "one more non-blocking call after each of the four windows has "
+            "published and validated its canary, and nothing else. It "
+            "invokes ops/run_progressive_live_refresh.py for that window and "
+            "then the frozen publication script's live page stage, pinned to "
+            "the receipt the refresh wrote. Every T-20 refusal, every T-20 "
+            "receipt field, the cumulative re-serving, the advisory "
+            "scheduling and reservation, the duplicate-capture claim and the "
+            "served-window recovery production already runs are untouched "
+            "and still pinned by their own tests. The call can never raise, "
+            "a live fault degrades the segment report under its own outcome "
+            "exactly as an advisory fault does, and the canary a window "
+            "already published is never withdrawn, re-published or "
+            "re-derived because of it. T20_CAPTURED_WINDOWS_UNSERVED and the "
+            "advisory-degraded outcome both still outrank it, so a window "
+            "production is missing is never reported as a live footnote. The "
+            "controller decides nothing about the live release itself -- not "
+            "the digest, not the ordering, not the approval -- it hands over "
+            "the window's own canary and serving receipts and reports what "
+            "came back. Nothing here captures, so nothing here can "
+            "fabricate, re-time or relabel a snapshot or let a non-T-20 "
+            "snapshot stand in for a T-20 one, and no model, calibration, "
+            "price or routing is reached from here"
         ),
         "ops/validate_workflows.py": (
-            "one added entry in T20_FORBIDDEN_ENTRY_POINTS, the advisory "
-            "serving script, a second for the live refresh script, and the "
-            "publication-activation check narrowed from a flat token ban to "
-            "the statement it was standing in for. The ban existed because "
-            "no workflow could be allowed to activate live publishing by "
-            "itself, and it refused the two approval variables by name "
-            "because a workflow mentioning them was a workflow deciding. "
-            "That now has to distinguish deciding from carrying, and it does "
-            "so strictly: --mode live and --stage live stay refused in every "
-            "workflow, both variables stay refused in every workflow but the "
-            "T-20 one, and in that one each is accepted only as a bare "
-            "binding of its own name to a vars or secrets reference of the "
-            "same name, only on the step that runs the controller entry "
-            "point, only with its other half present, and never inside a "
-            "run body. Everything else about the validator is untouched: "
-            "the three segment crons are still pinned exactly, the "
-            "permissions, concurrency, runner and checkout checks are "
-            "unchanged, and no existing refusal is removed. The advisory "
-            "entry point belongs to the "
-            "controller and not to the schedule: the controller is what "
-            "reserves the runner for the T-20 capture before an advisory "
-            "serve starts, what addresses each advisory release to its own "
-            "confined destination, and what refuses to write a T-20 window "
-            "id from an advisory run, so a workflow step invoking it directly "
-            "would have none of those in front of it, and the live refresh "
-            "entry point belongs to it for the same reason plus one more: "
-            "the window it publishes has to have passed its canary first, "
-            "and only the controller knows that it did"
+            "one added entry in CONTROLLER_OWNED_ENTRY_POINTS, the live "
+            "refresh script, and the publication-activation check narrowed "
+            "from a flat token ban to the statement it was standing in for. "
+            "The ban existed because no workflow could be allowed to "
+            "activate live publishing by itself, and it refused the two "
+            "approval variables by name because a workflow mentioning them "
+            "was a workflow deciding. That now has to distinguish deciding "
+            "from carrying, and it does so strictly: --mode live and --stage "
+            "live stay refused in every workflow, both variables stay "
+            "refused in every workflow but the T-20 one, and in that one "
+            "each is accepted only as a bare binding of its own name to a "
+            "vars or secrets reference of the same name, only on the step "
+            "that runs the controller entry point, only with its other half "
+            "present, and never inside a run body. Everything else is "
+            "untouched: the three segment crons are still pinned exactly, "
+            "the permissions, concurrency, runner and checkout checks are "
+            "unchanged, and no existing refusal is removed. The live refresh "
+            "entry point belongs to the controller and not to the schedule "
+            "for the reason the advisory one does, plus one more: the window "
+            "it publishes has to have passed its canary first, and only the "
+            "controller knows that it did"
         ),
         "docs/wizardofodds/PRODUCTION_AUTOMATION.md": (
-            "one added section describing the advisory windows: the offsets "
-            "and the America/New_York times a reader actually gets them at, "
-            "the six confined destinations, why the separation is structural "
-            "rather than procedural, how a release is labelled with its "
-            "offset, the three refusals, the reservation that keeps the T-20 "
-            "window's priority, and why there is no fourth cron and no second "
-            "workflow, plus a second added section describing the "
-            "progressive live refresh: the one live pointer, what each "
-            "window does to it, the digest identity the live publish is "
-            "conditional on, what is retained when a refresh fails, the "
-            "post-tip guard, where the durable record is written, and the "
-            "two variables the owner has to set before any of it publishes. "
-            "The one thing already documented that is edited is the "
-            "live-is-configured-and-disabled section, which now records the "
-            "state the switch actually carries: the decision taken in the "
-            "commit, the two conditions still outstanding, and the refusal "
-            "that stands until they are met. The trigger table, the "
+            "one added section describing the progressive live refresh: the "
+            "one live pointer, what each window does to it, the digest "
+            "identity the live publish is conditional on, what is retained "
+            "when a refresh fails, the post-tip guard, where the durable "
+            "record is written, and the two variables the owner has to set "
+            "before any of it publishes. The one thing already documented "
+            "that is edited is the live-is-configured-and-disabled section, "
+            "which now records the state the switch actually carries: the "
+            "decision taken in the commit, the two conditions still "
+            "outstanding, and the refusal that stands until they are met. "
+            "The trigger table, the advisory-window section, the "
             "single-writer and fail-closed sections and the idempotency "
-            "contract stand as written"
+            "contract all stand as written"
         ),
         "docs/GO_LIVE_CHECKLIST.md": (
             "the checklist's own step 4 of section 4, carried out and "
@@ -1344,15 +1313,15 @@ ADDITIVE_ONLY_WORKFLOWS: tuple[str, ...] = (
 
 #: The publishing switch, declarable only for the live decision inside it.
 #:
-#: The same correction as the destination registry below, on the file the
-#: registry's live destinations are useless without. The switch was pinned by
-#: its bytes because it decides whether anything publishes at all, and that is
-#: right about every other field in it -- but a byte pin reads the same for
-#: two different changes: weakening a gate, and taking the one decision the
-#: file exists to carry. ``modes.live.state`` is a field whose entire purpose
-#: is to be set once, by a human, in a reviewed commit, and the pin made the
-#: file permanently unable to be set, which is not a freeze on publication but
-#: a freeze on the review that authorises it.
+#: The same correction as the destination registry below, on the file those
+#: live destinations are useless without. The switch was pinned by its bytes
+#: because it decides whether anything publishes at all, and that is right
+#: about every other field in it -- but a byte pin reads the same for two
+#: different changes: weakening a gate, and taking the one decision the file
+#: exists to carry. ``modes.live.state`` is a field whose entire purpose is to
+#: be set once, by a human, in a reviewed commit, and the pin made the file
+#: permanently unable to be set, which is not a freeze on publication but a
+#: freeze on the review that authorises it.
 #:
 #: So it is declarable, under a rule that is strictly stronger than the byte
 #: comparison once the file is allowed to differ at all: only the three fields
@@ -1361,11 +1330,13 @@ ADDITIVE_ONLY_WORKFLOWS: tuple[str, ...] = (
 #: been granted, and every other key -- ``modes.canary``,
 #: ``what_enabling_live_requires``, the contract version, the approved freeze,
 #: both schema versions, ``published_authority`` and ``candidate_authority``
-#: -- must be deeply equal to the production ref. Flipping the state is also
-#: not the same thing as opening the gate: ``PublishingSwitch.enabled`` is the
-#: state *and* an empty blocker list, and the two approval variables are
-#: blockers until they are set in the GitHub environment and agree, neither of
-#: which any commit can do.
+#: -- must be deeply equal to the production ref.
+#:
+#: Flipping the state is also not the same thing as opening the gate.
+#: ``PublishingSwitch.enabled`` is the state *and* an empty blocker list, and
+#: ``NBA_PROP_WOO_PUBLISH`` and ``NBA_PROP_WOO_PUBLISH_APPROVAL`` are blockers
+#: until they are set in the ``wizardofodds-production`` GitHub environment
+#: and agree with this file, neither of which any commit can do.
 ADDITIVE_ONLY_PUBLISHING_SWITCH: tuple[str, ...] = (
     "ops/wizardofodds_publishing_switch.json",
 )

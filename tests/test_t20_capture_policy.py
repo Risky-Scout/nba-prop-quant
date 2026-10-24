@@ -27,10 +27,13 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import json
 import os
 import subprocess
 import sys
+import threading
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -471,3 +474,319 @@ def test_a_research_window_does_not_satisfy_the_production_window(tmp_path):
         ).window_id
         == "101:T-45m"
     )
+
+
+# ----------------------------------------------------------------------
+# one window, one scheduled capture, however many sweeps are in flight
+# ----------------------------------------------------------------------
+
+
+def sweep_settings(tmp_path: Path):
+    """The settings object the collector reads its snapshot root from."""
+    return SimpleNamespace(
+        bdl_api_key="test-key",
+        bdl_base_url="https://example.invalid",
+        bdl_requests_per_minute=600,
+        snapshot_dir=tmp_path / "snapshots",
+    )
+
+
+def sweep_client(games: list[dict]):
+    """A balldontlie client that answers from a fixed slate and no network."""
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def games(self, dates):
+            return iter([dict(row) for row in games])
+
+        def active_players(self, team_ids=None):
+            return iter([])
+
+        def injuries(self, team_ids=None, player_ids=None):
+            return iter([])
+
+        def lineups(self, game_ids):
+            return iter([])
+
+        def live_player_props(self, game_id):
+            return [prop(int(game_id), 900 + int(game_id))]
+
+    return FakeClient
+
+
+#: How long a sweep holds at the gate below waiting for the others.
+#:
+#: The gate is deliberately breakable. Two sweeps that are free to overlap
+#: both reach it and it releases them together, which is the interleaving
+#: that produces the defect; two sweeps that have been serialised cannot
+#: both reach it, and the one that does has to be let through rather than
+#: deadlocking the test against the fix it is checking.
+GATE_SECONDS = 2.0
+
+
+def concurrent_scheduled_sweeps(
+    tmp_path: Path,
+    *,
+    games: list[dict],
+    nows: list[str],
+) -> list[BaseException]:
+    """Run one scheduled sweep per entry in ``nows``, as concurrently as the
+    collector allows.
+
+    Each sweep is the real ``main`` of the real collector, loaded as its own
+    module object so that nothing is shared between them but the snapshot
+    tree on disk -- which is exactly what two producers on the production
+    host share. The interleaving is pinned rather than hoped for: every
+    sweep holds at a barrier immediately after it reads the recorded windows
+    for the first time, so sweeps that *can* overlap have all decided which
+    windows are unclaimed before any of them records one. That is the
+    ordering two sweeps inside one capture grace window reach whenever their
+    collection overlaps, and guessing at it with sleeps would make this test
+    flake either way.
+    """
+    settings = sweep_settings(tmp_path)
+
+    read_claims = threading.Barrier(
+        len(nows), timeout=GATE_SECONDS
+    )
+
+    failures: list[BaseException] = []
+
+    def sweep(now: str) -> None:
+        try:
+            module = load_collector()
+
+            module.get_settings = lambda: settings
+
+            module.BDLClient = sweep_client(games)
+
+            module.parse_args = lambda: SimpleNamespace(
+                date=SLATE,
+                scheduled=True,
+                now_utc=now,
+                grace_minutes=5,
+                offset_minutes=[PRIMARY_OFFSET_MINUTES],
+            )
+
+            recorded_windows = module.completed_window_ids
+
+            waited: list[bool] = []
+
+            def read_recorded_windows(path):
+                value = recorded_windows(path)
+
+                if not waited:
+                    waited.append(True)
+
+                    try:
+                        read_claims.wait()
+                    except threading.BrokenBarrierError:
+                        pass
+
+                return value
+
+            module.completed_window_ids = read_recorded_windows
+
+            module.main()
+        except BaseException as error:  # noqa: BLE001
+            failures.append(error)
+
+            read_claims.abort()
+
+    threads = [
+        threading.Thread(
+            target=sweep, args=(now,), name=f"sweep-{index}"
+        )
+        for index, now in enumerate(nows)
+    ]
+
+    for thread in threads:
+        thread.start()
+
+    for thread in threads:
+        thread.join(timeout=60)
+
+        assert not thread.is_alive(), f"{thread.name} did not finish"
+
+    return failures
+
+
+def capture_runs_of(snapshot_dir: Path) -> list[dict]:
+    path = snapshot_dir / "capture_runs" / f"{SLATE}.jsonl"
+
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def scheduled_captures_of(snapshot_dir: Path, window_id: str) -> list[dict]:
+    path = snapshot_dir / "capture_runs" / f"{SLATE}.jsonl"
+
+    envelopes = [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+    return [
+        envelope
+        for envelope in envelopes
+        if (envelope.get("payload") or {}).get("capture_reason") == "scheduled"
+        and window_id in ((envelope.get("payload") or {}).get("window_ids") or [])
+    ]
+
+
+@pytest.mark.parametrize(
+    "nows",
+    [
+        # The two sweeps were invoked with the same instant, which is what
+        # a catch-up run and a scheduled run reach when both compute the
+        # window's own T-20 time.
+        [at(22, 40).isoformat(), at(22, 40).isoformat()],
+        # And with different instants inside one grace window, which is what
+        # two runs that merely overlap reach. Both are due: due_windows
+        # accepts any now in [target, target + grace).
+        [at(22, 40).isoformat(), at(22, 42).isoformat()],
+    ],
+    ids=["same-instant", "within-one-grace-window"],
+)
+def test_two_concurrent_sweeps_record_one_scheduled_capture(tmp_path, nows):
+    """The production defect of 2026-10-23, as the collector reaches it.
+
+    Three games tipped at 02:00 UTC and their shared T-20 window was swept by
+    two producers inside the same grace window. Deciding which windows are
+    unclaimed and recording the claim were two separate steps with nothing
+    between them, so both sweeps read an empty claim set and both appended a
+    scheduled capture naming ``101:T-20m``. Pricing then refused the window
+    for being ambiguous -- correctly, and permanently, because the capture
+    log is append-only and both captures are genuine.
+
+    What is asserted is the invariant pricing already requires: a window has
+    exactly one scheduled capture, and the capture it has is one pricing will
+    accept.
+    """
+    games = [
+        game(101, at(23, 0)),
+        game(102, at(23, 0), home=3, away=4),
+    ]
+
+    failures = concurrent_scheduled_sweeps(
+        tmp_path, games=games, nows=nows
+    )
+
+    assert failures == [], failures
+
+    snapshot_dir = tmp_path / "snapshots"
+
+    # Stated first because this is the production symptom verbatim: on the
+    # code that lost three games it raises "21717943:T-20m: expected exactly
+    # one scheduled capture, found 2" with 101 in place of the game id.
+    for game_id in (101, 102):
+        bundle = select_capture_bundle(
+            snapshot_dir,
+            date=SLATE,
+            game_id=game_id,
+            offset_minutes=PRIMARY_OFFSET_MINUTES,
+        )
+
+        assert bundle.window_id == f"{game_id}:T-20m"
+
+        assert bundle.captured_at in nows
+
+    for window_id in ("101:T-20m", "102:T-20m"):
+        assert len(scheduled_captures_of(snapshot_dir, window_id)) == 1, (
+            f"{window_id} was recorded by more than one scheduled capture"
+        )
+
+
+def test_the_sweep_that_arrives_second_captures_nothing(tmp_path):
+    """Serialising the sweeps is what keeps the component digests honest.
+
+    A capture is content-addressed over the rows carrying its own
+    ``captured_at``, so two sweeps invoked with the same instant write into
+    one another's digests whatever either of them claims, and
+    ``select_capture_bundle`` would refuse both for a hash mismatch rather
+    than for an ambiguous window. That is why the claim is held across the
+    collection and not merely across the append: the sweep that arrives
+    second finds the window already recorded and captures nothing at all,
+    which is the same thing any later scheduled run already does.
+    """
+    games = [game(101, at(23, 0))]
+
+    failures = concurrent_scheduled_sweeps(
+        tmp_path,
+        games=games,
+        nows=[at(22, 40).isoformat(), at(22, 40).isoformat()],
+    )
+
+    assert failures == [], failures
+
+    snapshot_dir = tmp_path / "snapshots"
+
+    runs = capture_runs_of(snapshot_dir)
+
+    assert len(runs) == 1, runs
+
+    assert runs[0]["payload"]["window_ids"] == ["101:T-20m"]
+
+    assert runs[0]["payload"]["due_game_ids"] == [101]
+
+    # One sweep's worth of component rows, which is what that capture's
+    # recorded digests describe.
+    for component in ("games", "player_props"):
+        path = snapshot_dir / component / f"{SLATE}.jsonl"
+
+        rows = [
+            line
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+
+        assert len(rows) == 1, (component, rows)
+
+
+def test_a_sweep_refuses_rather_than_waiting_out_the_capture_window(tmp_path):
+    """The bounded wait fails closed, and says what it was waiting for.
+
+    Waiting longer than the grace window cannot produce a capture pricing
+    would accept, because the window stops being due. So a sweep that cannot
+    get the claim inside it exits non-zero -- the controller reads that as a
+    failed capture and refuses to serve -- rather than appending a second
+    claim to a window whose holder is still mid-collection.
+    """
+    settings = sweep_settings(tmp_path)
+
+    capture_run_path = (
+        settings.snapshot_dir / "capture_runs" / f"{SLATE}.jsonl"
+    )
+
+    with (
+        collector.capture_window_claim(
+            capture_run_path, timeout_seconds=0
+        ) as held,
+        pytest.raises(RuntimeError) as error,
+        collector.capture_window_claim(
+            capture_run_path, timeout_seconds=0
+        ),
+    ):
+        pass
+
+    assert str(held) in str(error.value)
+
+    assert "refusing" in str(error.value)
+
+    # And the claim is released on the way out, so the next sweep gets it.
+    with collector.capture_window_claim(
+        capture_run_path, timeout_seconds=0
+    ):
+        pass

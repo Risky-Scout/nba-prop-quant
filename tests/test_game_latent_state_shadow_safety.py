@@ -38,6 +38,7 @@ from nba_prop_quant.research.game_latent_state.safety import (
     ADDITIVE_ONLY_SERVING_SOURCES,
     ADDITIVE_ONLY_WORKFLOWS,
     CAPTURE_ENTRY_POINT_EXEMPT_FUNCTIONS,
+    DECLARABLE_DEPLOYMENT_PACKAGING_TOOLS,
     DECLARABLE_SERVING_SOURCE_REGISTRIES,
     DECLARED_CAPTURE_SELECTION_NAMES,
     DECLARED_INTEGRATION_PATHS,
@@ -215,6 +216,7 @@ def test_the_declared_integration_surface_cannot_reach_the_served_model():
         *ADDITIVE_ONLY_CAPTURE_ENTRY_POINTS,
         *ADDITIVE_ONLY_SERVING_ENTRY_POINTS,
         *ADDITIVE_ONLY_SERVING_SOURCES,
+        *DECLARABLE_DEPLOYMENT_PACKAGING_TOOLS,
         *DECLARABLE_SERVING_SOURCE_REGISTRIES,
     )
     for mapping in (DECLARED_INTEGRATION_PATHS, SHADOW_OWNED_PRODUCTION_PATHS):
@@ -1258,14 +1260,84 @@ WRITE_ATTRIBUTES: frozenset[str] = frozenset(
 )
 
 
+def token_scan_text(path: Path) -> str:
+    """A shadow source's text with its declared production paths removed.
+
+    The declaration registry has to spell out the paths it declares, and one
+    of them is now the bundle builder, so a flat substring ban would forbid
+    declaring the file the registry exists to declare -- the same mistake
+    ``docs/wizardofodds`` was on this list for.
+    :func:`test_shadow_package_references_no_production_write_target` already
+    exempts the declaration module from the analogous literal ban for the
+    same reason; this is narrower, because it removes exactly the declared
+    path strings and nothing else, so a reference to the publisher anywhere
+    else in the module is still reported.
+    """
+    text = path.read_text(encoding="utf-8")
+    if path.name != PATH_DECLARATION_MODULE:
+        return text
+    for declared in (
+        *DECLARED_INTEGRATION_PATHS,
+        *SHADOW_OWNED_PRODUCTION_PATHS,
+        *DECLARABLE_DEPLOYMENT_PACKAGING_TOOLS,
+    ):
+        text = text.replace(declared, "")
+    return text
+
+
 def test_shadow_package_contains_no_wizardofodds_publishing_surface():
     offenders = [
         f"{path.relative_to(PROJECT)}: {token}"
         for path in python_sources()
         for token in WIZARDOFODDS_SURFACE_TOKENS
-        if token in path.read_text(encoding="utf-8")
+        if token in token_scan_text(path)
     ]
     assert offenders == []
+
+
+def test_the_declaration_module_may_name_the_publisher_only_to_declare_it(tmp_path):
+    """What the exemption gives up, and what it still refuses.
+
+    It gives up the declared path string, which is the whole point. It does
+    not give up the publisher's entry point: that name is not a substring of
+    any declared path, so reaching for the function the script is called
+    through is still reported in the declaration module like anywhere else.
+
+    The precondition is that the exemption is load-bearing at all, and it is
+    taken off the standing list rather than off the declaration. A
+    declaration retires the moment its change reaches production, so pinning
+    one there made this test fail for the branch after the one that added it
+    -- which says nothing about the exemption. The packaging-tool list does
+    not retire, and it is the list that makes the bundle builder's name
+    appear in the declaration module in the first place.
+    """
+    path = next(p for p in python_sources() if p.name == PATH_DECLARATION_MODULE)
+
+    exempted = (
+        *DECLARED_INTEGRATION_PATHS,
+        *SHADOW_OWNED_PRODUCTION_PATHS,
+        *DECLARABLE_DEPLOYMENT_PACKAGING_TOOLS,
+    )
+
+    assert any(
+        token in declared
+        for declared in exempted
+        for token in WIZARDOFODDS_SURFACE_TOKENS
+    ), "no exempted path carries a banned token, so this exemption is untested"
+    assert not any(
+        token in token_scan_text(path) for token in WIZARDOFODDS_SURFACE_TOKENS
+    )
+
+    reaching = tmp_path / PATH_DECLARATION_MODULE
+    reaching.write_text(
+        path.read_text(encoding="utf-8")
+        + "\nfrom bundle import build_runtime_bundle\n",
+        encoding="utf-8",
+    )
+
+    assert any(
+        token in token_scan_text(reaching) for token in WIZARDOFODDS_SURFACE_TOKENS
+    )
 
 
 def test_no_shadow_source_writes_to_a_protected_production_path():
