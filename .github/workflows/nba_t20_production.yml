@@ -230,6 +230,18 @@ jobs:
       # No continue-on-error, on purpose. A due T-20 window that cannot be
       # captured, a capture that cannot be verified, or a served slate that
       # cannot be published is a production failure and the job must go red.
+      #
+      # Run unbuffered and with the stage directory under the durable data
+      # root rather than RUNNER_TEMP, both for the same reason. On 2026-10-24
+      # this runner lost communication with the server while asleep between
+      # windows; the server marked the job complete, the artifact upload then
+      # failed `403 job is completed`, and two hours of segment diagnostics
+      # went with RUNNER_TEMP. The served-window ledger survived -- it is
+      # written under the data root and fsynced before the controller sleeps
+      # -- but nothing explaining the segment did. Unbuffered output puts each
+      # window in the job log as it happens instead of in a buffer that is
+      # never flushed, and a durable run directory keeps the stage receipts
+      # whether or not the upload at the end is ever reached.
       - name: Capture T-20, serve the slate and publish the canary
         if: steps.probe.outputs.t20_work == 'true'
         env:
@@ -265,22 +277,31 @@ jobs:
           NBA_PROP_WOO_PUBLISH_APPROVAL: ${{ vars.NBA_PROP_WOO_PUBLISH_APPROVAL }}
         run: |
           set -euo pipefail
-          python ops/run_t20_production_controller.py \
+          RUN_DIR="$NBA_PROP_DATA_DIR/processed/t20_segments/${{ github.run_id }}-${{ github.run_attempt }}"
+          mkdir -p "$RUN_DIR"
+          echo "Segment stage directory: $RUN_DIR"
+          python -u ops/run_t20_production_controller.py \
             --segment-start-utc "${{ steps.probe.outputs.segment_start_utc }}" \
             --segment-end-utc "${{ steps.probe.outputs.segment_end_utc }}" \
             --slate-date "${{ inputs.slate_date || steps.probe.outputs.slate_date }}" \
             --data-root "$NBA_PROP_DATA_DIR" \
             --registry-root "$NBA_PROP_FIT_REGISTRY_DIR" \
             --production-sha "${{ steps.checkout.outputs.sha }}" \
-            --run-dir "$RUNNER_TEMP/t20" \
-            --receipt-path "$RUNNER_TEMP/t20/t20_controller.json" \
+            --run-dir "$RUN_DIR" \
+            --receipt-path "$RUN_DIR/t20_controller.json" \
             --summary-path "$GITHUB_STEP_SUMMARY"
 
+      # Best effort by design. The diagnostics it carries are already on the
+      # runner's durable disk under the data root, so a failed upload -- which
+      # is what a cancelled job gets -- costs convenience rather than evidence.
       - name: Upload the segment diagnostics
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: nba-t20-segment-${{ github.run_id }}
-          path: ${{ runner.temp }}/t20
+          path: |
+            ${{ runner.temp }}/t20
+            ${{ vars.NBA_PROP_DATA_DIR }}/processed/t20_segments/${{ github.run_id }}-${{ github.run_attempt }}
           retention-days: 14
           if-no-files-found: warn

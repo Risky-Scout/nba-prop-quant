@@ -5841,3 +5841,141 @@ def test_a_refused_window_gate_exits_non_zero(tmp_path, monkeypatch):
         receipt["final_outcome"]
         == controller.OUTCOME_SERVING_WINDOW_GATES_REFUSED
     )
+
+
+class LosesTheRunnerAfterTheFirstWindow(Clock):
+    """A clock whose next sleep never returns, the way 2026-10-24 ended.
+
+    Run 40113297251's self-hosted segment published its first window and
+    then lost communication with the server while asleep, waiting for a
+    window hours away. The job was marked complete underneath it and its
+    ``RUNNER_TEMP`` diagnostics went with it, so the only thing that can
+    carry the first window forward is what was written to the durable data
+    root before the sleep began.
+    """
+
+    def __init__(self, now: datetime, *, world_published: list) -> None:
+        super().__init__(now)
+
+        self.world_published = world_published
+
+    def sleep(self, seconds: float) -> None:
+        if self.world_published:
+            raise RuntimeError(
+                "The self-hosted runner lost communication with the server."
+            )
+
+        super().sleep(seconds)
+
+
+def test_a_published_window_survives_the_segment_dying_before_the_next(
+    tmp_path,
+):
+    """Evidence is durable before the controller waits for a future window.
+
+    Two games, two T-20 windows hours apart. The first is captured, served
+    and published; the runner then disappears while asleep for the second.
+    The published window has to be on disk already, outside ``RUNNER_TEMP``,
+    because nothing after the sleep ever runs.
+    """
+    games = [
+        game(101, at(20, 0)),
+        game(102, at(23, 0), home=3, away=4),
+    ]
+
+    published: list[list[int]] = []
+
+    clock = LosesTheRunnerAfterTheFirstWindow(
+        at(19, 25), world_published=published
+    )
+
+    world = World(tmp_path, schedules=[games], clock=clock)
+
+    world.published = published
+
+    write_morning_receipt(world)
+
+    segment = build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    )
+
+    with pytest.raises(RuntimeError, match="lost communication"):
+        segment.run()
+
+    # The first window was published ...
+    assert world.published == [[101]]
+
+    # ... and its evidence is in the durable data root, not in the run
+    # directory the job deletes.
+    assert served_window_ids_for(world) == {"101:T-20m"}
+
+    # The ledger is in the data root the next day still has, and the run
+    # directory -- which is ``RUNNER_TEMP`` in production -- holds no copy
+    # of it to be the authority instead.
+    assert (
+        world.data_root / controller.SERVED_WINDOWS_RELATIVE / f"{SLATE}.jsonl"
+    ).exists()
+
+    assert not list(
+        (world.data_root.parent / "run").rglob("*t20_served_windows*")
+    )
+
+
+def test_the_next_invocation_serves_only_what_the_dead_segment_did_not(
+    tmp_path,
+):
+    """A dead segment leaves a true account of what is left to do.
+
+    The run after the one above sees the first window as served and the
+    second as still owed. Neither error is acceptable here: re-serving the
+    first would mint a release that carries what the last one carried, and
+    reading the second as done would retire a window nothing ever published.
+    """
+    games = [
+        game(101, at(20, 0)),
+        game(102, at(23, 0), home=3, away=4),
+    ]
+
+    published: list[list[int]] = []
+
+    dying = LosesTheRunnerAfterTheFirstWindow(
+        at(19, 25), world_published=published
+    )
+
+    world = World(tmp_path, schedules=[games], clock=dying)
+
+    world.published = published
+
+    write_morning_receipt(world)
+
+    with pytest.raises(RuntimeError, match="lost communication"):
+        build(
+            world,
+            clock=dying,
+            segment_start=SEGMENT_2[0],
+            segment_end=SEGMENT_2[1],
+        ).run()
+
+    # The run after it, on the same durable data root.
+    retry_clock = Clock(at(22, 30))
+
+    retry = World(tmp_path, schedules=[games], clock=retry_clock)
+
+    write_morning_receipt(retry)
+
+    segment = build(
+        retry,
+        clock=retry_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    )
+
+    plan = segment.plan()
+
+    # The window the dead segment published is not owed again ...
+    assert "101:T-20m" not in plan["captured_unserved_windows"]
+
+    assert "101:T-20m" in plan["already_completed_windows"]
+
+    # ... and the one it never reached still is.
+    assert plan["pending_windows"] == ["102:T-20m"]

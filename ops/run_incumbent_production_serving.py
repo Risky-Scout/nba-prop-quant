@@ -1002,7 +1002,7 @@ def seal_priced_markets(
         encoding="utf-8",
     )
 
-    return {
+    record = {
         "bytes": int(artifact["bytes"]),
         "path": str(sealed),
         "relative": str(
@@ -1011,6 +1011,14 @@ def seal_priced_markets(
         "sha256": digest,
         "sidecar": str(sidecar),
     }
+
+    # Recorded here rather than by the caller, and only now: the receipt
+    # gains its pointer in the same statement that proves the bytes are
+    # already at that path, so there is no ordering in which a receipt names
+    # an artifact that was not stored.
+    receipt["immutable_priced_market_artifact"] = record
+
+    return record
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
@@ -1072,10 +1080,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     # immutable artifact is only ever written once those bytes are already
     # at that path. The reverse order would let a run record a provenance
     # pointer to something it had not yet stored.
-    sealed = seal_priced_markets(receipt=receipt, data_root=data_root)
-
-    if sealed is not None:
-        receipt["immutable_priced_market_artifact"] = sealed
+    seal_priced_markets(receipt=receipt, data_root=data_root)
 
     incomplete = missing_provenance(receipt)
 
