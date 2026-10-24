@@ -390,6 +390,14 @@ OUTCOME_FAILED = "T20_CONTROLLER_FAILED"
 #: point -- the state it names is the one that was previously invisible.
 OUTCOME_CAPTURED_NOT_SERVED = "T20_CAPTURED_WINDOWS_UNSERVED"
 
+#: What one captured-but-unserved window that selection refuses is recorded
+#: as. Not a segment outcome: a segment that has one of these still ends on
+#: OUTCOME_CAPTURED_NOT_SERVED above, because what the exit code has to say
+#: is that production is missing a window. This names the window, inside
+#: that outcome, and separates the ones a later run can still publish from
+#: the ones no run will.
+RECOVERY_OUTCOME_UNRECOVERABLE = "UNRECOVERABLE_NO_ELIGIBLE_CAPTURE"
+
 OUTCOMES_THAT_SUCCEED: frozenset[str] = frozenset(
     {
         OUTCOME_NO_WINDOWS,
@@ -1305,6 +1313,18 @@ class T20Controller:
 
         self.captures: list[dict[str, Any]] = []
         self.recovered: list[dict[str, Any]] = []
+
+        #: One record per captured-but-unserved window this segment proved
+        #: selection will not accept, carrying the selection's own reason.
+        #: Permanent: see :meth:`_record_unrecoverable`.
+        self.unrecoverable: list[dict[str, Any]] = []
+
+        #: One record per recovery that verified and still did not reach a
+        #: release, because a serving or publication stage refused. Separate
+        #: from :attr:`unrecoverable` because these captures are intact and
+        #: a later segment can still publish them.
+        self.recovery_faults: list[dict[str, Any]] = []
+
         self.publications: list[dict[str, Any]] = []
         self.serving: list[dict[str, Any]] = []
         self.distributions: list[dict[str, Any]] = []
@@ -1612,9 +1632,35 @@ class T20Controller:
         # Ahead of the advisory windows for the same reason, and that is the
         # stronger statement: an advisory release is a reading aid, and a
         # recovered T-20 release is a window production still owes.
+        deferred: ControllerRefused | None = None
+
         try:
             if plan["unserved_rows"]:
-                self._recover(plan["unserved_rows"], readiness=readiness)
+                # Recovery keeps its place at the front and loses its veto
+                # over everything behind it. Its two failure modes are
+                # confined differently, because they mean different things.
+                #
+                # A window selection refuses is recorded by :meth:`_recover`
+                # and skipped: it is already lost and nothing this segment
+                # does can change that.
+                #
+                # A serving or publication stage that refuses is caught here
+                # and re-raised below, after the work rather than instead of
+                # it. The refusal is not downgraded -- it leaves this method
+                # with its own outcome and its own message, exactly as it
+                # did when it was raised from this line. What changes is
+                # when. Raised here it lands before any collector has run,
+                # so it costs the segment the captures of games that have
+                # not tipped yet, and a capture is the one thing in this
+                # pipeline that cannot be retried: the market at T-20 exists
+                # once. Publication can wait for the next segment. The
+                # snapshot cannot.
+                try:
+                    self._recover(plan["unserved_rows"], readiness=readiness)
+                except ControllerRefused as refusal:
+                    deferred = refusal
+
+                    self._record_recovery_fault(refusal)
 
             if plan["pending_rows"]:
                 self._work(plan, readiness)
@@ -1626,6 +1672,17 @@ class T20Controller:
             # refusal raised anywhere in the segment still leaves naming the
             # windows it is abandoning.
             self._finish_advisory(readiness)
+
+            # The deferred refusal, raised now that the work it would have
+            # prevented has happened. Conditional on the windows still being
+            # unserved because the slate is re-served whole: if the capture
+            # work above published a release, that release carries the
+            # windows this refusal was about and the refusal has stopped
+            # being true. Raising a resolved refusal would be its own kind
+            # of false report.
+            if deferred is not None and self._unserved_rows(plan["rows"]):
+                raise deferred
+
         except ControllerRefused as error:
             # A refusal after a capture is the shape the incident had. The
             # refusal itself stands -- nothing is downgraded and nothing is
@@ -1667,14 +1724,7 @@ class T20Controller:
                 plan=plan,
                 started_at=started_at,
                 outcome=OUTCOME_CAPTURED_NOT_SERVED,
-                reason=(
-                    f"{len(outstanding)} T-{self.offset_minutes} capture(s) "
-                    f"of {self.slate_date} exist and no release carries "
-                    f"them: {', '.join(outstanding)}. The captures are "
-                    "sound and stay exactly as they were taken; a later run "
-                    "will serve and publish from them without recapturing. "
-                    "This segment is not reported as a success"
-                ),
+                reason=self._unserved_reason(outstanding),
                 readiness=readiness,
             )
 
@@ -1723,40 +1773,169 @@ class T20Controller:
         publication entry points over the slate, which enumerate every
         eligible capture and publish the whole priced artifact.
 
-        The proof is :meth:`_verify_captured`, which is ``select_capture_bundle``
-        and therefore still requires exactly one scheduled capture per
-        window, no recorded errors, every component digest recomputed and
-        the capture pre-tip. A capture that has stopped being eligible
-        refuses here rather than being published.
+        The proof is ``select_capture_bundle`` and therefore still requires
+        exactly one scheduled capture per window, no recorded errors, every
+        component digest recomputed and the capture pre-tip. A capture that
+        has stopped being eligible is never published.
+
+        Proven one window at a time, which is the difference between this
+        and the capture path. A window that no longer verifies is recorded
+        and skipped rather than raised for: it is already lost, and a single
+        verification over the whole set made it take the verifiable windows
+        beside it, the segment's own pending captures and the advisory
+        windows after them. The unit of isolation is the verification and
+        not the publication because publication is not divisible -- the
+        serving entry point prices the whole slate and the feed publishes
+        every row of it, so there is no such thing as publishing one window.
+        What that costs is nothing, because the selection performed here is
+        the selection serving performs: a window refused here is a window
+        serving would not have put in the release either.
         """
+        verified: list[dict[str, Any]] = []
+
+        for row in sorted(rows, key=lambda row: str(row["window_id"])):
+            bundle, error = self._select_capture(int(row["game_id"]))
+
+            if error is not None:
+                self._record_unrecoverable(row, error)
+
+                continue
+
+            verified.append(bundle)
+
+        # Nothing verified, so there is nothing to publish from. Returning
+        # rather than serving anyway matters: a serve here would re-publish
+        # the slate's existing release for no reason, and the windows that
+        # caused it are recorded above either way.
+        if not verified:
+            return
+
         stage_dir = self.run_dir / "recovery"
 
         stage_dir.mkdir(parents=True, exist_ok=True)
 
-        window_ids = sorted(str(row["window_id"]) for row in rows)
-
-        game_ids = sorted(int(row["game_id"]) for row in rows)
-
-        bundles = self._verify_captured(game_ids, window_ids=window_ids)
-
         self.recovered.append(
             {
                 "capture_ids": sorted(
-                    {bundle["capture_id"] for bundle in bundles}
+                    {bundle["capture_id"] for bundle in verified}
                 ),
-                "game_ids": game_ids,
+                "game_ids": sorted(
+                    {int(bundle["game_id"]) for bundle in verified}
+                ),
                 "recovered_at_utc": self.clock().isoformat(),
                 "reason": (
                     "these windows were captured by an earlier run that did "
                     "not publish them, so they are served from the captures "
                     "that already exist"
                 ),
-                "verified_bundles": bundles,
-                "window_ids": window_ids,
+                "verified_bundles": verified,
+                "window_ids": sorted(
+                    str(bundle["window_id"]) for bundle in verified
+                ),
             }
         )
 
         self._serve_and_publish(stage_dir, readiness=readiness)
+
+    def _record_unrecoverable(
+        self, row: dict[str, Any], error: RuntimeError
+    ) -> None:
+        """Record one window that no later run of this controller will serve.
+
+        Permanent by construction rather than by judgement. Recovery only
+        ever looks at windows already past their T-20 time, so no run can
+        take a different capture of one; the capture log is append-only, so
+        the bytes selection reads do not change; and the selection is a
+        deterministic function of those bytes. A window refused here is
+        refused identically by every segment that follows, which is why it
+        is reported as a window production has lost rather than as one still
+        waiting for a later run.
+
+        The reason recorded is the selection's own, not a summary of it, so
+        the receipt distinguishes a duplicate conflict from a post-tip
+        capture from a digest that no longer matches the bytes on disk.
+        """
+        window_id = str(row["window_id"])
+
+        if any(
+            record["window_id"] == window_id for record in self.unrecoverable
+        ):
+            return
+
+        self.unrecoverable.append(
+            {
+                "game_id": int(row["game_id"]),
+                "observed_at_utc": self.clock().isoformat(),
+                "outcome": RECOVERY_OUTCOME_UNRECOVERABLE,
+                "reason": str(error),
+                "window_id": window_id,
+            }
+        )
+
+    def _unserved_reason(self, outstanding: Sequence[str]) -> str:
+        """Why each window is unserved, split by whether anything can fix it.
+
+        The single sentence this replaces said the captures "stay exactly as
+        they were taken; a later run will serve and publish from them
+        without recapturing". That is true of a window whose segment ran out
+        of time and false of a conflicted or post-tip one, and the operator
+        it misleads is the one who waits for a recovery that cannot happen.
+        """
+        refused = {
+            str(record["window_id"]): str(record["reason"])
+            for record in self.unrecoverable
+        }
+
+        dead = [
+            window_id for window_id in outstanding if window_id in refused
+        ]
+
+        waiting = [
+            window_id for window_id in outstanding if window_id not in refused
+        ]
+
+        reason = (
+            f"{len(outstanding)} T-{self.offset_minutes} capture(s) of "
+            f"{self.slate_date} exist and no release carries them: "
+            f"{', '.join(outstanding)}"
+        )
+
+        if dead:
+            reason += (
+                f". {len(dead)} of them cannot be served from the capture "
+                "that exists, for a reason no later run can repair, so "
+                "production has lost the window: "
+                + "; ".join(
+                    f"{window_id} ({refused[window_id]})"
+                    for window_id in dead
+                )
+            )
+
+        if waiting:
+            reason += (
+                f". {len(waiting)} capture(s) are sound and stay exactly as "
+                "they were taken; a later run will serve and publish from "
+                f"them without recapturing: {', '.join(waiting)}"
+            )
+
+        return reason + ". This segment is not reported as a success"
+
+    def _record_recovery_fault(self, refusal: ControllerRefused) -> None:
+        """Record a recovery that got past verification and still did not land.
+
+        Kept apart from :attr:`unrecoverable` because the two mean opposite
+        things to whoever reads the receipt. A window in that list is gone.
+        A fault here is the serving or publication stage refusing, which
+        says nothing about the captures: they still verify, and the next
+        segment can still publish them.
+        """
+        self.recovery_faults.append(
+            {
+                "observed_at_utc": self.clock().isoformat(),
+                "outcome": str(refusal.outcome),
+                "reason": str(refusal),
+            }
+        )
 
     def _work(self, plan: dict[str, Any], readiness: dict[str, Any]) -> None:
         rows = {str(row["window_id"]): row for row in plan["pending_rows"]}
@@ -2765,35 +2944,66 @@ class T20Controller:
 
         self._serve_and_publish(stage_dir, readiness=readiness)
 
-    def _verify_captured(
-        self, game_ids: Sequence[int], *, window_ids: Sequence[str]
-    ) -> list[dict[str, Any]]:
-        """Prove the capture the pricing path requires is actually there.
+    def _select_capture(
+        self, game_id: int
+    ) -> tuple[dict[str, Any] | None, RuntimeError | None]:
+        """One game's eligible T-20 bundle, or the error selection refused it with.
 
-        The same selection pricing performs, performed here: exactly one
-        scheduled capture for the window, no recorded errors, every component
-        hash recomputed, the capture id recomputed, the target game present
-        and the capture pre-tip. A game that is on the schedule and reaches
-        this point without an eligible bundle is the failure this controller
-        exists to make loud -- left alone it would reach serving as an empty
-        slate and publish nothing with a green job.
+        The selection is ``select_capture_bundle`` and is not reimplemented
+        here: exactly one scheduled capture for the window, no recorded
+        errors, every component hash recomputed, the capture id recomputed,
+        the target game present and the capture pre-tip.
+
+        Returned rather than raised because the two callers need opposite
+        things from a refusal, and that difference is the whole of this
+        split. A capture this run has just taken and cannot select is the
+        failure this controller exists to make loud. A capture an earlier
+        run took and this one cannot select is one window of the slate, and
+        raising for it costs the segment every other window it owns.
 
         Imported here because ``prospective_snapshot`` pulls pandas, which the
         probe must not need.
         """
         from nba_prop_quant.prospective_snapshot import select_capture_bundle
 
+        try:
+            bundle = select_capture_bundle(
+                self.snapshot_dir,
+                date=self.slate_date,
+                game_id=int(game_id),
+                offset_minutes=self.offset_minutes,
+            )
+        except RuntimeError as error:
+            return None, error
+
+        return {
+            "capture_id": bundle.capture_id,
+            "captured_at_utc": bundle.captured_at,
+            "game_id": int(game_id),
+            "window_id": bundle.window_id,
+        }, None
+
+    def _verify_captured(
+        self, game_ids: Sequence[int], *, window_ids: Sequence[str]
+    ) -> list[dict[str, Any]]:
+        """Prove the capture the pricing path requires is actually there.
+
+        The same selection pricing performs, performed here. A game that is
+        on the schedule and reaches this point without an eligible bundle is
+        the failure this controller exists to make loud -- left alone it
+        would reach serving as an empty slate and publish nothing with a
+        green job.
+
+        This is the caller for a capture the run has just taken, and it is
+        deliberately all-or-nothing: the collector was invoked moments ago
+        for this group and every window in it must be there.
+        """
         verified: list[dict[str, Any]] = []
 
         for game_id in game_ids:
-            try:
-                bundle = select_capture_bundle(
-                    self.snapshot_dir,
-                    date=self.slate_date,
-                    game_id=int(game_id),
-                    offset_minutes=self.offset_minutes,
-                )
-            except RuntimeError as error:
+            bundle, error = self._select_capture(int(game_id))
+
+            if error is not None:
                 raise ControllerRefused(
                     OUTCOME_REQUIRED_SNAPSHOT_MISSING,
                     f"game {game_id} is on the {self.slate_date} schedule and "
@@ -2802,14 +3012,7 @@ class T20Controller:
                     f"scheduled capture can be selected for it: {error}",
                 ) from error
 
-            verified.append(
-                {
-                    "capture_id": bundle.capture_id,
-                    "captured_at_utc": bundle.captured_at,
-                    "game_id": int(game_id),
-                    "window_id": bundle.window_id,
-                }
-            )
+            verified.append(bundle)
 
         return verified
 
@@ -3082,18 +3285,32 @@ class T20Controller:
         enumerates the scheduled windows at this offset in that log and
         builds a bundle for every one of them with no branch that skips one,
         ``15_price_markets.py`` rewrites the whole priced artifact, and the
-        feed publishes every row in it. A window the capture log holds that
-        serving could not have used would have refused the run rather than
-        reaching this line.
+        feed publishes every row in it.
+
+        Minus the windows this segment has proved serving cannot select.
+        That subtraction used to be unnecessary and is now load-bearing: a
+        window the capture log held that serving could not have used would
+        once have refused the run before reaching this line, and now the
+        run continues past it on purpose. Claiming it here would assert
+        that a release carries a window no release can carry, and -- worse
+        -- would retire it from the unserved set, so the permanently
+        missing window would read as published and the segment would exit
+        green. Omitting it is the conservative direction: a window left out
+        of this row stays unserved and keeps failing the segment.
 
         Appended and fsynced, one row, never rewritten. The claim it makes
         is about what a release carried, so a row may not be withdrawn by a
         later run any more than a capture may.
         """
+        refused = {
+            str(record["window_id"]) for record in self.unrecoverable
+        }
+
         windows = sorted(
             window_id
             for window_id in completed_window_ids(self.capture_run_path)
             if window_id.endswith(f":T-{self.offset_minutes}m")
+            and window_id not in refused
         )
 
         row = {
@@ -3198,6 +3415,11 @@ class T20Controller:
                 for row in self._unserved_rows(plan["rows"])
             ],
             "recovered_windows": self.recovered,
+            # Named apart from captured_unserved_windows above, which is the
+            # whole outstanding set. These are the subset of it that no
+            # later run will clear, with the reason selection gave for each.
+            "unrecoverable_windows": self.unrecoverable,
+            "recovery_faults": self.recovery_faults,
             "served_window_records": self.publications,
             "capture_ids": sorted(
                 {
@@ -3278,6 +3500,14 @@ def render(receipt: dict[str, Any]) -> str:
             ", ".join(receipt.get("captured_unserved_windows") or [])
             or "none",
         ),
+        (
+            "unrecoverable",
+            ", ".join(
+                str(record.get("window_id"))
+                for record in receipt.get("unrecoverable_windows") or []
+            )
+            or "none",
+        ),
         ("captures completed", receipt.get("captures_completed")),
         ("serving invocations", len(receipt.get("serving_invocations") or [])),
         (
@@ -3325,6 +3555,34 @@ def render(receipt: dict[str, Any]) -> str:
     lines += [f"| {label} | {value} |" for label, value in rows]
 
     lines += ["", str(receipt.get("reason") or "")]
+
+    unrecoverable = receipt.get("unrecoverable_windows") or []
+
+    if unrecoverable:
+        lines += [
+            "",
+            "### Windows no later run will serve",
+            "",
+            (
+                "These captures exist and selection refuses them. The T-20 "
+                "window each one belongs to is in the past, so no run can "
+                "take another capture of it and no run can publish this "
+                "one. They are listed so the operator stops waiting for a "
+                "recovery that cannot happen, and the segment stays red "
+                "while they are outstanding."
+            ),
+            "",
+            "| window | why |",
+            "| --- | --- |",
+        ]
+
+        lines += [
+            "| {window} | {reason} |".format(
+                window=record.get("window_id"),
+                reason=str(record.get("reason") or "").replace("|", "/")[:300],
+            )
+            for record in unrecoverable
+        ]
 
     advisory = receipt.get("advisory_windows") or []
 

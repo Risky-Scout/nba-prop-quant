@@ -3296,14 +3296,17 @@ def test_the_unrecoverable_window_stops_blocking_the_segments_after_it(
     unserved set, re-attempted the same doomed recovery and skipped its own
     work in the same place. One conflicted capture at 15:25Z therefore cost
     every segment for the rest of the slate, not only the one it appeared
-    in. Here the second segment runs after the first has already failed.
+    in. Here the third segment of the day runs after the second has already
+    met the window and failed on it.
     """
     clock = Clock(at(19, 25))
 
+    # 104 tips late enough that its T-20 window belongs to the third
+    # segment, so the two runs below own genuinely different work.
     games = [
         game(101, at(23, 0)),
         game(102, at(23, 0), home=3, away=4),
-        game(103, at(0, 0, day=21), home=5, away=6),
+        game(104, at(2, 0, day=21), home=5, away=6),
     ]
 
     captured_but_unpublished(tmp_path, clock=clock, games=games)
@@ -3316,50 +3319,112 @@ def test_the_unrecoverable_window_stops_blocking_the_segments_after_it(
         captured_at=at(22, 45),
     )
 
-    first_clock = Clock(at(22, 50))
+    second_clock = Clock(at(22, 50))
 
-    first = World(tmp_path, schedules=[games], clock=first_clock)
+    second_segment = World(tmp_path, schedules=[games], clock=second_clock)
 
-    write_morning_receipt(first)
+    write_morning_receipt(second_segment)
 
-    first_receipt = build(
-        first,
-        clock=first_clock,
+    second_receipt = build(
+        second_segment,
+        clock=second_clock,
         segment_start=SEGMENT_2[0],
         segment_end=SEGMENT_2[1],
     ).run()
 
     assert (
-        first_receipt["final_outcome"]
+        second_receipt["final_outcome"]
         == controller.OUTCOME_CAPTURED_NOT_SERVED
     )
 
-    # A later segment over the same state. The window is still unrecoverable
-    # and still named, and this segment still does its own work.
-    second_clock = Clock(at(23, 20))
+    # The third segment, over the same state. The window is still
+    # unrecoverable and still named, and this segment still does its own
+    # work rather than stopping where the last one stopped.
+    third_clock = Clock(at(0, 25, day=21))
 
-    second = World(tmp_path, schedules=[games], clock=second_clock)
+    third_segment = World(tmp_path, schedules=[games], clock=third_clock)
 
-    write_morning_receipt(second)
+    write_morning_receipt(third_segment)
 
     receipt = build(
-        second,
-        clock=second_clock,
-        segment_start=SEGMENT_2[0],
-        segment_end=SEGMENT_2[1],
+        third_segment,
+        clock=third_clock,
+        segment_start=at(0, 25, day=21),
+        segment_end=at(5, 25, day=21),
     ).run()
 
     assert [
         record["window_id"] for record in receipt["unrecoverable_windows"]
     ] == ["101:T-20m"]
 
-    assert "103:T-20m" in served_window_ids_for(second)
+    assert "104:T-20m" in served_window_ids_for(third_segment)
 
-    assert "103:T-45m" in {
+    assert "104:T-45m" in {
         str(record["window_id"]) for record in receipt["advisory_windows"]
     }
 
     assert receipt["final_outcome"] == controller.OUTCOME_CAPTURED_NOT_SERVED
+
+
+def test_a_recovery_that_cannot_publish_still_takes_the_capture_it_owns(
+    tmp_path,
+):
+    """The capture is the half of this that cannot be retried.
+
+    Recovery's second failure mode: the windows verify and the serving
+    stage refuses anyway. That refusal used to land before any collector
+    had run, so the segment lost the T-20 captures of games that had not
+    tipped. The market at T-20 exists once -- a publication can wait for
+    the next segment and a snapshot cannot -- so the refusal is deferred
+    until after the work rather than raised instead of it.
+
+    This is the shape the live slate is in until the serving half of the
+    defect is fixed: one capture selection cannot accept makes
+    ``ProspectiveSnapshotClient`` refuse the whole slate, so recovery's
+    serve fails for a reason the controller cannot do anything about.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [
+        game(101, at(23, 0)),
+        game(103, at(0, 0, day=21), home=5, away=6),
+    ]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    retry_clock = Clock(at(23, 0))
+
+    retry = World(
+        tmp_path,
+        schedules=[games],
+        clock=retry_clock,
+        serving_outcome="FAILED",
+    )
+
+    write_morning_receipt(retry)
+
+    with pytest.raises(controller.ControllerRefused) as refused:
+        build(
+            retry,
+            clock=retry_clock,
+            segment_start=SEGMENT_2[0],
+            segment_end=SEGMENT_2[1],
+        ).run()
+
+    # Deferred, never downgraded: the refusal keeps its own outcome.
+    assert refused.value.outcome == controller.OUTCOME_FAILED
+
+    assert refused.value.captured_unserved_windows == [
+        "101:T-20m",
+        "103:T-20m",
+    ]
+
+    # The window this segment owned was captured, which is what the early
+    # refusal used to cost. Serving still cannot publish it, so it is
+    # named above as unserved and a later run can still recover it.
+    assert "103:T-20m" in controller.completed_window_ids(
+        retry.snapshot_dir / "capture_runs" / f"{SLATE}.jsonl"
+    )
 
 
 def test_the_receipt_says_which_unserved_windows_no_run_will_ever_serve(
