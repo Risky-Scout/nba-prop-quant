@@ -109,27 +109,32 @@ has, and all three are enforced rather than intended:
   No advisory release touches the T-20 canary's ``current.json``, because no
   advisory run resolves a path inside the directory that holds it.
 
-THE LIVE RELEASE, REFRESHED PROGRESSIVELY
------------------------------------------
+THE LIVE RELEASE, A COMPOSITE REFRESHED PER GAME
+------------------------------------------------
 
 Everything above publishes a canary: a real release, read back and attested,
 in a directory a reader does not fetch. What a reader fetches is the single
 live destination, and this controller now refreshes it once per window.
 
-T-180 establishes the live release, T-90 replaces it, T-45 replaces that and
-T-20 replaces that as the final pregame version. One pointer and four
-refreshes, not four pages: a reader opens one URL through the evening and is
-shown the most recent window that validated.
+Each game of the slate stands at its own latest validated window. A game gets
+no card until one of its windows has passed canary, serves T-180 once T-180
+has, and is replaced by T-90, then T-45, then T-20 as each of its own windows
+validates. The live release is the composite of all of them at once, so an
+evening with several tip times can hold one game at T-20 while another is
+still at T-180. One pointer and one URL, as before; what changed is that the
+window a reader is shown is now a fact about each game rather than about the
+whole slate.
 
 The refresh happens immediately after a window's canary feed *and* page have
 both succeeded, and that order is the authorisation rather than a preference.
-``ops/run_progressive_live_refresh.py`` publishes the release its own canary
-validated and proves it is the same bytes on three independent statements of
-one rows digest, so a window with no canary has nothing that could authorise
-it. Everything else about a live publication -- the switch, the destination
-confinement, the receipt verification, the row rules, the rollback target,
-the readback, the atomic pointer -- belongs to the frozen publisher, which
-that module calls by name.
+``ops/run_progressive_live_refresh.py`` publishes the games of that canary at
+their own window and copies every other game's rows byte for byte out of the
+attested release it was already serving from, so a window with no canary has
+nothing that could authorise it and no row reaches the live root that no
+canary validated. Everything else about a live publication -- the switch, the
+destination confinement, the receipt verification, the row rules, the
+rollback target, the readback, the atomic pointer -- belongs to the frozen
+publisher, which that module calls by name.
 
 Three properties mirror the advisory ones, and the third is new:
 
@@ -143,16 +148,19 @@ Three properties mirror the advisory ones, and the third is new:
   recorded verbatim, so the receipt and the step summary name both variables.
 * **The prior valid release survives.** The refresh promotes last, after every
   gate, so a missing capture, a failed serve, a canary that did not validate,
-  a digest that does not match, a game that has already tipped or a transport
-  that will not talk all leave the live pointer naming the most recent release
-  that did validate.
-* **The chain only moves closer to tip.** The offsets descend, so a later
-  window may replace an earlier one and never the reverse. That is reachable
-  on this runner: pickup has been delayed by hours, so a T-180 invocation can
-  finish after a T-45 one, and without the rule it would walk the live page
-  back to the market as it stood three hours before tip -- with every digest
-  agreeing and every readback passing, because what it published is a real
-  validated release. It is simply the wrong one.
+  a digest that does not match, a row that traces to no attested source, a
+  game that has already tipped or a transport that will not talk all leave the
+  live pointer naming the most recent composite that did validate, unaltered.
+* **No game moves away from its tip.** The offsets descend, so a game may be
+  replaced by a window closer to its own tip and never by one further from it.
+  That is reachable on this runner: pickup has been delayed by hours, so a
+  T-180 invocation can finish after a T-45 one, and without the rule it would
+  walk that game back to the market as it stood three hours before tip -- with
+  every digest agreeing and every readback passing, because what it published
+  is a real validated release. It is simply the wrong one. The rule is applied
+  per game, which is what makes it safe to apply at all: measured against one
+  slate-wide pointer, the first game to reach T-20 would forbid every later
+  game's T-180.
 
 This controller still has no mode option and still publishes canary on its
 own account. What it gained is one invocation of one entry point that has no
@@ -561,16 +569,20 @@ LIVE_OUTCOME_ALREADY_CURRENT = "LIVE_ALREADY_CURRENT"
 LIVE_OUTCOME_PROMOTED_THEN_INCOMPLETE = "LIVE_PROMOTED_THEN_INCOMPLETE"
 LIVE_OUTCOME_REFUSED = "LIVE_REFUSED"
 
-#: The ordering rule declined this window because the live release is already
-#: at one closer to tip. Not a defect, and the ordinary evening case rather
-#: than an edge one: a window belongs to a game and its offset is measured
-#: from that game's own tip, so a slate with several tip times interleaves
-#: them -- the first game's T-20 capture is taken before the last game's
-#: T-180 capture, which is a later moment in the evening and an earlier point
-#: in its own game's window. The advisory refresh that follows asks to put a
-#: T-180 release live over a T-20 one and is told no, which is the ordering
-#: rule working. Reporting that as a degradation every evening would make the
-#: segment's verdict mean nothing.
+#: The ordering rule declined this window because every game in it is already
+#: standing at one closer to its own tip. Not a defect: a re-run of a window
+#: that already published, or a delayed invocation whose games have since been
+#: advanced by a later window, asks to move those games away from tip and is
+#: told no, which is the ordering rule working.
+#:
+#: Rare now, and that is the point of the per-game rule. A window belongs to a
+#: game and its offset is measured from that game's own tip, so a slate with
+#: several tip times interleaves them -- the first game's T-20 capture is
+#: taken before the last game's T-180 capture, which is a later moment in the
+#: evening and an earlier point in its own game's window. Decided against one
+#: slate-wide pointer that was the ordinary evening case and it cost every
+#: later game its early windows; decided per game it only fires when the
+#: particular games asked for are genuinely already closer in.
 LIVE_OUTCOME_ALREADY_CLOSER_TO_TIP = "LIVE_ALREADY_CLOSER_TO_TIP"
 
 #: The live feed was refreshed and the page a reader actually opens was not.
