@@ -1773,18 +1773,21 @@ def test_no_workflow_production_already_has_was_changed_silently():
 
             continue
 
-        lines = after.splitlines()
+        # Through the shared helper, which is where the additive-only rule is
+        # computed. This guard restated it inline as a filtered-list
+        # equality, and that form is the same statement only when no line
+        # repeats: a workflow repeats `run: |`, `set -euo pipefail`, `env:`
+        # and a bare comment marker, so an appended step that used any of
+        # them read as a reordering while having reordered nothing. The
+        # helper consumes the production lines in order and with
+        # multiplicity, refuses an edited line, a removed line and a real
+        # reordering -- each pinned by its own regression test above -- and
+        # is already what the sibling guard below uses.
+        faults = lines_only_appended(before=before, after=after)
 
-        removed = [line for line in before.splitlines() if line not in lines]
-
-        assert removed == [], (
-            f"{relative} is additive-only and removed or edited existing "
-            f"lines: {removed}"
+        assert faults == [], (
+            f"{relative} is additive-only and " + "; ".join(faults)
         )
-
-        assert [line for line in before.splitlines() if line in lines] == [
-            line for line in lines if line in set(before.splitlines())
-        ], f"{relative} reordered the lines production has"
 
     undeclared = [
         name
