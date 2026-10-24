@@ -239,6 +239,20 @@ jobs:
           # The deployment key, by name. Never printed, never written to a
           # receipt, and read only by the transport that needs it.
           NBA_WOO_SSH_PRIVATE_KEY: ${{ secrets.NBA_WOO_SSH_PRIVATE_KEY }}
+          # The two halves of the live approval, carried and not decided.
+          #
+          # The decision is modes.live.state in
+          # ops/wizardofodds_publishing_switch.json and is reviewed in a
+          # commit. These two carry it to this process, because an
+          # environment variable does not reach a step unless the step binds
+          # it, and the publisher reads the approval out of os.environ. Both
+          # must be set in the wizardofodds-production environment and both
+          # must agree with the switch, or every live publication refuses by
+          # name and the canary this step already published is what is
+          # retained. Neither is ever printed, echoed or passed on a command
+          # line, and this step cannot grant either of them.
+          NBA_PROP_WOO_PUBLISH: ${{ vars.NBA_PROP_WOO_PUBLISH }}
+          NBA_PROP_WOO_PUBLISH_APPROVAL: ${{ secrets.NBA_PROP_WOO_PUBLISH_APPROVAL }}
         run: |
           set -euo pipefail
           python ops/run_t20_production_controller.py \
