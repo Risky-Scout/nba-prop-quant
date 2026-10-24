@@ -252,6 +252,20 @@ jobs:
             --receipt-path "$RUNNER_TEMP/t20/t20_controller.json" \
             --summary-path "$GITHUB_STEP_SUMMARY"
 
+      # The ledger the controller appends to as it goes already survives this
+      # job, because it is written under the data root. This makes it readable
+      # from the workflow run too, which is where anyone looking at a red
+      # segment starts.
+      - name: Collect the durable evidence record for upload
+        if: always()
+        env:
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+          SLATE: ${{ inputs.slate_date || steps.probe.outputs.slate_date }}
+        run: |
+          set -euo pipefail
+          bash ops/collect_t20_evidence.sh "$NBA_PROP_DATA_DIR" "$SLATE" \
+            "$RUNNER_TEMP/t20/evidence"
+
       - name: Upload the segment diagnostics
         if: always()
         uses: actions/upload-artifact@v4
