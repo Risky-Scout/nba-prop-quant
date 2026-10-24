@@ -46,6 +46,7 @@ from nba_prop_quant.research.game_latent_state.safety import (
     DECLARED_CAPTURE_ISOLATION_NAMES,
     DECLARED_CAPTURE_RESOLUTION_NAMES,
     DECLARED_CAPTURE_SELECTION_DEFINITIONS,
+    DECLARED_INTEGRATION_PATHS,
     DECLARED_PAGE_CONSISTENCY_NAMES,
     DECLARED_PUBLICATION_TRANSPORT_NAMES,
     DECLARED_SERVING_EXCLUSION_NAMES,
@@ -1460,8 +1461,8 @@ def test_the_classifier_and_the_serving_step_are_given_the_same_slate_date():
     assert '--refresh-status "$RUNNER_TEMP/run/refresh.json"' in serve
 
 
-def test_no_workflow_production_already_has_was_changed():
-    """The opening-day fix needed no workflow change, and still has none.
+def test_no_workflow_production_already_has_was_changed_silently():
+    """A workflow production already runs may not change without saying so.
 
     Stated as "every workflow the production ref has is byte-identical"
     rather than "no path under .github/workflows/ appears in the diff",
@@ -1472,6 +1473,16 @@ def test_no_workflow_production_already_has_was_changed():
     something wrong. Adding a workflow is governed by the containment
     declaration; silently editing one production already runs is what this
     pins.
+
+    Byte-identical-or-declared, for the same reason: a branch that must fix
+    a scheduled workflow -- the readiness refresh's catch-up job ran its probe
+    on segment bounds its own resolver had refused to emit, and turned four
+    successful readiness refreshes into red runs -- has to be able to, and
+    the thing worth banning is doing it without a reviewed statement of what
+    changed and what did not. ``.github/workflows/`` is declarable: the
+    undeclarable prefixes are the model artifacts, the configs, the scripts
+    and the release and review surfaces. So the ban is on the silence, and
+    ``DECLARED_INTEGRATION_PATHS`` is where it is broken.
     """
     base = production_base()
 
@@ -1489,4 +1500,21 @@ def test_no_workflow_production_already_has_was_changed():
         != (PROJECT / ".github" / "workflows" / name).read_text(encoding="utf-8")
     ]
 
-    assert edited == []
+    undeclared = [
+        name
+        for name in edited
+        if f".github/workflows/{name}" not in DECLARED_INTEGRATION_PATHS
+    ]
+
+    assert undeclared == [], (
+        "these workflows production already runs were edited without a "
+        f"declaration: {undeclared}"
+    )
+
+    for name in edited:
+        reason = DECLARED_INTEGRATION_PATHS[f".github/workflows/{name}"]
+
+        assert "What changes" in reason and "What does not change" in reason, (
+            f"the declaration for {name} does not say both what changes and "
+            "what does not"
+        )
