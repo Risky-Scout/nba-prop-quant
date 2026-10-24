@@ -3041,7 +3041,7 @@ def test_a_window_recorded_twice_is_recovered_rather_than_stuck(tmp_path):
 
     before = capture_log.read_bytes()
 
-    recovery_clock = Clock(at(23, 50))
+    recovery_clock = Clock(at(22, 50))
 
     recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
 
@@ -3095,7 +3095,7 @@ def test_recovering_a_duplicated_window_twice_yields_the_same_release(
 
     replay_the_capture_log(world)
 
-    first_clock = Clock(at(23, 50))
+    first_clock = Clock(at(22, 50))
 
     first = World(tmp_path, schedules=[games], clock=first_clock)
 
@@ -3110,7 +3110,7 @@ def test_recovering_a_duplicated_window_twice_yields_the_same_release(
 
     released = served_records(first)
 
-    second_clock = Clock(at(23, 55))
+    second_clock = Clock(at(22, 55))
 
     second = World(tmp_path, schedules=[games], clock=second_clock)
 
