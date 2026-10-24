@@ -103,6 +103,13 @@ class Clock:
 
         self.slept: list[float] = []
 
+        #: The moments the controller woke up at, in order. Asserted on in
+        #: preference to :attr:`slept` wherever a test is about which windows
+        #: the controller came awake for, because the number of sleeps now
+        #: depends on how many advisory windows share the segment and the
+        #: moments do not.
+        self.woke: list[datetime] = []
+
     def __call__(self) -> datetime:
         return self.now
 
@@ -110,6 +117,8 @@ class Clock:
         self.slept.append(seconds)
 
         self.now = self.now + timedelta(seconds=seconds)
+
+        self.woke.append(self.now)
 
 
 class World:
@@ -132,6 +141,9 @@ class World:
         serving_outcome: str = "SERVED",
         feed_outcome: str = "PUBLISHED",
         collector_returncode: int = 0,
+        advisory_serving_outcome: str = "SERVED",
+        advisory_serving_returncode: int = 0,
+        advisory_feed_outcome: str = "PUBLISHED",
     ) -> None:
         self.data_root = tmp_path / "data"
 
@@ -155,13 +167,33 @@ class World:
 
         self.collector_returncode = collector_returncode
 
+        self.advisory_serving_outcome = advisory_serving_outcome
+
+        self.advisory_serving_returncode = advisory_serving_returncode
+
+        self.advisory_feed_outcome = advisory_feed_outcome
+
         self.commands: list[list[str]] = []
+
+        #: When each command in :attr:`commands` was issued, by the injected
+        #: clock. The reservation before a T-20 capture is a statement about
+        #: time, so proving it needs the time and not only the order.
+        self.command_times: list[datetime] = []
 
         self.schedule_reads: list[str] = []
 
         self.served: list[list[int]] = []
 
         self.published: list[list[int]] = []
+
+        # The advisory windows are recorded apart from the T-20 ones all the
+        # way through, so every assertion in this module about what production
+        # served and published stays an assertion about T-20. Mixing them into
+        # one list would make a test that says "the slate was served twice"
+        # quietly mean "something was served twice".
+        self.advisory_served: list[tuple[int, list[int]]] = []
+
+        self.advisory_published: list[tuple[str, str]] = []
 
     # -- injected collaborators ---------------------------------------
 
@@ -175,6 +207,8 @@ class World:
     def __call__(self, command, *, environment, cwd):
         self.commands.append(list(command))
 
+        self.command_times.append(self.clock())
+
         script = str(command[1])
 
         if script.endswith("11_collect_snapshots.py"):
@@ -182,6 +216,9 @@ class World:
 
         if script.endswith("run_incumbent_production_serving.py"):
             return self._serve(command)
+
+        if script.endswith("run_advisory_window_serving.py"):
+            return self._serve_advisory(command)
 
         if script.endswith("nba_distribution_publication.py"):
             return self._completed(command)
@@ -204,6 +241,10 @@ class World:
             for position, token in enumerate(command)
             if token == flag
         ]
+
+    @staticmethod
+    def _optional(command, flag):
+        return command[command.index(flag) + 1] if flag in command else None
 
     def _completed(self, command, *, returncode: int = 0, stdout: str = ""):
         import subprocess
@@ -300,12 +341,84 @@ class World:
 
         return self._completed(command)
 
+    def _serve_advisory(self, command):
+        """What ops/run_advisory_window_serving.py writes, in receipt shape.
+
+        A real receipt, built the way the real one is: the production outcome
+        and provenance ``build_receipt`` emits, plus the three advisory fields.
+        The served games are read out of the capture log at this window's own
+        offset, so the fake agrees with what was actually captured rather than
+        with the controller that asked for it.
+        """
+        offset = int(self._value(command, "--snapshot-offset-minutes"))
+
+        receipt_path = Path(self._value(command, "--receipt-path"))
+
+        served_ids = eligible_game_ids(
+            self.snapshot_dir, SLATE, offset_minutes=offset
+        )
+
+        self.advisory_served.append((offset, served_ids))
+
+        outcome = self.advisory_serving_outcome
+
+        if outcome == "SERVED" and not served_ids:
+            outcome = "NO_GAMES_ON_SLATE"
+
+        digest = hashlib.sha256(
+            json.dumps([offset, served_ids]).encode("utf-8")
+        ).hexdigest()
+
+        receipt_path.parent.mkdir(parents=True, exist_ok=True)
+
+        receipt_path.write_text(
+            json.dumps(
+                {
+                    "advisory": True,
+                    "advisory_capture_offset_minutes": offset,
+                    "advisory_capture_window_ids": self._values(
+                        command, "--capture-window-id"
+                    ),
+                    "outcome": outcome,
+                    "prediction_artifact": (
+                        {"sha256": digest} if outcome == "SERVED" else None
+                    ),
+                    "priced_market_artifact": (
+                        {"sha256": digest} if outcome == "SERVED" else None
+                    ),
+                    "served_game_ids": served_ids,
+                    "slate_date": self._value(command, "--slate-date"),
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        return self._completed(
+            command, returncode=self.advisory_serving_returncode
+        )
+
     def _publish(self, command):
         stage = self._value(command, "--stage")
 
         receipt_path = Path(self._value(command, "--receipt-path"))
 
         receipt_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # A named destination is how an advisory release is addressed and the
+        # T-20 release is published by not naming one, so this is the same
+        # distinction the controller makes.
+        feed_destination = self._optional(command, "--feed-destination-name")
+
+        page_destination = self._optional(command, "--page-destination-name")
+
+        if feed_destination or page_destination:
+            return self._publish_advisory(
+                command,
+                stage=stage,
+                receipt_path=receipt_path,
+                feed_destination=feed_destination,
+                page_destination=page_destination,
+            )
 
         if stage == "feed":
             served = json.loads(
@@ -342,6 +455,67 @@ class World:
                     "mode": self._value(command, "--mode"),
                     "slate_date": self._value(command, "--slate-date"),
                     "page_sha256": "0" * 64,
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        return self._completed(command)
+
+    def _publish_advisory(
+        self, command, *, stage, receipt_path, feed_destination, page_destination
+    ):
+        served = (
+            json.loads(
+                Path(
+                    self._value(command, "--serving-receipt")
+                ).read_text(encoding="utf-8")
+            )
+            if stage == "feed"
+            else {}
+        )
+
+        offset = int(served.get("advisory_capture_offset_minutes") or 0)
+
+        self.advisory_published.append(
+            (stage, str(feed_destination or page_destination))
+        )
+
+        if stage == "feed":
+            digest = str(
+                (served.get("priced_market_artifact") or {}).get("sha256") or ""
+            )
+
+            receipt_path.write_text(
+                json.dumps(
+                    {
+                        "mode": self._value(command, "--mode"),
+                        "outcome": self.advisory_feed_outcome,
+                        "published_game_ids": list(
+                            served.get("served_game_ids") or []
+                        ),
+                        "release": {
+                            "release_id": (
+                                f"nba_prop_quant_advisory_t{offset}m__{SLATE}__"
+                                + digest[:16]
+                            )
+                        },
+                        "slate_date": self._value(command, "--slate-date"),
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            return self._completed(command)
+
+        receipt_path.write_text(
+            json.dumps(
+                {
+                    "mode": self._value(command, "--mode"),
+                    "outcome": "PUBLISHED",
+                    "page_prefix": self._optional(command, "--page-prefix"),
+                    "page_sha256": "1" * 64,
+                    "slate_date": self._value(command, "--slate-date"),
                 }
             ),
             encoding="utf-8",
@@ -485,11 +659,52 @@ SEGMENT_2 = (at(19, 25), at(0, 25, day=21))
 SEGMENT_1 = (at(14, 25), at(19, 25))
 
 
-def collector_commands(world: World) -> list[list[str]]:
+def capture_commands(world: World) -> list[list[str]]:
+    """Every collector invocation, at whatever offset it asked for."""
     return [
         command
         for command in world.commands
         if str(command[1]).endswith("11_collect_snapshots.py")
+    ]
+
+
+def collector_commands(
+    world: World, *, offset_minutes: int = 20
+) -> list[list[str]]:
+    """The collector invocations at one offset, the production one by default.
+
+    Narrowed to an offset because the controller now captures the advisory
+    windows through the same collector. Every assertion in this module about
+    the production capture is an assertion about T-20 specifically, and
+    counting advisory invocations into it would make "one capture per due
+    group" mean something else.
+    """
+    wanted = str(int(offset_minutes))
+
+    return [
+        command
+        for command in capture_commands(world)
+        if "--offset-minutes" in command
+        and command[command.index("--offset-minutes") + 1] == wanted
+    ]
+
+
+def publication_commands(world: World, *, stage: str) -> list[list[str]]:
+    """The T-20 publication invocations at one stage.
+
+    An advisory release is addressed by naming its destination; the T-20
+    release is published by naming none, because its destination is the
+    mode's default. Filtering on that is what keeps every assertion in this
+    module about what production published an assertion about T-20.
+    """
+    return [
+        command
+        for command in world.commands
+        if str(command[1]).endswith("run_wizardofodds_publication.py")
+        and "--stage" in command
+        and command[command.index("--stage") + 1] == stage
+        and "--feed-destination-name" not in command
+        and "--page-destination-name" not in command
     ]
 
 
@@ -613,8 +828,20 @@ def test_one_due_game_is_one_capture(tmp_path):
 
     assert len(receipt["capture_ids"]) == 1
 
-    # Slept to the window rather than polling toward it.
-    assert clock.slept == [(at(22, 40) - at(19, 25)).total_seconds()]
+    # Slept to the window rather than polling toward it. Asserted as the
+    # total rather than as one sleep, because the advisory windows between
+    # 19:25 and 22:40 are what the controller wakes up for on the way, and
+    # what this test is about is that it was awake at 22:40 and not before.
+    assert sum(clock.slept) == (at(22, 40) - at(19, 25)).total_seconds()
+
+    assert receipt["captures"][0]["attempted_at_utc"] == at(22, 40).isoformat()
+
+    assert (
+        collector_commands(world)[0][
+            collector_commands(world)[0].index("--now-utc") + 1
+        ]
+        == at(22, 40).isoformat()
+    )
 
     # Served once, derived once, published once.
     assert len(receipt["serving_invocations"]) == 1
@@ -698,8 +925,17 @@ def test_each_unique_t20_time_is_its_own_capture(tmp_path):
     assert len(receipt["feed_publication_outcomes"]) == 3
 
 
-def test_production_schedules_only_the_t20_offset(tmp_path):
-    """Case 6: the six research windows are never scheduled by production."""
+def test_production_schedules_only_the_t20_and_advisory_offsets(tmp_path):
+    """Case 6: the research windows are never scheduled by production.
+
+    Narrower than it was, and stronger where it counts. It used to assert
+    that T-20 was the only window production ever captured, which stopped
+    being true when the early advisory windows were added. What it asserts
+    now is the part that was always the point: T-1440, T-480 and T-5 are
+    research windows and production schedules none of them, every capture is
+    taken at a named offset rather than at all of them, and T-20 is still the
+    only window that is served to the production canary.
+    """
     clock = Clock(at(19, 25))
 
     world = World(
@@ -714,36 +950,255 @@ def test_production_schedules_only_the_t20_offset(tmp_path):
 
     assert receipt["captures_completed"] == 1
 
-    for command in collector_commands(world):
-        assert "--offset-minutes" in command
+    # Every capture names exactly one offset. Omitting the flag is what
+    # selects every offset the schedule defines, which is what research and
+    # manual callers get and what production must never ask for.
+    requested = set()
 
-        assert command[command.index("--offset-minutes") + 1] == "20"
+    for command in capture_commands(world):
+        assert command.count("--offset-minutes") == 1
+
+        requested.add(int(command[command.index("--offset-minutes") + 1]))
+
+    assert requested == {20, 180, 90, 45}
 
     captured = controller.completed_window_ids(
         world.snapshot_dir / "capture_runs" / f"{SLATE}.jsonl"
     )
 
-    assert captured == {"101:T-20m"}
+    assert captured == {
+        "101:T-20m",
+        "101:T-180m",
+        "101:T-90m",
+        "101:T-45m",
+    }
 
     research = {
         f"101:T-{offset}m"
         for offset in CAPTURE_OFFSETS_MINUTES
-        if offset != 20
+        if offset != controller.PRODUCTION_OFFSET_MINUTES
+        and offset not in controller.ADVISORY_OFFSETS_MINUTES
     }
 
+    assert research == {"101:T-1440m", "101:T-480m", "101:T-5m"}
+
     assert not (captured & research)
+
+    # The production canary is served from the T-20 window and from nothing
+    # else: one serving invocation and one feed publication for the one T-20
+    # group, whatever the advisory windows did beside it.
+    assert len(receipt["serving_invocations"]) == 1
+
+    assert [record["outcome"] for record in receipt["feed_publication_outcomes"]] == [
+        "PUBLISHED"
+    ]
+
+    assert [offset for offset, _ in world.advisory_served] == [180, 90, 45]
 
     # And the capability itself is untouched.
     assert CAPTURE_OFFSETS_MINUTES == (1440, 480, 180, 90, 45, 20, 5)
 
 
+def advisory_commands(world: World) -> list[list[str]]:
+    """Every command the advisory path issued, serving and publication both."""
+    return [
+        command
+        for command in world.commands
+        if str(command[1]).endswith("run_advisory_window_serving.py")
+        or "--feed-destination-name" in command
+        or "--page-destination-name" in command
+    ]
+
+
+def test_an_advisory_window_publishes_to_its_own_destinations(tmp_path):
+    """Addressed by name, and never by the T-20 destination's name."""
+    clock = Clock(at(19, 25))
+
+    world = World(tmp_path, schedules=[[game(101, at(23, 0))]], clock=clock)
+
+    write_morning_receipt(world)
+
+    receipt = build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    ).run()
+
+    assert receipt["final_outcome"] == controller.OUTCOME_SEGMENT_COMPLETE
+
+    expected = []
+
+    for offset in controller.ADVISORY_OFFSETS_MINUTES:
+        expected += [
+            ("feed", controller.ADVISORY_FEED_DESTINATIONS[offset]),
+            ("page", controller.ADVISORY_PAGE_DESTINATIONS[offset]),
+        ]
+
+    assert world.advisory_published == expected
+
+    named = {name for _, name in world.advisory_published}
+
+    assert controller.T20_FEED_DESTINATION not in named
+
+    assert controller.T20_PAGE_DESTINATION not in named
+
+    # Each release id carries the offset it was captured at.
+    for offset in controller.ADVISORY_OFFSETS_MINUTES:
+        assert any(
+            f"advisory_t{offset}m" in release
+            for release in receipt["advisory_releases"]
+        ), receipt["advisory_releases"]
+
+    assert len(receipt["advisory_releases"]) == len(
+        controller.ADVISORY_OFFSETS_MINUTES
+    )
+
+    # And no advisory release id could be read as a T-20 one.
+    for release in receipt["advisory_releases"]:
+        assert release.startswith("nba_prop_quant_advisory_t")
+
+
+def test_no_advisory_work_interleaves_a_t20_serve_and_its_publication(tmp_path):
+    """The T-20 sequence is one uninterrupted run of commands.
+
+    The priced-markets parquet is one file per slate and both the T-20 path
+    and the advisory path rewrite it, so the T-20 serve, the derivation behind
+    its prices and its two publications have to be contiguous. The publisher
+    and the grader both re-hash that file against the receipt, so advisory
+    bytes could never be published or graded as T-20 -- but a serve
+    interrupted halfway would still fail the segment, which is the thing this
+    rules out.
+    """
+    clock = Clock(at(19, 25))
+
+    world = World(tmp_path, schedules=[[game(101, at(23, 0))]], clock=clock)
+
+    write_morning_receipt(world)
+
+    build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    ).run()
+
+    serve = next(
+        index
+        for index, command in enumerate(world.commands)
+        if str(command[1]).endswith("run_incumbent_production_serving.py")
+    )
+
+    page = max(
+        index
+        for index, command in enumerate(world.commands)
+        if command in publication_commands(world, stage="page")
+    )
+
+    assert serve < page
+
+    interleaved = [
+        command
+        for command in world.commands[serve : page + 1]
+        if command in advisory_commands(world)
+    ]
+
+    assert interleaved == []
+
+
+def test_an_advisory_serve_does_not_start_inside_the_t20_reservation(tmp_path):
+    """The one rule that keeps the advisory path from costing a T-20 window.
+
+    The T-45 window of the 23:00 game falls at 22:15, five minutes before the
+    22:20 T-20 window of the 22:40 game. Five minutes is inside the ten-minute
+    reservation, so that capture is still taken on the clock -- it is cheap and
+    it is the point-in-time market -- and its serving waits until the T-20
+    group is done.
+    """
+    clock = Clock(at(19, 25))
+
+    world = World(
+        tmp_path,
+        schedules=[[game(101, at(23, 0)), game(102, at(22, 40))]],
+        clock=clock,
+    )
+
+    write_morning_receipt(world)
+
+    receipt = build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    ).run()
+
+    reservation = timedelta(minutes=controller.T20_RESERVATION_MINUTES)
+
+    t20_due = [at(22, 20), at(22, 40)]
+
+    issued_at = dict(
+        zip(
+            [tuple(command) for command in world.commands],
+            world.command_times,
+            strict=True,
+        )
+    )
+
+    # The T-45 capture at 22:15 happened, on the clock, inside the reservation.
+    assert at(22, 15) in {
+        issued_at[tuple(command)]
+        for command in capture_commands(world)
+        if command[command.index("--offset-minutes") + 1] == "45"
+    }
+
+    # And no advisory serving or publication command was issued inside the
+    # reservation before either T-20 capture.
+    for command in advisory_commands(world):
+        issued = issued_at[tuple(command)]
+
+        for due in t20_due:
+            assert not (due - reservation <= issued < due), (
+                f"{command[1]} ran at {issued.isoformat()}, inside the "
+                f"reservation before the T-20 capture due at {due.isoformat()}"
+            )
+
+    # The held window was served once the T-20 group it was waiting on had
+    # been captured, which is what the reservation is for: it delays an
+    # advisory release and never drops one.
+    t20_capture = max(
+        index
+        for index, command in enumerate(world.commands)
+        if command in collector_commands(world)
+        and command[command.index("--now-utc") + 1] == at(22, 20).isoformat()
+    )
+
+    held = [
+        index
+        for index, command in enumerate(world.commands)
+        if str(command[1]).endswith("run_advisory_window_serving.py")
+        and command[command.index("--snapshot-offset-minutes") + 1] == "45"
+        and issued_at[tuple(command)] >= at(22, 15)
+    ]
+
+    assert held and min(held) > t20_capture
+
+    # Both T-20 windows were captured on time regardless.
+    assert receipt["captures_completed"] == 2
+
+    assert [capture["attempted_at_utc"] for capture in receipt["captures"]] == [
+        at(22, 20).isoformat(),
+        at(22, 40).isoformat(),
+    ]
+
+    # And the held window was served in the end rather than lost.
+    assert 45 in {offset for offset, _ in world.advisory_served}
+
+
 def test_an_already_completed_window_is_not_recaptured(tmp_path):
     """Case 7: the capture log is the authority on restart and retry.
 
-    The window is captured and no release carries it, so this run serves
-    and publishes it -- from the capture that already exists. What it must
-    not do, and does not do, is run the collector again: the window's T-20
-    time has passed and a snapshot taken now would be a snapshot of now.
+    Every window this segment owns is already in it, advisory included, so
+    the restart recaptures nothing: the capture log is one log and it is the
+    authority for all four windows.
+
+    It is no longer a no-op, which is the one claim here that the served-
+    window ledger took away. The T-20 window is captured and no release
+    carries it, so this run serves and publishes it from the capture that
+    already exists. What it must not do, and still does not do, is run the
+    collector again -- the window's T-20 time has passed and a snapshot taken
+    now would be a snapshot of now. The no-op case is the test below, where
+    publication has been recorded as well.
     """
     clock = Clock(at(19, 25))
 
@@ -753,21 +1208,29 @@ def test_an_already_completed_window_is_not_recaptured(tmp_path):
 
     write_morning_receipt(world)
 
-    write_capture(
-        world.snapshot_dir,
-        date=SLATE,
-        captured_at=at(22, 40).isoformat(),
-        window_ids=["101:T-20m"],
-        due_game_ids=[101],
-        games=games,
-        props=[prop(101, 601)],
-    )
+    for captured_at, window_id in (
+        (at(20, 0), "101:T-180m"),
+        (at(21, 30), "101:T-90m"),
+        (at(22, 15), "101:T-45m"),
+        (at(22, 40), "101:T-20m"),
+    ):
+        write_capture(
+            world.snapshot_dir,
+            date=SLATE,
+            captured_at=captured_at.isoformat(),
+            window_ids=[window_id],
+            due_game_ids=[101],
+            games=games,
+            props=[prop(101, 601)],
+        )
 
     receipt = build(
         world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
     ).run()
 
     assert receipt["already_completed_windows"] == ["101:T-20m"]
+
+    assert receipt["advisory_pending_windows"] == []
 
     assert collector_commands(world) == []
 
@@ -777,10 +1240,16 @@ def test_an_already_completed_window_is_not_recaptured(tmp_path):
 def test_a_window_a_release_already_carries_is_the_cheap_no_op(tmp_path):
     """Case 7 once publication has been recorded: there is nothing to do.
 
-    The same capture as above, with the durable statement that a release
-    carried it. Nothing runs at all -- no collector, no serving, no
-    publication -- which is what every later segment of a finished slate
-    has to cost.
+    The same four captures as above, with the durable statement that a
+    release carried the T-20 one. Nothing runs at all -- no collector, no
+    serving, no publication -- which is what every later segment of a
+    finished slate has to cost.
+
+    A finished slate means all four windows now, not just the T-20 one. The
+    advisory captures are written for the same reason the test above writes
+    them: a segment that owns three uncaptured advisory windows has work to
+    do whatever the T-20 window's state is, and the statement being made
+    here is about the segment that has none.
     """
     clock = Clock(at(19, 25))
 
@@ -790,15 +1259,21 @@ def test_a_window_a_release_already_carries_is_the_cheap_no_op(tmp_path):
 
     write_morning_receipt(world)
 
-    write_capture(
-        world.snapshot_dir,
-        date=SLATE,
-        captured_at=at(22, 40).isoformat(),
-        window_ids=["101:T-20m"],
-        due_game_ids=[101],
-        games=games,
-        props=[prop(101, 601)],
-    )
+    for captured_at, window_id in (
+        (at(20, 0), "101:T-180m"),
+        (at(21, 30), "101:T-90m"),
+        (at(22, 15), "101:T-45m"),
+        (at(22, 40), "101:T-20m"),
+    ):
+        write_capture(
+            world.snapshot_dir,
+            date=SLATE,
+            captured_at=captured_at.isoformat(),
+            window_ids=[window_id],
+            due_game_ids=[101],
+            games=games,
+            props=[prop(101, 601)],
+        )
 
     write_served_record(world, window_ids=["101:T-20m"])
 
@@ -811,6 +1286,8 @@ def test_a_window_a_release_already_carries_is_the_cheap_no_op(tmp_path):
     assert receipt["already_completed_windows"] == ["101:T-20m"]
 
     assert receipt["captured_unserved_windows"] == []
+
+    assert receipt["advisory_pending_windows"] == []
 
     assert world.commands == []
 
@@ -846,8 +1323,11 @@ def test_a_tip_that_moved_later_is_rescheduled(tmp_path):
 
     assert receipt["captures"][0]["due_at_utc"] == at(23, 10).isoformat()
 
-    # Slept to the original window, found the move, slept to the new one.
-    assert len(clock.slept) == 2
+    # Woke at the original window, found the move, slept to the new one and
+    # woke there last of all.
+    assert at(22, 40) in clock.woke
+
+    assert clock.woke[-1] == at(23, 10)
 
 
 def test_a_tip_that_moved_into_a_later_segment_is_deferred(tmp_path):
@@ -1046,11 +1526,9 @@ def test_serving_reporting_no_games_after_a_capture_is_a_failure(tmp_path):
     assert "about to be recorded as an empty one" in str(error.value)
 
     # And nothing was published behind it.
-    assert [
-        command
-        for command in world.commands
-        if str(command[1]).endswith("run_wizardofodds_publication.py")
-    ] == []
+    assert publication_commands(world, stage="feed") == []
+
+    assert publication_commands(world, stage="page") == []
 
 
 def test_a_refused_feed_publication_fails_the_segment(tmp_path):
@@ -1075,11 +1553,7 @@ def test_a_refused_feed_publication_fails_the_segment(tmp_path):
 
     assert error.value.outcome == controller.OUTCOME_FAILED
 
-    assert [
-        command
-        for command in world.commands
-        if "--stage" in command and command[command.index("--stage") + 1] == "page"
-    ] == []
+    assert publication_commands(world, stage="page") == []
 
 
 # ----------------------------------------------------------------------
@@ -1563,10 +2037,18 @@ def test_the_lifecycle_workflow_still_owns_the_once_daily_work():
     """This change adds a scheduler; it does not move the heavy path."""
     lifecycle = LIFECYCLE_WORKFLOW.read_text(encoding="utf-8")
 
-    for entry_point in validator.T20_FORBIDDEN_ENTRY_POINTS:
+    for entry_point in validator.LIFECYCLE_ENTRY_POINTS:
         assert entry_point in lifecycle, entry_point
 
     assert "cron: '37 9 * * *'" in lifecycle
+
+    # The entry points the controller owns belong to neither workflow. They
+    # are forbidden in the T-20 workflow for a reason of their own, which is
+    # why they are a separate list rather than more of the lifecycle's work.
+    for entry_point in validator.CONTROLLER_OWNED_ENTRY_POINTS:
+        assert entry_point not in lifecycle, entry_point
+
+        assert entry_point not in T20_WORKFLOW.read_text(encoding="utf-8")
 
 
 def test_the_static_validator_covers_the_new_workflow():

@@ -63,6 +63,51 @@ replacing: ``10_predict_slate.py`` enumerates every game with an eligible
 bundle, ``15_price_markets.py`` rewrites the whole priced parquet, and the
 feed publishes every row in it. A game captured at 18:40 is still priced and
 still published after the 21:40 capture.
+
+THE EARLY ADVISORY WINDOWS
+--------------------------
+
+T-20 is twenty minutes before tip, which is when the production release is
+available and is too late to be much use to a reader deciding what to bet. So
+this controller also captures, serves and publishes T-180, T-90 and T-45 --
+:data:`ADVISORY_OFFSETS_MINUTES` -- as *advisory* releases, three hours, an
+hour and a half and three quarters of an hour before tip.
+
+They are handled here, inside the invocation that already owns the segment,
+rather than by a workflow of their own, and that is a decision about the
+runner rather than about the code. The self-hosted runner executes one job at
+a time; the 19:25 UTC segment holds it from 19:25 until its last window is
+done, which on a normal slate is past 01:00; and almost every advisory window
+falls inside that span. A second workflow would therefore not run earlier --
+it would queue behind this one on the runner and start after every window it
+was for had passed. Sharing this invocation is the only arrangement in which
+an advisory window is served at the time it is for. It also shortens the
+longest sleep this job ever takes, which matters on a runner that has twice
+dropped a long-idling job: the 19:25 segment's first T-20 window is over three
+hours away, and the advisory windows in between break that one sleep into
+several short ones.
+
+Three properties keep the advisory path from costing anything the T-20 path
+has, and all three are enforced rather than intended:
+
+* **T-20 comes first.** No advisory work is started inside
+  :data:`T20_RESERVATION_MINUTES` of a T-20 capture this segment still owns.
+  The reservation is re-checked at every stage boundary, so an advisory serve
+  that takes longer than expected is abandoned rather than allowed to run
+  into the window.
+* **An advisory failure is not a T-20 failure.** Everything the advisory path
+  does is recorded and nothing it does raises: a capture that fails, a serve
+  that fails or a publication that fails is reported as
+  :data:`OUTCOME_SEGMENT_COMPLETE_ADVISORY_DEGRADED`, which still succeeds,
+  because a defect in an advisory window must never cost the slate its
+  production release.
+* **An advisory release cannot be mistaken for a T-20 one.** It is captured
+  at its own window id, served through ``ops/run_advisory_window_serving.py``
+  -- which refuses the T-20 offset and refuses to write a T-20 window id --
+  and published to :data:`ADVISORY_FEED_DESTINATIONS`, which are confined to
+  ``canary-advisory/t<offset>m`` and carry the offset in their release prefix.
+  No advisory release touches the T-20 canary's ``current.json``, because no
+  advisory run resolves a path inside the directory that holds it.
 """
 
 from __future__ import annotations
@@ -97,8 +142,26 @@ from nba_prop_quant.snapshot_schedule import (  # noqa: E402
 
 NBA_TZ = ZoneInfo("America/New_York")
 
-#: The window production consumes, and the only one it schedules.
+#: The window production consumes, and the only one it is required to capture.
 PRODUCTION_OFFSET_MINUTES = 20
+
+#: The early windows served for advisory reading, in the order they occur.
+#:
+#: A subset of :data:`CAPTURE_OFFSETS_MINUTES` and no addition to it: the
+#: capture schedule has always defined these three and nothing scheduled them.
+#: T-1440 and T-480 are a day and eight hours out, which is before the books
+#: have posted most of a slate's props; T-5 is five minutes before tip, which
+#: is later than the window a reader already gets. So these three are the ones
+#: with an advisory destination configured, and the serving entry point
+#: refuses any other.
+#:
+#: On by default, which is deliberate. GitHub fires scheduled events from the
+#: default branch, so a scheduled run executes ``main``'s copy of the workflow
+#: and this branch's copy of the Python. An advisory path switched on by a
+#: workflow input would therefore do nothing until the scheduler copy was
+#: separately synced, and the point of this change is that a reader gets the
+#: early windows tonight.
+ADVISORY_OFFSETS_MINUTES: tuple[int, ...] = (180, 90, 45)
 
 #: The three scheduled segment starts, as UTC (hour, minute). Each segment
 #: owns the half-open five hours that follow it, so together they cover
@@ -124,10 +187,99 @@ SERVING_ENTRY_POINT = Path("ops") / "run_incumbent_production_serving.py"
 DISTRIBUTION_ENTRY_POINT = Path("ops") / "nba_distribution_publication.py"
 PUBLICATION_ENTRY_POINT = Path("ops") / "run_wizardofodds_publication.py"
 
+#: The advisory windows' serving entry point. A separate script rather than an
+#: argument to the one above, because the production orchestrator is held
+#: byte-identical to production outside two named functions and the offset
+#: would have to be added to its argument parser. The advisory one imports
+#: that orchestrator and calls its functions by name, so the model, the
+#: incumbent resolution, the frozen-bundle verification and the receipt shape
+#: are the production ones and not a second copy of them.
+ADVISORY_SERVING_ENTRY_POINT = Path("ops") / "run_advisory_window_serving.py"
+
 #: Canary, always. There is no mode argument and no code path to live
 #: publication here: a schedule that could activate live publishing would
 #: make every scheduled run an activation decision.
 PUBLICATION_MODE = "canary"
+
+#: The feed destination each advisory window publishes to, by name.
+#:
+#: One destination per window, and the reason is the pointer rather than the
+#: tidiness. A publication writes ``current.json`` at the root of the
+#: destination it resolved, so the only way an advisory release can be
+#: structurally incapable of repointing the T-20 canary is for it to resolve a
+#: root the T-20 canary's pointer is not inside. Each of these is confined to
+#: ``canary-advisory/t<offset>m`` where the T-20 canary is confined to
+#: ``canary``: neither path is a prefix of the other, so neither destination
+#: can address the other's pointer, releases or audit log.
+#:
+#: Their release prefixes carry the offset too, so ``current.json``, the
+#: release directory, the release id in the manifest and the rows path the
+#: manifest names all state the window the prices came from.
+ADVISORY_FEED_DESTINATIONS: dict[int, str] = {
+    180: "wizardofodds_nba_advisory_t180m_canary",
+    90: "wizardofodds_nba_advisory_t90m_canary",
+    45: "wizardofodds_nba_advisory_t45m_canary",
+}
+
+#: The page destination each advisory window's page is written to, by name.
+#: Confined the same way and disjoint from the T-20 page canary for the same
+#: reason.
+ADVISORY_PAGE_DESTINATIONS: dict[int, str] = {
+    180: "wizardofodds_nba_player_props_page_advisory_t180m_canary",
+    90: "wizardofodds_nba_player_props_page_advisory_t90m_canary",
+    45: "wizardofodds_nba_player_props_page_advisory_t45m_canary",
+}
+
+#: The subdirectory each advisory page is written to inside its destination.
+#: The destination confinement already separates the windows from each other
+#: and from T-20; this carries the offset in the page's own file path as well,
+#: so a reader who has only the URL can tell which window they are reading.
+ADVISORY_PAGE_PREFIXES: dict[int, str] = {
+    offset: f"page-preview-advisory-t{offset}m"
+    for offset in ADVISORY_OFFSETS_MINUTES
+}
+
+#: The feed destination the T-20 window publishes to, by the name
+#: ``run_wizardofodds_publication.py`` resolves for canary mode. Stated here
+#: so the cross-routing refusal can name it: the T-20 release is published by
+#: *not* passing a destination name, and this is the name that would be
+#: resolved if one were.
+T20_FEED_DESTINATION = "wizardofodds_nba_canary"
+
+T20_PAGE_DESTINATION = "wizardofodds_nba_player_props_page_canary"
+
+#: How much room an advisory window needs before the next T-20 capture this
+#: segment owns.
+#:
+#: Measured rather than guessed. On the production runner a complete capture,
+#: serve, derive, publish-feed and publish-page cycle for a seven-game,
+#: 2,075-row slate took two minutes and nine seconds (run 40033448558, the
+#: 23:40 UTC group of 2026-10-23). Ten minutes is nearly five times that, and
+#: it is re-checked at every stage boundary rather than only before the first,
+#: so the exposure if a stage runs long is one stage rather than four.
+#:
+#: Ten and not more: T-45 and T-20 are twenty-five minutes apart by
+#: definition, so a reservation above twenty-five would defer every T-45
+#: window whose T-20 this segment also owns -- which is most of them -- and
+#: the T-45 release would reliably arrive after the T-20 one it is meant to
+#: precede.
+#:
+#: Ten is also what keeps the capture claim out of T-20's way. The claim an
+#: advisory sweep takes beside ``capture_runs/<slate>.jsonl`` is exclusive and
+#: held across the whole sweep, so an advisory sweep that overran would block
+#: the T-20 sweep behind it until ``--grace-minutes`` expired. The reservation
+#: is what bounds that: an advisory sweep cannot start inside the last ten
+#: minutes before a T-20 capture, so a sweep costing 2m09s clears the claim
+#: with roughly eight minutes to spare. The margin is pinned by
+#: :data:`ADVISORY_SWEEP_MEASURED_SECONDS` below rather than left as prose.
+T20_RESERVATION_MINUTES = 10
+
+#: The measured end-to-end cost of one advisory window, in seconds, from the
+#: run named above. Recorded as a number so the claim-headroom argument is a
+#: test rather than a comment: the reservation has to stay a large multiple of
+#: this, because it is the only thing standing between a long advisory sweep
+#: and a T-20 sweep waiting on the capture claim.
+ADVISORY_SWEEP_MEASURED_SECONDS = 129
 
 #: Where this controller durably records which T-20 windows a published
 #: release actually carried.
@@ -165,6 +317,13 @@ SERVED_RECORD_TYPE = "t20_windows_served"
 #: copy is the handoff this controller reuses; no new receipt is introduced.
 MORNING_RECEIPT_RELATIVE = Path("processed") / "incumbent_serving"
 
+#: The field only ``ops/run_advisory_window_serving.py`` writes. Stated here
+#: rather than imported for the reason the readiness outcomes are stated here:
+#: that module imports the serving orchestrator, which pulls the fit registry
+#: and the frozen-bundle installer behind it, and the probe must stay light. A
+#: test pins the two constants equal.
+ADVISORY_RECEIPT_MARKER_FIELD = "advisory"
+
 #: The serving outcomes that prove the morning lifecycle got all the way
 #: through its own serving step for this slate.
 #:
@@ -196,6 +355,15 @@ SERVING_OUTCOME_NO_GAMES = "NO_GAMES_ON_SLATE"
 
 OUTCOME_NO_WINDOWS = "NO_T20_WINDOWS_IN_SEGMENT"
 OUTCOME_SEGMENT_COMPLETE = "T20_SEGMENT_COMPLETE"
+
+#: The segment finished its T-20 work and something in the advisory path did
+#: not. A distinct outcome and still a success: the T-20 release is the
+#: production deliverable and an advisory defect must not turn a slate that
+#: was captured, served and published into a red job. Distinct so the run is
+#: not silently green either -- the receipt names every advisory failure and
+#: the step summary leads with the count.
+OUTCOME_SEGMENT_COMPLETE_ADVISORY_DEGRADED = "T20_SEGMENT_COMPLETE_ADVISORY_DEGRADED"
+
 OUTCOME_MORNING_NOT_READY = "MORNING_PRODUCTION_NOT_READY"
 
 #: Distinguished from the outcome above because the operator action differs.
@@ -223,12 +391,66 @@ OUTCOME_FAILED = "T20_CONTROLLER_FAILED"
 OUTCOME_CAPTURED_NOT_SERVED = "T20_CAPTURED_WINDOWS_UNSERVED"
 
 OUTCOMES_THAT_SUCCEED: frozenset[str] = frozenset(
-    {OUTCOME_NO_WINDOWS, OUTCOME_SEGMENT_COMPLETE}
+    {
+        OUTCOME_NO_WINDOWS,
+        OUTCOME_SEGMENT_COMPLETE,
+        OUTCOME_SEGMENT_COMPLETE_ADVISORY_DEGRADED,
+    }
 )
 
 PUBLICATION_OUTCOME_PUBLISHED = "PUBLISHED"
 PUBLICATION_OUTCOME_NOT_SERVED = "NOT_SERVED_NOTHING_TO_PUBLISH"
 PUBLICATION_OUTCOME_SKIPPED = "SKIPPED_ALREADY_PUBLISHED_THIS_STATE"
+
+#: What one advisory window's attempt is recorded as.
+ADVISORY_OUTCOME_PUBLISHED = "ADVISORY_PUBLISHED"
+
+#: Captured on time and not served, because serving it would have run inside
+#: the reservation before a T-20 capture. The capture is durable and the
+#: window is retried at the next gap, so this is a delay and not a loss.
+ADVISORY_OUTCOME_HELD_FOR_T20 = "ADVISORY_HELD_FOR_T20_WINDOW"
+
+#: Its capture time fell outside every scheduling segment, so no invocation
+#: would have been awake for it. Recorded rather than refused: the equivalent
+#: T-20 condition is :data:`OUTCOME_UNSUPPORTED_TIME` and fails the run,
+#: which is right for the window production is required to have and wrong for
+#: one it is not.
+ADVISORY_OUTCOME_UNSUPPORTED_TIME = "ADVISORY_UNSUPPORTED_TIME"
+
+#: Its capture time passed while the controller was doing T-20 work, so the
+#: point-in-time snapshot it is for no longer exists to be taken.
+ADVISORY_OUTCOME_MISSED = "ADVISORY_WINDOW_MISSED"
+
+ADVISORY_OUTCOME_WITHDRAWN = "ADVISORY_GAME_WITHDRAWN"
+
+#: The tip moved and the window moved with it, out past the end of this
+#: segment. The invocation that owns the segment it moved into owns it now,
+#: exactly as :attr:`T20Controller.deferred` records for the T-20 window.
+#: Recorded rather than slept to, because sleeping past the segment end would
+#: hold the single self-hosted runner into the next invocation's segment and
+#: queue the capture that segment is required to have behind an advisory one.
+ADVISORY_OUTCOME_DEFERRED = "ADVISORY_DEFERRED_TO_LATER_SEGMENT"
+
+ADVISORY_OUTCOME_FAILED = "ADVISORY_FAILED"
+
+#: Advisory outcomes that are not a defect: nothing went wrong, the window
+#: was simply not this segment's to serve. Only an outcome outside this set
+#: degrades the segment.
+ADVISORY_OUTCOMES_WITHOUT_FAULT: frozenset[str] = frozenset(
+    {
+        ADVISORY_OUTCOME_PUBLISHED,
+        ADVISORY_OUTCOME_HELD_FOR_T20,
+        ADVISORY_OUTCOME_UNSUPPORTED_TIME,
+        ADVISORY_OUTCOME_WITHDRAWN,
+        ADVISORY_OUTCOME_DEFERRED,
+    }
+)
+
+#: How many times one advisory window may be re-planned onto a later capture
+#: time before it is given up on. Bounded for the same reason the T-20 plan's
+#: re-planning is: a schedule that kept moving must not loop forever. In
+#: practice one re-plan is the most that ever happens.
+ADVISORY_REPLAN_LIMIT = 4
 
 EXIT_OK = 0
 EXIT_FAILED = 1
@@ -402,6 +624,173 @@ def t20_rows(
     return [
         row for row in rows if int(row["offset_minutes"]) == int(offset_minutes)
     ]
+
+
+def advisory_rows(
+    games: Sequence[dict[str, Any]],
+    *,
+    offsets: Sequence[int] = ADVISORY_OFFSETS_MINUTES,
+) -> list[dict[str, Any]]:
+    """One row per game per advisory offset, earliest capture time first.
+
+    The same shared schedule :func:`t20_rows` reads, narrowed to the advisory
+    offsets instead of to the production one. Sorted by capture time because
+    the controller walks these in time order and a stable order makes the
+    receipt readable; the secondary keys make it total.
+    """
+    requested = [int(offset) for offset in offsets]
+
+    # The production window first, because it is the specific mistake and
+    # "not among the advisory windows" would be a true but useless way to
+    # describe it.
+    if PRODUCTION_OFFSET_MINUTES in requested:
+        raise ControllerRefused(
+            OUTCOME_FAILED,
+            f"T-{PRODUCTION_OFFSET_MINUTES} was asked for as an advisory "
+            "window. It is the production window: it has its own capture, its "
+            "own serving entry point, its own receipt and its own release "
+            "stream, and serving it as advisory would put the same snapshot "
+            "into two release streams under two names",
+        )
+
+    unknown = sorted(
+        offset for offset in requested if offset not in ADVISORY_OFFSETS_MINUTES
+    )
+
+    if unknown:
+        raise ControllerRefused(
+            OUTCOME_FAILED,
+            f"advisory offset(s) {unknown} are not among the advisory windows "
+            f"{list(ADVISORY_OFFSETS_MINUTES)}, so no destination is "
+            "configured to publish them and nothing would carry the release",
+        )
+
+    try:
+        rows = capture_schedule(list(games))
+    except ValueError as error:
+        raise ControllerRefused(
+            OUTCOME_FAILED,
+            "the slate schedule cannot be turned into capture windows, so "
+            f"no advisory time can be computed: {error}",
+        ) from error
+
+    wanted = set(requested)
+
+    return sorted(
+        (row for row in rows if int(row["offset_minutes"]) in wanted),
+        key=lambda row: (
+            row["capture_at_utc"],
+            int(row["offset_minutes"]),
+            int(row["game_id"]),
+        ),
+    )
+
+
+def assert_window_is_not_production(
+    window_ids: Sequence[str], *, offset_minutes: int
+) -> list[str]:
+    """Every window an advisory step is about is a window at its own offset.
+
+    The one assertion that makes "an advisory run cannot write a T-20 window
+    id" a property rather than a consequence. It is checked before the
+    collector is invoked, so a mis-wired advisory group refuses instead of
+    appending a ``:T-20m`` window to the capture log, and again on the window
+    ids handed to the advisory serving entry point, which refuses them in the
+    same terms from its own side.
+
+    Both halves matter. A ``:T-20m`` id would name the production record. An
+    id at some other offset would mean this step is about a window it is not
+    serving, and the receipt would describe a capture that did not produce
+    these prices.
+    """
+    suffix = f":T-{int(offset_minutes)}m"
+
+    production_suffix = f":T-{PRODUCTION_OFFSET_MINUTES}m"
+
+    claimed = sorted(
+        str(window_id)
+        for window_id in window_ids
+        if str(window_id).endswith(production_suffix)
+    )
+
+    if claimed:
+        raise ControllerRefused(
+            OUTCOME_FAILED,
+            "an advisory step would write the production window(s) "
+            + ", ".join(claimed)
+            + f", and a T-{PRODUCTION_OFFSET_MINUTES} window id is the name "
+            "of the production record. No advisory capture, receipt or "
+            "release may carry one",
+        )
+
+    wrong = sorted(
+        str(window_id)
+        for window_id in window_ids
+        if not str(window_id).endswith(suffix)
+    )
+
+    if wrong:
+        raise ControllerRefused(
+            OUTCOME_FAILED,
+            f"a T-{offset_minutes} advisory step was handed the window(s) "
+            + ", ".join(wrong)
+            + f", which are not {suffix} windows, so it is not the step those "
+            "captures belong to",
+        )
+
+    return sorted(str(window_id) for window_id in window_ids)
+
+
+def assert_destinations_are_advisory(
+    *, offset_minutes: int, feed: str, page: str
+) -> None:
+    """The destination pair an advisory window publishes to is its own.
+
+    Checked because the two mistakes it prevents are both one typo away and
+    neither would announce itself. A T-20 destination name here would publish
+    advisory prices over the production canary's ``current.json``. The wrong
+    advisory window's name would publish one window's prices under another
+    window's release prefix, which is the mislabelling this whole design
+    exists to make impossible.
+    """
+    expected_feed = ADVISORY_FEED_DESTINATIONS.get(int(offset_minutes))
+
+    expected_page = ADVISORY_PAGE_DESTINATIONS.get(int(offset_minutes))
+
+    for label, actual, expected in (
+        ("feed", feed, expected_feed),
+        ("page", page, expected_page),
+    ):
+        if expected is None:
+            raise ControllerRefused(
+                OUTCOME_FAILED,
+                f"no advisory {label} destination is configured for T-"
+                f"{offset_minutes}, so nothing would carry its release",
+            )
+
+        if actual != expected:
+            raise ControllerRefused(
+                OUTCOME_FAILED,
+                f"a T-{offset_minutes} advisory release would be published to "
+                f"the {label} destination {actual!r} and its own is "
+                f"{expected!r}. The T-20 canary is "
+                f"{T20_FEED_DESTINATION!r} and its page canary is "
+                f"{T20_PAGE_DESTINATION!r}; neither is ever written by an "
+                "advisory run",
+            )
+
+    for label, actual, production in (
+        ("feed", feed, T20_FEED_DESTINATION),
+        ("page", page, T20_PAGE_DESTINATION),
+    ):
+        if actual == production:
+            raise ControllerRefused(
+                OUTCOME_FAILED,
+                f"an advisory release would be published to the production "
+                f"T-{PRODUCTION_OFFSET_MINUTES} {label} destination "
+                f"{production!r}, which would repoint the release a reader "
+                "fetches as the production one",
+            )
 
 
 def unsupported_t20_times(
@@ -633,6 +1022,23 @@ def morning_readiness(
     if not isinstance(receipt, dict):
         raise refuse(f"{path} does not hold a receipt object")
 
+    # An advisory receipt is the same shape as this one, by design: it is
+    # built by the same function, from the same incumbent, under the same
+    # production SHA, and it would satisfy every check below. The only thing
+    # that distinguishes it is the marker, so the marker is refused here.
+    # ``ops/run_advisory_window_serving.py`` separately refuses to write into
+    # this directory at all, and this is the second of the two.
+    if receipt.get(ADVISORY_RECEIPT_MARKER_FIELD) is True:
+        raise refuse(
+            f"{path} is an advisory receipt: it carries "
+            f"{ADVISORY_RECEIPT_MARKER_FIELD}, which only "
+            f"{ADVISORY_SERVING_ENTRY_POINT} writes, and it records the "
+            f"T-{receipt.get('advisory_capture_offset_minutes')} capture "
+            "window rather than a production serving run. An advisory run "
+            "proves nothing about the T-20 slate and is not a readiness "
+            "receipt for one"
+        )
+
     recorded_slate = str(receipt.get("slate_date") or "")
 
     if recorded_slate != slate_date:
@@ -794,6 +1200,8 @@ class T20Controller:
         registry_root: Path | None = None,
         run_dir: Path | None = None,
         offset_minutes: int = PRODUCTION_OFFSET_MINUTES,
+        advisory_offsets: Sequence[int] = ADVISORY_OFFSETS_MINUTES,
+        t20_reservation_minutes: int = T20_RESERVATION_MINUTES,
         grace_minutes: int = 5,
         summary_path: Path | None = None,
         clock: Callable[[], datetime] | None = None,
@@ -813,6 +1221,39 @@ class T20Controller:
                 OUTCOME_FAILED, "--grace-minutes must be positive"
             )
 
+        # Checked here as well as in :func:`advisory_rows`, because a
+        # controller built with an unserveable advisory offset must refuse
+        # before it reads a schedule rather than after.
+        unknown = sorted(
+            int(offset)
+            for offset in advisory_offsets
+            if int(offset) not in ADVISORY_OFFSETS_MINUTES
+        )
+
+        if unknown:
+            raise ControllerRefused(
+                OUTCOME_FAILED,
+                f"--advisory-offset-minutes {unknown} are not among the "
+                f"advisory windows {list(ADVISORY_OFFSETS_MINUTES)}, so no "
+                "destination is configured to publish them",
+            )
+
+        if offset_minutes in {int(offset) for offset in advisory_offsets}:
+            raise ControllerRefused(
+                OUTCOME_FAILED,
+                f"T-{offset_minutes} is this run's production window and was "
+                "also asked for as an advisory one, which would publish one "
+                "capture into two release streams under two names",
+            )
+
+        if t20_reservation_minutes < 0:
+            raise ControllerRefused(
+                OUTCOME_FAILED,
+                "--t20-reservation-minutes cannot be negative: it is the room "
+                "an advisory window must leave before a T-20 capture, and a "
+                "negative reservation would be permission to run into one",
+            )
+
         if segment_end <= segment_start:
             raise ControllerRefused(
                 OUTCOME_FAILED,
@@ -828,6 +1269,13 @@ class T20Controller:
         self.project_root = Path(project_root)
         self.registry_root = registry_root
         self.offset_minutes = int(offset_minutes)
+        self.advisory_offsets = tuple(
+            offset
+            for offset in ADVISORY_OFFSETS_MINUTES
+            if offset in {int(value) for value in advisory_offsets}
+        )
+        self.t20_reservation = timedelta(minutes=int(t20_reservation_minutes))
+        self.t20_reservation_minutes = int(t20_reservation_minutes)
         self.grace = timedelta(minutes=int(grace_minutes))
         self.grace_minutes = int(grace_minutes)
         self.summary_path = summary_path
@@ -866,7 +1314,41 @@ class T20Controller:
         self.rescheduled: list[dict[str, Any]] = []
         self.withdrawn: list[dict[str, Any]] = []
 
+        #: One record per advisory window this segment did anything about,
+        #: whether it was published, held, missed or failed.
+        self.advisory: list[dict[str, Any]] = []
+
         self._published_priced_digest: str | None = None
+
+        #: Publication idempotency, per destination. The T-20 digest and each
+        #: advisory window's digest are tracked apart, because the same priced
+        #: bytes published to two different destinations are two different
+        #: releases and skipping the second would leave a destination empty.
+        self._published_advisory_digests: dict[int, str] = {}
+
+        #: Advisory windows captured and not yet served, newest capture last.
+        #: Held rather than served immediately when the room before the next
+        #: T-20 capture is short; drained at the next gap and, failing that,
+        #: after the segment's last T-20 window.
+        self._advisory_held: dict[int, list[dict[str, Any]]] = {}
+
+        #: Advisory window ids this segment has finished with, in any sense.
+        self._advisory_handled: set[str] = set()
+
+        #: The advisory windows this segment owns, by window id. Seeded from
+        #: the plan when the segment starts working and refreshed from the
+        #: live schedule at every advisory capture attempt, so a tip that
+        #: moved moves its advisory windows with it.
+        self._advisory_pending: dict[str, dict[str, Any]] = {}
+
+        #: One record per advisory window re-planned onto a later capture
+        #: time. Kept apart from :attr:`rescheduled`, which is the T-20
+        #: record, and not a terminal outcome: a re-planned window is still
+        #: pending and is still this segment's to take.
+        self._advisory_rescheduled: list[dict[str, Any]] = []
+
+        #: How many times each advisory window has been re-planned.
+        self._advisory_replans: dict[str, int] = {}
 
     # -- planning ------------------------------------------------------
 
@@ -919,6 +1401,8 @@ class T20Controller:
         # already failed to publish it.
         unserved = self._unserved_rows(rows, completed=completed)
 
+        advisory = self._plan_advisory(games, completed=completed)
+
         return {
             "games_discovered": len(games),
             "t20_windows_for_slate": [str(row["window_id"]) for row in rows],
@@ -937,6 +1421,72 @@ class T20Controller:
             "rows": rows,
             "pending_rows": pending,
             "unserved_rows": unserved,
+            **advisory,
+        }
+
+    def _plan_advisory(
+        self, games: Sequence[dict[str, Any]], *, completed: set[str]
+    ) -> dict[str, Any]:
+        """The advisory windows this segment owns, and the ones nobody does.
+
+        Deliberately not symmetric with the T-20 plan above. A T-20 time no
+        segment covers fails the run, because production is required to have
+        that window; an advisory time no segment covers is recorded and the
+        segment carries on, because refusing would mean an unreachable
+        advisory window cost the slate its production release. That asymmetry
+        is the whole of the advisory path's claim on reliability.
+        """
+        if not self.advisory_offsets:
+            return {
+                "advisory_offsets": [],
+                "advisory_windows_in_segment": [],
+                "advisory_pending_windows": [],
+                "advisory_pending_rows": [],
+                "advisory_unsupported": [],
+            }
+
+        rows = advisory_rows(games, offsets=self.advisory_offsets)
+
+        start, end = supported_window(self.slate_date)
+
+        unsupported = [
+            {
+                "capture_at_utc": row["capture_at_utc"].isoformat(),
+                "game_id": int(row["game_id"]),
+                "offset_minutes": int(row["offset_minutes"]),
+                "outcome": ADVISORY_OUTCOME_UNSUPPORTED_TIME,
+                "reason": (
+                    "its capture time falls outside the supported production "
+                    f"window {start.isoformat()} to {end.isoformat()}, so no "
+                    "scheduling segment would have been awake for it"
+                ),
+                "tip_utc": row["tip_utc"].isoformat(),
+                "window_id": str(row["window_id"]),
+            }
+            for row in rows
+            if not (start <= row["capture_at_utc"] < end)
+        ]
+
+        owned = [
+            row
+            for row in rows
+            if self.segment_start <= row["capture_at_utc"] < self.segment_end
+        ]
+
+        pending = [
+            row for row in owned if str(row["window_id"]) not in completed
+        ]
+
+        return {
+            "advisory_offsets": list(self.advisory_offsets),
+            "advisory_windows_in_segment": [
+                str(row["window_id"]) for row in owned
+            ],
+            "advisory_pending_windows": [
+                str(row["window_id"]) for row in pending
+            ],
+            "advisory_pending_rows": pending,
+            "advisory_unsupported": unsupported,
         }
 
     def _unserved_rows(
@@ -970,7 +1520,21 @@ class T20Controller:
 
         plan = self.plan()
 
-        if not plan["pending_rows"] and not plan["unserved_rows"]:
+        self.advisory += list(plan["advisory_unsupported"])
+
+        # Three kinds of work now, and the segment exits early only if it has
+        # none of them. ``pending_rows`` is a T-20 window still to capture,
+        # ``unserved_rows`` is one already captured that no release carries,
+        # and ``advisory_pending_rows`` is an early window this segment owns.
+        # They are independent: a segment can own no T-20 window at all and
+        # still have three advisory windows to serve, and a segment with
+        # nothing left to capture can still be the run that recovers a window
+        # an earlier one captured and died before publishing.
+        if (
+            not plan["pending_rows"]
+            and not plan["unserved_rows"]
+            and not plan["advisory_pending_rows"]
+        ):
             return self._receipt(
                 plan=plan,
                 started_at=started_at,
@@ -978,30 +1542,90 @@ class T20Controller:
                 reason=(
                     f"the segment {self.segment_start.isoformat()} to "
                     f"{self.segment_end.isoformat()} contains no uncaptured "
-                    f"T-{self.offset_minutes} window for {self.slate_date} "
-                    "and no capture of that slate is waiting to be "
-                    "published, so no capture, serving or publication was "
-                    "performed"
+                    f"T-{self.offset_minutes} window for {self.slate_date}, "
+                    "no advisory window it owns, and no capture of that "
+                    "slate waiting to be published, so no capture, serving "
+                    "or publication was performed"
                 ),
             )
 
         # Only now, with work to do, is the morning handoff required. A day
         # with nothing to capture must not be reported as a lifecycle failure.
-        readiness = morning_readiness(
-            data_root=self.data_root,
-            slate_date=self.slate_date,
-            production_sha=self.production_sha,
-            project_root=self.project_root,
-        )
+        #
+        # Guarded only when the segment's work is advisory. With a T-20 window
+        # pending, a receipt that does not prove a verified incumbent is the
+        # refusal it has always been. With none, this segment would have been
+        # a green no-op before the advisory windows existed, and an advisory
+        # window must not be the reason an evening turns red -- so the missing
+        # proof is recorded as the advisory failure it is.
+        #
+        # A captured-but-unserved window counts as T-20 work for this guard.
+        # Recovery publishes a production release off an existing capture and
+        # needs the same verified incumbent a fresh capture does; degrading
+        # here with one outstanding would turn a window production is still
+        # missing into an advisory footnote.
+        try:
+            readiness = morning_readiness(
+                data_root=self.data_root,
+                slate_date=self.slate_date,
+                production_sha=self.production_sha,
+                project_root=self.project_root,
+            )
+        except ControllerRefused as refusal:
+            if plan["pending_rows"] or plan["unserved_rows"]:
+                raise
+
+            for row in plan["advisory_pending_rows"]:
+                self._record_advisory(
+                    row,
+                    outcome=ADVISORY_OUTCOME_FAILED,
+                    reason=(
+                        "the advisory windows need the same verified "
+                        f"incumbent the T-{self.offset_minutes} window does, "
+                        f"and {refusal.outcome}: {refusal}"
+                    ),
+                )
+
+            return self._receipt(
+                plan=plan,
+                started_at=started_at,
+                outcome=OUTCOME_SEGMENT_COMPLETE_ADVISORY_DEGRADED,
+                reason=(
+                    f"the segment held no T-{self.offset_minutes} window and "
+                    f"{len(plan['advisory_pending_rows'])} advisory window(s) "
+                    "it could not serve, because no verified incumbent is "
+                    f"proven for {self.slate_date}: {refusal}"
+                ),
+            )
+
+        # Seeded once, here, rather than in each of the two places that take
+        # advisory windows: between them the rows are refreshed off later
+        # schedule reads, and re-seeding from the plan would put the stale
+        # capture times back.
+        self._advisory_pending = {
+            str(row["window_id"]): row for row in plan["advisory_pending_rows"]
+        }
 
         # Recovery first. These windows are already past their T-20 time, so
         # nothing is gained by making them wait behind a group that is still
         # in the future, and the games they belong to may be about to tip.
+        # Ahead of the advisory windows for the same reason, and that is the
+        # stronger statement: an advisory release is a reading aid, and a
+        # recovered T-20 release is a window production still owes.
         try:
             if plan["unserved_rows"]:
                 self._recover(plan["unserved_rows"], readiness=readiness)
 
-            self._work(plan, readiness)
+            if plan["pending_rows"]:
+                self._work(plan, readiness)
+
+            # Whatever advisory windows are left: the ones after this
+            # segment's last T-20 window, the ones held back for a T-20
+            # capture, and all of them on a segment that owns no T-20 window
+            # at all. Inside the same guard as the T-20 work so that a
+            # refusal raised anywhere in the segment still leaves naming the
+            # windows it is abandoning.
+            self._finish_advisory(readiness)
         except ControllerRefused as error:
             # A refusal after a capture is the shape the incident had. The
             # refusal itself stands -- nothing is downgraded and nothing is
@@ -1016,11 +1640,28 @@ class T20Controller:
 
             raise
 
+        faults = [
+            record
+            for record in self.advisory
+            if str(record.get("outcome")) not in ADVISORY_OUTCOMES_WITHOUT_FAULT
+        ]
+
+        published = [
+            record
+            for record in self.advisory
+            if str(record.get("outcome")) == ADVISORY_OUTCOME_PUBLISHED
+        ]
+
         outstanding = [
             str(row["window_id"])
             for row in self._unserved_rows(plan["rows"])
         ]
 
+        # Ahead of the advisory verdict, and not merged into it. An advisory
+        # window that failed degrades the segment; a T-20 capture nothing
+        # published is a window production is missing, and that outcome is
+        # the one that has to reach the exit code. The advisory records are
+        # on the receipt either way -- the outcome says which fact is worse.
         if outstanding:
             return self._receipt(
                 plan=plan,
@@ -1037,21 +1678,33 @@ class T20Controller:
                 readiness=readiness,
             )
 
+        reason = (
+            f"{len(self.captures)} T-{self.offset_minutes} capture(s) "
+            f"completed for {self.slate_date}"
+            + (
+                f" and {len(plan['captured_unserved_windows'])} earlier "
+                "capture(s) recovered"
+                if self.recovered
+                else ""
+            )
+            + ", each served and published to the canary destination"
+        )
+
+        if self.advisory_offsets:
+            reason += (
+                f"; {len(published)} advisory window(s) published to their "
+                f"own confined canary destinations and {len(faults)} failed"
+            )
+
         return self._receipt(
             plan=plan,
             started_at=started_at,
-            outcome=OUTCOME_SEGMENT_COMPLETE,
-            reason=(
-                f"{len(self.captures)} T-{self.offset_minutes} capture(s) "
-                f"completed for {self.slate_date}"
-                + (
-                    f" and {len(plan['captured_unserved_windows'])} earlier "
-                    "capture(s) recovered"
-                    if self.recovered
-                    else ""
-                )
-                + ", each served and published to the canary destination"
+            outcome=(
+                OUTCOME_SEGMENT_COMPLETE_ADVISORY_DEGRADED
+                if faults
+                else OUTCOME_SEGMENT_COMPLETE
             ),
+            reason=reason,
             readiness=readiness,
         )
 
@@ -1132,6 +1785,12 @@ class T20Controller:
                 for row in outstanding.values()
                 if row["capture_at_utc"] == due
             ]
+
+            # The gap before the next T-20 capture is where the advisory
+            # windows live. Taken before the sleep rather than instead of it:
+            # what replaces polling is still sleeping, and this only decides
+            # what the controller wakes up for on the way.
+            self._advisory_up_to(due, readiness=readiness)
 
             self._sleep_until(due)
 
@@ -1241,6 +1900,805 @@ class T20Controller:
 
         if remaining > 0:
             self.sleep(remaining)
+
+    # -- the advisory windows ------------------------------------------
+
+    def _next_advisory(
+        self, *, before: datetime | None
+    ) -> dict[str, Any] | None:
+        """The earliest advisory window left, optionally before a deadline.
+
+        ``before`` is the next T-20 capture time. A window at exactly that
+        moment is left for later rather than taken now: the T-20 window is
+        the one this segment is required to have, and the tie goes to it.
+        """
+        outstanding = [
+            row
+            for row in self._advisory_pending.values()
+            if str(row["window_id"]) not in self._advisory_handled
+            and (before is None or row["capture_at_utc"] < before)
+        ]
+
+        if not outstanding:
+            return None
+
+        return min(
+            outstanding,
+            key=lambda row: (
+                row["capture_at_utc"],
+                int(row["offset_minutes"]),
+                int(row["game_id"]),
+            ),
+        )
+
+    def _advisory_up_to(
+        self, deadline: datetime, *, readiness: dict[str, Any]
+    ) -> None:
+        """Every advisory window due before the next T-20 capture."""
+        while True:
+            row = self._next_advisory(before=deadline)
+
+            if row is None:
+                self._drain_advisory(readiness=readiness, next_t20_due=deadline)
+
+                return
+
+            self._sleep_until(row["capture_at_utc"])
+
+            self._capture_advisory_window(row)
+
+            self._drain_advisory(readiness=readiness, next_t20_due=deadline)
+
+    def _finish_advisory(self, readiness: dict[str, Any]) -> None:
+        """The advisory windows no T-20 window is in front of any more.
+
+        Everything after this segment's last T-20 capture, everything that was
+        held back for one, and -- on a segment that owns no T-20 window at all
+        -- all of them. No deadline, because there is no T-20 capture left in
+        this segment to reserve room for.
+
+        Deliberately does not re-seed the pending windows from the plan: by
+        the time this runs they may have been refreshed off a schedule read
+        the plan predates, and the planned times are the stale ones.
+        """
+        while True:
+            row = self._next_advisory(before=None)
+
+            if row is None:
+                break
+
+            self._sleep_until(row["capture_at_utc"])
+
+            self._capture_advisory_window(row)
+
+            self._drain_advisory(readiness=readiness, next_t20_due=None)
+
+        self._drain_advisory(readiness=readiness, next_t20_due=None)
+
+        # Anything still held after the last drain was never served, and the
+        # segment has no gap left to serve it in. Recorded once, here, rather
+        # than on every drain that passed it over.
+        for offset in self.advisory_offsets:
+            self._hold_advisory(
+                self._advisory_held.get(offset) or [],
+                offset=offset,
+                reason=(
+                    f"the segment ended with the T-{offset} capture taken and "
+                    "unserved, so the window's release was not made. The "
+                    "capture is durable and the window is served by the next "
+                    "invocation that owns a gap"
+                ),
+            )
+
+    def _room_for_advisory(self, next_t20_due: datetime | None) -> bool:
+        """Whether there is room to serve an advisory window right now.
+
+        The one rule that makes the advisory path unable to cost the T-20
+        window: no advisory serving starts inside the reservation before a
+        T-20 capture this segment still owns. Asked again at every stage
+        boundary, not only before the first, so a stage that runs long costs
+        one stage of exposure rather than the whole sequence.
+        """
+        if next_t20_due is None or not self.t20_reservation:
+            return True
+
+        return next_t20_due - self.clock() >= self.t20_reservation
+
+    def _record_advisory(
+        self,
+        row: dict[str, Any],
+        *,
+        outcome: str,
+        reason: str,
+        extra: dict[str, Any] | None = None,
+    ) -> None:
+        self._advisory_handled.add(str(row["window_id"]))
+
+        self.advisory.append(
+            {
+                "capture_at_utc": (
+                    row["capture_at_utc"].isoformat()
+                    if hasattr(row["capture_at_utc"], "isoformat")
+                    else str(row["capture_at_utc"])
+                ),
+                "game_id": int(row["game_id"]),
+                "observed_at_utc": self.clock().isoformat(),
+                "offset_minutes": int(row["offset_minutes"]),
+                "outcome": outcome,
+                "reason": reason,
+                "window_id": str(row["window_id"]),
+                **(extra or {}),
+            }
+        )
+
+    def _revalidate_advisory(
+        self, row: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """One schedule read per advisory capture attempt, just before it.
+
+        The same discipline the T-20 loop keeps, for the same reason: the
+        controller has been asleep, and the tip it is about to capture three
+        hours before may not be at the hour it was planned against. The read
+        refreshes every advisory window still pending, not only this one,
+        because they all come off the same schedule -- otherwise the next
+        window would be woken for at its own stale time and the one that
+        actually moved would be slept past.
+
+        Returns the window to capture now, or ``None`` when it was recorded
+        here instead: withdrawn, deferred into a later segment, re-planned
+        onto a later time in this one, or missed outright. Never raises; a
+        moved tip must not be able to cost the slate its T-20 release.
+        """
+        window_id = str(row["window_id"])
+
+        fresh = {
+            str(candidate["window_id"]): candidate
+            for candidate in advisory_rows(
+                self.schedule_source(self.slate_date),
+                offsets=self.advisory_offsets,
+            )
+        }
+
+        for pending_id, pending in list(self._advisory_pending.items()):
+            if pending_id in self._advisory_handled:
+                continue
+
+            refreshed = fresh.get(pending_id)
+
+            if refreshed is not None:
+                self._advisory_pending[pending_id] = refreshed
+
+        now = self.clock()
+
+        current = fresh.get(window_id)
+
+        if current is None:
+            self._record_advisory(
+                row,
+                outcome=ADVISORY_OUTCOME_WITHDRAWN,
+                reason=(
+                    "the game is no longer on the slate schedule, so it has "
+                    "no advisory window to capture"
+                ),
+            )
+
+            return None
+
+        target = current["capture_at_utc"]
+
+        if target >= self.segment_end:
+            self._record_advisory(
+                current,
+                outcome=ADVISORY_OUTCOME_DEFERRED,
+                reason=(
+                    f"the tip moved and this window is now due at "
+                    f"{target.isoformat()}, in a later scheduling segment, "
+                    "which owns it"
+                ),
+            )
+
+            return None
+
+        if now >= target + self.grace:
+            self._record_advisory(
+                current,
+                outcome=ADVISORY_OUTCOME_MISSED,
+                reason=(
+                    f"it was due at {target.isoformat()} and it is now "
+                    f"{now.isoformat()}, past the {self.grace_minutes}-minute "
+                    "capture grace, so the point-in-time snapshot it is for "
+                    "can no longer be taken"
+                ),
+            )
+
+            return None
+
+        if now < target:
+            replans = self._advisory_replans.get(window_id, 0) + 1
+
+            self._advisory_replans[window_id] = replans
+
+            if replans > ADVISORY_REPLAN_LIMIT:
+                self._record_advisory(
+                    current,
+                    outcome=ADVISORY_OUTCOME_FAILED,
+                    reason=(
+                        "the slate schedule kept moving and this window was "
+                        f"re-planned {replans - 1} times without settling, "
+                        "so no capture was attempted for it"
+                    ),
+                )
+
+                return None
+
+            self._advisory_rescheduled.append(
+                {
+                    "moved_to_utc": target.isoformat(),
+                    "observed_at_utc": now.isoformat(),
+                    "was_due_utc": row["capture_at_utc"].isoformat(),
+                    "window_id": window_id,
+                }
+            )
+
+            return None
+
+        return current
+
+    def _capture_advisory_window(self, row: dict[str, Any]) -> None:
+        """Take one advisory capture, and never raise doing it.
+
+        The capture is the time-critical half of an advisory window and the
+        cheap half: one collector invocation, narrowed to this window's offset.
+        Serving and publishing it is not time-critical at all, because the
+        capture *is* the point-in-time market -- a T-180 capture served an hour
+        later still prices the market as it stood three hours before tip -- so
+        the two are separated and only this half is held to the clock.
+        """
+        current = self._revalidate_advisory(row)
+
+        if current is None:
+            return
+
+        window_id = str(current["window_id"])
+
+        offset = int(current["offset_minutes"])
+
+        now = self.clock()
+
+        try:
+            assert_window_is_not_production([window_id], offset_minutes=offset)
+        except ControllerRefused as refusal:
+            self._record_advisory(
+                current,
+                outcome=ADVISORY_OUTCOME_FAILED,
+                reason=str(refusal),
+            )
+
+            return
+
+        capture = self.run_command(
+            [
+                sys.executable,
+                str(COLLECTOR_SCRIPT),
+                "--date",
+                self.slate_date,
+                "--scheduled",
+                "--offset-minutes",
+                str(offset),
+                "--now-utc",
+                now.isoformat(),
+                "--grace-minutes",
+                str(self.grace_minutes),
+            ],
+            environment=self._environment(),
+            cwd=self.project_root,
+        )
+
+        if capture.returncode != 0:
+            self._record_advisory(
+                current,
+                outcome=ADVISORY_OUTCOME_FAILED,
+                reason=(
+                    f"{COLLECTOR_SCRIPT} exited {capture.returncode}: "
+                    + ((capture.stderr or capture.stdout) or "")[-1000:]
+                ),
+            )
+
+            return
+
+        bundle = self._advisory_bundle(current)
+
+        if bundle is None:
+            return
+
+        # Finished with as a *capture*, which is what the scheduling loop
+        # asks about. Its serving is tracked by the held list instead, because
+        # a window whose capture was taken must not be woken for again -- the
+        # capture is the point-in-time market and taking it twice is at best
+        # wasted work and at worst a second scheduled capture for a window
+        # that accepts exactly one.
+        self._advisory_handled.add(window_id)
+
+        self._advisory_held.setdefault(offset, []).append(
+            {**current, "capture": bundle}
+        )
+
+    def _advisory_bundle(self, row: dict[str, Any]) -> dict[str, Any] | None:
+        """Prove the advisory capture the pricing path will select is there.
+
+        The same selection pricing performs, performed at this window's own
+        offset. A window that reaches this point without an eligible bundle
+        is recorded as missed rather than refused, because the alternative --
+        raising -- would make a game whose tip moved while the controller was
+        asleep cost the slate its T-20 release.
+        """
+        from nba_prop_quant.prospective_snapshot import select_capture_bundle
+
+        try:
+            bundle = select_capture_bundle(
+                self.snapshot_dir,
+                date=self.slate_date,
+                game_id=int(row["game_id"]),
+                offset_minutes=int(row["offset_minutes"]),
+            )
+        except RuntimeError as error:
+            self._record_advisory(
+                row,
+                outcome=ADVISORY_OUTCOME_MISSED,
+                reason=(
+                    "no eligible scheduled capture can be selected for it, "
+                    "so there is nothing at this window to price: "
+                    f"{error}"
+                ),
+            )
+
+            return None
+
+        return {
+            "capture_id": bundle.capture_id,
+            "captured_at_utc": bundle.captured_at,
+            "game_id": int(row["game_id"]),
+            "window_id": bundle.window_id,
+        }
+
+    def _drain_advisory(
+        self, *, readiness: dict[str, Any], next_t20_due: datetime | None
+    ) -> None:
+        """Serve and publish every advisory window with room to be served.
+
+        Coalesced per offset, for the reason the T-20 path re-serves
+        cumulatively: ``10_predict_slate.py`` enumerates every game with an
+        eligible bundle at the offset it was given, so one invocation at T-180
+        prices every game whose T-180 capture exists. Four captures taken over
+        an hour are therefore one serve and one release rather than four, and
+        the release published is the whole of what is available.
+
+        Largest offset first, because that is the order the windows occur in
+        and the earliest window is the one a reader has been waiting longest
+        for.
+        """
+        for offset in self.advisory_offsets:
+            held = self._advisory_held.get(offset) or []
+
+            if not held:
+                continue
+
+            # Left held rather than recorded, so the window is tried again at
+            # the next gap. Anything still held when the segment runs out of
+            # gaps is recorded then, once, by :meth:`_finish_advisory`.
+            if not self._room_for_advisory(next_t20_due):
+                return
+
+            self._serve_and_publish_advisory(
+                offset, held, readiness=readiness, next_t20_due=next_t20_due
+            )
+
+    def _hold_advisory(
+        self, rows: Sequence[dict[str, Any]], *, offset: int, reason: str
+    ) -> None:
+        for row in rows:
+            self._record_advisory(
+                row, outcome=ADVISORY_OUTCOME_HELD_FOR_T20, reason=reason
+            )
+
+        self._advisory_held[offset] = []
+
+    def _serve_and_publish_advisory(
+        self,
+        offset: int,
+        held: Sequence[dict[str, Any]],
+        *,
+        readiness: dict[str, Any],
+        next_t20_due: datetime | None,
+    ) -> None:
+        """One advisory release: serve the window, derive, publish, record.
+
+        Every stage boundary re-asks whether there is still room before the
+        next T-20 capture, so the T-20 window's protection is not a single
+        decision taken minutes earlier. Nothing here raises: an advisory
+        release that cannot be made is a recorded advisory failure, never a
+        failure of the segment.
+        """
+        rows = list(held)
+
+        windows = sorted(
+            window_id
+            for window_id in completed_window_ids(self.capture_run_path)
+            if window_id.endswith(f":T-{offset}m")
+        )
+
+        index = (
+            sum(
+                1
+                for record in self.advisory
+                if record.get("offset_minutes") == offset
+                and record.get("outcome") == ADVISORY_OUTCOME_PUBLISHED
+            )
+            + 1
+        )
+
+        stage_dir = self.run_dir / f"advisory-t{offset}m-{index:02d}"
+
+        feed_destination = ADVISORY_FEED_DESTINATIONS.get(offset, "")
+
+        page_destination = ADVISORY_PAGE_DESTINATIONS.get(offset, "")
+
+        try:
+            assert_window_is_not_production(windows, offset_minutes=offset)
+
+            assert_destinations_are_advisory(
+                offset_minutes=offset,
+                feed=feed_destination,
+                page=page_destination,
+            )
+
+            stage_dir.mkdir(parents=True, exist_ok=True)
+        except (ControllerRefused, OSError) as error:
+            self._fail_advisory(rows, offset=offset, reason=str(error))
+
+            return
+
+        serving_receipt = stage_dir / "advisory_serving.json"
+
+        served = self._advisory_serve(
+            offset,
+            rows,
+            windows=windows,
+            readiness=readiness,
+            receipt_path=serving_receipt,
+        )
+
+        if served is None:
+            return
+
+        if not self._room_for_advisory(next_t20_due):
+            self._hold_advisory(
+                rows,
+                offset=offset,
+                reason=(
+                    f"the T-{offset} window was served and the reservation "
+                    f"before the T-{self.offset_minutes} capture due at "
+                    f"{next_t20_due.isoformat()} closed before it could be "
+                    "published, so publication was held back"
+                ),
+            )
+
+            return
+
+        digest = str(
+            (served.get("priced_market_artifact") or {}).get("sha256") or ""
+        )
+
+        if digest and digest == self._published_advisory_digests.get(offset):
+            self._publish_advisory_record(
+                rows,
+                offset=offset,
+                outcome=ADVISORY_OUTCOME_PUBLISHED,
+                reason=(
+                    "this invocation already published the identical priced "
+                    f"artifact to the T-{offset} advisory destination, so the "
+                    "release it would make is the release already serving"
+                ),
+                extra={
+                    "feed_destination": feed_destination,
+                    "page_destination": page_destination,
+                    "priced_market_artifact_sha256": digest,
+                    "publication_outcome": PUBLICATION_OUTCOME_SKIPPED,
+                    "release_id": "",
+                },
+            )
+
+            self._advisory_held[offset] = []
+
+            return
+
+        feed_receipt = stage_dir / "advisory_wizardofodds_feed.json"
+
+        feed = self._advisory_stage(
+            f"{PUBLICATION_ENTRY_POINT} --stage feed (T-{offset} advisory)",
+            [
+                sys.executable,
+                str(PUBLICATION_ENTRY_POINT),
+                "--stage",
+                "feed",
+                "--mode",
+                PUBLICATION_MODE,
+                "--slate-date",
+                self.slate_date,
+                "--data-root",
+                str(self.data_root),
+                "--serving-receipt",
+                str(serving_receipt),
+                "--feed-destination-name",
+                feed_destination,
+                "--receipt-path",
+                str(feed_receipt),
+            ],
+            rows,
+            offset=offset,
+        )
+
+        if feed is None:
+            return
+
+        release_id = str((feed.get("release") or {}).get("release_id") or "")
+
+        if str(feed.get("outcome") or "") != PUBLICATION_OUTCOME_PUBLISHED:
+            self._fail_advisory(
+                rows,
+                offset=offset,
+                reason=(
+                    f"{PUBLICATION_ENTRY_POINT} --stage feed recorded "
+                    f"{feed.get('outcome') or 'nothing'} for the T-{offset} "
+                    "advisory window, so no page is built from it"
+                ),
+            )
+
+            return
+
+        if not self._room_for_advisory(next_t20_due):
+            self._hold_advisory(
+                rows,
+                offset=offset,
+                reason=(
+                    f"the T-{offset} advisory feed was published as "
+                    f"{release_id} and the reservation before the T-"
+                    f"{self.offset_minutes} capture due at "
+                    f"{next_t20_due.isoformat()} closed before the page could "
+                    "be built, so the page was held back"
+                ),
+            )
+
+            return
+
+        page_receipt = stage_dir / "advisory_wizardofodds_page.json"
+
+        page = self._advisory_stage(
+            f"{PUBLICATION_ENTRY_POINT} --stage page (T-{offset} advisory)",
+            [
+                sys.executable,
+                str(PUBLICATION_ENTRY_POINT),
+                "--stage",
+                "page",
+                "--mode",
+                PUBLICATION_MODE,
+                "--slate-date",
+                self.slate_date,
+                "--feed-receipt",
+                str(feed_receipt),
+                "--page-source-destination-name",
+                feed_destination,
+                "--page-destination-name",
+                page_destination,
+                "--page-prefix",
+                ADVISORY_PAGE_PREFIXES[offset],
+                "--receipt-path",
+                str(page_receipt),
+            ],
+            rows,
+            offset=offset,
+        )
+
+        if page is None:
+            return
+
+        self._published_advisory_digests[offset] = digest or ""
+
+        self._publish_advisory_record(
+            rows,
+            offset=offset,
+            outcome=ADVISORY_OUTCOME_PUBLISHED,
+            reason=(
+                f"the T-{offset} capture of {len(windows)} window(s) was "
+                f"served and published as {release_id} to {feed_destination}, "
+                f"and its page to {page_destination}"
+            ),
+            extra={
+                "feed_destination": feed_destination,
+                "page_destination": page_destination,
+                "page_sha256": str(page.get("page_sha256") or ""),
+                "priced_market_artifact_sha256": digest,
+                "publication_outcome": PUBLICATION_OUTCOME_PUBLISHED,
+                "release_id": release_id,
+                "serving_receipt_path": str(serving_receipt),
+                "windows_priced": windows,
+            },
+        )
+
+        self._advisory_held[offset] = []
+
+    def _advisory_serve(
+        self,
+        offset: int,
+        rows: Sequence[dict[str, Any]],
+        *,
+        windows: Sequence[str],
+        readiness: dict[str, Any],
+        receipt_path: Path,
+    ) -> dict[str, Any] | None:
+        command = [
+            sys.executable,
+            str(ADVISORY_SERVING_ENTRY_POINT),
+            "--slate-date",
+            self.slate_date,
+            "--data-root",
+            str(self.data_root),
+            "--snapshot-offset-minutes",
+            str(offset),
+            "--production-sha",
+            self.production_sha,
+            "--model-dir",
+            readiness["serving_model_dir"],
+            "--frozen-bundle-root",
+            readiness["serving_bundle_root"],
+            "--receipt-path",
+            str(receipt_path),
+        ]
+
+        for window_id in windows:
+            command += ["--capture-window-id", window_id]
+
+        if self.registry_root is not None:
+            command += ["--registry-root", str(self.registry_root)]
+
+        served = self._advisory_stage(
+            f"{ADVISORY_SERVING_ENTRY_POINT} (T-{offset})",
+            command,
+            rows,
+            offset=offset,
+        )
+
+        if served is None:
+            return None
+
+        # The receipt has to agree that it is the advisory receipt for this
+        # window before anything is published from it. Checked here as well as
+        # inside the serving entry point, because this is the process that
+        # chose the destination and the two facts have to match.
+        problems = [
+            problem
+            for problem in (
+                None
+                if served.get(ADVISORY_RECEIPT_MARKER_FIELD) is True
+                else (
+                    f"it does not carry {ADVISORY_RECEIPT_MARKER_FIELD}, so "
+                    "it is not an advisory receipt"
+                ),
+                None
+                if int(served.get("advisory_capture_offset_minutes") or 0)
+                == offset
+                else (
+                    "it records the capture offset "
+                    f"{served.get('advisory_capture_offset_minutes')} and "
+                    f"this is the T-{offset} window"
+                ),
+                None
+                if str(served.get("outcome") or "") == SERVING_OUTCOME_SERVED
+                else (
+                    f"it records the outcome {served.get('outcome')!r} rather "
+                    f"than {SERVING_OUTCOME_SERVED}"
+                ),
+            )
+            if problem is not None
+        ]
+
+        if problems:
+            self._fail_advisory(
+                rows,
+                offset=offset,
+                reason=(
+                    f"the T-{offset} advisory serving receipt at "
+                    f"{receipt_path} cannot be published from: "
+                    + "; ".join(problems)
+                ),
+            )
+
+            return None
+
+        return served
+
+    def _advisory_stage(
+        self,
+        label: str,
+        command: Sequence[str],
+        rows: Sequence[dict[str, Any]],
+        *,
+        offset: int,
+    ) -> dict[str, Any] | None:
+        """One advisory subprocess and its receipt, or a recorded failure.
+
+        The advisory twin of :meth:`_stage`, and the difference is the whole
+        reason it exists separately: that one raises and this one records.
+        """
+        result = self.run_command(
+            list(command),
+            environment=self._environment(),
+            cwd=self.project_root,
+        )
+
+        if result.returncode != 0:
+            self._fail_advisory(
+                rows,
+                offset=offset,
+                reason=(
+                    f"{label} exited {result.returncode}: "
+                    + ((result.stderr or result.stdout) or "")[-1500:]
+                ),
+            )
+
+            return None
+
+        path = Path(str(command[command.index("--receipt-path") + 1]))
+
+        try:
+            receipt = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            self._fail_advisory(
+                rows,
+                offset=offset,
+                reason=f"{label} wrote no readable receipt at {path} ({error})",
+            )
+
+            return None
+
+        if not isinstance(receipt, dict):
+            self._fail_advisory(
+                rows,
+                offset=offset,
+                reason=f"{label} wrote no receipt object at {path}",
+            )
+
+            return None
+
+        return receipt
+
+    def _fail_advisory(
+        self,
+        rows: Sequence[dict[str, Any]],
+        *,
+        offset: int,
+        reason: Any,
+    ) -> None:
+        for row in rows:
+            self._record_advisory(
+                row, outcome=ADVISORY_OUTCOME_FAILED, reason=str(reason)
+            )
+
+        self._advisory_held[offset] = []
+
+    def _publish_advisory_record(
+        self,
+        rows: Sequence[dict[str, Any]],
+        *,
+        offset: int,
+        outcome: str,
+        reason: str,
+        extra: dict[str, Any],
+    ) -> None:
+        for row in rows:
+            self._record_advisory(
+                row, outcome=outcome, reason=reason, extra=extra
+            )
 
     # -- one due group -------------------------------------------------
 
@@ -1697,7 +3155,40 @@ class T20Controller:
     ) -> dict[str, Any]:
         finished_at = self.clock()
 
+        advisory_published = [
+            record
+            for record in self.advisory
+            if str(record.get("outcome")) == ADVISORY_OUTCOME_PUBLISHED
+        ]
+
         return {
+            "advisory_offsets": list(self.advisory_offsets),
+            "advisory_pending_windows": plan["advisory_pending_windows"],
+            "advisory_publications_completed": len(
+                {
+                    (
+                        record.get("offset_minutes"),
+                        record.get("release_id"),
+                    )
+                    for record in advisory_published
+                }
+            ),
+            "advisory_releases": sorted(
+                {
+                    str(record.get("release_id") or "")
+                    for record in advisory_published
+                    if record.get("release_id")
+                }
+            ),
+            "advisory_rescheduled_windows": self._advisory_rescheduled,
+            "advisory_windows": self.advisory,
+            "advisory_windows_in_segment": plan["advisory_windows_in_segment"],
+            "advisory_windows_with_faults": [
+                record
+                for record in self.advisory
+                if str(record.get("outcome"))
+                not in ADVISORY_OUTCOMES_WITHOUT_FAULT
+            ],
             "already_completed_windows": plan["already_completed_windows"],
             # What a run that captured and did not publish leaves behind,
             # stated after the work rather than copied from the plan: the
@@ -1731,6 +3222,8 @@ class T20Controller:
             "publication_mode": PUBLICATION_MODE,
             "reason": reason,
             "rescheduled_windows": self.rescheduled,
+            "t20_feed_destination": T20_FEED_DESTINATION,
+            "t20_reservation_minutes": self.t20_reservation_minutes,
             "segment_end_utc": self.segment_end.isoformat(),
             "segment_start_utc": self.segment_start.isoformat(),
             "serving_invocations": self.serving,
@@ -1804,6 +3297,21 @@ def render(receipt: dict[str, Any]) -> str:
             or "none",
         ),
         ("publication mode", receipt.get("publication_mode")),
+        (
+            "advisory windows served",
+            ", ".join(
+                f"T-{offset}" for offset in receipt.get("advisory_offsets") or []
+            )
+            or "none",
+        ),
+        (
+            "advisory releases",
+            ", ".join(receipt.get("advisory_releases") or []) or "none",
+        ),
+        (
+            "advisory failures",
+            len(receipt.get("advisory_windows_with_faults") or []),
+        ),
         ("wall seconds", receipt.get("wall_seconds")),
     ]
 
@@ -1817,6 +3325,34 @@ def render(receipt: dict[str, Any]) -> str:
     lines += [f"| {label} | {value} |" for label, value in rows]
 
     lines += ["", str(receipt.get("reason") or "")]
+
+    advisory = receipt.get("advisory_windows") or []
+
+    if advisory:
+        lines += [
+            "",
+            "### Early advisory windows",
+            "",
+            (
+                "Advisory releases are published to their own confined "
+                "canary destinations and never to the T-20 canary. An "
+                "advisory failure degrades this report and does not fail "
+                "the segment."
+            ),
+            "",
+            "| window | outcome | release | why |",
+            "| --- | --- | --- | --- |",
+        ]
+
+        lines += [
+            "| {window} | {outcome} | {release} | {reason} |".format(
+                window=record.get("window_id"),
+                outcome=record.get("outcome"),
+                release=record.get("release_id") or "-",
+                reason=str(record.get("reason") or "").replace("|", "/")[:300],
+            )
+            for record in advisory
+        ]
 
     return "\n".join(lines) + "\n"
 
@@ -1880,6 +3416,39 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     parser.add_argument(
         "--offset-minutes", type=int, default=PRODUCTION_OFFSET_MINUTES
+    )
+
+    parser.add_argument(
+        "--advisory-offset-minutes",
+        type=int,
+        action="append",
+        default=None,
+        dest="advisory_offsets",
+        help="an early capture window to serve for advisory reading, "
+        "repeatable. Defaults to "
+        + ", ".join(f"T-{offset}" for offset in ADVISORY_OFFSETS_MINUTES)
+        + ". Advisory releases go to their own confined canary destinations "
+        "and never to the T-20 canary, and an advisory failure degrades the "
+        "report rather than failing the segment.",
+    )
+
+    parser.add_argument(
+        "--no-advisory-windows",
+        action="store_true",
+        help="capture and serve the T-20 window only, as this controller did "
+        "before the advisory windows existed. The escape hatch for an "
+        "evening where the runner is degraded and the production release is "
+        "the only thing that matters.",
+    )
+
+    parser.add_argument(
+        "--t20-reservation-minutes",
+        type=int,
+        default=T20_RESERVATION_MINUTES,
+        help="how much room an advisory window must leave before the next "
+        "T-20 capture this segment owns. Re-checked at every advisory stage "
+        "boundary; an advisory window with less room is captured on time and "
+        "served at the next gap.",
     )
 
     parser.add_argument("--grace-minutes", type=int, default=5)
@@ -1951,6 +3520,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         registry_root=args.registry_root,
         run_dir=args.run_dir,
         offset_minutes=args.offset_minutes,
+        advisory_offsets=(
+            ()
+            if args.no_advisory_windows
+            else (args.advisory_offsets or ADVISORY_OFFSETS_MINUTES)
+        ),
+        t20_reservation_minutes=args.t20_reservation_minutes,
         grace_minutes=args.grace_minutes,
         summary_path=args.summary_path,
     )
@@ -1960,13 +3535,29 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
     plan = controller.plan()
 
+    # The probe gates the expensive install, so "is there work" has to include
+    # the advisory windows: a segment whose only work is a T-180 capture must
+    # still install the package. A captured window no release carries counts
+    # for the same reason, and it is the case the probe most has to ask for:
+    # the full job is the only thing with the environment to serve and publish
+    # from a capture that already exists. Reported under the field name the
+    # workflow already reads, because a scheduled run executes the default
+    # branch's copy of the workflow and renaming the output would silently
+    # stop gating.
+    work = (
+        list(plan["pending_windows"])
+        + list(plan["advisory_pending_windows"])
+        + list(plan["captured_unserved_windows"])
+    )
+
     return {
+        "advisory_offsets": list(controller.advisory_offsets),
+        "advisory_pending_windows": plan["advisory_pending_windows"],
+        "advisory_windows_in_segment": plan["advisory_windows_in_segment"],
         "already_completed_windows": plan["already_completed_windows"],
         "captured_unserved_windows": plan["captured_unserved_windows"],
         "final_outcome": (
-            OUTCOME_NO_WINDOWS
-            if not plan["pending_rows"] and not plan["unserved_rows"]
-            else "T20_WORK_IN_SEGMENT"
+            OUTCOME_NO_WINDOWS if not work else "T20_WORK_IN_SEGMENT"
         ),
         "games_discovered": plan["games_discovered"],
         "offset_minutes": controller.offset_minutes,
@@ -1975,8 +3566,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "production_sha": controller.production_sha,
         "reason": (
             f"{len(plan['pending_windows'])} uncaptured "
-            f"T-{controller.offset_minutes} window(s) fall in "
-            f"{segment_start.isoformat()} to {segment_end.isoformat()}"
+            f"T-{controller.offset_minutes} window(s) and "
+            f"{len(plan['advisory_pending_windows'])} uncaptured advisory "
+            f"window(s) fall in {segment_start.isoformat()} to "
+            f"{segment_end.isoformat()}"
             + (
                 f", and {len(plan['captured_unserved_windows'])} captured "
                 f"window(s) of {slate_date} are not carried by any "
@@ -2006,16 +3599,24 @@ def _github_output(args: argparse.Namespace, receipt: dict[str, Any]) -> None:
     # in the workflow so the schedule the production branch runs is unchanged.
     unserved = receipt.get("captured_unserved_windows") or []
 
+    advisory = receipt.get("advisory_pending_windows") or []
+
     _write(
         args.github_output,
         "\n".join(
             [
-                f"t20_work={'true' if pending or unserved else 'false'}",
+                # The gate the workflow already reads. True for advisory work
+                # and for a captured-but-unserved window as well as for T-20
+                # work, because the step it gates is the package install and
+                # all three need it.
+                "t20_work="
+                + ("true" if pending or unserved or advisory else "false"),
                 f"segment_start_utc={receipt['segment_start_utc']}",
                 f"segment_end_utc={receipt['segment_end_utc']}",
                 f"slate_date={receipt['slate_date']}",
                 f"pending_windows={len(pending)}",
                 f"captured_unserved_windows={len(unserved)}",
+                f"advisory_pending_windows={len(advisory)}",
             ]
         )
         + "\n",
