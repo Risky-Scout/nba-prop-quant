@@ -2553,15 +2553,13 @@ def test_live_publication_is_decided_in_the_commit_and_gated_outside_it():
     for flag in validator.PUBLICATION_ACTIVATION_FLAGS:
         assert flag not in text, flag
 
-    # Both halves, bound from vars and secrets and from nowhere else.
-    for variable, expression in (
-        ("NBA_PROP_WOO_PUBLISH", "${{ vars.NBA_PROP_WOO_PUBLISH }}"),
-        (
-            "NBA_PROP_WOO_PUBLISH_APPROVAL",
-            "${{ secrets.NBA_PROP_WOO_PUBLISH_APPROVAL }}",
-        ),
-    ):
-        assert f"{variable}: {expression}" in text, variable
+    # Both halves, bound from the environment's own vars and from nowhere
+    # else. Both from vars rather than one from each, because neither value
+    # is secret -- one is the literal ENABLED and the other is committed in
+    # plaintext in the switch -- so there is one kind of thing to set, under
+    # the names the switch's own what_enabling_live_requires uses.
+    for variable in validator.PUBLICATION_APPROVAL_VARIABLES:
+        assert f"{variable}: ${{{{ vars.{variable} }}}}" in text, variable
 
 
 def test_the_controller_has_no_mode_option():

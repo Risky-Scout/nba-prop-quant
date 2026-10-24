@@ -533,7 +533,7 @@ three conditions and it is the only one a commit can hold:
 | --- | --- | --- |
 | `modes.live.state` is `ENABLED` | `ops/wizardofodds_publishing_switch.json` | **Set** — in a reviewed commit, with the authorisation in `modes.live.reason` |
 | `NBA_PROP_WOO_PUBLISH` is the literal `ENABLED` | `wizardofodds-production` environment variable | **Not set** |
-| `NBA_PROP_WOO_PUBLISH_APPROVAL` equals `modes.live.approval_token` | `wizardofodds-production` environment secret | **Not set** |
+| `NBA_PROP_WOO_PUBLISH_APPROVAL` equals `modes.live.approval_token` | `wizardofodds-production` environment variable | **Not set** |
 
 Until the last two are set in the GitHub UI, every live publication refuses
 and says so by name: it names both variables, the environment they belong to
@@ -825,8 +825,16 @@ and publishes:
 
 ```yaml
 NBA_PROP_WOO_PUBLISH: ${{ vars.NBA_PROP_WOO_PUBLISH }}
-NBA_PROP_WOO_PUBLISH_APPROVAL: ${{ secrets.NBA_PROP_WOO_PUBLISH_APPROVAL }}
+NBA_PROP_WOO_PUBLISH_APPROVAL: ${{ vars.NBA_PROP_WOO_PUBLISH_APPROVAL }}
 ```
+
+Both from `vars` because neither value is confidential: one is the literal
+`ENABLED` and the other is committed in plaintext in the switch, which is
+where the decision is reviewed. A secret would hide an approval that is meant
+to be auditable and would give the person setting them two different kinds of
+thing to set. What the token defends against is an unreviewed live
+publication, and a variable defends against that just as well, because the
+validator refuses any literal, any name mismatch and any other location.
 
 They grant nothing. Until the owner sets both in the `wizardofodds-production`
 environment they interpolate to the empty string, the switch's blockers stand,

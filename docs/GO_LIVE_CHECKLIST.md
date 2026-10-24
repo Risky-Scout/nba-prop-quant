@@ -215,16 +215,27 @@ which is a blocker, which is a refusal.
 - **Variable:** `NBA_PROP_WOO_PUBLISH_APPROVAL`
 - **Set to:** `live-progressive-refresh-approved-2026-10-24` — exactly the
   approval token Step 1 chose, character for character
-- **Where:** the `wizardofodds-production` environment, as a **secret**, the way
-  `NBA_WOO_SSH_PRIVATE_KEY` is set — this string is the approval, so it should
-  not be readable
+- **Where:** the `wizardofodds-production` environment, as a **variable**,
+  alongside Step 2 and in the same place
 - **Status now:** **not set — this is the other thing left to do**
-- **Who:** whoever administers that environment's secrets, ideally not the
+- **Who:** whoever administers that environment's variables, ideally not the
   Step 1 reviewer
 
 The same T-20 step binds
-`NBA_PROP_WOO_PUBLISH_APPROVAL: ${{ secrets.NBA_PROP_WOO_PUBLISH_APPROVAL }}`,
+`NBA_PROP_WOO_PUBLISH_APPROVAL: ${{ vars.NBA_PROP_WOO_PUBLISH_APPROVAL }}`,
 so this needs no code change either.
+
+**Why a variable and not a secret.** A secret would look like the more careful
+choice and would be the less honest one. This token is committed in plaintext
+in `ops/wizardofodds_publishing_switch.json`, because that file is where the
+decision is reviewed, so there is nothing to keep confidential and a secret
+would only make the approval harder to audit. What the token actually defends
+against is an *accidental* live publication — a scheduled run that was never
+reviewed, or a workflow that granted itself the approval — and a variable stops
+both, because `ops/validate_workflows.py` refuses any literal value, any name
+mismatch, and any binding outside this one step. It is also one less kind of
+thing for the person doing Steps 2 and 3 to get wrong: both go in the same
+place, under the two names the switch's own `what_enabling_live_requires` uses.
 
 ### Step 4 — Ask the publisher for live mode — **done**
 
