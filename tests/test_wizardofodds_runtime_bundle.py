@@ -1622,11 +1622,34 @@ def test_the_deferred_obligation_is_recorded_as_discharged():
 
 
 #: Digest of every lock-bearing field of the adaptive serving source contract
-#: as version 9 recorded them, taken before the Step 3D obligation was
-#: discharged. Pinned as a literal rather than read from a git ref so it stays
-#: meaningful after this lands and the ref moves on.
-ADAPTIVE_LOCK_DIGEST_AT_VERSION_NINE = (
-    "23d63c9f854be2f134c6c06b91dfeb8c15d038d1963c6e3dc6f8706495072a98"
+#: as version 9 recorded them, with the collector's own lock entry left out.
+#:
+#: The pin used to cover the whole subset, because at the time the only
+#: contract edit in flight was the note and the version. Version 10 then
+#: relocked :data:`THE_ONE_LOCK_ANOTHER_CHANGE_MOVED` as part of the
+#: capture-concurrency correction -- a real lock move, separately declared and
+#: recorded in the version history -- so a whole-subset literal taken before
+#: it would now assert something false, and widening it to the new value would
+#: assert nothing at all.
+#:
+#: So the pin is narrowed to what this test was always for: discharging the
+#: Step 3D obligation moved nothing. It covers every lock-bearing field except
+#: the single entry another reviewed change is allowed to have moved, and the
+#: test accounts for that entry field by field rather than exempting it.
+#: Pinned as a literal rather than read from a git ref so it stays meaningful
+#: after this lands and the ref moves on.
+ADAPTIVE_LOCK_DIGEST_AT_VERSION_NINE_WITHOUT_THE_COLLECTOR = (
+    "2492dd67ff7b012aae25116722f026c70d684928230eae0c0d7c6ed1902c7573"
+)
+
+#: The locked file the capture-concurrency correction relocked, and the only
+#: one any change landing beside this one may have moved.
+THE_ONE_LOCK_ANOTHER_CHANGE_MOVED = "scripts/11_collect_snapshots.py"
+
+#: That file's anchor hash, which a relock must never touch: a relock records
+#: what the working tree now is, never what the architecture reference was.
+COLLECTOR_HISTORICAL_REFERENCE = (
+    "dd0c3ed393ec04bbef521c4ff0d719bf3744ee04ef6405e83bc19b99233b6535"
 )
 
 ADAPTIVE_LOCK_BEARING_FIELDS = (
@@ -1646,7 +1669,9 @@ def test_discharging_the_obligation_moved_no_lock():
 
     Every lock, hash, divergence and invariant has to be what version 9
     recorded, so teaching the builder to read this contract cannot have
-    quietly relocked anything on the way.
+    quietly relocked anything on the way. The one exception is the collector,
+    which a separate reviewed change relocked, and the exception is read out
+    field by field below rather than taken on trust.
     """
 
     adaptive = adaptive_serving_contract()
@@ -1655,13 +1680,34 @@ def test_discharging_the_obligation_moved_no_lock():
         field: adaptive[field] for field in ADAPTIVE_LOCK_BEARING_FIELDS
     }
 
+    locked = dict(subset["locked_serving_source_files"])
+    collector = locked.pop(THE_ONE_LOCK_ANOTHER_CHANGE_MOVED)
+    subset["locked_serving_source_files"] = locked
+
     digest = hashlib.sha256(
         json.dumps(subset, sort_keys=True, separators=(",", ":")).encode(
             "utf-8"
         )
     ).hexdigest()
 
-    assert digest == ADAPTIVE_LOCK_DIGEST_AT_VERSION_NINE
+    assert digest == ADAPTIVE_LOCK_DIGEST_AT_VERSION_NINE_WITHOUT_THE_COLLECTOR
+
+    # The collector's entry may have been relocked, but only its current hash
+    # and the reason recording why. Its anchor, its pinned status and its
+    # divergence from the anchor are the reviewed version 9 values.
+    assert collector["historical_reference_sha256"] == (
+        COLLECTOR_HISTORICAL_REFERENCE
+    )
+    assert collector["historically_byte_pinned"] is True
+    assert collector["matches_historical_reference"] is False
+
+    # And a moved lock is only legitimate if the history says it moved, so the
+    # relock has to be named by an entry past the version the pin is taken at.
+    assert any(
+        THE_ONE_LOCK_ANOTHER_CHANGE_MOVED in entry
+        for version, entry in adaptive["contract_version_history"].items()
+        if int(version) > 9
+    )
 
     # And the version did move, so the edit is not passing itself off as the
     # reviewed version 9 contract.
