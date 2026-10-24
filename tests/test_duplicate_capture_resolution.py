@@ -345,8 +345,8 @@ def test_two_snapshots_of_one_window_are_still_refused(tmp_path):
 
     assert "capture_id" in message
 
-    # The content did not move, so nothing claims it did.
-    assert "component_sha256" not in message
+    # The content did not move, so nothing claims any of it did.
+    assert "digest" not in message
 
 
 def test_two_captures_of_one_instant_with_different_content_are_refused(
@@ -357,7 +357,9 @@ def test_two_captures_of_one_instant_with_different_content_are_refused(
     A reader comparing only timestamps would call these one capture. They
     carry different props and therefore different ``player_props`` digests,
     so they are two snapshots of the same moment and the refusal has to name
-    the digest rather than the instant.
+    the component whose digest moved rather than the instant -- and must not
+    name the four components that did not move, which is the difference
+    between an actionable refusal and two five-entry maps to diff by eye.
     """
     snapshot_dir = tmp_path / "snapshots"
 
@@ -380,7 +382,10 @@ def test_two_captures_of_one_instant_with_different_content_are_refused(
 
     assert "2 different point-in-time captures" in message
 
-    assert "component_sha256" in message
+    assert "the player_props digest" in message
+
+    for component in ("games", "injuries", "lineups", "active_players"):
+        assert f"the {component} digest" not in message
 
 
 def test_a_record_that_copied_a_capture_id_onto_other_fields_is_refused(

@@ -424,6 +424,12 @@ def _describe_capture_conflict(
     still open. So the difference is named: every field the distinct
     captures do not agree on, with the values they carry, in field order and
     with the values sorted, so one conflict always reads the same way.
+
+    The component digests are reported per component rather than as the maps
+    they are compared as. The comparison has to be over the whole map,
+    because that is what ``build_capture_id`` digests, but a reader of the
+    refusal needs to know which component moved and would otherwise be left
+    diffing two five-entry maps by eye.
     """
     parts = []
 
@@ -443,6 +449,50 @@ def _describe_capture_conflict(
         if len(
             values
         ) < 2:
+            continue
+
+        if (
+            name
+            == "component_sha256"
+        ):
+            maps = [
+                json.loads(
+                    value
+                )
+                for value in values
+            ]
+
+            for component in sorted(
+                {
+                    key
+                    for row in maps
+                    for key in row
+                }
+            ):
+                digests = sorted(
+                    {
+                        str(
+                            row.get(
+                                component
+                            )
+                        )
+                        for row in maps
+                    }
+                )
+
+                if len(
+                    digests
+                ) < 2:
+                    continue
+
+                parts.append(
+                    f"the {component} "
+                    "digest "
+                    + " vs ".join(
+                        digests
+                    )
+                )
+
             continue
 
         parts.append(
