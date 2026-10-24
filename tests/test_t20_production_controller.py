@@ -1010,6 +1010,54 @@ def advisory_commands(world: World) -> list[list[str]]:
     ]
 
 
+def test_a_segment_owning_no_t20_window_still_serves_its_advisory_windows(
+    tmp_path,
+):
+    """The early exit is about all three kinds of work, not just the T-20 one.
+
+    A segment that owns no T-20 window used to be the cheap no-op the probe
+    exists to make cheap, and two changes now have a claim on that branch:
+    one adds a captured-but-unserved window as work, the other adds advisory
+    windows. The afternoon segment of a normal slate is the case where only
+    the second applies -- it owns the first T-180 window of the evening and
+    nothing else -- and dropping that term from the condition would make it
+    exit green with the window uncaptured and nothing said about it.
+
+    A game tipping at 22:00 puts T-180 at 19:00, inside the 14:25 segment,
+    and leaves T-90, T-45 and T-20 to the 19:25 one.
+    """
+    clock = Clock(at(14, 25))
+
+    games = [game(101, at(22, 0))]
+
+    world = World(tmp_path, schedules=[games], clock=clock)
+
+    write_morning_receipt(world)
+
+    receipt = build(
+        world, clock=clock, segment_start=SEGMENT_1[0], segment_end=SEGMENT_1[1]
+    ).run()
+
+    assert receipt["t20_windows_in_segment"] == []
+
+    assert receipt["advisory_windows_in_segment"] == ["101:T-180m"]
+
+    assert receipt["final_outcome"] != controller.OUTCOME_NO_WINDOWS
+
+    # Captured at its own offset, and no T-20 capture was taken.
+    assert [
+        command[command.index("--offset-minutes") + 1]
+        for command in capture_commands(world)
+    ] == ["180"]
+
+    assert collector_commands(world) == []
+
+    # And served and published, through the advisory entry point.
+    assert [offset for offset, _ in world.advisory_served] == [180]
+
+    assert receipt["captures_completed"] == 0
+
+
 def test_an_advisory_window_publishes_to_its_own_destinations(tmp_path):
     """Addressed by name, and never by the T-20 destination's name."""
     clock = Clock(at(19, 25))
@@ -1580,6 +1628,79 @@ def test_an_absent_morning_receipt_is_morning_production_not_ready(tmp_path):
     assert error.value.outcome == controller.OUTCOME_MORNING_NOT_READY
 
     assert world.commands == []
+
+
+def test_an_advisory_only_segment_degrades_when_the_morning_proves_nothing():
+    """A segment with nothing but advisory work must not turn the evening red.
+
+    The first half of the readiness guard. Before the advisory windows a
+    segment owning no T-20 window was a green no-op, and an advisory window
+    is a reading aid: a missing morning receipt is recorded as the advisory
+    failure it is and the segment still ends successfully, so the exit code
+    keeps saying what it said about production.
+    """
+    assert (
+        controller.OUTCOME_SEGMENT_COMPLETE_ADVISORY_DEGRADED
+        in controller.OUTCOMES_THAT_SUCCEED
+    )
+
+
+def test_a_readiness_refusal_is_not_degraded_while_a_capture_is_unserved(
+    tmp_path,
+):
+    """The other half, and the one the two changes had to agree on.
+
+    An unserved window is a T-20 window production is still missing, and
+    recovering it publishes a production release off a capture that already
+    exists. That needs the same verified incumbent a fresh capture does. So
+    the refusal stands here rather than being filed as an advisory failure:
+    degrading it would end the segment at an outcome that exits zero, with
+    the window still uncarried by any release and nothing saying so.
+
+    The segment has no pending T-20 window and no pending advisory window --
+    every one of the four was captured by the run that then died in serving
+    -- so the unserved window is the only thing keeping this out of the
+    degraded branch.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0))]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    recovery_clock = Clock(at(23, 50))
+
+    recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
+
+    # The failing run wrote one; removing it is how this segment gets the
+    # refusal under test, rather than by omitting a call whose effect the
+    # shared data root would keep anyway.
+    (
+        recovery.data_root / "processed" / "incumbent_serving" / f"{SLATE}.json"
+    ).unlink()
+
+    segment = build(
+        recovery,
+        clock=recovery_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    )
+
+    plan = segment.plan()
+
+    assert plan["pending_rows"] == []
+
+    assert plan["advisory_pending_rows"] == []
+
+    assert plan["captured_unserved_windows"] == ["101:T-20m"]
+
+    with pytest.raises(controller.ControllerRefused) as error:
+        segment.run()
+
+    assert error.value.outcome == controller.OUTCOME_MORNING_NOT_READY
+
+    # Nothing was served or published off an unproven incumbent on the way.
+    assert recovery.commands == []
 
 
 @pytest.mark.parametrize(
