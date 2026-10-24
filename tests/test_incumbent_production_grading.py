@@ -121,6 +121,14 @@ def priced_frame(records: list[dict[str, Any]], *, priced_at: str) -> pd.DataFra
             "market_pricing_schema_version": 3,
         }
 
+        # Optional for the same reason the market pair is: the breakdowns
+        # narrow when a column is absent rather than refusing the day.
+        for name in ("minutes", "over_odds", "under_odds"):
+            if name in record:
+                row["expected_minutes" if name == "minutes" else name] = (
+                    record[name]
+                )
+
         if "market_over" in record:
             market_over = record["market_over"]
             row["market_devig_q_over"] = (
@@ -925,6 +933,382 @@ def test_the_prediction_id_is_a_digest_of_what_was_predicted(grader, settled):
         line_value=25.5,
         vendor="w",
     )
+
+
+# ======================================================================
+# the daily record, cut by the dimensions it is kept by
+# ======================================================================
+#
+# Overall scores alone cannot answer the question the daily record exists to
+# answer: the model's edge is not uniform across props, across rotation
+# minutes, across the side it took or across how confident it was, and a
+# single Brier hides exactly the place where it is losing.
+
+
+@pytest.fixture
+def many(tmp_path, grader):
+    """A settled slate wide enough to cut four ways.
+
+    Deliberately not uniform: two props, both sides, three minutes bands and
+    three confidence tiers, with the realised results arranged so a reader
+    could tell the groups apart from each other.
+    """
+    records = [
+        {
+            "game_id": 1,
+            "player_id": 11,
+            "line": 24.5,
+            "q_over": 0.68,
+            "minutes": 35.0,
+            "over_odds": -110,
+        },
+        {
+            "game_id": 1,
+            "player_id": 12,
+            "line": 18.5,
+            "q_over": 0.44,
+            "side": "under",
+            "minutes": 27.0,
+            "under_odds": 105,
+        },
+        {
+            "game_id": 1,
+            "player_id": 13,
+            "line": 6.5,
+            "q_over": 0.57,
+            "prop_type": "assists",
+            "minutes": 19.0,
+            "over_odds": 120,
+        },
+        {
+            "game_id": 2,
+            "player_id": 21,
+            "line": 8.5,
+            "q_over": 0.38,
+            "prop_type": "assists",
+            "side": "under",
+            "minutes": 33.0,
+            "under_odds": -130,
+        },
+    ]
+
+    paths = build_root(
+        tmp_path,
+        priced=priced_frame(records, priced_at="2026-11-04T22:05:00+00:00"),
+        stats=stats_frame(
+            [
+                {"game_id": 1, "player_id": 11, "pts": 31.0},
+                {"game_id": 1, "player_id": 12, "pts": 12.0},
+                {"game_id": 1, "player_id": 13, "ast": 9.0},
+                {"game_id": 2, "player_id": 21, "ast": 4.0},
+            ],
+            date=SLATE,
+        ),
+        games=games_frame([{"game_id": 1}, {"game_id": 2}], date=SLATE),
+    )
+
+    assert invoke(grader, paths) == 0
+
+    return paths, json.loads(paths["receipt_path"].read_text(encoding="utf-8"))
+
+
+def test_the_record_is_kept_by_every_dimension_it_declares(grader, many):
+    _, receipt = many
+
+    breakdowns = receipt["breakdowns"]
+
+    for name, _ in grader.BREAKDOWN_DIMENSIONS:
+        assert name in breakdowns, f"{name} is declared and not reported"
+
+        assert breakdowns[name], f"{name} was reported with no groups"
+
+
+def test_each_group_carries_the_same_figures_the_slate_does(grader, many):
+    _, receipt = many
+
+    for name, _ in grader.BREAKDOWN_DIMENSIONS:
+        for label, group in receipt["breakdowns"][name].items():
+            for field in ("events", "brier", "log_loss", "base_rate"):
+                assert group[field] is not None, f"{name}/{label} has no {field}"
+
+            assert "market_events" in group
+
+            assert "flat_stake" in group
+
+
+def test_every_dimension_accounts_for_every_settled_row(grader, many):
+    """A cut that drops rows is a cut a reader cannot reconcile."""
+    _, receipt = many
+
+    settled = receipt["scores"]["events"]
+
+    for name, _ in grader.BREAKDOWN_DIMENSIONS:
+        total = sum(
+            group["events"] for group in receipt["breakdowns"][name].values()
+        )
+
+        assert total == settled, (
+            f"{name} accounts for {total} of {settled} settled rows"
+        )
+
+
+def test_the_breakdowns_are_the_cuts_the_daily_record_is_asked_for(grader):
+    """Named rather than inferred, so the set cannot quietly shrink."""
+    assert {name for name, _ in grader.BREAKDOWN_DIMENSIONS} == {
+        "by_prop",
+        "by_expected_minutes_band",
+        "by_side",
+        "by_confidence_tier",
+    }
+
+
+def test_the_prop_cut_is_by_the_prop_actually_priced(grader, many):
+    _, receipt = many
+
+    assert set(receipt["breakdowns"]["by_prop"]) == {"points", "assists"}
+
+    assert receipt["breakdowns"]["by_prop"]["points"]["events"] == 2
+
+    assert receipt["breakdowns"]["by_prop"]["assists"]["events"] == 2
+
+
+def test_the_side_cut_separates_over_from_under(grader, many):
+    _, receipt = many
+
+    assert set(receipt["breakdowns"]["by_side"]) == {"over", "under"}
+
+
+def test_the_minutes_cut_uses_the_declared_bands(grader, many):
+    _, receipt = many
+
+    bands = set(receipt["breakdowns"]["by_expected_minutes_band"])
+
+    assert bands <= {label for label, _, _ in grader.EXPECTED_MINUTES_BANDS}
+
+    # 19 is a rotation player, 27 a starter, 33 and 35 leading starters.
+    assert bands == {"12-24", "24-32", "32+"}
+
+    assert receipt["breakdowns"]["by_expected_minutes_band"]["32+"]["events"] == 2
+
+
+def test_the_bands_cover_the_line_without_overlapping(grader):
+    """Half-open and contiguous, so nothing falls between two bands."""
+    for bands in (grader.EXPECTED_MINUTES_BANDS, grader.CONFIDENCE_TIERS):
+        for (_, _, upper), (_, lower, _) in zip(bands, bands[1:]):
+            assert upper == lower
+
+        assert bands[-1][2] == float("inf")
+
+        for value in (0.0, 0.499, 11.9, 12.0, 23.99, 31.0, 55.0, 1000.0):
+            matched = [
+                label for label, low, high in bands if low <= value < high
+            ]
+
+            assert len(matched) == 1, f"{value} matched {matched}"
+
+
+def test_the_confidence_cut_is_by_the_probability_that_was_scored(grader, many):
+    """Not by a published tier label, which could disagree with the score."""
+    _, receipt = many
+
+    tiers = receipt["breakdowns"]["by_confidence_tier"]
+
+    # 0.68 over, 0.56 under, 0.57 over, 0.62 under.
+    assert set(tiers) == {"55-60", "60-65", "65+"}
+
+    assert tiers["55-60"]["events"] == 2
+
+
+def test_an_absent_dimension_is_reported_empty_rather_than_missing(
+    grader, tmp_path
+):
+    """"No row carried this" and "this was never asked" are different."""
+    paths = build_root(
+        tmp_path,
+        priced=priced_frame(
+            [{"game_id": 1, "player_id": 11, "line": 24.5, "q_over": 0.62}],
+            priced_at="2026-11-04T22:05:00+00:00",
+        ),
+        stats=stats_frame([{"game_id": 1, "player_id": 11, "pts": 31.0}], date=SLATE),
+        games=games_frame([{"game_id": 1}], date=SLATE),
+    )
+
+    assert invoke(grader, paths) == 0
+
+    receipt = json.loads(paths["receipt_path"].read_text(encoding="utf-8"))
+
+    # The fixture prices no minutes column and no odds.
+    assert receipt["breakdowns"]["by_expected_minutes_band"] == {}
+
+    assert receipt["breakdowns"]["by_prop"]["points"]["events"] == 1
+
+    assert receipt["scores"]["flat_stake"]["staked_events"] == 0
+
+    assert receipt["scores"]["flat_stake"]["return_on_stake"] is None
+
+
+def test_the_flat_stake_return_is_one_unit_at_the_quoted_price(grader, many):
+    """Arithmetic, checked by hand rather than against the implementation."""
+    _, receipt = many
+
+    stake = receipt["scores"]["flat_stake"]
+
+    assert stake["staked_events"] == 4
+
+    assert stake["staked"] == pytest.approx(4.0)
+
+    # over 24.5 at -110 on 31 points: won, +100/110.
+    # under 18.5 at +105 on 12 points: won, +1.05.
+    # over 6.5 at +120 on 9 assists: won, +1.20.
+    # under 8.5 at -130 on 4 assists: won, +100/130.
+    expected = 100 / 110 + 1.05 + 1.20 + 100 / 130
+
+    assert stake["profit"] == pytest.approx(expected)
+
+    assert stake["return_on_stake"] == pytest.approx(expected / 4.0)
+
+
+def test_a_losing_prediction_costs_its_whole_stake(grader, tmp_path):
+    paths = build_root(
+        tmp_path,
+        priced=priced_frame(
+            [
+                {
+                    "game_id": 1,
+                    "player_id": 11,
+                    "line": 24.5,
+                    "q_over": 0.62,
+                    "over_odds": 150,
+                }
+            ],
+            priced_at="2026-11-04T22:05:00+00:00",
+        ),
+        stats=stats_frame([{"game_id": 1, "player_id": 11, "pts": 12.0}], date=SLATE),
+        games=games_frame([{"game_id": 1}], date=SLATE),
+    )
+
+    assert invoke(grader, paths) == 0
+
+    stake = json.loads(paths["receipt_path"].read_text(encoding="utf-8"))["scores"][
+        "flat_stake"
+    ]
+
+    assert stake["profit"] == pytest.approx(-1.0)
+
+    assert stake["return_on_stake"] == pytest.approx(-1.0)
+
+
+def test_a_push_is_neither_staked_nor_scored(grader, tmp_path):
+    """Settlement removes a push from the comparison; the stake follows it."""
+    paths = build_root(
+        tmp_path,
+        priced=priced_frame(
+            [
+                {
+                    "game_id": 1,
+                    "player_id": 11,
+                    "line": 24.0,
+                    "q_over": 0.62,
+                    "over_odds": -110,
+                }
+            ],
+            priced_at="2026-11-04T22:05:00+00:00",
+        ),
+        stats=stats_frame([{"game_id": 1, "player_id": 11, "pts": 24.0}], date=SLATE),
+        games=games_frame([{"game_id": 1}], date=SLATE),
+    )
+
+    assert invoke(grader, paths) == 0
+
+    receipt = json.loads(paths["receipt_path"].read_text(encoding="utf-8"))
+
+    assert receipt["counts"].get(grader.STATUS_PUSH) == 1
+
+    assert receipt["scores"]["flat_stake"]["staked_events"] == 0
+
+
+@pytest.mark.parametrize(
+    "odds,profit",
+    [(100, 1.0), (-100, 1.0), (150, 1.5), (-200, 0.5), (0, None), (None, None)],
+)
+def test_an_american_price_converts_to_the_profit_it_pays(grader, odds, profit):
+    """Zero is not a price and may not be read as even money."""
+    assert grader.american_profit(odds) == (
+        None if profit is None else pytest.approx(profit)
+    )
+
+
+def test_a_row_with_no_price_for_the_side_taken_is_not_staked(grader, tmp_path):
+    """The model took under; only the over was quoted."""
+    paths = build_root(
+        tmp_path,
+        priced=priced_frame(
+            [
+                {
+                    "game_id": 1,
+                    "player_id": 11,
+                    "line": 24.5,
+                    "q_over": 0.38,
+                    "side": "under",
+                    "over_odds": -110,
+                }
+            ],
+            priced_at="2026-11-04T22:05:00+00:00",
+        ),
+        stats=stats_frame([{"game_id": 1, "player_id": 11, "pts": 12.0}], date=SLATE),
+        games=games_frame([{"game_id": 1}], date=SLATE),
+    )
+
+    assert invoke(grader, paths) == 0
+
+    receipt = json.loads(paths["receipt_path"].read_text(encoding="utf-8"))
+
+    assert receipt["scores"]["events"] == 1
+
+    assert receipt["scores"]["flat_stake"]["staked_events"] == 0
+
+
+def test_the_breakdowns_reach_nothing_that_serves(grader, many):
+    """Reported, never gated. The outcome is decided before any of this."""
+    paths, receipt = many
+
+    assert receipt["outcome"] == grader.OUTCOME_GRADED
+
+    assert receipt["production_serving_was_affected"] is False
+
+    assert receipt["promotion_authority"] == "NONE"
+
+    assert receipt["published"] is False
+
+    report = grader.render(receipt)
+
+    assert "by prop" in report
+
+    assert "flat-stake return" in report
+
+    assert "leaves serving authority untouched" in report
+
+
+def test_the_stored_rows_carry_the_dimensions_the_report_cuts_by(grader, many):
+    """So a reader can recompute every cut from the grade store itself."""
+    paths, _ = many
+
+    rows = stored_grades(paths)
+
+    for column in (
+        "expected_minutes",
+        "expected_minutes_band",
+        "confidence_tier",
+        "flat_stake_odds",
+        "flat_stake_profit_if_won",
+    ):
+        assert column in rows.columns, column
+
+    settled = rows[rows["settlement_status"] == grader.STATUS_GRADED]
+
+    assert settled["expected_minutes_band"].notna().all()
+
+    assert settled["confidence_tier"].notna().all()
 
 
 # ======================================================================

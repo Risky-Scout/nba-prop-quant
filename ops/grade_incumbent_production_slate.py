@@ -209,6 +209,60 @@ REQUIRED_PRICED_COLUMNS: tuple[str, ...] = (
     "line_value",
 )
 
+#: Where the expected-minutes band comes from. The projection the slate was
+#: priced from carries it, and ``scripts/15_price_markets.py`` merges the
+#: projections into the priced artifact, so it is normally present. Optional
+#: all the same: a slate priced before the column existed is still a gradeable
+#: slate, and an absent column narrows the report rather than refusing the day,
+#: exactly as an absent market pair does.
+EXPECTED_MINUTES_COLUMNS: tuple[str, ...] = (
+    "expected_minutes",
+    "minutes_projection",
+)
+
+#: Half-open lower bounds, in minutes. A band is ``[lower, next lower)``, so
+#: the labels below are the bands and nothing falls between two of them. Chosen
+#: on how the rotation actually behaves rather than on round numbers: under
+#: twelve is a fringe player whose minutes are the dominant uncertainty, twelve
+#: to twenty-four is a rotation player, twenty-four to thirty-two is a starter
+#: and thirty-two and up is a leading starter.
+EXPECTED_MINUTES_BANDS: tuple[tuple[str, float, float], ...] = (
+    ("00-12", 0.0, 12.0),
+    ("12-24", 12.0, 24.0),
+    ("24-32", 24.0, 32.0),
+    ("32+", 32.0, float("inf")),
+)
+
+#: Confidence tiers, by the model's own probability on the side it preferred.
+#: Taken from the probability rather than from any published tier label,
+#: because the probability is what the Brier and the log loss are computed
+#: from and a tier that disagreed with them would make the breakdown
+#: unreadable. A preferred side is at least a coin flip by construction, so
+#: the tiers start at 0.5.
+CONFIDENCE_TIERS: tuple[tuple[str, float, float], ...] = (
+    ("50-55", 0.0, 0.55),
+    ("55-60", 0.55, 0.60),
+    ("60-65", 0.60, 0.65),
+    ("65+", 0.65, float("inf")),
+)
+
+#: The quoted American prices, for the theoretical flat-stake return. The
+#: return is reported only when the price for the side actually taken is on
+#: the row; a return computed against an assumed price would be a number
+#: about an assumption.
+ODDS_COLUMNS: dict[str, tuple[str, ...]] = {
+    "over": ("over_odds", "over_price", "price_over"),
+    "under": ("under_odds", "under_price", "price_under"),
+}
+
+#: One unit on the model's preferred side of every settled prediction. Not a
+#: strategy and not a claim about one: no stake sizing, no edge threshold, no
+#: selection beyond what the model already preferred. It is the flattest
+#: possible reading of the same rows the Brier scores, and it is reported next
+#: to them because a probability score and a monetary outcome answer different
+#: questions about the same night.
+FLAT_STAKE = 1.0
+
 #: Box-score columns settlement needs.
 REQUIRED_STAT_COLUMNS: tuple[str, ...] = (
     "game_id",
@@ -740,6 +794,13 @@ def grade_rows(
         priced.columns, ("priced_at_utc", "generated_at_utc")
     )
 
+    minutes_column = _first_present(priced.columns, EXPECTED_MINUTES_COLUMNS)
+
+    odds_columns = {
+        taken: _first_present(priced.columns, candidates)
+        for taken, candidates in ODDS_COLUMNS.items()
+    }
+
     records: list[dict[str, Any]] = []
 
     for _, row in priced.iterrows():
@@ -813,6 +874,29 @@ def grade_rows(
                 )
             ),
             "log_loss_floor": LOG_LOSS_FLOOR,
+            "expected_minutes": (
+                None
+                if minutes_column is None
+                else _as_float(row.get(minutes_column))
+            ),
+            "expected_minutes_band": (
+                None
+                if minutes_column is None
+                else band_for(row.get(minutes_column), EXPECTED_MINUTES_BANDS)
+            ),
+            "confidence_tier": band_for(probability, CONFIDENCE_TIERS),
+            # The price for the side the model took, not both sides: a flat
+            # stake is placed on one of them.
+            "flat_stake_odds": (
+                None
+                if side is None or odds_columns.get(side) is None
+                else _as_float(row.get(odds_columns[side]))
+            ),
+            "flat_stake_profit_if_won": (
+                None
+                if side is None or odds_columns.get(side) is None
+                else american_profit(row.get(odds_columns[side]))
+            ),
             "graded_at": graded_at,
             **{key: provenance[key] for key in sorted(provenance)},
         }
@@ -834,6 +918,92 @@ def grade_rows(
         )
 
     return pd.DataFrame.from_records(records)
+
+
+def _as_float(value: Any) -> float | None:
+    number = pd.to_numeric(value, errors="coerce")
+
+    return None if number is None or pd.isna(number) else float(number)
+
+
+def band_for(value: Any, bands: tuple[tuple[str, float, float], ...]) -> str | None:
+    """Which half-open band a number falls in, or ``None`` if it is absent.
+
+    ``None`` rather than a catch-all label, so a row whose dimension was never
+    recorded is left out of that breakdown instead of being pooled with rows
+    whose value genuinely is low.
+    """
+    number = pd.to_numeric(value, errors="coerce")
+
+    if number is None or pd.isna(number):
+        return None
+
+    for label, lower, upper in bands:
+        if lower <= float(number) < upper:
+            return label
+
+    return None
+
+
+def american_profit(odds: Any) -> float | None:
+    """Profit on a winning unit stake at an American price.
+
+    ``None`` for anything that is not a usable price, including zero, which is
+    not a price. A missing price must not be read as an even-money one.
+    """
+    number = pd.to_numeric(odds, errors="coerce")
+
+    if number is None or pd.isna(number):
+        return None
+
+    value = float(number)
+
+    if value > 0:
+        return value / 100.0
+
+    if value < 0:
+        return 100.0 / abs(value)
+
+    return None
+
+
+def flat_stake_return(rows: pd.DataFrame) -> dict[str, Any]:
+    """One unit on each settled prediction, at the price it was quoted at.
+
+    A push is already absent from ``rows``: the model prices a non-push
+    conditional probability and settlement removes a push from the comparison
+    rather than scoring it, so a push is neither a win nor a loss here either.
+
+    Reported over the rows that carry a usable price, with the count stated,
+    for the same reason the market comparison states ``market_events``: a
+    return taken over a different row set than the Brier is not the return on
+    the rows the Brier describes.
+    """
+    priced = rows.loc[rows["flat_stake_profit_if_won"].notna()]
+
+    if priced.empty:
+        return {
+            "staked_events": 0,
+            "staked": None,
+            "profit": None,
+            "return_on_stake": None,
+        }
+
+    won = priced["realized_result"] == 1
+
+    profit = float(
+        (priced.loc[won, "flat_stake_profit_if_won"] * FLAT_STAKE).sum()
+        - (~won).sum() * FLAT_STAKE
+    )
+
+    staked = float(len(priced)) * FLAT_STAKE
+
+    return {
+        "staked_events": int(len(priced)),
+        "staked": staked,
+        "profit": profit,
+        "return_on_stake": profit / staked,
+    }
 
 
 def _settle(
@@ -1111,6 +1281,7 @@ def grade_slate(
         },
         "incumbent": {key: provenance[key] for key in sorted(provenance)},
         "scores": _slate_scores(graded),
+        "breakdowns": slate_breakdowns(graded),
         "settlement": settlement,
     }
 
@@ -1197,6 +1368,95 @@ def _same_value(before: Any, after: Any) -> bool:
     return bool(before == after)
 
 
+#: The dimensions the daily record is kept by, each as the grade-row column
+#: that carries it. Stated as data so the receipt, the report and the tests
+#: all read one list and cannot drift apart.
+BREAKDOWN_DIMENSIONS: tuple[tuple[str, str], ...] = (
+    ("by_prop", "stat"),
+    ("by_expected_minutes_band", "expected_minutes_band"),
+    ("by_side", "side"),
+    ("by_confidence_tier", "confidence_tier"),
+)
+
+
+def _group_scores(rows: pd.DataFrame) -> dict[str, Any]:
+    """Model and market scores plus the flat-stake return, for one group.
+
+    The same figures the slate reports, over a subset of its rows. Market
+    figures come from the rows in this group that carry a market contribution,
+    and the count is stated, so a group whose benchmark covered fewer rows is
+    visibly that rather than silently incomparable.
+    """
+    paired = rows.loc[rows["market_brier_contribution"].notna()]
+
+    scores: dict[str, Any] = {
+        "events": int(len(rows)),
+        "brier": float(rows["brier_contribution"].mean()),
+        "log_loss": float(rows["log_loss_contribution"].mean()),
+        "base_rate": float(rows["realized_result"].mean()),
+        "market_events": int(len(paired)),
+        "market_brier": (
+            None
+            if paired.empty
+            else float(paired["market_brier_contribution"].mean())
+        ),
+        "market_log_loss": (
+            None
+            if paired.empty
+            else float(paired["market_log_loss_contribution"].mean())
+        ),
+        "flat_stake": flat_stake_return(rows),
+    }
+
+    if not paired.empty:
+        scores["brier_delta_model_minus_market"] = float(
+            paired["brier_contribution"].mean()
+            - paired["market_brier_contribution"].mean()
+        )
+        scores["log_loss_delta_model_minus_market"] = float(
+            paired["log_loss_contribution"].mean()
+            - paired["market_log_loss_contribution"].mean()
+        )
+
+    return scores
+
+
+def slate_breakdowns(graded: pd.DataFrame) -> dict[str, Any]:
+    """The settled slate, cut by each dimension the daily record is kept by.
+
+    Reported, never gated: nothing here can refuse a grade, change a score or
+    reach anything that serves. A dimension whose column is absent or wholly
+    unrecorded is an empty mapping rather than a missing key, so a reader can
+    tell "no rows carried this" from "this was never asked".
+
+    Groups are keyed by the label on the row, sorted, and every group is
+    reported however small -- a band with two predictions in it is not
+    evidence about the band, and hiding it would make the slate's own total
+    stop adding up.
+    """
+    settled = graded.loc[graded["settlement_status"] == STATUS_GRADED]
+
+    breakdowns: dict[str, Any] = {}
+
+    for name, column in BREAKDOWN_DIMENSIONS:
+        if settled.empty or column not in settled.columns:
+            breakdowns[name] = {}
+
+            continue
+
+        present = settled.loc[settled[column].notna()]
+
+        breakdowns[name] = {
+            str(label): _group_scores(group)
+            for label, group in sorted(
+                present.groupby(present[column].astype(str)),
+                key=lambda item: str(item[0]),
+            )
+        }
+
+    return breakdowns
+
+
 def _slate_scores(graded: pd.DataFrame) -> dict[str, Any]:
     """The slate's own Brier and log loss, and the market's on the same rows.
 
@@ -1222,6 +1482,12 @@ def _slate_scores(graded: pd.DataFrame) -> dict[str, Any]:
         "market_log_loss": None,
         "brier_delta_model_minus_market": None,
         "log_loss_delta_model_minus_market": None,
+        "flat_stake": {
+            "staked_events": 0,
+            "staked": None,
+            "profit": None,
+            "return_on_stake": None,
+        },
     }
 
     if settled.empty:
@@ -1233,6 +1499,7 @@ def _slate_scores(graded: pd.DataFrame) -> dict[str, Any]:
         "brier": float(settled["brier_contribution"].mean()),
         "log_loss": float(settled["log_loss_contribution"].mean()),
         "base_rate": float(settled["realized_result"].mean()),
+        "flat_stake": flat_stake_return(settled),
     }
 
     paired = settled.loc[settled["market_brier_contribution"].notna()]
@@ -1420,6 +1687,52 @@ def render(receipt: dict[str, Any]) -> str:
             "market-paired events : 0 (no de-vigged market probability on "
             "these rows, so no comparison is reported)"
         )
+
+    stake = scores.get("flat_stake") or {}
+
+    if stake.get("staked_events"):
+        lines += [
+            f"flat-stake events    : {stake['staked_events']}",
+            (
+                "flat-stake return    : "
+                f"{stake['return_on_stake']:+.6f}"
+                f" ({stake['profit']:+.2f} on {stake['staked']:.2f} staked,"
+                " one unit on the preferred side at the quoted price)"
+            ),
+        ]
+    elif scores.get("events"):
+        lines.append(
+            "flat-stake events    : 0 (no quoted price for the side taken on "
+            "these rows, so no return is reported)"
+        )
+
+    for name, _ in BREAKDOWN_DIMENSIONS:
+        groups = (receipt.get("breakdowns") or {}).get(name) or {}
+
+        if not groups:
+            continue
+
+        lines.append(f"{name.replace('_', ' ')}:")
+
+        for label, group in groups.items():
+            market = (
+                f"  market {group['market_brier']:.6f}"
+                if group.get("market_brier") is not None
+                else ""
+            )
+
+            flat = (
+                f"  return {group['flat_stake']['return_on_stake']:+.6f}"
+                if (group.get("flat_stake") or {}).get("return_on_stake")
+                is not None
+                else ""
+            )
+
+            lines.append(
+                f"  {label:<12} n={group['events']:<5} "
+                f"brier {group['brier']:.6f}"
+                f"  log loss {group['log_loss']:.6f}{market}{flat}"
+            )
 
     artifact = receipt.get("grade_artifact")
 
