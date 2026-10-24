@@ -357,15 +357,30 @@ CAPTURE_ENTRY_POINT_EXEMPT_FUNCTIONS: tuple[str, ...] = (
 #: whose subject is which windows a scheduled capture records. The way this
 #: exemption would widen is by coming to change *what* is captured rather than
 #: *which window* it is recorded against, and the defence is that each added
-#: statement has to name one of these. All of them are the offset narrowing:
-#: the argument under both the spellings it appears in, the validator that
-#: refuses an offset the schedule does not define, and the local the due list
-#: is filtered by.
+#: statement has to name one of these. The first four are the offset
+#: narrowing: the argument under both the spellings it appears in, the
+#: validator that refuses an offset the schedule does not define, and the
+#: local the due list is filtered by.
+#:
+#: ``capture_window_claim`` is the same subject read from the other side, and
+#: the only name here that is about concurrency rather than selection. Which
+#: windows a sweep records was decided by reading ``completed_window_ids``,
+#: collecting, and then appending, with nothing holding the capture-run log
+#: across the three. Two sweeps whose collections overlap therefore both read
+#: a window as unclaimed and both record it, and ``select_capture_bundle``
+#: refuses an ambiguous window permanently, because the log is append-only
+#: and both captures are genuine. On 2026-10-23 that cost three games every
+#: prediction they would have had. The name is an exclusive ``flock`` held
+#: across the sweep and nothing else: it captures no component the collector
+#: did not already capture, writes no key the envelope did not already have,
+#: moves no digest, no grace window and no due-window rule, and decides only
+#: which of two simultaneous sweeps is the one that records.
 DECLARED_CAPTURE_SELECTION_NAMES: tuple[str, ...] = (
     "--offset-minutes",
     "offset_minutes",
     "selected_offsets",
     "offsets",
+    "capture_window_claim",
 )
 
 #: The *publication transport* a declaration may name, and only additively.
@@ -767,149 +782,100 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: branch declares again the three of them it touches. It does not touch the
 #: availability module, so that entry is retired and not replaced.
 #:
-#: This branch declares the slate module and both serving-source registries,
-#: and widens the slate builder's plumbing names by one, all named above.
-#: What it corrects is the population argument's last stop: not which
-#: player-games a prior averages over, which the played-game population fix
-#: settled, nor what an absence frees, which the branch before this one
-#: settled, but what one of those priors is worth for a player who has no
-#: games to average.
+#: The no-appearance-prior branch's three entries were retired in turn when
+#: they landed. All three -- the slate module and both serving-source
+#: registries -- are pre-existing production files that lineage changed
+#: rather than introduced and are recorded nowhere, so touching any of them
+#: again requires declaring it again.
 #:
-#: ``build_base_frame`` takes ``prior_minutes10`` and all eleven
-#: ``prior_*_rate10`` columns through a lagged EWM, so a player's first NBA
-#: appearance is fit with every one of them missing -- 2,542 rows of the
-#: 667,556 the corpus holds -- and the fitted minutes model, an
-#: ``XGBRegressor``, holds a learned branch for exactly that row. The live
-#: builder substituted the played population's mean minutes instead. That is
-#: not a neutral stand-in for a missing value: it is what a rotation
-#: regular's prior looks like, so a player nobody has seen was scored as one
-#: with twenty-three minutes a night behind him. On October 20 every
-#: no-history player was served 23.3218 and the five who appeared were
-#: projected 17.5 to 18.9 minutes against 1, 1, 1, 1 and 11 realized.
+#: This branch declares the capture entry point and both serving-source
+#: registries, and widens the capture entry point's selection names by one,
+#: all named above. It is the first use of the capture carve-out for a
+#: defect rather than for an argument, and the defect is one the carve-out's
+#: own text did not anticipate: not what the collector captures, nor which
+#: window it captures, but what happens when two sweeps capture at once.
 #:
-#: Measured on the frozen minutes model over the first-appearance rows of
-#: 2021-22 through 2024-25, serving the value training states instead moves
-#: the cohort's bias from +8.4003 to +1.0894 minutes, its MAE from 10.4440 to
-#: 5.8860 and its RMSE from 11.3570 to 7.5324, on 417 rows and 333 of them
-#: individually closer. The 2025-26 confirmation, run once after the choice
-#: was frozen, moves bias from +5.9914 to -1.0546, MAE from 8.9409 to 6.1100
-#: and RMSE from 10.0863 to 7.9295 on 103 rows.
+#: A scheduled sweep decides which windows are unclaimed by reading the
+#: capture-run log, then collects for as long as the slate takes, then
+#: appends its own claim. Nothing holds the log across those three steps, so
+#: two sweeps whose collections overlap both read the window as unclaimed
+#: and both record it. ``select_capture_bundle`` requires exactly one
+#: scheduled capture per window and refuses two, which is correct and which
+#: is permanent: the log is append-only, both captures are genuine
+#: point-in-time data, and nothing may retract or relabel either. The window
+#: becomes unpriceable for the rest of the slate's life.
 #:
-#: Like the two fixes before it the rule stays where production states it:
-#: ``features.py`` is byte-identical to production, the value served is the
-#: one it already produces, and a player with any appearance at all is
-#: untouched because the condition is ``not games_prior`` and ``games_prior``
-#: is the count the module already computes.
+#: That is not hypothetical. On 2026-10-23 a catch-up run and the scheduled
+#: segment run both swept the 01:40Z window, serving raised
+#: ``21717943:T-20m: expected exactly one scheduled capture, found 2``, and
+#: the three games tipping at 02:00 UTC were captured, marked complete and
+#: never priced. The published canary carried nine of the slate's twelve
+#: games and nothing in either run's receipt said which three were missing.
 #:
-#: The population fix itself corrected the fourth instance of one defect: a
-#: feature the fitted models were shown one definition of, served under
-#: another. The first three
-#: were definitions -- the competition-regime flags, then
-#: ``season_progress``. This one is the population every definition is taken
-#: over. ``build_base_frame`` opens by keeping only the player-games with
-#: minutes on them, so every rolling prior, decay state and Kalman state the
-#: models were fit on is an average over appearances. BALLDONTLIE returns a
-#: row per rostered player, the live builder read that table whole, and so
-#: every game a player missed entered his per-minute EWMs as a zero and his
-#: minutes EWM as a zero.
+#: The fix is an exclusive ``flock`` on a lock file beside the capture-run
+#: log, taken before the log is read and released after the claim is
+#: appended, so the second sweep reads the claim set the first one left
+#: rather than the one it found and captures nothing. It is held across the
+#: collection rather than only across the append because a capture's
+#: component digests are recomputed from every row carrying its
+#: ``captured_at``: two sweeps invoked with the same instant write into one
+#: another's digests whatever either of them claims, so claiming later would
+#: have replaced an ambiguous window with a corrupt one. The wait is bounded
+#: by the capture grace window, which is the span in which a due window may
+#: legitimately be captured at all, and a sweep that cannot get the claim
+#: inside it refuses and exits non-zero rather than appending a second claim.
 #:
-#: Like ``season_progress``, it refused nothing and announced nothing: it
-#: served the models numbers they were not fit on. Unlike it, the error has a
-#: direction, because every target here is a count and the contamination can
-#: only subtract -- and it is selective, because it scales with how much of a
-#: player's recent history is absence. So the durable players were priced
-#: correctly, the absence-prone ones were marked down, and the output read as
-#: a model with a view on the under rather than as a model with a defect. On
-#: opening night, when every player's most recent rows are the end of a
-#: season he may have missed, that is most of the slate.
-#:
-#: The fix is the one the carve-out exists for and the same shape as the last
-#: two: the rule stays where production states it, and only training's own
-#: population reaches the path that serves it. ``features.py``, ``decay.py``,
-#: ``kalman.py``, ``game_context.py``, ``model.py``, ``production.py``,
-#: ``pricing.py`` and ``distributions.py`` are all byte-identical to
-#: production, which the branch-safety tests and the targeted tests both pin.
-#: No feature definition, window, weight, threshold, distribution, price,
-#: probability, simulation count, Gate 3 route, calibration or publication
-#: rule is touched anywhere in this change. No fitted artifact moves. What
-#: changes is which player-games the live builder averages over, and it
-#: changes to the set training averaged over.
-#:
-#: The pricing entry point's third declared use is a publication defect with
-#: the same shape as the first: a quantity that already existed on the path
-#: was not carried to the stage that publishes it.
-#:
-#: ``model_projection`` is the one column naming the model's central forecast
-#: for a wager, and the pricing script wrote null into it for every
-#: combination prop. The reason recorded in place was that a combination is
-#: priced from a joint distribution over its components and that no central
-#: forecast of the combined total exists on this path. The second half of
-#: that was wrong: a distribution has a mean, the pricing step is the stage
-#: that builds the combination's distribution at all, and
-#: ``ops/nba_distribution_publication.py`` was already publishing that mean
-#: beside the price under ``distribution_mean``. So the figure existed, was
-#: already published one field away, and the column a bettor reads it from
-#: said there was none -- which on the public page is an empty Model
-#: Projection cell for five of the eleven prop families the model prices.
-#:
-#: The fix takes the mean from whichever engine priced the row, on
-#: ``price_combo_lines``' own branch and threshold: the convolution of the
-#: component marginals under independence, and the mean of the very draws the
-#: simulation priced from under dependence. Taking it from the engine rather
-#: than adding up the component means is a choice about which number is
-#: published and not about which is right -- a Gaussian copula couples the
-#: components' ranks and moves no mass within any component's marginal, so
-#: the sum's mean is the sum of the component means at every dependence
-#: coefficient -- but only the engine's answer is the mean of the
-#: distribution published beside it, and on the frozen policy's one dependent
-#: combination the two differ by the simulation's own sampling error.
-#:
-#: Nothing in ``pricing.py`` moves: it stays undeclarable and
-#: byte-identical to production, and both engines are reached by named import
-#: so no second definition of a combination's distribution exists. No
-#: probability, price, edge, EV, quantile, line, calibration, dependence
-#: coefficient, simulation count or routing rule is computed or changed
-#: anywhere in this change, and every single-stat row's projection is the
-#: column it already was.
+#: Nothing about what is captured moves. Every component, every API call,
+#: every digest, the grace window, the due-window rule and all sixteen keys
+#: of the ``capture_run`` envelope are the ones production has, which the
+#: branch-safety tests and the capture-policy tests both pin; every function
+#: in the file except ``parse_args`` and ``main`` is syntax-tree-identical to
+#: production and neither of those lost a line. No probability, price, edge,
+#: EV, quantile, line, distribution, calibration, dependence coefficient,
+#: Gate 3 route or publication rule is computed or changed anywhere in this
+#: change, and no fitted artifact is touched.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
-        "src/nba_prop_quant/slate.py": (
-            "a player with no NBA appearance is now served the value "
-            "training states for an appearance-only prior, which is no "
-            "value, instead of the played population's mean minutes. One "
-            "added condition inside the one exempt function and one added "
-            "module constant, NO_APPEARANCE_PRIOR, which is declared serving "
-            "plumbing and is nan. The lines production has are the two above "
-            "it and both survive, so the substitution is still what runs for "
-            "every player with any appearance at all: the condition is not "
-            "games_prior, and games_prior is the career count the module "
-            "already computes from the same already-leakage-checked, "
-            "already-played-filtered history. build_base_frame takes these "
-            "same columns through a lagged EWM, so a first appearance is fit "
-            "with all of them missing and the fitted minutes model holds a "
-            "learned branch for that row; features.py is byte-identical to "
-            "production and the authority on what the value is. Every other "
-            "function in the module is syntax-tree-identical to production "
-            "and every module constant production has is unmoved, which the "
-            "branch-safety tests pin. No feature definition, prior, window, "
-            "span, weight, threshold, probability, price, edge, EV, "
-            "quantile, line, distribution, simulation count, calibration or "
-            "Gate 3 route is computed or changed, and no fitted artifact is "
-            "touched"
+        "scripts/11_collect_snapshots.py": (
+            "two scheduled sweeps of one slate can no longer both record a "
+            "claim to the same capture window. One added context manager, "
+            "capture_window_claim, which is declared capture window "
+            "selection, and one added statement in main that enters it "
+            "alongside the balldontlie client it already entered. It is an "
+            "exclusive flock on a lock file beside capture_runs/{date}.jsonl, "
+            "taken before completed_window_ids is read and released after "
+            "the capture_run envelope is appended, so the second sweep reads "
+            "the claim set the first one left and takes the no-unseen-"
+            "windows path the collector already has. Held across the "
+            "collection and not only across the append, because a capture's "
+            "component digests are recomputed from every row carrying its "
+            "captured_at and two sweeps at one instant otherwise write into "
+            "one another's digests. The wait is bounded by the existing "
+            "--grace-minutes window and refuses rather than duplicating. No "
+            "line production has was removed or edited: every function "
+            "except parse_args and main is syntax-tree-identical to "
+            "production, parse_args is untouched, and main's one changed "
+            "statement is the with statement it already had. No API call, "
+            "component, digest, grace window, due-window rule or "
+            "capture_run key moved -- capture_id is derived from that "
+            "envelope, so a changed key would invalidate every capture ever "
+            "written -- and no probability, price, edge, EV, quantile, line, "
+            "calibration or Gate 3 route is computed or changed"
         ),
         "models/frozen_manifests/"
         "nba_prop_quant_v2_adaptive_serving_source_contract.json": (
-            "relocks src/nba_prop_quant/slate.py at the bytes above and "
-            "records the third reason that file diverges from the "
+            "relocks scripts/11_collect_snapshots.py at the bytes above and "
+            "records the second reason that file diverges from the "
             "historical reference, which is what this registry exists for: "
             "its own purpose requires every difference to be enumerated and "
             "justified in it. The historical reference hashes are untouched, "
             "no locked file is dropped or added, the divergence count is "
             "unchanged because the file was already a declared divergence, "
-            "and every invariant flag -- feature definitions, training "
-            "feature definitions, model mathematics, mean-model routing, "
-            "marginal family, calibration, dependence, Gate 3 routing, "
-            "fitted artifacts -- stays false"
+            "the four serving sources locked at version 9 are unchanged, and "
+            "every invariant flag -- feature definitions, training feature "
+            "definitions, model mathematics, mean-model routing, marginal "
+            "family, calibration, dependence, Gate 3 routing, fitted "
+            "artifacts -- stays false"
         ),
         "models/frozen_manifests/"
         "nba_prop_quant_v2_adaptive_update_protocol.json": (

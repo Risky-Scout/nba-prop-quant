@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
+import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -147,6 +150,103 @@ def completed_window_ids(
     return completed
 
 
+#: How often a sweep retries the claim while another sweep holds it.
+CAPTURE_CLAIM_POLL_SECONDS = 0.05
+
+
+@contextmanager
+def capture_window_claim(
+    capture_run_path: Path,
+    *,
+    timeout_seconds: float,
+):
+    """The exclusive right to sweep one slate, held across the whole sweep.
+
+    ``completed_window_ids`` is the authority on which windows have already
+    been captured, and the collector consults it, collects, and then records
+    its own answer. Those three steps are a read-modify-write of an
+    append-only log with nothing holding the file between them, so two
+    sweeps whose collections overlap both read the window as unclaimed and
+    both append a scheduled capture naming it. ``select_capture_bundle``
+    then refuses that window for being ambiguous -- permanently, because the
+    log is append-only and both captures are genuine -- and the game cannot
+    be priced at all. That is what happened on 2026-10-23: three games
+    tipping at 02:00 UTC were swept twice inside one grace window and none
+    of the three was ever served.
+
+    The claim is an exclusive ``flock`` on a lock file beside the log, held
+    from before the read until after the append, so the second sweep reads
+    the claim set the first one left rather than the one it found. It covers
+    the component appends too, and that is not incidental: a capture's
+    component digests are recomputed from every row carrying its
+    ``captured_at``, so two sweeps invoked with the same ``--now-utc`` write
+    rows into one another's digests and corrupt both captures even if only
+    one of them claims the window.
+
+    The wait is bounded by the capture grace window, which is the span in
+    which a due window may legitimately be captured at all: a sweep that
+    cannot get the claim inside it could not produce a capture pricing would
+    accept, so it refuses and exits non-zero rather than appending a second
+    claim to a window the holder is in the middle of claiming. The lock is a
+    file descriptor, so a sweep that crashes releases it.
+    """
+    lock_path = (
+        capture_run_path.parent
+        / f"{capture_run_path.name}.claim"
+    )
+
+    lock_path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    deadline = (
+        time.monotonic()
+        + float(timeout_seconds)
+    )
+
+    with lock_path.open(
+        "a",
+        encoding="utf-8",
+    ) as handle:
+        while True:
+            try:
+                fcntl.flock(
+                    handle.fileno(),
+                    fcntl.LOCK_EX
+                    | fcntl.LOCK_NB,
+                )
+            except OSError:
+                if (
+                    time.monotonic()
+                    >= deadline
+                ):
+                    raise RuntimeError(
+                        "another capture sweep has held "
+                        f"{lock_path} for more than "
+                        f"{float(timeout_seconds):g}s; refusing "
+                        "rather than recording a second "
+                        "scheduled capture of a window it may "
+                        "already have claimed"
+                    ) from None
+
+                time.sleep(
+                    CAPTURE_CLAIM_POLL_SECONDS
+                )
+
+                continue
+
+            break
+
+        try:
+            yield lock_path
+        finally:
+            fcntl.flock(
+                handle.fileno(),
+                fcntl.LOCK_UN,
+            )
+
+
 def main() -> None:
     args = parse_args()
     settings = get_settings()
@@ -169,11 +269,21 @@ def main() -> None:
 
     errors: list[dict[str, object]] = []
 
-    with BDLClient(
-        api_key=settings.bdl_api_key,
-        base_url=settings.bdl_base_url,
-        requests_per_minute=settings.bdl_requests_per_minute,
-    ) as client:
+    with (
+        BDLClient(
+            api_key=settings.bdl_api_key,
+            base_url=settings.bdl_base_url,
+            requests_per_minute=settings.bdl_requests_per_minute,
+        ) as client,
+        capture_window_claim(
+            settings.snapshot_dir
+            / "capture_runs"
+            / f"{args.date}.jsonl",
+            timeout_seconds=(
+                args.grace_minutes * 60
+            ),
+        ),
+    ):
         games = list(
             client.games(
                 dates=[args.date]
