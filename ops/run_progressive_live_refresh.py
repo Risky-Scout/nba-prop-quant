@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Replace the live release with the window that has just passed canary.
+"""Hold every game of the live slate at its own latest validated window.
 
 WHAT WAS MISSING
 ----------------
@@ -11,85 +11,123 @@ the committed switch, requires a prior canary attestation of the same bytes
 and requires a rollback target before it will move anything. The page builder
 has a live entry in ``MODE_DESTINATIONS`` naming the served root. What was
 absent was the thing none of them can supply on its own: a statement of
-*which* capture window is live, *which* window may replace it, and what
-happens to the pointer when a later window fails.
+*which* capture window each game is live at, *which* window may replace it,
+and what happens to the pointer when a later window fails.
 
-That is this module, and it is deliberately thin. It does not publish. It
-calls ``publish_incumbent_to_wizardofodds.publish`` with ``mode="live"``, by
-name, so the switch gate, the destination confinement, the receipt
-verification, the row rules, the release construction, the canary-attestation
-match, the rollback-target requirement, the readback and the atomic pointer
-rotation are the frozen publisher's own and not a second copy of any of them.
-It then calls ``run_wizardofodds_publication.verify_promoted_release`` --
-again by name -- so the post-promotion readback a live refresh is held to is
-the one the canary feed stage is held to.
+That is this module, and it is deliberately thin. Every rule a live
+publication rests on is the frozen publisher's own, called by name: the switch
+gate, the destination confinement, the release construction, the
+canary-attestation match, the rollback-target requirement, the readback, the
+atomic pointer rotation, the retention sweep and the audit append. It then
+calls ``run_wizardofodds_publication.verify_promoted_release`` -- again by
+name -- so the post-promotion readback a live refresh is held to is the one
+the canary feed stage is held to.
 
-What it adds is four decisions the publisher has no opinion about.
+What it adds is the decisions the publisher has no opinion about.
 
-THE PROGRESSIVE CHAIN
----------------------
+WHY THE ONE-POINTER CHAIN WAS WRONG
+-----------------------------------
 
-T-180 establishes the live release, T-90 replaces it, T-45 replaces that and
-T-20 replaces that as the final pregame version. Four refreshes of one live
-pointer, not four live pages: ``wizardofodds_nba_live`` and
-``wizardofodds_nba_player_props_page_live`` are single destinations with a
-single ``current.json`` each, and a reader who opens the page at any point in
-the evening is shown the most recent window that validated.
+The first version of this file published the slate through a single
+forward-only pointer: one "closest window offset reached so far" for the whole
+evening, and any later refresh at a larger offset declined as going backwards.
 
-The offsets descend, so "a later window may replace an earlier one" is "a
-smaller offset may replace a larger one", and the reverse is refused. That
-matters because the self-hosted runner makes it reachable: pickup on this
-repository's runner has been delayed by hours, so a T-180 invocation could
-finish after a T-45 one, and without the ordering rule it would walk the live
-page back to the market as it stood three hours before tip -- with every
-digest agreeing and every readback passing, because what it published is a
-real validated release. It is simply the wrong one.
+That is correct when every game tips at once and degenerate otherwise,
+because a window belongs to a *game* and its offset is measured from that
+game's own tip. On the eight-game 2026-10-24 slate, tips from 6:00 PM to
+10:00 PM ET, the first game reached T-20 at 5:40 PM -- and from that moment
+the rule declined the T-180, T-90 and T-45 windows of all seven games behind
+it. Fourteen of twenty-four window groups declined; most of the slate with no
+live card at all. Every decline was the rule working as written, every
+receipt was correct and the segment was green, which is what made it
+invisible.
 
-IDENTICAL BYTES, PROVED BY DIGEST
----------------------------------
+PER-GAME COMPOSITION
+--------------------
 
-The live release is not re-derived. It is the release the canary validated,
-and three independent statements of one digest have to agree before anything
-is written:
+The live slate is a composite that holds, simultaneously, each game at its own
+latest validated window. Game A at T-20, game B at T-90 and game C at T-180
+is one live release carrying exactly those three cards at exactly those three
+windows. For each game independently: no card before its first capture, then
+its T-180, then its T-90 in place of that, then its T-45, then its T-20 as the
+final pregame version.
 
-* the canary feed publication receipt this run's canary stage wrote, which
-  names the ``rows_sha256`` the canary published;
-* ``canary_attestation.json`` read back from the canary destination itself,
-  which names the ``rows_sha256`` and the ``source_artifact_sha256`` that
-  destination is actually serving and proved by readback;
-* the release built for the live destination, whose ``rows_sha256`` is
-  compared against both before it is promoted.
+Two invariants, and both are properties of how the composition is computed
+rather than things checked afterwards.
 
-The rows digest is the digest of the rows payload, which holds the contract
-version, the rows, the distributions and the slate date and nothing about the
-destination -- so it is identical at the canary and at live by construction,
-and any difference at all means the bytes changed between the two stages. The
-release *id* does differ, because it carries the destination's own prefix, and
-that is the point: one set of rows, published under the live stream's name.
+*A game is never downgraded.* The offset a game is composed at is the smaller
+of the offset recorded for it and the offset being refreshed, and nothing
+anywhere takes the larger. A T-180 refresh that arrives after a game's T-20 --
+which is the ordinary case on a staggered slate and not a fault -- leaves that
+game at T-20 and goes on to advance the games the refresh is actually for.
 
-``publish_incumbent_to_wizardofodds.assert_canary_attested`` performs the
-first two of those comparisons from inside the publisher, against the release
-it has just built, and both are kept. That one is the gate. This module's runs
-before a connection to the live host is opened at all, so a canary that does
-not match is refused without the live destination being touched.
+*Advancing one game leaves the others byte-identical.* Every other game's
+component is selected out of its own stored source release and is a function
+of that release's bytes alone, so games B..H come out of the composition
+unchanged whatever A does.
 
-THE PRIOR VALID RELEASE SURVIVES EVERY FAILURE
-----------------------------------------------
+``ops/live_slate_composite.py`` is where the composition lives. This file is
+the entry point: it decides which games may advance and then publishes what
+that module assembled.
 
-Structurally, not by compensation. The publisher's order of operations is
-switch, destination, priced artifact, serving receipt, rows, release,
-transport, canary attestation, rollback target, write, readback, *promote*.
+SELECTION, NEVER COMPUTATION
+----------------------------
+
+Nothing is re-derived, re-priced, re-routed or recomputed. Each game's rows
+are copied byte for byte out of a release its own canary already validated
+and read back, and the composite is those rows concatenated in the
+publisher's own logical-key order with the distribution records the same
+bytes carry.
+
+So the digest identity the chain has always rested on survives composition.
+A composite whose games all come from one source release produces a rows
+payload byte-identical to that release's own -- same contract version, same
+rows, same distributions, same slate -- and therefore the identical
+``rows_sha256``. In that case the three statements of one digest still agree
+exactly as before:
+
+* the canary feed publication receipt this run's canary stage wrote;
+* ``canary_attestation.json`` read back from the canary destination itself;
+* the release built for the live destination.
+
+A composite spanning more than one window has a digest of its own, and what
+replaces the single-release comparison is strictly stronger rather than
+weaker: ``publish_incumbent_to_wizardofodds.assert_canary_attested`` is
+applied once per source release, every composite row is looked up in the
+recomputed bytes of the release its game names, and
+``COMPOSITE_UNATTESTED_ROWS``, ``LIVE_SOURCE_MISMATCH_COUNT`` and
+``COMPOSITE_UNATTESTED_DISTRIBUTIONS`` all have to be zero. One row that
+cannot be traced to canary-attested bytes refuses the whole publication.
+
+THE PRIOR VALID COMPOSITE SURVIVES EVERY FAILURE
+------------------------------------------------
+
+Structurally, not by compensation. The order of operations is switch,
+destinations, canary receipt, canary attestation, the per-game advancement
+read, the attested sources, the composition, the attestation audit, the
+release, the transport, the rollback target, write, readback, *promote*.
 Every refusal above happens before ``promote``, and ``promote`` is the only
 thing that touches ``current.json``. So a refresh that fails for any reason --
-no capture, a failed serve, a canary that did not validate, a digest that does
-not match, a game that has already tipped, a transport that will not talk --
-leaves the live pointer naming the last release that did validate, and the
-release before that is still at the destination because ``previous.json``
-names it and ``prune_releases`` is pointer-driven rather than date-driven.
+a game's source missing, a digest that does not match, an unattested row, a
+game that has already tipped, a transport that will not talk, an HTTPS
+readback that disagrees -- leaves the live pointer naming the last composite
+that did validate, and the composite before that is still at the destination
+because ``previous.json`` names it and ``prune_releases`` is pointer-driven
+rather than date-driven.
 
 This module adds no second retention scheme. ``previous.json`` and
 ``rollback`` are the mechanism; what is new is only that the thing being
-retained now has a capture window attached to it.
+retained now has a window per game attached to it.
+
+POST-TIP IS PER GAME
+--------------------
+
+No game is newly published after its own tip. A game whose card was validly
+published before its tip keeps that card: the guard refuses new publication
+for that game and does not retract the slate, because retracting it would
+take down seven games to punish one. So a refresh is for the games whose tips
+are still ahead, the tipped ones are recorded as refused by name, and a
+refresh in which no game is left to advance publishes nothing at all.
 
 WHAT IT CANNOT DO
 -----------------
@@ -135,6 +173,7 @@ if str(PROJECT_ROOT / "ops") not in sys.path:
 # retention keeps -- is read out of the frozen publisher rather than restated
 # here, and the readback a promoted release is held to is the publication
 # orchestrator's own.
+import live_slate_composite as composite  # noqa: E402
 import publish_incumbent_to_wizardofodds as publisher  # noqa: E402
 import run_wizardofodds_publication as publication  # noqa: E402
 
@@ -234,21 +273,22 @@ OUTCOME_ALREADY_CURRENT = "LIVE_ALREADY_CURRENT"
 #: put there.
 OUTCOME_PROMOTED_THEN_INCOMPLETE = "LIVE_PROMOTED_THEN_INCOMPLETE"
 
-#: The live release is already at a window closer to tip than this one, so
-#: nothing was written and the pointer is unchanged.
+#: Every game this refresh is for is already at a window closer to its own
+#: tip, so nothing was written and the pointer is unchanged.
 #:
-#: Its own outcome, and a success, because it is the ordering rule working
-#: rather than anything failing. It is also the ordinary evening state on a
-#: staggered slate and not an edge case: the windows are per game, the
-#: offsets are measured from each game's own tip, and a twelve-game slate
-#: with five tip times interleaves them -- the 7:00 game's T-20 capture is at
-#: 6:40 and the 10:30 game's T-180 capture is at 7:30, an hour *later* in the
-#: evening and three hours *earlier* in its own game's window. So an advisory
-#: window firing after some game has already reached T-20 is routine, and
-#: what the chain does about it is exactly what the rule says: the release
-#: closer to tip stays serving. Reporting that as a fault every evening would
-#: make the segment's own verdict unreadable, which is the only thing a
-#: verdict is for.
+#: Its own outcome, and a success, because it is the no-downgrade invariant
+#: working rather than anything failing.
+#:
+#: Narrowed from the slate to the games, which is the whole of what the
+#: composite changed. It used to fire whenever *any* game of the slate had
+#: reached a smaller offset, which on a staggered slate meant almost always:
+#: the 6:00 game's T-20 capture is taken at 5:40 and the 10:00 game's T-180
+#: capture at 7:00, an hour and twenty minutes *later* in the evening and
+#: three hours *earlier* in its own game's window, so the advisory refresh
+#: that followed was declined and the later game never got a card. Now a
+#: refresh is declined only when every game it is for has already validly
+#: reached a window closer to its own tip, which is a real repeat and not a
+#: collision between two games' schedules.
 OUTCOME_ALREADY_CLOSER_TO_TIP = "LIVE_ALREADY_CLOSER_TO_TIP"
 
 #: Nothing was written and the live pointer is unchanged.
@@ -381,10 +421,30 @@ def assert_destinations_are_the_live_ones(
             )
 
 
-def assert_no_window_has_tipped(
+def game_of_window(window_id: str) -> str:
+    """The game a window id belongs to.
+
+    A window id is ``GAME_ID:T-OFFSETm`` and this is the only place that shape
+    is taken apart. It is the join between the caller's schedule read and the
+    per-game composition: the tips arrive keyed by window and everything after
+    this point is keyed by game.
+    """
+    game_id, separator, _ = str(window_id).partition(":")
+
+    if not separator or not game_id:
+        raise LiveRefreshRefused(
+            f"the window id {window_id!r} does not name a game before its "
+            "offset, so the game whose tip it is about cannot be told from "
+            "the window it is about"
+        )
+
+    return game_id
+
+
+def partition_windows_by_tip(
     tips: dict[str, datetime], *, now: datetime, offset_minutes: int
-) -> list[dict[str, Any]]:
-    """Every window this refresh is for is still ahead of its tip.
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Split this refresh's windows into the pregame ones and the tipped ones.
 
     The guard the canary path does not have and does not need. A preview
     priced after tip is a preview of a stale market in a directory nobody
@@ -401,13 +461,21 @@ def assert_no_window_has_tipped(
     release at the served root would have been a pregame page for a game in
     its third quarter.
 
-    The subject is the windows this refresh is *for*, not every window in the
-    release. A release is cumulative -- one serve at an offset prices every
-    game with an eligible capture at that offset -- so by the time the last
-    T-20 group of a twelve-game slate is published, the first game tipped two
-    hours earlier, and its rows are correctly in the release because they were
-    priced before their own tip. What has to still be ahead is the tip of the
-    game whose window this refresh is the refresh for.
+    Scoped per game, which is the whole of what changed. The old guard refused
+    the refresh when *any* window it was for had tipped, and on a composite
+    that is a retraction: one late game would have taken seven games' valid
+    cards off the page to prevent its own. So the tipped games are partitioned
+    out and recorded, the games still ahead of their tips advance, and a game
+    whose card was published before its own tip keeps it -- the composite
+    carries it because it was validly published, not because this refresh is
+    claiming anything new about it.
+
+    The subject is still the windows this refresh is *for*, not every window
+    in the release. A release is cumulative -- one serve at an offset prices
+    every game with an eligible capture at that offset -- so by the time the
+    last T-20 group of a twelve-game slate is published, the first game tipped
+    two hours earlier, and its rows are correctly in the release because they
+    were priced before their own tip.
     """
     if not tips:
         raise LiveRefreshRefused(
@@ -432,31 +500,45 @@ def assert_no_window_has_tipped(
             "checking a window this release is not being refreshed for"
         )
 
-    tipped = sorted(
-        (window_id, tip) for window_id, tip in tips.items() if now >= tip
-    )
+    pregame: list[dict[str, Any]] = []
 
-    if tipped:
-        raise LiveRefreshRefused(
-            "the game(s) "
-            + ", ".join(
-                f"{window_id} (tipped {tip.isoformat()}, "
-                f"{round((now - tip).total_seconds() / 60.0)} minutes ago)"
-                for window_id, tip in tipped
-            )
-            + f" have already started and it is now {now.isoformat()}. A "
-            "window whose game has tipped is not a pregame price and does not "
-            "go live; the release already live is left serving"
-        )
+    tipped: list[dict[str, Any]] = []
 
-    return [
-        {
-            "minutes_before_tip": round((tip - now).total_seconds() / 60.0, 3),
+    for window_id, tip in sorted(tips.items()):
+        entry = {
+            "game_id": game_of_window(window_id),
+            "minutes_before_tip": round(
+                (tip - now).total_seconds() / 60.0, 3
+            ),
             "tip_utc": tip.isoformat(),
             "window_id": window_id,
         }
-        for window_id, tip in sorted(tips.items())
-    ]
+
+        (tipped if now >= tip else pregame).append(entry)
+
+    return pregame, tipped
+
+
+def post_tip_refusal(
+    tipped: list[dict[str, Any]], *, now: datetime
+) -> LiveRefreshRefused:
+    """The refusal for a refresh in which every game has already started.
+
+    Nothing is left to publish, so this is a refusal rather than a partial
+    composite: the games named here keep whatever they already have and this
+    refresh claims nothing new about any of them.
+    """
+    return LiveRefreshRefused(
+        "the game(s) "
+        + ", ".join(
+            f"{entry['window_id']} (tipped {entry['tip_utc']}, "
+            f"{abs(round(entry['minutes_before_tip']))} minutes ago)"
+            for entry in tipped
+        )
+        + f" have already started and it is now {now.isoformat()}. A "
+        "window whose game has tipped is not a pregame price and does not "
+        "go live; the release already live is left serving"
+    )
 
 
 # ----------------------------------------------------------------------
@@ -721,20 +803,54 @@ def assert_canary_validated_this_release(
     }
 
 
-def assert_live_release_is_the_canary_release(
-    release: Any, *, canary: dict[str, Any], attestation: dict[str, Any]
-) -> None:
-    """The bytes about to be promoted are the bytes that were validated.
+def assert_a_single_window_composite_is_the_canary_release(
+    release: Any,
+    *,
+    assembled: composite.Composite,
+    canary: dict[str, Any],
+    attestation: dict[str, Any],
+    canary_release_id: str,
+) -> str:
+    """The three statements of one digest, where there is still one digest.
 
-    The last of the three statements of one digest, taken on the release the
-    publisher actually built for the live destination. It cannot normally
-    differ -- the rows payload is a function of the priced parquet, the
-    distributions and the slate date, and the publisher re-hashes the parquet
-    against the serving receipt before it builds anything -- which is exactly
-    why it is asserted rather than assumed: the only ways it could differ are
-    the ways that matter, and all of them end with a reader being shown
-    numbers no canary ever read back.
+    A composite whose games all come out of this window's own canary release,
+    and all of that release's games, *is* that release: the rows payload holds
+    the contract version, the rows, the distributions and the slate date and
+    nothing about the destination, so it serialises to the identical bytes and
+    digests to the identical ``rows_sha256``. In that case the equality the
+    chain has always asserted still applies exactly as written, and it is
+    asserted rather than quietly dropped.
+
+    A composite spanning more than one window has a digest of its own and
+    cannot be compared to any single attestation. What stands in its place is
+    not weaker: every source release behind it goes through the publisher's
+    own ``assert_canary_attested``, every row is looked up in the recomputed
+    bytes of the release its game names, and all three untraceable-row counts
+    have to be zero. Returned rather than silent, so the receipt says which of
+    the two claims was available.
     """
+    sources = {
+        component.source_release_id
+        for component in assembled.components.values()
+    }
+
+    if sources != {canary_release_id}:
+        return (
+            f"this composite spans {len(sources)} canary release(s), so its "
+            "rows digest is its own and each component's attestation is "
+            "checked against its own source release instead"
+        )
+
+    priced = assembled.games_of_source(canary_release_id)
+
+    if priced != set(assembled.components):
+        return (
+            f"this composite holds {len(assembled.components)} of the "
+            f"{len(priced)} game(s) {canary_release_id} prices, so its rows "
+            "digest is its own and each component's attestation is checked "
+            "against its own source release instead"
+        )
+
     for label, built, validated in (
         ("canary publication", release.rows_sha256, canary["rows_sha256"]),
         (
@@ -746,10 +862,16 @@ def assert_live_release_is_the_canary_release(
         if validated and built != validated:
             raise LiveRefreshRefused(
                 f"the release built for the live destination digests to "
-                f"{built} and the {label} covers {validated}, so live would "
-                "be given bytes no canary validated. Nothing is promoted and "
-                "the release already live is left serving"
+                f"{built} and the {label} covers {validated}, so what was "
+                "canaried is not what would go live. Nothing is promoted and "
+                "the composite already live is left serving"
             )
+
+    return (
+        f"this composite is the whole of {canary_release_id}, so its rows "
+        "digest is that canary's own and is equal to both the publication "
+        "receipt's and the destination's attestation"
+    )
 
 
 # ----------------------------------------------------------------------
@@ -886,6 +1008,7 @@ def resolve_live_state(
 
         return {
             "established": False,
+            "live_components": [],
             "live_offset_minutes": None,
             "live_release_id": "",
             "live_rows_sha256": "",
@@ -915,6 +1038,7 @@ def resolve_live_state(
 
         return {
             "established": True,
+            "live_components": [],
             "live_offset_minutes": None,
             "live_release_id": release_id,
             "live_rows_sha256": rows_sha256,
@@ -958,66 +1082,168 @@ def resolve_live_state(
             "forward or backward cannot be established"
         )
 
+    components = recorded.get("games")
+
+    if not components:
+        raise LiveRefreshRefused(
+            f"{evidence} records {release_id!r} as live without the per-game "
+            "composition it was assembled from, so which window each game is "
+            "serving is unknown and no game can be shown to be going forward. "
+            f"Reconcile against {publisher.AUDIT_LOG_NAME} at the destination "
+            "before another composite is published live"
+        )
+
     return {
         "established": True,
+        "live_components": components,
         "live_offset_minutes": int(offset),
         "live_release_id": release_id,
         "live_rows_sha256": rows_sha256,
         "live_slate_date": served_slate,
         "reason": (
             f"the live destination serves the T-{int(offset)} release "
-            f"{release_id} for {slate_date}"
+            f"{release_id} for {slate_date}, which holds "
+            f"{len(components)} game(s) at their own latest validated windows"
         ),
     }
 
 
-def assert_the_refresh_goes_forward(
-    *, offset_minutes: int, live_offset_minutes: int | None
-) -> str:
-    """A later window may replace an earlier one, and never the reverse.
+def resolve_advancement(
+    *,
+    offset_minutes: int,
+    pregame: list[dict[str, Any]],
+    tipped: list[dict[str, Any]],
+    live_components: dict[str, composite.GameComponent],
+) -> dict[str, Any]:
+    """Which games this refresh advances, which it leaves, and why.
 
-    The offsets descend through the evening, so going forward is the offset
-    getting smaller. Equality is allowed and is how a cumulative release grows
-    within one window: a segment that captures three tip groups serves and
-    publishes three times at T-20, each release holding every game priced so
-    far, and the later ones have to be able to replace the earlier ones.
+    The per-game replacement of the one-pointer ordering rule, and the place
+    the no-downgrade invariant is enforced. Per game:
 
-    Going backwards is declined rather than treated as a failure, because on
-    a staggered slate it is the normal case. A window belongs to a game and
-    its offset is measured from that game's own tip, so an evening's windows
-    interleave: on the twelve-game slate of 2026-10-23 the 7:00 game's T-20
-    capture is taken at 6:40 and the 10:30 game's T-180 capture an hour later
-    at 7:30, which is three hours earlier in its own game's window. The
-    advisory refresh that follows it is asking to put a T-180 release live
-    over a T-20 one, and the answer is the one the rule gives: the release
-    closer to tip stays serving, nothing is written, and the chain carries on.
+    *No record.* It advances: this window is the first one that validated for
+    it, so this is where its card comes from.
+
+    *Recorded at a larger offset.* It advances, because this window is closer
+    to its tip than the one it is serving.
+
+    *Recorded at this offset.* It advances, which is how a cumulative release
+    grows within one window: a segment that captures three tip groups serves
+    and publishes three times at T-20, each release holding every game priced
+    so far, and the later ones have to be able to replace the earlier ones for
+    the games they are about.
+
+    *Recorded at a smaller offset.* It is left exactly as it is. This is the
+    one-pointer rule's decline, narrowed from the slate to the game it is
+    actually about: a T-180 refresh arriving after that game's T-20 cannot
+    walk it back, and -- unlike before -- it does not stop the refresh from
+    advancing the games it is for.
+
+    A game whose tip has passed is left as it is too, and for a different
+    reason: not because this window is behind it, but because no game is
+    newly published after it has started.
+
+    When nothing is left to advance the refresh writes nothing. That is the
+    ordering rule declining a window rather than anything failing, and it is
+    the ordinary evening state on a staggered slate.
     """
-    if live_offset_minutes is None:
-        return (
-            f"no release is live for this slate, so the T-{offset_minutes} "
-            "window establishes it"
+    advancing: list[str] = []
+
+    declined: list[dict[str, Any]] = []
+
+    for entry in pregame:
+        game_id = str(entry["game_id"])
+
+        held = live_components.get(game_id)
+
+        if held is None or int(held.offset_minutes) >= int(offset_minutes):
+            advancing.append(game_id)
+            continue
+
+        declined.append(
+            {
+                "game_id": game_id,
+                "held_window": composite.window_label(held.offset_minutes),
+                "reason": (
+                    f"game {game_id} is already serving its "
+                    f"{composite.window_label(held.offset_minutes)} card, "
+                    f"which is closer to its tip than T-{offset_minutes}, so "
+                    "it is left exactly as it is and is never walked back to "
+                    "an earlier window"
+                ),
+                "window_id": entry["window_id"],
+            }
         )
 
-    if int(offset_minutes) > int(live_offset_minutes):
+    refused = [
+        {
+            "game_id": str(entry["game_id"]),
+            "reason": (
+                f"game {entry['game_id']} tipped at {entry['tip_utc']} and is "
+                "not newly published after its own tip. Whatever card it "
+                "already had was published before it started and is carried "
+                "unchanged"
+            ),
+            "window_id": entry["window_id"],
+        }
+        for entry in tipped
+    ]
+
+    return {
+        "advancing_game_ids": sorted(advancing),
+        "declined": declined,
+        "post_tip_refused": refused,
+    }
+
+
+def assert_something_advances(
+    advancement: dict[str, Any],
+    *,
+    offset_minutes: int,
+    tipped: list[dict[str, Any]],
+    now: datetime,
+) -> str:
+    """At least one game of this refresh has a window to advance to.
+
+    Two ways there is nothing, and they are different verdicts. Every game
+    already closer to its own tip is the ordering rule working, and a success.
+    Every game already started is the post-tip guard working, and a refusal:
+    the games are named, nothing is written, and what they were serving stays
+    served.
+    """
+    if advancement["advancing_game_ids"]:
+        declined = advancement["declined"]
+
+        return (
+            f"{len(advancement['advancing_game_ids'])} game(s) advance to "
+            f"T-{offset_minutes}"
+            + (
+                f", and {len(declined)} are already closer to their own tips "
+                "and are carried unchanged"
+                if declined
+                else ""
+            )
+            + (
+                f", and {len(advancement['post_tip_refused'])} have already "
+                "tipped and are not newly published"
+                if advancement["post_tip_refused"]
+                else ""
+            )
+        )
+
+    if advancement["declined"]:
         raise LiveAlreadyCloserToTip(
-            f"the T-{live_offset_minutes} release is already live and this is "
-            f"the T-{offset_minutes} refresh, which is an earlier capture "
-            "window. The chain only ever moves closer to tip, so a later "
-            "window is never replaced by an earlier one and the release "
-            "already live is left serving"
+            f"this is the T-{offset_minutes} refresh and every game it is for "
+            "is already serving a window closer to its own tip ("
+            + "; ".join(
+                f"{entry['game_id']} at {entry['held_window']}"
+                for entry in advancement["declined"]
+            )
+            + "). A game is never replaced by an earlier one of its own "
+            "windows, so nothing is written and every game's latest valid "
+            "prediction is left serving"
         )
 
-    if int(offset_minutes) == int(live_offset_minutes):
-        return (
-            f"the T-{offset_minutes} release is already live and this refresh "
-            "is the same window, which is how a cumulative release grows "
-            "within one window"
-        )
-
-    return (
-        f"the T-{live_offset_minutes} release is live and the "
-        f"T-{offset_minutes} window is closer to tip, so it replaces it"
-    )
+    raise post_tip_refusal(tipped, now=now)
 
 
 # ----------------------------------------------------------------------
@@ -1025,26 +1251,22 @@ def assert_the_refresh_goes_forward(
 # ----------------------------------------------------------------------
 
 
-def build_live_release(
-    *,
-    switch: publisher.PublishingSwitch,
-    destination: publisher.Destination,
-    slate_date: str,
-    data_root: Path,
-    serving_receipt: Path,
-) -> tuple[Any, dict[str, Any]]:
-    """The release the live destination would hold, built the publisher's way.
+def assert_the_slate_was_served(
+    *, slate_date: str, data_root: Path, serving_receipt: Path
+) -> dict[str, Any]:
+    """The incumbent served this slate, and the rows carry its provenance.
 
-    Needed only by the establishment path below, which cannot go through
-    ``publish`` and therefore has to have the release in hand before it writes
-    anything. Every step is the publisher's own function called by name and in
-    the publisher's own order -- the receipt verification that re-hashes the
-    parquet, the row rules, the distribution projection, the release
-    construction -- so there is no second definition of what a live release
-    contains or of what it is named.
+    Asked of the serving receipt and the priced parquet before anything is
+    read from either destination. Nothing from here goes into the composite --
+    every published number comes out of an attested canary release and not out
+    of this file -- but a refresh of a slate the incumbent never served, or of
+    a parquet whose receipt does not provenance it, is a refresh with no
+    serving run behind it and is refused on the publisher's own terms.
+
+    ``verify_receipt`` is the publisher's own, called by name, so the identity
+    fields the composite's components are compared against are the ones the
+    publisher would have embedded itself.
     """
-    import pandas as pd
-
     priced = publisher.priced_markets_path(Path(data_root), slate_date)
 
     if not priced.exists():
@@ -1061,32 +1283,63 @@ def build_live_release(
             f"{priced} carry no provenance and are not published live"
         ) from error
 
-    provenance = publisher.verify_receipt(
+    return publisher.verify_receipt(
         receipt, slate_date=slate_date, priced_path=priced
     )
 
-    rows = publisher.published_rows(
-        pd.read_parquet(priced), switch=switch, slate_date=slate_date
-    )
 
+def build_composite_release(
+    assembled: composite.Composite,
+    *,
+    switch: publisher.PublishingSwitch,
+    destination: publisher.Destination,
+    slate_date: str,
+) -> Any:
+    """The composite expressed as a release, built the publisher's way.
+
+    ``publish_incumbent_to_wizardofodds.build_release`` is called by name, so
+    there is no second definition of what a release payload holds, how it is
+    digested, how it is named or what its manifest carries. What is handed to
+    it is the already-attested rows and distributions the composite selected
+    and a provenance assembled out of the components' own identities.
+
+    Then the one equality that makes this a copy rather than a construction:
+    the release's rows digest has to be the digest of the composite assembled
+    out of attested bytes. It cannot normally differ -- both are
+    ``serialise`` over the same payload -- which is exactly why it is asserted
+    rather than assumed. The only ways it could differ are the ways that
+    matter, and all of them end with a reader being shown numbers no canary
+    read back.
+    """
     release = publisher.build_release(
-        rows=rows,
-        distributions=publisher.published_distributions(
-            publisher.read_distributions_document(
-                publisher.distributions_path(Path(data_root), slate_date)
-            ),
-            rows=rows,
-            priced_sha256=str(
-                provenance.get("priced_market_artifact_sha256") or ""
-            ),
+        rows=assembled.rows,
+        distributions=assembled.distributions,
+        provenance=composite.composite_provenance(
+            assembled.components, slate_date=slate_date
         ),
-        provenance=provenance,
         switch=switch,
         destination=destination,
         slate_date=slate_date,
     )
 
-    return release, provenance
+    if release.rows_sha256 != assembled.rows_sha256:
+        raise LiveRefreshRefused(
+            f"the release built for the live destination digests to "
+            f"{release.rows_sha256} and the composite of canary-attested rows "
+            f"digests to {assembled.rows_sha256}, so what was canaried is not "
+            "what would go live. Nothing is promoted and the composite "
+            "already live is left serving"
+        )
+
+    if release.rows_bytes != assembled.rows_bytes:
+        raise LiveRefreshRefused(
+            "the release built for the live destination does not hold the "
+            "bytes of the composite assembled out of canary-attested rows, so "
+            "it is not a copy of them. Nothing is promoted and the composite "
+            "already live is left serving"
+        )
+
+    return release
 
 
 def establish_first_live_release(
@@ -1095,6 +1348,7 @@ def establish_first_live_release(
     release: Any,
     slate_date: str,
     provenance: dict[str, Any],
+    composite_manifest: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Seed a live destination that has never served anything.
 
@@ -1119,9 +1373,9 @@ def establish_first_live_release(
     own atomic replace, the retention through ``prune_releases`` and the
     record through ``append_audit_entry``. What it does not do is run before
     the canary gate: the caller has already applied
-    :func:`publish_incumbent_to_wizardofodds.assert_canary_attested` to these
-    exact bytes, so a live destination cannot be established from something no
-    canary read back.
+    :func:`publish_incumbent_to_wizardofodds.assert_canary_attested` to every
+    source release behind these exact bytes, so a live destination cannot be
+    established from something no canary read back.
     """
     if transport.exists(publisher.CURRENT_POINTER):
         raise LiveRefreshRefused(
@@ -1132,7 +1386,20 @@ def establish_first_live_release(
 
     publisher.write_release(transport, release)
 
-    verification = publisher.verify_release(transport, release)
+    recorded = (
+        composite.write_composite_manifest(
+            transport,
+            release_id=release.release_id,
+            manifest=composite_manifest,
+        )
+        if composite_manifest is not None
+        else {}
+    )
+
+    verification = {
+        **publisher.verify_release(transport, release),
+        **recorded,
+    }
 
     pointer = {
         "manifest_relative": release.manifest_relative,
@@ -1224,11 +1491,107 @@ def append_evidence(path: Path, entry: dict[str, Any]) -> str:
     return str(path)
 
 
+def promote_composite_release(
+    transport: Any,
+    *,
+    release: Any,
+    slate_date: str,
+    provenance: dict[str, Any],
+    composite_manifest: dict[str, Any],
+    retained: int | None,
+) -> dict[str, Any]:
+    """Replace the live composite, in the publisher's own order and no other.
+
+    This is the step ``publish_incumbent_to_wizardofodds.publish`` performs
+    for a release built out of one priced parquet. A composite cannot go
+    through that function, because the release it builds is the whole slate
+    re-derived at one window and the whole point here is that the slate is not
+    at one window -- but every operation is that function's own, called by
+    name, in that function's own order:
+
+    ``assert_rollback_target_exists``, ``write_release``, ``verify_release``,
+    ``promote``, ``prune_releases``, ``append_audit_entry``.
+
+    The one addition is the composite's own manifest, written before the
+    readback and read back with the release, so a destination that accepted
+    the rows and lost the statement of which window each game is at does not
+    get promoted either.
+
+    The gate ``publish`` applies before all of this --
+    ``assert_canary_attested`` -- has already been applied by the caller once
+    per source release behind these bytes, which is why it is not repeated
+    here: the composite's digest is the digest of those attested rows and
+    nothing between the audit and this call can touch them.
+    """
+    rollback_target = publisher.assert_rollback_target_exists(transport)
+
+    publisher.write_release(transport, release)
+
+    recorded = composite.write_composite_manifest(
+        transport, release_id=release.release_id, manifest=composite_manifest
+    )
+
+    verification = {
+        **publisher.verify_release(transport, release),
+        **recorded,
+    }
+
+    promotion = publisher.promote(
+        transport, release, mode=publisher.MODE_LIVE
+    )
+
+    # After the pointers, never before: the releases kept are the ones the
+    # pointers name, so pruning first could remove the rollback target this
+    # publication has just created.
+    retention = publisher.prune_releases(transport, retained=retained)
+
+    audit_relative = publisher.append_audit_entry(
+        transport,
+        {
+            "action": (
+                publisher.ACTION_PUBLISHED
+                if promotion["promoted"]
+                else publisher.ACTION_REPUBLISHED
+            ),
+            "mode": publisher.MODE_LIVE,
+            "model_authority": publisher.MODEL_AUTHORITY,
+            "production_code_sha": provenance.get("production_code_sha"),
+            "recorded_at": _utc_now().isoformat(),
+            "release_id": release.release_id,
+            "row_count": release.row_count,
+            "rows_sha256": release.rows_sha256,
+            "slate_date": slate_date,
+            "source_artifact_sha256": provenance.get(
+                "priced_market_artifact_sha256"
+            ),
+        },
+    )
+
+    return {
+        "activation": {"rollback_target": rollback_target},
+        "audit_relative": audit_relative,
+        "promotion": promotion,
+        "provenance": provenance,
+        "release": {
+            "manifest_relative": release.manifest_relative,
+            "manifest_sha256": release.manifest_sha256,
+            "release_id": release.release_id,
+            "row_count": release.row_count,
+            "rows_relative": release.rows_relative,
+            "rows_sha256": release.rows_sha256,
+        },
+        "retention": retention,
+        "verification": verification,
+    }
+
+
 def evidence_entry(
     *,
     attempted_at: datetime,
     canary: dict[str, Any] | None,
     attestation: dict[str, Any] | None,
+    composite_audit: dict[str, Any] | None = None,
+    games: list[dict[str, Any]] | None = None,
     live_release_id: str,
     manifest_sha256: str,
     offset_minutes: int,
@@ -1250,15 +1613,25 @@ def evidence_entry(
     the outcome was. ``live_release_id`` is empty on a refusal, which is what
     lets the ordering read pass over refusals without having to interpret
     them.
+
+    ``games`` is the per-game composition the attempt left live, one entry per
+    game in the composite manifest's own shape. It is the durable half of the
+    no-downgrade invariant: the next refresh reads it to find out which window
+    each game has already validly reached, and composes each game at the
+    smaller of that offset and its own. Written on every live-bearing outcome
+    and empty on a refusal, so a refusal can never be mistaken for a
+    composition in which every game lost its card.
     """
     return {
         "attempted_at_utc": attempted_at.isoformat(),
         "canary": canary,
         "canary_attestation": attestation,
+        "composite_audit": composite_audit,
         "feed_destination": LIVE_FEED_DESTINATION,
         "final_pregame_window": (
             int(offset_minutes) == FINAL_PREGAME_OFFSET_MINUTES
         ),
+        "games": games or [],
         "live_release_id": live_release_id,
         "manifest_sha256": manifest_sha256,
         "mode": publisher.MODE_LIVE,
@@ -1297,15 +1670,61 @@ def _window_tips(raw: list[str] | None) -> dict[str, str]:
     return tips
 
 
-def refresh(args: argparse.Namespace) -> dict[str, Any]:
+def _window_captures(raw: list[str] | None) -> dict[str, dict[str, str]]:
+    """``WINDOW_ID=CAPTURE_ID@CAPTURE_TIMESTAMP``, one per window.
+
+    Parsed strictly and never partially. A capture identity with a missing
+    half is refused rather than recorded empty, because a composite manifest
+    that named a capture id and no timestamp, or a timestamp and no id, would
+    be a provenance record nobody could follow back to a snapshot.
+    """
+    captures: dict[str, dict[str, str]] = {}
+
+    for item in raw or []:
+        window_id, separator, identity = str(item).partition("=")
+
+        capture_id, at, captured_at = identity.partition("@")
+
+        if (
+            not separator
+            or not at
+            or not window_id.strip()
+            or not capture_id.strip()
+            or not captured_at.strip()
+        ):
+            raise LiveRefreshRefused(
+                f"--window-capture {item!r} is not "
+                "WINDOW_ID=CAPTURE_ID@CAPTURE_TIMESTAMP, so the capture a "
+                "game's card came out of cannot be recorded"
+            )
+
+        captures[window_id.strip()] = {
+            "capture_id": capture_id.strip(),
+            "captured_at": captured_at.strip(),
+        }
+
+    return captures
+
+
+def refresh(
+    args: argparse.Namespace, *, publishing: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """One window's live refresh, or the first refusal on the way to it.
 
     Ordered so that nothing is read from the live destination until every
     cheap local fact has held, and nothing is written to it until the canary,
-    the ordering and the clock have all been satisfied. Every refusal before
-    the write leaves the live pointer exactly as it was, and so does every
-    refusal the publisher makes after it: ``promote`` is the last thing either
-    path does before the bookkeeping.
+    the per-game advancement read, the attestation audit and the clock have
+    all been satisfied. Every refusal before the write leaves the live pointer
+    exactly as it was, and so does every refusal after it up to ``promote``,
+    which is the last thing either path does before the bookkeeping.
+
+    ``publishing`` is the caller's window onto the one fact a failure handler
+    cannot recover for itself: the digest this refresh was about to promote.
+    It is written immediately before the first byte reaches the destination
+    and is how :func:`main` tells a clean refusal apart from a promotion that
+    did not finish. A composite's digest is its own -- it is not the canary's
+    except in the single-window case -- so it cannot be read back off the
+    canary receipt after the fact.
     """
     now = (
         parse_utc(args.now_utc, what="--now-utc")
@@ -1328,7 +1747,7 @@ def refresh(args: argparse.Namespace) -> dict[str, Any]:
         page=args.live_page_destination_name,
     )
 
-    windows = assert_no_window_has_tipped(
+    windows, tipped = partition_windows_by_tip(
         {
             window_id: parse_utc(tip, what=f"--window-tip-utc {window_id}")
             for window_id, tip in _window_tips(args.window_tips).items()
@@ -1336,6 +1755,15 @@ def refresh(args: argparse.Namespace) -> dict[str, Any]:
         now=now,
         offset_minutes=offset,
     )
+
+    # Raised here and not left to the advancement read, so a refresh in which
+    # every game has already started refuses before the switch, the canary or
+    # either destination is consulted. Nothing it could learn further on could
+    # make a started game publishable.
+    if not windows:
+        raise post_tip_refusal(tipped, now=now)
+
+    captures = _window_captures(args.window_captures)
 
     project_root = Path(args.project_root).resolve()
 
@@ -1361,13 +1789,21 @@ def refresh(args: argparse.Namespace) -> dict[str, Any]:
         project_root=project_root, destinations_path=args.destinations_path
     )
 
-    attested, attestation_path = _attestation_from_the_canary(
+    attested, attestation_path, stored = _attestation_from_the_canary(
         document,
         offset_minutes=offset,
         canary=canary,
         canary_name=canary_name,
         canary_root=args.canary_destination_root,
         beside=Path(args.receipt_path),
+        data_root=data_root,
+        slate_date=args.slate_date,
+    )
+
+    provenance = assert_the_slate_was_served(
+        slate_date=args.slate_date,
+        data_root=data_root,
+        serving_receipt=args.serving_receipt,
     )
 
     live = publisher.resolve_destination(
@@ -1390,6 +1826,12 @@ def refresh(args: argparse.Namespace) -> dict[str, Any]:
     transport = publisher.build_transport(live)
 
     try:
+        identity = (
+            transport.verify_identity()
+            if hasattr(transport, "verify_identity")
+            else None
+        )
+
         state = resolve_live_state(
             transport,
             entries=entries,
@@ -1397,14 +1839,41 @@ def refresh(args: argparse.Namespace) -> dict[str, Any]:
             evidence=evidence,
         )
 
-        ordering = assert_the_refresh_goes_forward(
+        held = composite.recorded_components(state["live_components"])
+
+        advancement = resolve_advancement(
             offset_minutes=offset,
-            live_offset_minutes=state["live_offset_minutes"],
+            pregame=windows,
+            tipped=tipped,
+            live_components=held,
+        )
+
+        ordering = assert_something_advances(
+            advancement, offset_minutes=offset, tipped=tipped, now=now
+        )
+
+        assembled = assemble_composite(
+            data_root=data_root,
+            slate_date=args.slate_date,
+            offset_minutes=offset,
+            canary_name=canary_name,
+            canary_release_id=canary["canary_release_id"],
+            advancing=advancement["advancing_game_ids"],
+            captures=captures,
+            held=held,
+        )
+
+        manifest_document = composite.composite_manifest(
+            assembled,
+            release_id="",
+            rows_sha256=assembled.rows_sha256,
+            slate_date=args.slate_date,
+            feed_destination=args.live_feed_destination_name,
         )
 
         if (
             state["live_slate_date"] == args.slate_date
-            and state["live_rows_sha256"] == canary["rows_sha256"]
+            and state["live_rows_sha256"] == assembled.rows_sha256
         ):
             return _receipt(
                 args,
@@ -1412,20 +1881,28 @@ def refresh(args: argparse.Namespace) -> dict[str, Any]:
                 attestation=attested,
                 attestation_path=attestation_path,
                 canary=canary,
-                destination=publisher.destination_payload(live),
+                composite_manifest={
+                    **manifest_document,
+                    "release_id": state["live_release_id"],
+                },
+                destination=publisher.destination_payload(
+                    live, identity=identity
+                ),
                 live_outcome=OUTCOME_ALREADY_CURRENT,
                 manifest_sha256="",
                 now=now,
                 offset=offset,
                 ordering=ordering,
+                advancement=advancement,
                 previous_release_id=state["live_release_id"],
                 promoted=None,
                 promoted_at="",
                 reason=(
                     f"the live destination already serves "
                     f"{state['live_release_id']}, whose rows digest is the "
-                    f"one the T-{offset} canary validated, so nothing was "
-                    "written and the pointer was not touched"
+                    "one this composite of "
+                    f"{len(assembled.components)} game(s) assembles to, so "
+                    "nothing was written and the pointer was not touched"
                 ),
                 release={
                     "release_id": state["live_release_id"],
@@ -1433,52 +1910,63 @@ def refresh(args: argparse.Namespace) -> dict[str, Any]:
                 },
                 row_count=None,
                 state=state,
+                stored_sources=stored,
                 verification=None,
                 windows=windows,
             )
 
+        publisher.assert_mode_enabled(switch)
+
+        release = build_composite_release(
+            assembled,
+            switch=switch,
+            destination=live,
+            slate_date=args.slate_date,
+        )
+
+        identity_claim = assert_a_single_window_composite_is_the_canary_release(
+            release,
+            assembled=assembled,
+            canary=canary,
+            attestation=attested,
+            canary_release_id=canary["canary_release_id"],
+        )
+
+        manifest_document = {
+            **composite.composite_manifest(
+                assembled,
+                release_id=release.release_id,
+                rows_sha256=release.rows_sha256,
+                slate_date=args.slate_date,
+                feed_destination=args.live_feed_destination_name,
+            ),
+            "digest_identity": identity_claim,
+        }
+
+        if publishing is not None:
+            publishing["release_id"] = release.release_id
+
+            publishing["rows_sha256"] = release.rows_sha256
+
         if state["established"]:
-            published = _replace_the_live_release(
-                args,
-                attestation_path=attestation_path,
-                canary=canary,
-                attested=attested,
-                offset=offset,
-                live_name=(
-                    None
-                    if args.live_destination_root is not None
-                    else args.live_feed_destination_name
-                ),
+            published = promote_composite_release(
+                transport,
+                release=release,
+                slate_date=args.slate_date,
+                provenance=provenance,
+                composite_manifest=manifest_document,
+                retained=live.retained_releases,
             )
 
             live_outcome = OUTCOME_REPLACED
 
         else:
-            publisher.assert_mode_enabled(switch)
-
-            release, provenance = build_live_release(
-                switch=switch,
-                destination=live,
-                slate_date=args.slate_date,
-                data_root=data_root,
-                serving_receipt=args.serving_receipt,
-            )
-
-            assert_live_release_is_the_canary_release(
-                release, canary=canary, attestation=attested
-            )
-
-            publisher.assert_canary_attested(
-                publisher.read_attestation(attestation_path),
-                release=release,
-                provenance=provenance,
-            )
-
             published = establish_first_live_release(
                 transport,
                 release=release,
                 slate_date=args.slate_date,
                 provenance=provenance,
+                composite_manifest=manifest_document,
             )
 
             live_outcome = OUTCOME_ESTABLISHED
@@ -1503,22 +1991,26 @@ def refresh(args: argparse.Namespace) -> dict[str, Any]:
         attestation=attested,
         attestation_path=attestation_path,
         canary=canary,
-        destination=published.get("destination")
-        or publisher.destination_payload(live),
+        composite_manifest=manifest_document,
+        destination=publisher.destination_payload(live, identity=identity),
         live_outcome=live_outcome,
         manifest_sha256=str(released.get("manifest_sha256") or ""),
         now=now,
         offset=offset,
         ordering=ordering,
+        advancement=advancement,
         previous_release_id=str(state["live_release_id"]),
         promoted=promoted,
         promoted_at=str(promoted.get("promoted_at") or ""),
         reason=(
-            f"{promoted['row_count']} rows of the T-{offset} capture window "
-            f"were published live as {released['release_id']} under "
-            f"publication contract {promoted['contract_version']}"
+            f"{promoted['row_count']} rows of a composite holding "
+            f"{len(assembled.components)} game(s) at their own latest "
+            f"validated windows, {len(advancement['advancing_game_ids'])} of "
+            f"them advanced to T-{offset} by this refresh, were published "
+            f"live as {released['release_id']} under publication contract "
+            f"{promoted['contract_version']}"
             + (
-                ", which is the final pregame version"
+                ", which is the final pregame version for the games at it"
                 if offset == FINAL_PREGAME_OFFSET_MINUTES
                 else ""
             )
@@ -1526,9 +2018,120 @@ def refresh(args: argparse.Namespace) -> dict[str, Any]:
         release=released,
         row_count=promoted.get("row_count"),
         state=state,
+        stored_sources=stored,
         verification=published.get("verification"),
         windows=windows,
     )
+
+
+def assemble_composite(
+    *,
+    data_root: Path,
+    slate_date: str,
+    offset_minutes: int,
+    canary_name: str,
+    canary_release_id: str,
+    advancing: list[str],
+    captures: dict[str, dict[str, str]],
+    held: dict[str, composite.GameComponent],
+) -> composite.Composite:
+    """The whole live slate: this window's advances over everything held.
+
+    The advancing games take their component out of this window's own canary
+    release; every other game keeps the component recorded for it, read back
+    out of its own stored source. Which is the second invariant in its
+    strongest available form -- a game nobody advanced is reassembled from
+    bytes this refresh cannot reach and did not look at, so it comes out
+    byte-identical by construction rather than by care.
+
+    Every source behind the result is then re-read, re-digested and put
+    through the publisher's own canary gate by
+    :func:`live_slate_composite.audit_composite`, and all three untraceable-row
+    counts have to be zero before anything is published.
+    """
+    components = dict(held)
+
+    advanced = read_advancing_components(
+        data_root=data_root,
+        slate_date=slate_date,
+        offset_minutes=offset_minutes,
+        canary_name=canary_name,
+        canary_release_id=canary_release_id,
+        advancing=advancing,
+        captures=captures,
+    )
+
+    components.update(advanced)
+
+    bundles = {
+        release_id: composite.read_source_bundle(
+            data_root, slate_date, release_id
+        )
+        for release_id in sorted(
+            {
+                component.source_release_id
+                for component in components.values()
+            }
+        )
+    }
+
+    assembled = composite.compose(
+        components, bundles, slate_date=slate_date
+    )
+
+    composite.assert_every_row_is_attested(assembled.audit)
+
+    return assembled
+
+
+def read_advancing_components(
+    *,
+    data_root: Path,
+    slate_date: str,
+    offset_minutes: int,
+    canary_name: str,
+    canary_release_id: str,
+    advancing: list[str],
+    captures: dict[str, dict[str, str]],
+) -> dict[str, composite.GameComponent]:
+    """One component per advancing game, out of this window's canary release.
+
+    The capture identity is required and never defaulted. A component that
+    could not name the capture its prices were taken from would be a row on
+    the served root with no snapshot behind it that anybody could find again,
+    and inventing one here is exactly the thing this chain may never do -- so
+    the refusal names the flag and the window instead.
+    """
+    bundle = composite.read_source_bundle(
+        data_root, slate_date, canary_release_id
+    )
+
+    components: dict[str, composite.GameComponent] = {}
+
+    for game_id in advancing:
+        window_id = f"{game_id}:T-{int(offset_minutes)}m"
+
+        capture = captures.get(window_id)
+
+        if capture is None:
+            raise LiveRefreshRefused(
+                f"no --window-capture was supplied for {window_id}, so the "
+                "capture this game's prices were taken from cannot be named "
+                "in the composite manifest and the game is not published. "
+                "Every advancing window needs "
+                "WINDOW_ID=CAPTURE_ID@CAPTURE_TIMESTAMP"
+            )
+
+        components[game_id] = composite.component_for_game(
+            bundle,
+            game_id=game_id,
+            offset_minutes=offset_minutes,
+            canary_destination=canary_name,
+            capture_id=capture["capture_id"],
+            capture_timestamp=capture["captured_at"],
+        )
+
+    return components
 
 
 def _attestation_from_the_canary(
@@ -1539,12 +2142,23 @@ def _attestation_from_the_canary(
     canary_name: str,
     canary_root: Path | None,
     beside: Path,
-) -> tuple[dict[str, Any], Path]:
-    """Read the canary's attestation, check it, and leave it on disk.
+    data_root: Path,
+    slate_date: str,
+) -> tuple[dict[str, Any], Path, dict[str, Any]]:
+    """Read the canary's attestation, check it, and keep what it covers.
 
-    On disk because the publisher's own gate takes a path, and from the
-    destination rather than from the caller so the file that gate reads is the
-    file the canary host holds.
+    The attestation is read from the destination rather than from the caller,
+    so "the canary validated these bytes" is a fact about the canary host and
+    not about this run's temporary directory, and it is left on disk because
+    the publisher's own gate takes a path.
+
+    The release it covers is copied into the durable source store in the same
+    connection, which is what lets a composite reassemble a game hours later.
+    The canary destinations retain two releases and no more -- ``current.json``
+    and ``previous.json`` -- so a game that advanced at T-180 out of the first
+    of four cumulative T-180 releases has a source the canary host has since
+    pruned. Copying it while the attestation of those exact bytes is in hand
+    is the only moment at which it can be kept honestly.
     """
     transport = publisher.build_transport(
         publisher.resolve_destination(
@@ -1559,12 +2173,30 @@ def _attestation_from_the_canary(
         attestation = read_attestation_from_the_canary(
             transport, destination=canary_name, offset_minutes=offset_minutes
         )
+
+        attested = assert_canary_validated_this_release(
+            attestation, canary=canary, offset_minutes=offset_minutes
+        )
+
+        release_id = canary["canary_release_id"]
+
+        stored = composite.retain_source_release(
+            transport,
+            data_root=data_root,
+            slate_date=slate_date,
+            release_id=release_id,
+            rows_relative=(
+                f"{publisher.RELEASES_DIRECTORY}/{release_id}/"
+                f"{publisher.ROWS_NAME}"
+            ),
+            manifest_relative=(
+                f"{publisher.RELEASES_DIRECTORY}/{release_id}/"
+                f"{publisher.MANIFEST_NAME}"
+            ),
+            attestation=attestation,
+        )
     finally:
         transport.close()
-
-    attested = assert_canary_validated_this_release(
-        attestation, canary=canary, offset_minutes=offset_minutes
-    )
 
     path = Path(beside).parent / "live_canary_attestation.json"
 
@@ -1575,65 +2207,18 @@ def _attestation_from_the_canary(
         encoding="utf-8",
     )
 
-    return attested, path
-
-
-def _replace_the_live_release(
-    args: argparse.Namespace,
-    *,
-    attestation_path: Path,
-    canary: dict[str, Any],
-    attested: dict[str, Any],
-    offset: int,
-    live_name: str | None,
-) -> dict[str, Any]:
-    """Hand the whole publication to the publisher, then check the digest.
-
-    ``publish`` opens its own transport, which is why this is a separate call
-    rather than something done through the one already held: the publisher
-    owns the connection it writes over, and borrowing a transport into it
-    would be a second way of doing the one thing it is the authority on.
-    """
-    receipt = publisher.publish(
-        mode=publisher.MODE_LIVE,
-        slate_date=args.slate_date,
-        data_root=Path(args.data_root),
-        project_root=Path(args.project_root),
-        destination_root=args.live_destination_root,
-        switch_path=args.switch_path,
-        destinations_path=args.destinations_path,
-        receipt_path=args.serving_receipt,
-        canary_attestation=attestation_path,
-        destination_name=live_name,
-    )
-
-    released = receipt["release"]
-
-    for label, published, validated in (
-        ("canary publication", released["rows_sha256"], canary["rows_sha256"]),
-        (
-            "canary attestation",
-            released["rows_sha256"],
-            attested["rows_sha256"],
-        ),
-    ):
-        if validated and published != validated:
-            raise LiveRefreshIncomplete(
-                f"the release promoted live digests to {published} and the "
-                f"{label} covers {validated}. The pointer has moved to bytes "
-                f"no canary validated for T-{offset} and has to be rolled back"
-            )
-
-    return receipt
+    return attested, path, stored
 
 
 def _receipt(
     args: argparse.Namespace,
     *,
+    advancement: dict[str, Any],
     approval: dict[str, Any],
     attestation: dict[str, Any],
     attestation_path: Path,
     canary: dict[str, Any],
+    composite_manifest: dict[str, Any],
     destination: dict[str, Any],
     live_outcome: str,
     manifest_sha256: str,
@@ -1647,6 +2232,7 @@ def _receipt(
     release: dict[str, Any],
     row_count: int | None,
     state: dict[str, Any],
+    stored_sources: dict[str, Any],
     verification: dict[str, Any] | None,
     windows: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -1659,11 +2245,18 @@ def _receipt(
     file is pinned syntax-tree-identical to production and may not learn a new
     word -- so the live page stage reads this receipt unchanged, and the
     progressive verdict is carried beside it in ``live_outcome``.
+
+    ``composite`` is the whole per-game manifest, carried in the receipt as
+    well as written at the destination so the controller's segment report can
+    say which window every game is at without opening a connection.
     """
     return {
+        "advancement": advancement,
         "canary": canary,
         "canary_attestation": attestation,
         "canary_attestation_path": str(attestation_path),
+        "composite": composite_manifest,
+        "composite_source_retained": stored_sources,
         "contract_version": publisher.PUBLICATION_CONTRACT_VERSION,
         "destination": destination,
         "final_pregame_window": offset == FINAL_PREGAME_OFFSET_MINUTES,
@@ -1701,6 +2294,10 @@ def _receipt(
 def render(receipt: dict[str, Any]) -> str:
     release = receipt.get("release") or {}
 
+    manifest = receipt.get("composite") or {}
+
+    advancement = receipt.get("advancement") or {}
+
     rows: list[tuple[str, Any]] = [
         ("live outcome", receipt.get("live_outcome")),
         ("capture window", f"T-{receipt.get('offset_minutes')}"),
@@ -1713,6 +2310,19 @@ def render(receipt: dict[str, Any]) -> str:
         ),
         ("replaced", receipt.get("previous_release_id") or "nothing"),
         ("rows live", receipt.get("row_count")),
+        ("games live", len(manifest.get("games") or [])),
+        (
+            "advanced by this refresh",
+            ", ".join(advancement.get("advancing_game_ids") or []) or "none",
+        ),
+        (
+            composite.UNATTESTED_ROWS_FIELD,
+            manifest.get(composite.UNATTESTED_ROWS_FIELD),
+        ),
+        (
+            composite.SOURCE_MISMATCH_FIELD,
+            manifest.get(composite.SOURCE_MISMATCH_FIELD),
+        ),
         (
             "final pregame version",
             "yes" if receipt.get("final_pregame_window") else "no",
@@ -1720,13 +2330,32 @@ def render(receipt: dict[str, Any]) -> str:
     ]
 
     lines = [
-        f"## NBA progressive live refresh (T-{receipt.get('offset_minutes')})",
+        f"## NBA per-game live composite (T-{receipt.get('offset_minutes')})",
         "",
         "| field | value |",
         "| --- | --- |",
     ]
 
     lines += [f"| {label} | {value} |" for label, value in rows]
+
+    games = manifest.get("games") or []
+
+    if games:
+        lines += [
+            "",
+            "| game | window | source release | capture |",
+            "| --- | --- | --- | --- |",
+        ]
+
+        lines += [
+            "| {} | {} | {} | {} |".format(
+                game.get("GAME_ID"),
+                game.get("SOURCE_WINDOW"),
+                game.get("SOURCE_RELEASE_ID"),
+                str(game.get("CAPTURE_ID") or "")[:16],
+            )
+            for game in games
+        ]
 
     lines += ["", str(receipt.get("reason") or "")]
 
@@ -1771,6 +2400,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="when the game behind one of the windows this refresh is for "
         "tips, repeatable. Required: a release whose window has already "
         "tipped is not a pregame price and does not go live.",
+    )
+
+    parser.add_argument(
+        "--window-capture",
+        action="append",
+        default=None,
+        dest="window_captures",
+        metavar="WINDOW_ID=CAPTURE_ID@CAPTURE_TIMESTAMP",
+        help="the capture one of this refresh's windows was priced from, "
+        "repeatable. Required for every window that advances: the composite "
+        "manifest names the capture behind each game's card, and this module "
+        "may not read the capture log to find out -- a live publisher that "
+        "could would be a live publisher with an opinion about captures.",
     )
 
     parser.add_argument(
@@ -1900,12 +2542,18 @@ def main(argv: list[str] | None = None) -> int:
     # a classification that is wrong in the one case somebody is reading it.
     observed_before = _observed_live_release(args)
 
+    # The digest this refresh was about to promote, filled in by the refresh
+    # itself immediately before it writes anything. Empty means nothing was
+    # ever on its way to the destination.
+    publishing: dict[str, Any] = {}
+
     try:
-        receipt = refresh(args)
+        receipt = refresh(args, publishing=publishing)
 
     except (
         LiveRefreshRefused,
         LiveRefreshIncomplete,
+        composite.CompositeRefused,
         publisher.PublishingRefused,
         publication.PublicationStageFailed,
         OSError,
@@ -1923,7 +2571,7 @@ def main(argv: list[str] | None = None) -> int:
         # else -- a pointer that already carried these bytes, or a pointer
         # somebody moved for another reason -- and only this refresh could
         # have made both true at once.
-        expected = _canary_rows_digest(args)
+        expected = str(publishing.get("rows_sha256") or "")
 
         promoted = bool(
             expected
@@ -1999,7 +2647,7 @@ def main(argv: list[str] | None = None) -> int:
 
         _write(
             args.summary_path,
-            f"## NBA progressive live refresh (T-{offset})\n\n"
+            f"## NBA per-game live composite (T-{offset})\n\n"
             f"{outcome}: {error}\n",
             append=True,
         )
@@ -2012,12 +2660,26 @@ def main(argv: list[str] | None = None) -> int:
 
     release = receipt["release"]
 
+    manifest = receipt["composite"]
+
     receipt["evidence_path"] = append_evidence(
         evidence_path(Path(args.data_root), args.slate_date),
         evidence_entry(
             attempted_at=recorded["attempted_at"],
             canary=receipt["canary"],
             attestation=receipt["canary_attestation"],
+            composite_audit={
+                name: manifest.get(name)
+                for name in (
+                    composite.UNATTESTED_ROWS_FIELD,
+                    composite.SOURCE_MISMATCH_FIELD,
+                    composite.UNATTESTED_DISTRIBUTIONS_FIELD,
+                    "attested_rows",
+                    "digest_identity",
+                    "source_releases",
+                )
+            },
+            games=list(manifest.get("games") or []),
             live_release_id=str(release.get("release_id") or ""),
             manifest_sha256=recorded["manifest_sha256"],
             offset_minutes=int(receipt["offset_minutes"]),
@@ -2043,27 +2705,6 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps(receipt, default=str, indent=2, sort_keys=True))
 
     return EXIT_OK
-
-
-def _canary_rows_digest(args: argparse.Namespace) -> str:
-    """The rows digest the canary published, read without any checking.
-
-    Used only to tell a refusal apart from a promotion that did not finish,
-    which is a question about what is at the destination rather than about
-    whether the receipt was acceptable -- so the receipt is read for one field
-    and nothing is concluded from it.
-    """
-    try:
-        receipt = json.loads(
-            Path(args.canary_feed_receipt).read_text(encoding="utf-8")
-        )
-    except (OSError, ValueError):
-        return ""
-
-    if not isinstance(receipt, dict):
-        return ""
-
-    return str((receipt.get("release") or {}).get("rows_sha256") or "")
 
 
 if __name__ == "__main__":

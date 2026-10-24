@@ -1530,6 +1530,16 @@ class T20Controller:
         #: publisher re-hashes the priced artifact against it.
         self._serving_receipts: dict[int, Path] = {}
 
+        #: The capture every window's prices were taken from, by window id.
+        #: Filled in at the one place that already knows it -- the bundle
+        #: selection the pricing path itself performs -- and read only when a
+        #: live refresh is handed a window, so that the composite manifest can
+        #: name the snapshot behind each game's card. Carried rather than
+        #: re-selected because selecting again would be a second answer to a
+        #: question already answered, and a composite may not name a capture
+        #: nobody can find again.
+        self._capture_identity: dict[str, dict[str, str]] = {}
+
         #: Advisory windows captured and not yet served, newest capture last.
         #: Held rather than served immediately when the room before the next
         #: T-20 capture is short; drained at the next gap and, failing that,
@@ -2646,12 +2656,14 @@ class T20Controller:
 
             return None
 
-        return {
-            "capture_id": bundle.capture_id,
-            "captured_at_utc": bundle.captured_at,
-            "game_id": int(row["game_id"]),
-            "window_id": bundle.window_id,
-        }
+        return self._remember_capture(
+            {
+                "capture_id": bundle.capture_id,
+                "captured_at_utc": bundle.captured_at,
+                "game_id": int(row["game_id"]),
+                "window_id": bundle.window_id,
+            }
+        )
 
     def _drain_advisory(
         self, *, readiness: dict[str, Any], next_t20_due: datetime | None
@@ -3151,7 +3163,7 @@ class T20Controller:
         serving_receipt: Path,
         priced_digest: str,
     ) -> None:
-        """Replace the live release with the window that has just published.
+        """Advance this group's games to the window that has just published.
 
         Called immediately after a window's canary feed and page have both
         succeeded, and in that order on purpose: what authorises a live
@@ -3167,13 +3179,19 @@ class T20Controller:
         decision nobody has carried to the runner yet. The refusal is recorded
         verbatim, so the receipt and the step summary name both variables.
 
-        The tips are this group's own. A release is cumulative -- one serve at
-        an offset prices every game with an eligible capture at that offset --
-        so by the time the last T-20 group of a twelve-game slate publishes,
-        the first game tipped two hours earlier and its rows are correctly in
-        the release because they were priced before their own tip. What the
-        post-tip guard is about is the window this refresh is *for*, and that
-        is the group passed in.
+        The tips are this group's own, and so are the games this refresh
+        advances. A release is cumulative -- one serve at an offset prices
+        every game with an eligible capture at that offset -- so by the time
+        the last T-20 group of a twelve-game slate publishes, the first game
+        tipped two hours earlier and its rows are correctly in the release
+        because they were priced before their own tip. The live slate the
+        refresh composes holds every game at its own latest validated window,
+        so handing it this group advances this group and leaves every other
+        game standing exactly where its own last successful refresh put it.
+        Each window is handed the capture its prices were selected from as
+        well as its tip, because the composite manifest names the snapshot
+        behind every game's card and this controller is the only thing that
+        knows it.
         """
         self._feed_receipts[offset] = Path(feed_receipt)
 
@@ -3225,11 +3243,31 @@ class T20Controller:
         for row in rows:
             tip = row["tip_utc"]
 
+            window_id = str(row["window_id"])
+
             command += [
                 "--window-tip-utc",
-                f"{row['window_id']}="
+                f"{window_id}="
                 + (tip.isoformat() if hasattr(tip, "isoformat") else str(tip)),
             ]
+
+            # Omitted rather than guessed when selection never recorded one.
+            # The refresh refuses an advancing window it cannot name a
+            # capture for, which is the right outcome: a card on the served
+            # root whose snapshot nobody can find again is worse than no
+            # card, and the refusal degrades the segment without touching
+            # what is already live.
+            capture = self._capture_identity.get(window_id)
+
+            if capture is not None:
+                command += [
+                    "--window-capture",
+                    "{}={}@{}".format(
+                        window_id,
+                        capture["capture_id"],
+                        capture["captured_at_utc"],
+                    ),
+                ]
 
         if self.summary_path is not None:
             command += ["--summary-path", str(self.summary_path)]
@@ -3465,12 +3503,29 @@ class T20Controller:
         except RuntimeError as error:
             return None, error
 
-        return {
-            "capture_id": bundle.capture_id,
-            "captured_at_utc": bundle.captured_at,
-            "game_id": int(game_id),
-            "window_id": bundle.window_id,
-        }, None
+        return self._remember_capture(
+            {
+                "capture_id": bundle.capture_id,
+                "captured_at_utc": bundle.captured_at,
+                "game_id": int(game_id),
+                "window_id": bundle.window_id,
+            }
+        ), None
+
+    def _remember_capture(self, bundle: dict[str, Any]) -> dict[str, Any]:
+        """Keep a selected bundle's capture identity under its window id.
+
+        Returns the bundle so the two selection sites can keep reading as one
+        expression. Last write wins and cannot differ: ``select_capture_bundle``
+        accepts exactly one scheduled capture per window and recomputes its
+        id, so a second selection of the same window is the same answer.
+        """
+        self._capture_identity[str(bundle["window_id"])] = {
+            "capture_id": str(bundle["capture_id"]),
+            "captured_at_utc": str(bundle["captured_at_utc"]),
+        }
+
+        return bundle
 
     def _verify_captured(
         self, game_ids: Sequence[int], *, window_ids: Sequence[str]
