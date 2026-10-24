@@ -2362,6 +2362,10 @@ def render(receipt: dict[str, Any]) -> str:
             manifest.get(composite.SOURCE_MISMATCH_FIELD),
         ),
         (
+            composite.UNATTESTED_DISTRIBUTIONS_FIELD,
+            manifest.get(composite.UNATTESTED_DISTRIBUTIONS_FIELD),
+        ),
+        (
             "final pregame version",
             "yes" if receipt.get("final_pregame_window") else "no",
         ),
@@ -2385,12 +2389,15 @@ def render(receipt: dict[str, Any]) -> str:
             "| --- | --- | --- | --- |",
         ]
 
+        # The capture id in full. It is the one field here whose whole point
+        # is that somebody can find the snapshot again, and a truncation that
+        # saved a column would cost exactly that.
         lines += [
             "| {} | {} | {} | {} |".format(
                 game.get("GAME_ID"),
                 game.get("SOURCE_WINDOW"),
                 game.get("SOURCE_RELEASE_ID"),
-                str(game.get("CAPTURE_ID") or "")[:16],
+                game.get("CAPTURE_ID"),
             )
             for game in games
         ]
