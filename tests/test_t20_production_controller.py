@@ -3118,9 +3118,11 @@ def test_two_captures_of_one_window_still_stop_the_recovery(tmp_path):
     A second *capture* is not a second record of one capture. Both are
     genuine point-in-time data, nothing in the data model says which one T-20
     pricing is entitled to read, and a controller that published either would
-    be publishing a snapshot nobody chose. So recovery refuses, names the
-    outcome the capture is missing under, and carries the window out with it
-    so the run that abandons it says what it abandoned.
+    be publishing a snapshot nobody chose. So recovery refuses, records the
+    window with the reason the selection gave, carries it out under
+    ``captured_unserved_windows``, and ends the segment on the outcome that
+    is not a success -- which is how a refusal that costs only its own window
+    still says what it abandoned.
     """
     clock = Clock(at(19, 25))
 
@@ -3146,23 +3148,31 @@ def test_two_captures_of_one_window_still_stop_the_recovery(tmp_path):
 
     write_morning_receipt(recovery)
 
-    with pytest.raises(controller.ControllerRefused) as refusal:
-        build(
-            recovery,
-            clock=recovery_clock,
-            segment_start=SEGMENT_2[0],
-            segment_end=SEGMENT_2[1],
-        ).run()
+    receipt = build(
+        recovery,
+        clock=recovery_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
 
-    assert refusal.value.outcome == controller.OUTCOME_REQUIRED_SNAPSHOT_MISSING
+    assert [
+        record["window_id"] for record in receipt["unrecoverable_windows"]
+    ] == ["101:T-20m"]
 
-    message = " ".join(str(refusal.value).split())
+    reason = " ".join(receipt["unrecoverable_windows"][0]["reason"].split())
 
-    assert "2 different point-in-time captures" in message
+    assert "2 different point-in-time captures" in reason
 
-    assert "captured_at" in message
+    assert "captured_at" in reason
 
-    assert refusal.value.captured_unserved_windows == ["101:T-20m"]
+    assert receipt["captured_unserved_windows"] == ["101:T-20m"]
+
+    assert receipt["final_outcome"] == controller.OUTCOME_CAPTURED_NOT_SERVED
+
+    assert (
+        controller.OUTCOME_CAPTURED_NOT_SERVED
+        not in controller.OUTCOMES_THAT_SUCCEED
+    )
 
     assert served_records(recovery) == []
 

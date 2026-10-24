@@ -1022,12 +1022,22 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: rather than introduced and are recorded nowhere, so touching any of them
 #: again requires declaring it again.
 #:
-#: This branch declares the capture entry point, the T-20 controller and
-#: both serving-source registries, and widens the capture entry point's
-#: selection names by one, all named above. The controller is owned below,
-#: which is the reason it is declared again. The two defects it fixes are
-#: the two halves of one evening: the first made a window unpriceable, the
-#: second made that invisible and permanent.
+#: The duplicate-claim branch's four entries were retired in turn when they
+#: landed, and the recovery-isolation branch's one entry was retired the same
+#: way. That one declared the T-20 controller again, and the controller is
+#: owned below, which is the reason both of those entries gave. The capture
+#: entry point is a pre-existing production file this lineage changed rather
+#: than introduced and is recorded nowhere, and so are both serving-source
+#: registries, which is why this branch declares both registries again. It
+#: touches neither the capture entry point nor the controller, so those two
+#: entries are retired and not replaced.
+#:
+#: This branch declares the capture-selection source, the serving entry point
+#: that prices a slate and both serving-source registries, all named above.
+#: None of the four is owned below. What it fixes is what one evening left
+#: after the two defects above it were fixed: the first made a window
+#: unpriceable, the second made that invisible and permanent, and both are
+#: kept below because the defect declared here is their remainder.
 #:
 #: The first is the capture carve-out's first use for a defect rather than
 #: for an argument, and the defect is one the carve-out's own text did not
@@ -1106,7 +1116,7 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: schedule the production branch runs byte-identical.
 #:
 #: The third defect is the first two read from the serving side, and it is
-#: why this branch also declares ``src/nba_prop_quant/prospective_snapshot.py``
+#: why this branch declares ``src/nba_prop_quant/prospective_snapshot.py``
 #: under a carve-out of its own. The claim stops two sweeps recording one
 #: window again and the ledger makes a captured-but-unpublished window
 #: recoverable; neither does anything for a window that already has two
@@ -1134,49 +1144,18 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: match the bytes on disk is still a hash mismatch. The capture log is not
 #: written, because it is the append-only evidence that the duplicate
 #: happened.
+#:
+#: One module, two halves of one principle. The second half is that a refusal
+#: costs the game it belongs to and no other, and it is why
+#: ``scripts/10_predict_slate.py`` is declared beside the module. The client
+#: assembled the slate by selecting every game of it in one comprehension, so
+#: the first game that refused aborted the whole slate -- which is enough for
+#: one conflicted window to explain all three games lost on 2026-10-23. The
+#: games that refuse are now found one at a time and kept with the reason the
+#: selection gave, and the entry point refuses the run on them rather than
+#: publishing a slate that is short and does not say so.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
-        "ops/run_t20_production_controller.py": (
-            "the blast radius of a recovery that cannot succeed, narrowed to "
-            "the window it is about. _recover verified every unserved window "
-            "of the slate in one call and the first refusal raised, so one "
-            "capture selection can never accept took the segment with it: "
-            "the verifiable windows beside it, the pending T-20 captures of "
-            "games that had not tipped, and the advisory windows after them. "
-            "Every cause is permanent and every one is a correct refusal -- a "
-            "duplicate conflict, a post-tip capture, a component digest that "
-            "no longer matches the bytes, a recorded error_count -- so each "
-            "later segment re-derived the same unserved set and stopped in "
-            "the same place. "
-            "What changes: the per-game selection is split into "
-            "_select_capture, which returns the refusal instead of raising "
-            "it, so the two callers can differ. _verify_captured, which is "
-            "the caller for a capture the run has just taken, still raises "
-            "with the same outcome and the same message and is byte-for-byte "
-            "as loud as it was. _recover verifies one window at a time, "
-            "records each refusal with the selection's own reason, and "
-            "recovers the rest. The isolation is the verification and not "
-            "the publication because publication is not divisible -- the "
-            "serving entry point prices the whole slate -- and that costs "
-            "nothing, because the selection performed here is the selection "
-            "serving performs. A serving or publication stage that refuses "
-            "after the windows verified is deferred rather than discarded: "
-            "it leaves run() with its own outcome and its own message, after "
-            "the capture work instead of instead of it, and only while the "
-            "windows are still unserved. _record_served_windows subtracts "
-            "the windows this segment proved serving cannot select, which "
-            "keeps the row's claim true and keeps the lost window in the "
-            "unserved set rather than retiring it into a green segment. "
-            "What does not change: T20_CAPTURED_WINDOWS_UNSERVED, its "
-            "absence from OUTCOMES_THAT_SUCCEED and the non-zero exit; "
-            "every capture-path refusal; the duplicate-capture claim; the "
-            "advisory reservation, destinations and refusals; the cumulative "
-            "re-serving; and the order recovery runs in. Nothing is "
-            "repaired, relabelled, re-timed, merged or synthesised, no "
-            "unverified capture is published, no non-T-20 snapshot can stand "
-            "in for a T-20 one, and no model, calibration, price or routing "
-            "is reached from here"
-        ),
         "src/nba_prop_quant/prospective_snapshot.py": (
             "a window with two records of one capture is now served rather "
             "than refused for the rest of the slate's life, and a window "
