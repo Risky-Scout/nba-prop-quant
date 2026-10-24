@@ -56,6 +56,11 @@ PROJECT = Path(__file__).resolve().parents[1]
 
 sys.path.insert(0, str(PROJECT / "tests"))
 
+# ``test_real_slate_serving_root`` is imported for its bundle and subprocess
+# helpers rather than rebuilt here: that suite already owns the shape of a
+# tree a serving entry point will accept, and a second copy would be a second
+# thing to keep true.
+import test_real_slate_serving_root as serving_root  # noqa: E402
 from t20_capture_fixture import (  # noqa: E402
     SLATE,
     at,
@@ -63,12 +68,6 @@ from t20_capture_fixture import (  # noqa: E402
     prop,
     write_capture,
 )
-
-# The real serving script, run as a subprocess against a verified bundle, the
-# way the lifecycle runs it. Borrowed rather than rebuilt: that suite already
-# owns the shape of a bundle a serving entry point will accept, and a second
-# copy of it here would be a second thing to keep true.
-import test_real_slate_serving_root as serving_root  # noqa: E402
 
 #: The game whose capture is made unservable, and the one that is left alone.
 CONFLICTED = 101
@@ -78,8 +77,13 @@ CLEAN = 202
 #: file is refused for being post-tip unless a test asks for that.
 TIP = at(23, 0)
 
+#: The instant the clean game's capture is taken at, by default.
+CLEAN_CAPTURED_AT = at(22, 42)
 
-def write_clean_game(snapshot_dir, *, game_id=CLEAN, captured_at=at(22, 42)):
+
+def write_clean_game(
+    snapshot_dir, *, game_id=CLEAN, captured_at=CLEAN_CAPTURED_AT
+):
     """One eligible scheduled T-20 capture for a game nothing is wrong with.
 
     Captured at its own instant rather than sharing one with another game's
