@@ -1108,6 +1108,48 @@ def test_a_transport_that_will_not_talk_leaves_the_pointer_alone(
     assert_untouched(chain, current, previous, audit)
 
 
+def test_a_refusal_of_bytes_already_live_is_still_a_clean_refusal(served):
+    """A digest alone cannot say who put it there.
+
+    The T-20 group of a slate is re-served whenever a later tip group
+    captures, so the same bytes reach the refresh more than once. If a
+    refusal of bytes that are *already* live were classified by digest alone
+    it would find the canary's rows digest at the destination, conclude the
+    promotion had happened and report LIVE_PROMOTED_THEN_INCOMPLETE -- a
+    loud incident about a destination nothing wrote to, raised against the
+    one outcome the chain most needs to be trusted.
+
+    So the claim takes both halves: the pointer has to have changed *and* to
+    now name the digest this refresh was publishing.
+    """
+    chain, current, previous, audit = served
+
+    # The same bytes that are already live, offered again, and refused for a
+    # reason that has nothing to do with them.
+    chain.canary(45, odds=-110 - 45)
+
+    code, receipt = chain.refresh(
+        45, now="2026-10-21T04:00:00+00:00"
+    )
+
+    assert code == live.EXIT_REFUSED
+
+    assert receipt["live_outcome"] == live.OUTCOME_REFUSED
+
+    assert receipt["live_outcome"] != live.OUTCOME_PROMOTED_THEN_INCOMPLETE
+
+    # The premise of the test: the digest it would have been classified by is
+    # exactly the one the pointer already carries.
+    assert receipt["observed_live_release_id"] == current["release_id"]
+
+    assert_untouched(chain, current, previous, audit)
+
+    # And the ledger agrees, so nothing downstream reads it as live-bearing.
+    assert chain.ledger()[-1]["outcome"] == live.OUTCOME_REFUSED
+
+    assert chain.ledger()[-1]["live_release_id"] == ""
+
+
 def test_a_window_whose_game_has_tipped_is_never_published_live(served):
     """Stage seven: the guard that did not exist anywhere.
 

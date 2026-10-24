@@ -92,16 +92,54 @@ def publish(built: dict, **overrides) -> dict:
 # ======================================================================
 
 
-def test_the_committed_switch_disables_live_publishing():
-    """The state this change is required to leave behind, read off disk."""
+def test_the_committed_switch_opens_nothing_on_its_own():
+    """The state this change is required to leave behind, read off disk.
+
+    The state used to be DISABLED and this test used to say so. It now says
+    the thing that was always the point and that stayed true when the state
+    moved: the file is one of three conditions, it is the only one a commit
+    can hold, and holding it opens nothing. ``enabled`` is the state *and* an
+    empty blocker list, so with a clean environment the switch reads enabled
+    as a state and not enabled as a gate, and both missing variables are
+    named as blockers.
+    """
     document = json.loads(
         (PROJECT / publisher.SWITCH_RELATIVE).read_text(encoding="utf-8")
     )
 
-    assert document["modes"]["live"]["state"] == publisher.STATE_DISABLED
+    assert document["modes"]["live"]["state"] == publisher.STATE_ENABLED
     assert document["published_authority"] == publisher.MODEL_AUTHORITY
     assert document["candidate_authority"] == publisher.CANDIDATE_AUTHORITY
     assert len(document["what_enabling_live_requires"]) == 3
+
+    # Not the placeholder that said no approval had been granted, because the
+    # phrase is published in this repository and would satisfy the gate.
+    token = document["modes"]["live"]["approval_token"]
+
+    assert token and "no-approval-has-been-granted" not in token
+
+    switch = publisher.read_publishing_switch(
+        publisher.MODE_LIVE, project_root=PROJECT, environment={}
+    )
+
+    assert switch.state == publisher.STATE_ENABLED
+
+    assert switch.enabled is False
+
+    assert list(switch.blockers) == [
+        f"{publisher.PUBLISH_ENV_VAR} does not match the switch state",
+        f"{publisher.PUBLISH_APPROVAL_ENV_VAR} does not match the approval "
+        "token",
+    ]
+
+    with pytest.raises(publisher.PublishingRefused) as refusal:
+        publisher.assert_mode_enabled(switch)
+
+    for named in (
+        publisher.PUBLISH_ENV_VAR,
+        publisher.PUBLISH_APPROVAL_ENV_VAR,
+    ):
+        assert named in str(refusal.value)
 
 
 def test_a_disabled_mode_refuses(tmp_path: Path):
@@ -137,11 +175,24 @@ def test_a_disabled_mode_refuses(tmp_path: Path):
 
 
 def test_live_publishing_refuses_with_no_approval_at_all(tmp_path: Path):
-    """2. The committed live state, asked for directly, with a clean environment."""
+    """2. The committed live state, asked for directly, with a clean environment.
+
+    The committed state is ENABLED and this still refuses, which is the whole
+    reason the gate is three conditions rather than one. The refusal names
+    both variables, so a reader of a failed run knows what is missing.
+    """
     built = fixture.build(tmp_path)
 
-    with pytest.raises(publisher.PublishingRefused, match="DISABLED"):
+    with pytest.raises(publisher.PublishingRefused) as refusal:
         publish(built, mode=publisher.MODE_LIVE, environment={})
+
+    for named in (
+        publisher.PUBLISH_ENV_VAR,
+        publisher.PUBLISH_APPROVAL_ENV_VAR,
+    ):
+        assert named in str(refusal.value)
+
+    assert not built["destination_root"].exists(), "a refusal wrote bytes"
 
 
 def test_live_publishing_refuses_a_wrong_approval_token(tmp_path: Path):
@@ -253,15 +304,23 @@ def test_live_publishing_with_every_approval_still_has_nowhere_to_go(tmp_path: P
     ]
 
     for name in live:
-        with pytest.raises(
-            publisher.PublishingRefused, match="live publishing is DISABLED"
-        ):
+        with pytest.raises(publisher.PublishingRefused) as named_refusal:
             publish(
                 built,
                 mode=publisher.MODE_LIVE,
                 destination_name=name,
                 destination_root=None,
+                environment={},
             )
+
+        # The committed switch's state is ENABLED, and with nothing in the
+        # environment it is still the switch that refuses, by name and before
+        # the destination is resolved at all.
+        for variable in (
+            publisher.PUBLISH_ENV_VAR,
+            publisher.PUBLISH_APPROVAL_ENV_VAR,
+        ):
+            assert variable in str(named_refusal.value)
 
 
 def test_an_unreadable_switch_reads_as_disabled(tmp_path: Path):
@@ -1792,7 +1851,9 @@ def test_the_entry_point_runs_the_canary_and_writes_a_receipt(tmp_path: Path):
     assert receipt["outcome"] == publisher.OUTCOME_PUBLISHED
     assert receipt["mode"] == publisher.MODE_CANARY
     assert receipt["model_authority"] == publisher.MODEL_AUTHORITY
-    assert receipt["live_publishing"] == publisher.STATE_DISABLED
+    # The state the switch records, which a canary receipt reports as a fact
+    # about the file and not as a claim about this run.
+    assert receipt["live_publishing"] == publisher.STATE_ENABLED
     assert receipt["release"]["row_count"] == len(fixture.QUOTES)
     assert receipt["verification"]["verified"] is True
 
@@ -1880,6 +1941,19 @@ def test_only_the_publisher_reads_its_activation_variables():
     workflow may not contain. That is the opposite of consulting one: a
     validator that finds the name fails the workflow rather than publishing
     from it, and neither validator reads the environment at all.
+
+    Two more files name them without consulting them, and the distinction is
+    the same one: the progressive live refresh names them in the refusal it
+    writes when the publisher has already said no, and the branch-safety
+    declaration names them in prose explaining a declared path. The refusal
+    is reachable only after ``publish_incumbent_to_wizardofodds`` has read
+    the variables itself.
+
+    So the second half of this test is about the two names rather than about
+    the word ``os.environ``. Reading *some* environment variable is ordinary
+    -- the declaration module resolves a git ref from one -- and what may not
+    happen outside the entry point is reading *these*. That is checked on the
+    syntax tree: no environment lookup anywhere else may name either of them.
     """
     bearers = {
         path.relative_to(PROJECT).as_posix()
@@ -1895,15 +1969,65 @@ def test_only_the_publisher_reads_its_activation_variables():
 
     assert bearers == {
         entry_point,
+        "ops/run_progressive_live_refresh.py",
         "ops/validate_main_scheduler_role.py",
         "ops/validate_workflows.py",
+        "src/nba_prop_quant/research/game_latent_state/safety.py",
+    }
+
+    activation = {
+        publisher.PUBLISH_ENV_VAR,
+        publisher.PUBLISH_APPROVAL_ENV_VAR,
     }
 
     for name in sorted(bearers - {entry_point}):
         source = (PROJECT / name).read_text(encoding="utf-8")
 
-        assert "os.environ" not in source, name
-        assert "getenv" not in source, name
+        looked_up: set[str] = set()
+
+        for node in ast.walk(ast.parse(source)):
+            # os.environ[...] and os.environ.get(...), under any spelling of
+            # the module, plus os.getenv(...) and getenv(...).
+            if isinstance(node, ast.Subscript):
+                target = node.value
+
+                if (
+                    isinstance(target, ast.Attribute)
+                    and target.attr == "environ"
+                    and isinstance(node.slice, ast.Constant)
+                ):
+                    looked_up.add(str(node.slice.value))
+
+            if not isinstance(node, ast.Call):
+                continue
+
+            function = node.func
+
+            reads = (
+                isinstance(function, ast.Attribute)
+                and (
+                    function.attr == "getenv"
+                    or (
+                        function.attr == "get"
+                        and isinstance(function.value, ast.Attribute)
+                        and function.value.attr == "environ"
+                    )
+                )
+            ) or (isinstance(function, ast.Name) and function.id == "getenv")
+
+            if not reads:
+                continue
+
+            looked_up.update(
+                str(argument.value)
+                for argument in node.args
+                if isinstance(argument, ast.Constant)
+            )
+
+        assert looked_up & activation == set(), (
+            f"{name} reads {sorted(looked_up & activation)} out of the "
+            "environment, and only the publisher may"
+        )
 
 
 def test_the_serving_module_still_publishes_nothing():

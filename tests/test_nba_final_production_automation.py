@@ -776,22 +776,38 @@ def test_23_both_live_destinations_address_the_served_roots():
         assert remote.published_base_url == remote.public_base_url
 
 
-def test_24_live_execution_is_disabled_before_any_destination_resolves():
-    """Case 24. An address is not a permission.
+def test_24_live_execution_is_gated_before_any_destination_resolves():
+    """Case 24. An address is not a permission, and neither is a state.
 
     The switch is read first, so a fully configured live destination is
-    unreachable while the committed state says DISABLED -- which it does, for
-    the feed and for the page, through the one switch rather than two that
-    could drift.
+    unreachable while the gate is shut -- for the feed and for the page,
+    through the one switch rather than two that could drift.
+
+    The committed state is now ENABLED, taken in a reviewed commit, and the
+    gate is still shut. ``enabled`` is the state *and* an empty blocker list,
+    and the two approval variables live in the ``wizardofodds-production``
+    GitHub environment where no commit can set them.
     """
     document = json.loads(
         (PROJECT / publisher.SWITCH_RELATIVE).read_text(encoding="utf-8")
     )
 
-    assert document["modes"]["live"]["state"] == "DISABLED"
+    assert document["modes"]["live"]["state"] == publisher.STATE_ENABLED
     assert document["modes"]["canary"]["state"] == publisher.STATE_ENABLED
     assert document["published_authority"] == publisher.MODEL_AUTHORITY
     assert document["candidate_authority"] == "shadow_only"
+
+    switch = publisher.read_publishing_switch(
+        publisher.MODE_LIVE, project_root=PROJECT, environment={}
+    )
+
+    assert switch.enabled is False
+
+    for variable in (
+        publisher.PUBLISH_ENV_VAR,
+        publisher.PUBLISH_APPROVAL_ENV_VAR,
+    ):
+        assert any(variable in blocker for blocker in switch.blockers)
 
     with pytest.raises(publisher.PublishingRefused, match="live publishing is"):
         page.assert_mode_is_permitted(

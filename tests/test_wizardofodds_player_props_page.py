@@ -2035,21 +2035,35 @@ def test_the_live_page_is_addressed_without_being_reachable():
     # Resolvable and still unpublishable: the switch refuses before a
     # destination is reached at all.
     switch = publisher.read_publishing_switch(
-        publisher.MODE_LIVE, project_root=PROJECT
+        publisher.MODE_LIVE, project_root=PROJECT, environment={}
     )
-
-    assert switch.state == publisher.STATE_DISABLED
-
-
-def test_live_publishing_is_still_disabled():
-    """Case 17. The committed switch, read rather than assumed."""
-    switch = publisher.read_publishing_switch(
-        publisher.MODE_LIVE, project_root=PROJECT
-    )
-
-    assert switch.state == publisher.STATE_DISABLED
 
     assert switch.enabled is False
+
+
+def test_live_publishing_is_still_gated():
+    """Case 17. The committed switch, read rather than assumed.
+
+    The state is now ENABLED, taken in a reviewed commit, and that is one of
+    three conditions. ``enabled`` is the state *and* an empty blocker list, so
+    with nothing in the environment the gate is shut and both missing
+    variables are named.
+    """
+    switch = publisher.read_publishing_switch(
+        publisher.MODE_LIVE, project_root=PROJECT, environment={}
+    )
+
+    assert switch.state == publisher.STATE_ENABLED
+
+    assert switch.enabled is False
+
+    assert len(switch.blockers) == 2
+
+    for variable in (
+        publisher.PUBLISH_ENV_VAR,
+        publisher.PUBLISH_APPROVAL_ENV_VAR,
+    ):
+        assert any(variable in blocker for blocker in switch.blockers)
 
 
 def test_the_unnamed_live_destination_is_still_unconfigured():

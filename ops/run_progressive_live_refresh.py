@@ -1880,6 +1880,22 @@ def main(argv: list[str] | None = None) -> int:
 
     attempted_at = _utc_now()
 
+    # What the live destination was serving before this refresh touched it.
+    #
+    # Read up front and not in the failure handler, because it is the only
+    # thing that can tell a clean refusal apart from a run that promoted and
+    # then failed. The digest alone cannot: a refusal of the same bytes that
+    # are *already* live finds the canary's rows digest at the destination
+    # and nothing has moved. That is not a hypothetical -- the T-20 group of
+    # a slate is re-served whenever a later tip group captures, so a window
+    # the post-tip guard refuses can carry exactly the digest the pointer
+    # already names, and calling that an incomplete promotion would raise a
+    # loud incident about a destination nothing wrote to.
+    #
+    # One extra pointer read per refresh is what it costs. The alternative is
+    # a classification that is wrong in the one case somebody is reading it.
+    observed_before = _observed_live_release(args)
+
     try:
         receipt = refresh(args)
 
@@ -1897,13 +1913,18 @@ def main(argv: list[str] | None = None) -> int:
 
         # A refusal left the pointer alone; an incomplete run moved it. The
         # two are told apart by the pointer itself rather than by which
-        # exception was raised: only this refresh could have put the canary's
-        # rows digest at the live destination, so finding it there is proof
-        # the promotion happened.
+        # exception was raised, and by both halves of the claim: the pointer
+        # has to have changed, and it has to now name the digest this refresh
+        # was publishing. Either half on its own is satisfiable by something
+        # else -- a pointer that already carried these bytes, or a pointer
+        # somebody moved for another reason -- and only this refresh could
+        # have made both true at once.
         expected = _canary_rows_digest(args)
 
         promoted = bool(
-            expected and str(observed.get("rows_sha256") or "") == expected
+            expected
+            and str(observed.get("rows_sha256") or "") == expected
+            and observed != observed_before
         )
 
         # The ordering rule declining a window is the one of these that is
