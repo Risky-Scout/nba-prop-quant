@@ -104,6 +104,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -148,6 +149,14 @@ PRICE_SCRIPT = Path("scripts") / "15_price_markets.py"
 #: Where those scripts write, relative to the data root.
 PROJECTIONS_RELATIVE = Path("processed") / "projections"
 PRICED_MARKETS_RELATIVE = Path("processed") / "priced_markets"
+
+#: Where the bytes a serve actually priced are kept, for ever, relative to
+#: the data root. Content-addressed under the slate date, so a slate served
+#: four times in an evening keeps four artifacts and every serving receipt
+#: points at the one it produced. See :func:`seal_priced_markets`.
+SERVED_PRICED_MARKETS_RELATIVE = (
+    Path("processed") / "served_priced_markets"
+)
 
 #: The refresh's own semantic fingerprint of the live rolling tree. Used as
 #: the input state fingerprint so the receipt names the data generation the
@@ -895,6 +904,115 @@ def _write(path: Path | None, text: str, *, append: bool) -> None:
         handle.write(text)
 
 
+def seal_priced_markets(
+    *,
+    receipt: dict[str, Any],
+    data_root: Path,
+) -> dict[str, Any] | None:
+    """Keep the exact bytes this serve priced, where nothing can rewrite them.
+
+    ``processed/priced_markets/<slate>.parquet`` is the convenience path and
+    it is a *mutable* one: every serve for a slate rewrites it, so the
+    evening's T-20 serve overwrites the morning's and a later advisory serve
+    overwrites that. The grader runs the next day and checks the file's
+    digest against the receipt's, which is the right check -- and against a
+    file that has since been rewritten it can only ever refuse. It did,
+    every day, and that is not the digest check being wrong. It is the
+    artifact lifecycle being wrong: a receipt is immutable and the thing it
+    provenances was not.
+
+    So the bytes are copied, at the moment they are priced, to a path
+    nothing rewrites:
+
+        processed/served_priced_markets/<slate>/<sha256>.parquet
+
+    Content-addressed, which makes it write-once by construction: the same
+    bytes land on the same path and different bytes cannot collide onto it.
+    A sidecar records the serving identity -- slate, fit, authority,
+    production SHA, served-at -- so the artifact can say which serve it came
+    from without the reader having to find the receipt first.
+
+    The convenience path keeps existing and keeps being rewritten. It is
+    simply no longer what grading reads.
+    """
+    artifact = receipt.get("priced_market_artifact")
+
+    if not artifact:
+        return None
+
+    digest = str(artifact.get("sha256") or "")
+
+    if not digest:
+        return None
+
+    slate_date = str(receipt["slate_date"])
+
+    directory = (
+        Path(data_root) / SERVED_PRICED_MARKETS_RELATIVE / slate_date
+    )
+
+    directory.mkdir(parents=True, exist_ok=True)
+
+    sealed = directory / f"{digest}.parquet"
+
+    source = Path(str(artifact["path"]))
+
+    if not sealed.exists():
+        staging = directory / f".{digest}.parquet.tmp"
+
+        shutil.copyfile(source, staging)
+
+        # Re-hashed after the copy rather than trusted: a truncated copy
+        # under a digest-shaped name is the one thing a content-addressed
+        # store must never hold.
+        if sha256_file(staging) != digest:
+            staging.unlink(missing_ok=True)
+
+            raise ServingFailed(
+                f"the priced markets for {slate_date} did not copy intact to "
+                f"{sealed}, so no immutable artifact was sealed"
+            )
+
+        os.replace(staging, sealed)
+
+    elif sha256_file(sealed) != digest:
+        raise ServingFailed(
+            f"{sealed} is addressed by {digest} but does not hash to it, so "
+            "the immutable store has been tampered with"
+        )
+
+    sidecar = directory / f"{digest}.json"
+
+    sidecar.write_text(
+        json.dumps(
+            {
+                "bytes": int(artifact["bytes"]),
+                "incumbent_authority": receipt.get("incumbent_authority"),
+                "incumbent_fit_id": receipt.get("incumbent_fit_id"),
+                "incumbent_version": receipt.get("incumbent_version"),
+                "production_code_sha": receipt.get("production_code_sha"),
+                "served_at": receipt.get("generated_at"),
+                "sha256": digest,
+                "slate_date": slate_date,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    return {
+        "bytes": int(artifact["bytes"]),
+        "path": str(sealed),
+        "relative": str(
+            SERVED_PRICED_MARKETS_RELATIVE / slate_date / f"{digest}.parquet"
+        ),
+        "sha256": digest,
+        "sidecar": str(sidecar),
+    }
+
+
 def run(args: argparse.Namespace) -> dict[str, Any]:
     project_root = Path(args.project_root).resolve()
 
@@ -949,6 +1067,15 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         fingerprint=input_state_fingerprint(data_root),
         served=served,
     )
+
+    # Sealed before the receipt is returned, so a receipt that names an
+    # immutable artifact is only ever written once those bytes are already
+    # at that path. The reverse order would let a run record a provenance
+    # pointer to something it had not yet stored.
+    sealed = seal_priced_markets(receipt=receipt, data_root=data_root)
+
+    if sealed is not None:
+        receipt["immutable_priced_market_artifact"] = sealed
 
     incomplete = missing_provenance(receipt)
 
