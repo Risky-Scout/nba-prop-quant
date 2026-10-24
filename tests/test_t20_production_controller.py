@@ -628,6 +628,18 @@ def served_records(world: World, *, slate_date: str = SLATE) -> list[dict]:
     ]
 
 
+def served_window_ids_for(
+    world: World, *, slate_date: str = SLATE
+) -> set[str]:
+    """Every T-20 window the durable ledger says a release carries."""
+    return controller.served_window_ids(
+        world.data_root
+        / "processed"
+        / "t20_served_windows"
+        / f"{slate_date}.jsonl"
+    )
+
+
 def build(
     world: World,
     *,
@@ -3002,6 +3014,428 @@ def test_recovery_is_safe_to_run_twice(tmp_path):
 
     # One release, from the first recovery, and one row recording it.
     assert len(served_records(first)) == 1
+
+
+# ----------------------------------------------------------------------
+# a window that can never be recovered costs only itself
+# ----------------------------------------------------------------------
+
+
+def conflict(tmp_path, *, games, window_id: str, game_id: int, captured_at):
+    """A second scheduled capture of one window, which is a real conflict.
+
+    Written at its own ``captured_at`` so no other window's component
+    digests move: ``_component_records`` groups by that timestamp, and a
+    duplicate sharing one would corrupt the capture it was meant to leave
+    alone. Both rows are genuine scheduled captures and the log is
+    append-only, so nothing can undo this -- which is the point.
+    """
+    return write_capture(
+        tmp_path / "data" / "snapshots",
+        date=SLATE,
+        captured_at=captured_at.isoformat(),
+        window_ids=[window_id],
+        due_game_ids=[game_id],
+        games=[dict(row) for row in games],
+        props=[prop(game_id, 600 + game_id)],
+    )
+
+
+def test_an_unrecoverable_window_does_not_cost_the_segment_its_own_captures(
+    tmp_path,
+):
+    """The blast radius of one capture production can never serve.
+
+    ``_recover`` verified every unserved window of the slate in one call and
+    raised on the first refusal, so one conflicted capture took the whole
+    segment with it: the pending T-20 windows of games that had not tipped
+    were never captured, and the advisory windows after them never ran. On
+    the 2026-10-24 slate the 19:25Z segment owns 27 of the 32 windows, so
+    one unservable capture existing by 15:25Z cost all 27.
+
+    The window itself is lost either way. What must not be lost with it is
+    everything the segment still could have done.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [
+        game(101, at(23, 0)),
+        game(102, at(23, 0), home=3, away=4),
+        game(103, at(0, 0, day=21), home=5, away=6),
+    ]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    conflict(
+        tmp_path,
+        games=games,
+        window_id="101:T-20m",
+        game_id=101,
+        captured_at=at(22, 45),
+    )
+
+    recovery_clock = Clock(at(23, 0))
+
+    recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
+
+    write_morning_receipt(recovery)
+
+    receipt = build(
+        recovery,
+        clock=recovery_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    # The one window nothing can serve, named with the reason selection
+    # refused it rather than as an anonymous count.
+    assert [
+        record["window_id"] for record in receipt["unrecoverable_windows"]
+    ] == ["101:T-20m"]
+
+    assert (
+        "expected exactly one scheduled capture"
+        in receipt["unrecoverable_windows"][0]["reason"]
+    )
+
+    # The segment's own T-20 window: captured, served and published.
+    assert "103:T-20m" in served_window_ids_for(recovery)
+
+    # The advisory window after it ran too.
+    assert "103:T-45m" in {
+        str(record["window_id"]) for record in receipt["advisory_windows"]
+    }
+
+    # Still fails closed, and still on the outcome that reaches the exit
+    # code: production is missing a window and that is not a success.
+    assert receipt["final_outcome"] == controller.OUTCOME_CAPTURED_NOT_SERVED
+
+    assert (
+        controller.OUTCOME_CAPTURED_NOT_SERVED
+        not in controller.OUTCOMES_THAT_SUCCEED
+    )
+
+
+def test_one_unrecoverable_window_does_not_discard_the_one_beside_it(
+    tmp_path,
+):
+    """Verification was a single call over every unserved window at once.
+
+    The first refusal ended it, so a window that would have verified was
+    discarded for being in the same batch as one that would not.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0)), game(102, at(23, 0), home=3, away=4)]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    conflict(
+        tmp_path,
+        games=games,
+        window_id="101:T-20m",
+        game_id=101,
+        captured_at=at(22, 45),
+    )
+
+    recovery_clock = Clock(at(23, 30))
+
+    recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
+
+    write_morning_receipt(recovery)
+
+    receipt = build(
+        recovery,
+        clock=recovery_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    # The recoverable one reached a release.
+    assert [
+        record["window_ids"] for record in receipt["recovered_windows"]
+    ] == [["102:T-20m"]]
+
+    assert "102:T-20m" in served_window_ids_for(recovery)
+
+    # The refusal names the other one, and only the other one.
+    assert [
+        record["window_id"] for record in receipt["unrecoverable_windows"]
+    ] == ["101:T-20m"]
+
+    assert receipt["captured_unserved_windows"] == ["101:T-20m"]
+
+    assert receipt["final_outcome"] == controller.OUTCOME_CAPTURED_NOT_SERVED
+
+
+def test_a_capture_serving_could_not_select_is_not_recorded_as_served(
+    tmp_path,
+):
+    """The ledger row says what the release it names actually carries.
+
+    ``_record_served_windows`` writes every T-20 window in the capture log,
+    on the stated grounds that a window serving could not have used would
+    have refused the run before reaching that line. Isolating the refusal
+    makes that false: the publication now happens *beside* a window
+    selection rejects. Recording it would claim a release carries a window
+    no release can carry, and -- worse -- would retire it from the unserved
+    set, turning the permanently missing window into a green segment.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0)), game(102, at(23, 0), home=3, away=4)]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    conflict(
+        tmp_path,
+        games=games,
+        window_id="101:T-20m",
+        game_id=101,
+        captured_at=at(22, 45),
+    )
+
+    recovery_clock = Clock(at(23, 30))
+
+    recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
+
+    write_morning_receipt(recovery)
+
+    build(
+        recovery,
+        clock=recovery_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    rows = [
+        row
+        for row in served_records(recovery)
+        if row["offset_minutes"] == 20
+    ]
+
+    assert rows, "the recoverable window should have produced a ledger row"
+
+    for row in rows:
+        assert "101:T-20m" not in row["window_ids"], (
+            "the ledger claims a release carries a window selection refuses"
+        )
+
+    assert controller.served_window_ids(
+        recovery.data_root
+        / "processed"
+        / "t20_served_windows"
+        / f"{SLATE}.jsonl"
+    ) == {"102:T-20m"}
+
+
+def test_a_post_tip_capture_is_isolated_the_way_a_conflict_is(tmp_path):
+    """A second permanent cause, to show the isolation is not conflict-shaped.
+
+    A capture taken after its game tipped is refused by a different check
+    than a duplicate is, and is just as permanent: the window is in the
+    past, so no later run can take a pre-tip capture of it.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0)), game(102, at(23, 0), home=3, away=4)]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    # 104 tips at 23:20 and nothing captured its T-20 window at 23:00,
+    # because the run that owned it died at 22:40. This is a capture of it
+    # taken after the game started.
+    late = game(104, at(23, 20), home=7, away=8)
+
+    with_late = [*games, late]
+
+    write_capture(
+        tmp_path / "data" / "snapshots",
+        date=SLATE,
+        captured_at=at(23, 25).isoformat(),
+        window_ids=["104:T-20m"],
+        due_game_ids=[104],
+        games=[dict(row) for row in with_late],
+        props=[prop(104, 704)],
+    )
+
+    recovery_clock = Clock(at(23, 40))
+
+    recovery = World(tmp_path, schedules=[with_late], clock=recovery_clock)
+
+    write_morning_receipt(recovery)
+
+    receipt = build(
+        recovery,
+        clock=recovery_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    unrecoverable = {
+        record["window_id"]: record["reason"]
+        for record in receipt["unrecoverable_windows"]
+    }
+
+    assert list(unrecoverable) == ["104:T-20m"]
+
+    assert "not pre-tip" in unrecoverable["104:T-20m"]
+
+    # The two windows beside it were served from the captures that existed.
+    assert served_window_ids_for(recovery) == {"101:T-20m", "102:T-20m"}
+
+    assert receipt["final_outcome"] == controller.OUTCOME_CAPTURED_NOT_SERVED
+
+
+def test_the_unrecoverable_window_stops_blocking_the_segments_after_it(
+    tmp_path,
+):
+    """The condition was sticky, and that is what made it expensive.
+
+    Every cause is permanent, so each later segment re-derived the same
+    unserved set, re-attempted the same doomed recovery and skipped its own
+    work in the same place. One conflicted capture at 15:25Z therefore cost
+    every segment for the rest of the slate, not only the one it appeared
+    in. Here the second segment runs after the first has already failed.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [
+        game(101, at(23, 0)),
+        game(102, at(23, 0), home=3, away=4),
+        game(103, at(0, 0, day=21), home=5, away=6),
+    ]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    conflict(
+        tmp_path,
+        games=games,
+        window_id="101:T-20m",
+        game_id=101,
+        captured_at=at(22, 45),
+    )
+
+    first_clock = Clock(at(22, 50))
+
+    first = World(tmp_path, schedules=[games], clock=first_clock)
+
+    write_morning_receipt(first)
+
+    first_receipt = build(
+        first,
+        clock=first_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    assert (
+        first_receipt["final_outcome"]
+        == controller.OUTCOME_CAPTURED_NOT_SERVED
+    )
+
+    # A later segment over the same state. The window is still unrecoverable
+    # and still named, and this segment still does its own work.
+    second_clock = Clock(at(23, 20))
+
+    second = World(tmp_path, schedules=[games], clock=second_clock)
+
+    write_morning_receipt(second)
+
+    receipt = build(
+        second,
+        clock=second_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    assert [
+        record["window_id"] for record in receipt["unrecoverable_windows"]
+    ] == ["101:T-20m"]
+
+    assert "103:T-20m" in served_window_ids_for(second)
+
+    assert "103:T-45m" in {
+        str(record["window_id"]) for record in receipt["advisory_windows"]
+    }
+
+    assert receipt["final_outcome"] == controller.OUTCOME_CAPTURED_NOT_SERVED
+
+
+def test_the_receipt_says_which_unserved_windows_no_run_will_ever_serve(
+    tmp_path, monkeypatch
+):
+    """The reason string was actively misleading for a permanent cause.
+
+    It said the captures "stay exactly as they were taken; a later run will
+    serve and publish from them without recapturing", which is true of a
+    window waiting for a later run and false of a conflicted or post-tip
+    one. An operator reading it would wait for a recovery that can never
+    happen.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0)), game(102, at(23, 0), home=3, away=4)]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    conflict(
+        tmp_path,
+        games=games,
+        window_id="101:T-20m",
+        game_id=101,
+        captured_at=at(22, 45),
+    )
+
+    recovery_clock = Clock(at(23, 30))
+
+    recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
+
+    write_morning_receipt(recovery)
+
+    as_the_entry_point_sees_it(monkeypatch, recovery)
+
+    receipt_path = tmp_path / "receipt.json"
+
+    summary_path = tmp_path / "summary.md"
+
+    exit_code = controller.main(
+        [
+            "--data-root",
+            str(recovery.data_root),
+            "--production-sha",
+            PRODUCTION_SHA,
+            "--segment-start-utc",
+            SEGMENT_2[0].isoformat(),
+            "--segment-end-utc",
+            SEGMENT_2[1].isoformat(),
+            "--slate-date",
+            SLATE,
+            "--receipt-path",
+            str(receipt_path),
+            "--summary-path",
+            str(summary_path),
+        ]
+    )
+
+    assert exit_code == 1
+
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+
+    assert "101:T-20m" in receipt["reason"]
+
+    assert "no later run" in receipt["reason"]
+
+    # The misleading promise must not be made about this window.
+    assert "a later run will serve and publish from them" not in (
+        receipt["reason"]
+    )
+
+    summary = controller.render(receipt)
+
+    assert "101:T-20m" in summary
+
+    assert "expected exactly one scheduled capture" in summary
 
 
 def test_publication_is_recorded_on_publication_and_names_the_release(
