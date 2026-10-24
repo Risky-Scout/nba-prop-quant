@@ -518,19 +518,33 @@ page renderer reads no clock, so the same release renders the same bytes.
 Retention prunes only after the pointers have moved, and never below the two
 releases the rollback target needs.
 
-### Live is configured and disabled
+### Live is decided in the commit and gated outside it
 
 Both stages accept `--mode live`, and both live destinations are configured by
-name — see `docs/wizardofodds/INCUMBENT_PUBLISHER.md`. Neither can be reached.
-`modes.live.state` is `DISABLED` in the committed switch, the switch is
-consulted before any destination is resolved, and activation additionally
-requires `NBA_PROP_WOO_PUBLISH` and `NBA_PROP_WOO_PUBLISH_APPROVAL` in the
-environment. The lifecycle names none of the three.
+name — see `docs/wizardofodds/INCUMBENT_PUBLISHER.md`.
+
+`modes.live.state` is now `ENABLED` in the committed switch, and the switch
+opening is not the gate opening. `PublishingSwitch.enabled` is the state *and*
+an empty blocker list, and the two approval variables are blockers until they
+are set and agree, so a live publication still refuses. The switch is one of
+three conditions and it is the only one a commit can hold:
+
+| Condition | Where it lives | State |
+| --- | --- | --- |
+| `modes.live.state` is `ENABLED` | `ops/wizardofodds_publishing_switch.json` | **Set** — in a reviewed commit, with the authorisation in `modes.live.reason` |
+| `NBA_PROP_WOO_PUBLISH` is the literal `ENABLED` | `wizardofodds-production` environment variable | **Not set** |
+| `NBA_PROP_WOO_PUBLISH_APPROVAL` equals `modes.live.approval_token` | `wizardofodds-production` environment secret | **Not set** |
+
+Until the last two are set in the GitHub UI, every live publication refuses
+and says so by name: it names both variables, the environment they belong to
+and the values they must carry. It never falls back to publishing a canary in
+their place, and it never reports a live success it did not have.
 
 That is the division this section exists to draw: **the destination is
-engineering and the activation is a decision.** A reviewed activation sets the
-switch and supplies the two variables. It writes no code, configures no
-destination, copies no file by hand and rebuilds no page.
+engineering and the activation is a decision.** The decision has been taken;
+what is left is carrying it to the runner, which supplies an approval and
+writes no code, configures no destination, copies no file by hand and rebuilds
+no page.
 
 ## 14. Early advisory windows
 
@@ -670,7 +684,7 @@ three-and-a-quarter-hour wait for its first T-20 window becomes several short
 waits. That is the failure mode recorded in the next section, which has twice
 cost this schedule a whole evening to a job dropped while idling.
 
-`nba_t20_production.yml` is unchanged by all of this, and deliberately. The
+`nba_t20_production.yml` was unchanged by all of this, and deliberately. The
 offsets are a module constant in the controller rather than a workflow input,
 because a scheduled event fires from the default branch: a scheduled run
 executes `main`'s copy of the workflow against the production branch's copy of
@@ -679,10 +693,154 @@ probe already reports `t20_work=true` for a segment whose only work is
 advisory, so the existing install gate covers it. The escape hatch is
 `--no-advisory-windows` on the controller, for a manual invocation.
 
+The live refresh in Section 15 is the one thing that did need two lines of
+YAML, for a reason no Python can get around: GitHub does not put a variable or
+a secret into a step's process unless the step binds it. That is a binding and
+not an opt-in, and the same default-branch note applies to it — see Section 15.
+
 One consequence worth knowing: the 14:25Z segment used to be a cheap no-op on
 almost every slate and now does work whenever a T-180 window falls inside it,
 which on a slate with an early tip it does. That segment therefore installs the
 production package where it previously exited before doing so.
+
+## 15. The live release, refreshed progressively
+
+There is **one** live feed and **one** live page, and they are replaced as the
+evening closes in on tip. The reviewed progression is:
+
+| Window | What it does to the live pointer |
+| --- | --- |
+| T-180 | establishes it |
+| T-90 | replaces it |
+| T-45 | replaces it |
+| T-20 | replaces it, and is the final pregame version |
+
+`ops/run_progressive_live_refresh.py` is what does it, invoked by the
+controller once per window immediately after that window's canary feed and
+page have both published. The advisory canary destinations in Section 14 are
+unchanged and still confined; the live pair is `wizardofodds_nba_live` and
+`wizardofodds_nba_player_props_page_live`, and the refresh refuses any other
+destination by name.
+
+### It publishes the release the canary validated, not a new one
+
+The refresh computes nothing. It re-derives no price, no probability, no
+distribution and no minute, and it does not re-run the pipeline: what goes
+live is the release the canary already published and read back. That is
+enforced by digest and not by intention — three independent statements of one
+rows digest have to be equal before anything is written:
+
+1. the **canary feed publication receipt** for this window, which says what
+   the canary published;
+2. the **canary attestation** read back off the canary destination itself,
+   which is that destination's own statement of what it is serving;
+3. the **live release** built by the publisher's own `build_release`, which is
+   what would be promoted.
+
+A rows payload is the contract version, the rows, the distributions and the
+slate date and carries nothing about its destination, so the three are equal
+by construction — which is exactly why they are checked. If any pair differs
+the refresh refuses, nothing is written, and the message names both digests.
+The rows document that lands at the live destination is byte-identical to the
+one at the canary.
+
+The release *ids* are not compared, and deliberately. An id is its
+destination's `release_prefix`, the slate and the digest, and the advisory
+prefixes carry their offset while the T-20 canary's prefix is the live one, so
+an id comparison would refuse three of the four windows and accept the fourth
+for the wrong reason.
+
+### Forward only, and declining is not failing
+
+A later window is never replaced by an earlier one. Equal offsets replace,
+which is how a cumulative T-20 release grows as a segment captures successive
+tip groups, and the identical release is idempotent: it reports what is
+current and writes nothing at all rather than minting a second release of the
+same rows.
+
+A window the rule declines is recorded as `LIVE_ALREADY_CLOSER_TO_TIP`, exits
+zero and does not degrade the segment, because on a staggered slate it is the
+ordinary case rather than an edge one. A window belongs to a game and its
+offset is measured from that game's own tip, so an evening's windows
+interleave — on a twelve-game slate with five tip times the 7:00 game's T-20
+capture is taken at 6:40 and the 10:30 game's T-180 capture an hour later at
+7:30, which is three hours earlier in its own game's window. The advisory
+refresh that follows asks to put a T-180 release live over a T-20 one and is
+told no. Nothing is written, the release closer to tip stays serving, and the
+chain carries on. **The practical consequence is worth stating plainly: once
+any game of a slate has reached T-20, the live pointer advances only at later
+T-20 groups.** That is the ordering requirement being honoured, not a defect.
+
+### The last valid release survives every failure
+
+Whatever goes wrong — a missing priced artifact, an unusable serving receipt,
+a canary that did not publish, a canary of the wrong window, a destination
+with no attestation, an attestation of other bytes, a digest that moved, a
+game that has already tipped, a transport that will not talk, an approval that
+is absent or disagrees — the live pointer still names the most recent release
+that validated, and `previous.json` still names the one before it. The
+mechanics are the publisher's own: `current.json`, `previous.json`, the audit
+log and the retention sweep, with no second scheme beside them. Nothing is
+written before every gate has passed, and retention never prunes below the two
+releases a rollback needs.
+
+The first release of all is the one case that cannot go through `publish`,
+because `assert_rollback_target_exists` refuses a destination with no
+`current.json` — and it is right to, since an activation must never be the
+step that leaves live with nowhere to go back to. On a destination that has
+never served anything there is nothing to seed it with, so the first release
+seeds itself: both pointers name it, which is the truthful state of a
+destination holding one release. Every other publisher gate is applied by
+name, and that path is reachable exactly once.
+
+### A window whose game has tipped is not a pregame price
+
+The refresh takes each of its windows' tip times and refuses if any has
+already passed. The guard is scoped to the windows the refresh is *for*: a
+release is cumulative, so by the time the last T-20 group of a twelve-game
+slate publishes, the first game tipped hours earlier and its rows are
+correctly in the release because they were priced before their own tip.
+
+This guard did not exist anywhere on the publication path before. On
+2026-10-23 the T-20 path priced game `21717941`, CHI at MIL, two hours and
+forty minutes after it tipped, and nothing refused.
+
+### Where the durable record is
+
+`processed/live_progressive_refresh/<slate>.jsonl`, appended and fsynced, one
+line per attempt including every refusal and every declined window. It is its
+own tree beside the witness ledgers rather than inside one, because those
+record what happened and this one decides something: it is the only record of
+*which capture window* is live. The published rows cannot carry the offset —
+`PUBLISHED_FIELDS` is pinned — and `current.json` names a release id whose
+prefix is the live stream's rather than the window's. So the ordering rule
+reads this file, and binds it to the destination by release id and rows
+digest: if the file and the pointer disagree, the refresh refuses and names
+the destination's own `audit_log.jsonl`.
+
+### What the workflow had to change, and what it grants
+
+Two lines, in the `env` block of the T-20 step that already captures, serves
+and publishes:
+
+```yaml
+NBA_PROP_WOO_PUBLISH: ${{ vars.NBA_PROP_WOO_PUBLISH }}
+NBA_PROP_WOO_PUBLISH_APPROVAL: ${{ secrets.NBA_PROP_WOO_PUBLISH_APPROVAL }}
+```
+
+They grant nothing. Until the owner sets both in the `wizardofodds-production`
+environment they interpolate to the empty string, the switch's blockers stand,
+and every live publication refuses. `ops/validate_workflows.py` is narrowed to
+match: `--mode live` and `--stage live` stay refused in every workflow, both
+variables stay refused in every workflow but this one, and in this one each is
+accepted only as a bare binding of its own name to a `vars.` or `secrets.`
+reference of the same name, only on the step that runs the controller, only
+with its other half present, and never inside a `run:` body.
+
+**A scheduled run executes `main`'s copy of this workflow.** The bindings have
+to be present in `main`'s copy too, or a scheduled segment will check out the
+production controller and hand it neither variable — which refuses safely, but
+refuses. See Section 2.
 
 ## Segment cancellations, 2026-10-22 and 2026-10-23
 
