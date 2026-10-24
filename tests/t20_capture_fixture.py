@@ -141,14 +141,26 @@ def write_capture(
     return capture_id
 
 
-def eligible_game_ids(snapshot_dir: Path, date: str) -> list[int]:
-    """Every game with a scheduled T-20 window recorded for this slate."""
+def eligible_game_ids(
+    snapshot_dir: Path, date: str, *, offset_minutes: int = 20
+) -> list[int]:
+    """Every game with a scheduled window at one offset, for this slate.
+
+    The offset defaults to the production one, because that is what the
+    serving path consumes and what nearly every caller wants. It is a
+    parameter at all because the advisory windows are served by the same
+    selection at their own offsets, and a helper that could only answer for
+    T-20 would make an advisory fake agree with itself rather than with the
+    capture log.
+    """
     path = snapshot_dir / "capture_runs" / f"{date}.jsonl"
 
     found: set[int] = set()
 
     if not path.exists():
         return []
+
+    suffix = f":T-{int(offset_minutes)}m"
 
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
@@ -162,7 +174,7 @@ def eligible_game_ids(snapshot_dir: Path, date: str) -> list[int]:
             continue
 
         for window_id in payload.get("window_ids", []):
-            if str(window_id).endswith(":T-20m"):
+            if str(window_id).endswith(suffix):
                 found.add(int(str(window_id).split(":", 1)[0]))
 
     return sorted(found)
