@@ -4077,7 +4077,7 @@ class T20Controller:
             if retained is not None:
                 self._refresh_live(
                     stage_dir,
-                    group,
+                    windows,
                     offset=self.offset_minutes,
                     canary_destination=T20_FEED_DESTINATION,
                     feed_receipt=retained,
@@ -4185,7 +4185,7 @@ class T20Controller:
 
         self._refresh_live(
             stage_dir,
-            group,
+            windows,
             offset=self.offset_minutes,
             canary_destination=T20_FEED_DESTINATION,
             feed_receipt=feed_receipt,
