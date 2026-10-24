@@ -118,6 +118,14 @@ T20_FORBIDDEN_ENTRY_POINTS: tuple[str, ...] = (
     "ops/grade_incumbent_production_slate.py",
     "ops/run_production_shadow.py",
     "ops/monitor_live_shadow_evidence.py",
+    # Advisory serving, which belongs to the controller and not to the
+    # schedule. The controller is what reserves the runner for the T-20
+    # capture before starting an advisory serve, what addresses each advisory
+    # release to its own confined destination, and what refuses to write a
+    # T-20 window id from an advisory run. A workflow step that invoked the
+    # advisory entry point directly would have none of those guarantees in
+    # front of it.
+    "ops/run_advisory_window_serving.py",
 )
 
 #: A serving workflow installs what it serves with. The dev extra is pytest

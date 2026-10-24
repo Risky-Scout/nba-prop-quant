@@ -532,6 +532,144 @@ engineering and the activation is a decision.** A reviewed activation sets the
 switch and supplies the two variables. It writes no code, configures no
 destination, copies no file by hand and rebuilds no page.
 
+## 14. Early advisory windows
+
+T-20 is twenty minutes before tip. That is the window production is *required*
+to have, because it is the market the slate is graded against, but it is late
+to read a prediction from. The same invocation therefore also serves the
+T-180, T-90 and T-45 capture windows as **advisory** releases.
+
+What a reader actually gets, in the wall clock they read it in:
+
+| Tip (America/New_York) | T-180 | T-90 | T-45 | T-20 |
+| --- | --- | --- | --- | --- |
+| 7:00 PM | 4:00 PM | 5:30 PM | 6:15 PM | 6:40 PM |
+| 9:30 PM | 6:30 PM | 8:00 PM | 8:45 PM | 9:10 PM |
+| 10:00 PM | 7:00 PM | 8:30 PM | 9:15 PM | 9:40 PM |
+
+### Nothing about the model changes
+
+An advisory release is the same frozen incumbent, the same fitted artifacts,
+the same marginals, copula, calibration, pricing and Gate 3 routing, priced
+from a different point-in-time market snapshot. The only argument that differs
+is `--snapshot-offset-minutes`, which both `10_predict_slate.py` and
+`15_price_markets.py` already accepted; `ops/run_advisory_window_serving.py`
+imports `ops/run_incumbent_production_serving.py` and calls that module's own
+`resolve_incumbent`, `serve` and `build_receipt`, so the serving orchestrator
+is unchanged byte for byte and there is no second definition of what the
+incumbent is.
+
+### Separate destinations, separate pointer
+
+Six named destinations, three for the feed and three for the page, one pair
+per offset:
+
+| offset | feed destination | page destination | confinement |
+| --- | --- | --- | --- |
+| T-180 | `wizardofodds_nba_advisory_t180m_canary` | `wizardofodds_nba_player_props_page_advisory_t180m_canary` | `canary-advisory/t180m` |
+| T-90 | `wizardofodds_nba_advisory_t90m_canary` | `wizardofodds_nba_player_props_page_advisory_t90m_canary` | `canary-advisory/t90m` |
+| T-45 | `wizardofodds_nba_advisory_t45m_canary` | `wizardofodds_nba_player_props_page_advisory_t45m_canary` | `canary-advisory/t45m` |
+
+Each is `mode: canary`. None is live, and live remains disabled for all of
+them by the same switch described above.
+
+The confinement is what makes contamination structural rather than
+procedural. `RemoteDestination.published_root` is `public_target` joined to
+the confinement, so the T-20 feed's served root is
+`.../predictions/nba/canary` and T-180's is
+`.../predictions/nba/canary-advisory/t180m`. Neither path is a prefix of the
+other. Every pointer the publisher writes -- `current.json`, `previous.json`,
+`canary_attestation.json`, `audit_log.jsonl` -- is written *inside* the served
+root, so an advisory publication does not decline to repoint the T-20
+`current.json`; it has no filesystem path by which it could reach it. The same
+holds for the page: `.../NBA/player-props/canary` against
+`.../NBA/player-props/canary-advisory/t180m`.
+
+### Labelled with the offset it was captured at
+
+Every advisory destination carries its own `release_prefix`, and a release id
+is `{release_prefix}__{slate_date}__{rows_sha256[:16]}`. So the offset is in
+the release id itself, which means it is in the feed manifest, in
+`current.json`, in the page manifest's `released.release_id`, in the page's
+rendered "Release" fact row, and in the public URL:
+
+```
+nba_prop_quant_advisory_t180m__2026-10-23__<digest>
+https://.../predictions/nba/canary-advisory/t180m/
+```
+
+The page prefix carries it too (`page-preview-advisory-t180m`). The advisory
+serving receipt adds three fields of its own -- `advisory: true`,
+`advisory_capture_offset_minutes`, `advisory_capture_window_ids` -- additively,
+so nothing a verifier already reads moves.
+
+The one thing not labelled is the rows document's own bytes. `PUBLISHED_FIELDS`
+in `ops/publish_incumbent_to_wizardofodds.py` is pinned by AST comparison
+against the production ref, so a row cannot gain a field; the offset is
+carried by the release id, the manifest and the URL instead.
+
+### Three refusals, all additive
+
+1. `assert_offset_is_advisory` in the advisory entry point refuses an offset
+   that is not in `CAPTURE_OFFSETS_MINUTES`, refuses the production offset of
+   20 specifically, and refuses any offset outside `ADVISORY_OFFSETS_MINUTES`.
+2. `assert_window_ids_are_this_offset` refuses any window id ending `:T-20m`
+   before it refuses an id belonging to some other offset, so "an advisory run
+   wrote a T-20 window id" is its own named refusal rather than a side effect.
+3. `morning_readiness` in the controller refuses a serving receipt carrying
+   `advisory: true`. The durable receipt at `processed/incumbent_serving/` is
+   what proves a verified incumbent for the slate; an advisory receipt is
+   written to `processed/advisory_window_serving/` and the entry point refuses
+   a `--receipt-path` equal to or inside the production record's directory,
+   but if one ever arrived there anyway it would be refused on the way in
+   rather than believed.
+
+### The T-20 window keeps priority
+
+The advisory path runs in the gaps of the loop that already exists, and the
+T-20 loop itself is unchanged apart from the one call that fills a gap before
+its sleep. Two rules keep it that way:
+
+- **A reservation.** No advisory serve *starts* within
+  `T20_RESERVATION_MINUTES` (10) of a T-20 capture the segment still owns, and
+  the reservation is re-checked at every stage boundary rather than only
+  before the first, so a stage that runs long costs one stage of exposure
+  instead of the whole sequence. Ten minutes is roughly five times the 2m09s
+  that run `40033448558`'s 23:40Z group took to go from capture to published
+  page for a seven-game, 2,075-row slate, and deliberately under the
+  twenty-five minutes between T-45 and T-20 so that T-45 is not reliably
+  deferred past its own game's required window.
+- **Capture and serve are separated.** The capture is the time-critical half
+  and the cheap half; the serve is expensive and not time-critical, because
+  the capture *is* the point-in-time market. A T-180 capture served an hour
+  late still prices the market as it stood three hours before tip. So advisory
+  captures are always taken on the clock and advisory serving is drained when
+  there is room, coalesced per offset the way the T-20 path coalesces its own
+  cumulative re-serving.
+
+An advisory failure degrades the segment to
+`T20_SEGMENT_COMPLETE_ADVISORY_DEGRADED`, which is a success outcome. The
+asymmetry is deliberate: a T-20 time no segment covers fails the run, because
+production is required to have that window, while an advisory time no segment
+covers is recorded and the segment carries on.
+
+### Why no fourth cron and no second workflow
+
+The three segment crons are pinned contiguous by `ops/validate_workflows.py`
+so that no capture window is owned twice, and every advisory time already
+falls inside one of them. The decisive constraint is the runner: it executes
+one job at a time, and the 19:25Z invocation holds it from 19:25Z until its
+last publication, which covers nearly the whole 20:00Z-02:15Z span the
+advisory windows live in. A separate workflow with its own concurrency group
+would only move the queue from GitHub's gate to the runner's and start each
+advisory run after the window it was for had passed.
+
+Handling the advisory windows inside the invocation that already owns the
+segment also *shortens* the longest contiguous sleep: the 19:25Z invocation's
+three-and-a-quarter-hour wait for its first T-20 window becomes several short
+waits. That is the failure mode recorded in the next section, which has twice
+cost this schedule a whole evening to a job dropped while idling.
+
 ## Segment cancellations, 2026-10-22 and 2026-10-23
 
 Two evenings were lost to a cancellation rather than to any gate, and the
