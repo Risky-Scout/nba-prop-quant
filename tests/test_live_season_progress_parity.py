@@ -70,6 +70,7 @@ from season_parity_fixture import (  # noqa: E402
     game,
     standings_rounds,
 )
+from serving_additive_pin import assert_numerically_unchanged  # noqa: E402
 
 PRODUCTION_REF = "production/wizardofodds-integration"
 
@@ -1128,12 +1129,22 @@ NUMERICAL_MODULES: tuple[str, ...] = (
 
 
 def test_no_model_probability_or_pricing_module_changed():
-    """The twelve numerical modules are byte-identical to production.
+    """The twelve numerical modules still compute what production computes.
 
     ``features.py`` and ``game_context.py`` are in this list deliberately:
     this fix makes the live path match the training definition, so the
     training definition itself must not move. A fix that edited either would
     be redefining the feature rather than reproducing it.
+
+    Eleven of the twelve are byte-identical. ``prospective_snapshot.py`` is
+    the one entry a later approved change may reach, and byte-equality cannot
+    tell a changed capture digest apart from a changed reading of the capture
+    log -- the first is "a price moved", the second is a defect that made a
+    window with two records of one capture permanently unpriceable. So it is
+    checked as the containment guard checks it instead: every production line
+    still present, and every function but ``select_capture_bundle``
+    syntax-tree-identical, which includes both of the digest functions every
+    capture ever written is addressed by.
     """
     base = production_base()
 
@@ -1141,9 +1152,7 @@ def test_no_model_probability_or_pricing_module_changed():
         pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
 
     for relative in NUMERICAL_MODULES:
-        assert blob_text(base, relative) == (
-            PROJECT / relative
-        ).read_text(encoding="utf-8"), relative
+        assert_numerically_unchanged(base, relative)
 
 
 def test_no_model_artifact_or_freeze_manifest_changed():

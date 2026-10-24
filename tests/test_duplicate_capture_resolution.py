@@ -307,6 +307,15 @@ def test_two_snapshots_of_one_window_are_still_refused(tmp_path):
     model says which of them T-20 pricing is entitled to read -- so serving
     either would be pricing a game off a snapshot nobody chose. The refusal
     is the correct outcome and is unchanged.
+
+    This is also why the instant is part of what identifies a capture rather
+    than the component digests alone. Each sweep writes its own component
+    rows under its own ``captured_at``, so two sweeps over a market that did
+    not move in between record *identical* digests, and a criterion built on
+    the digests would have called these one capture and served a snapshot
+    taken at a minute nobody asked for. They differ in the instant, and
+    therefore in the capture id derived from it, and that is what the
+    refusal names.
     """
     snapshot_dir = tmp_path / "snapshots"
 
@@ -334,9 +343,10 @@ def test_two_snapshots_of_one_window_are_still_refused(tmp_path):
 
     assert at(22, 41).isoformat() in message
 
-    assert "component_sha256" in message
-
     assert "capture_id" in message
+
+    # The content did not move, so nothing claims it did.
+    assert "component_sha256" not in message
 
 
 def test_two_captures_of_one_instant_with_different_content_are_refused(

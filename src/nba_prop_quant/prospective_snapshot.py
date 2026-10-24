@@ -276,6 +276,277 @@ def _capture_runs(
     ]
 
 
+def _capture_identity(
+    envelope: dict[str, Any],
+) -> tuple[
+    tuple[str, str],
+    ...,
+]:
+    """Which capture a ``capture_run`` row says it is.
+
+    A capture is content-addressed. :func:`build_capture_id` digests the
+    slate date, the instant, the window ids, the due game ids and the five
+    component digests, and :func:`select_capture_bundle` recomputes that
+    digest off the envelope before pricing may read the capture -- so those
+    fields, and only those, are what distinguishes one point-in-time
+    snapshot from another. Two rows agreeing on every one of them denote the
+    same capture: the same instant, over the same windows and the same due
+    games, with byte-identical content in every component.
+
+    What is compared is the preimage rather than the stored ``capture_id``,
+    because the stored id is a claim the envelope makes about itself. A row
+    carrying a copied id over a different instant would otherwise read as a
+    duplicate of the row it copied from, and something would have chosen
+    between two snapshots before the capture-id check below ever ran.
+    Comparing the fields the id is derived from cannot be fooled that way,
+    and on a row the collector wrote it is the same comparison, since equal
+    fields hash to equal ids.
+
+    ``error_count`` is here as well and is the one field outside the digest.
+    It is not part of the capture's identity in the data model, but
+    :func:`select_capture_bundle` refuses a capture whose sweep recorded any
+    error, so two rows agreeing on all the content and disagreeing about
+    whether that sweep was clean are not interchangeable: exactly one of
+    them is servable and nothing here can say which. The stored
+    ``capture_id`` is carried for the same reason -- a row whose id does not
+    describe it is refused below, and whether a window is refused may not
+    depend on which of two rows was read.
+
+    Every remaining key of the envelope -- the five counts, ``game_ids``,
+    ``team_ids``, ``errors``, ``grace_minutes``, the payload's own ``date``
+    -- is either derived from content already compared here or is read by
+    nothing on the serving path, so a row this collector wrote cannot differ
+    in one of them while agreeing on all of these, and none of them can
+    reach what is served.
+
+    Rendered as ordered ``(name, value)`` pairs of strings so that the
+    comparison cannot depend on dict ordering and so that a refusal can name
+    the fields that differ. The two id lists are sorted for the reason
+    :func:`build_capture_id` sorts them -- a list written in another order
+    is the same set of windows -- and sorted as recorded rather than as
+    parsed, so a row this function cannot interpret is a difference rather
+    than an exception.
+    """
+    payload = (
+        envelope.get(
+            "payload"
+        )
+        or {}
+    )
+
+    component_hashes = (
+        payload.get(
+            "component_sha256"
+        )
+        or {}
+    )
+
+    return (
+        (
+            "captured_at",
+            str(
+                envelope.get(
+                    "captured_at"
+                )
+            ),
+        ),
+        (
+            "window_ids",
+            _canonical_json(
+                sorted(
+                    str(x)
+                    for x in payload.get(
+                        "window_ids",
+                        [],
+                    )
+                )
+            ),
+        ),
+        (
+            "due_game_ids",
+            _canonical_json(
+                sorted(
+                    str(x)
+                    for x in payload.get(
+                        "due_game_ids",
+                        [],
+                    )
+                )
+            ),
+        ),
+        (
+            "component_sha256",
+            _canonical_json(
+                {
+                    str(key): str(
+                        value
+                    )
+                    for key, value in (
+                        component_hashes.items()
+                    )
+                }
+            ),
+        ),
+        (
+            "error_count",
+            str(
+                payload.get(
+                    "error_count"
+                )
+            ),
+        ),
+        (
+            "capture_id",
+            str(
+                payload.get(
+                    "capture_id",
+                    "",
+                )
+            ),
+        ),
+    )
+
+
+def _describe_capture_conflict(
+    identities: list[
+        tuple[
+            tuple[str, str],
+            ...,
+        ]
+    ],
+) -> str:
+    """Field by field, what the captures of one window disagree about.
+
+    A refusal that says only how many records were found is a refusal nobody
+    can act on. The 2026-10-23 one said "found 2", and establishing whether
+    those two were one capture written twice or two snapshots taken minutes
+    apart meant reading the log by hand -- on the evening the window was
+    still open. So the difference is named: every field the distinct
+    captures do not agree on, with the values they carry, in field order and
+    with the values sorted, so one conflict always reads the same way.
+    """
+    parts = []
+
+    for index, name in enumerate(
+        name
+        for name, _ in identities[
+            0
+        ]
+    ):
+        values = sorted(
+            {
+                identity[index][1]
+                for identity in identities
+            }
+        )
+
+        if len(
+            values
+        ) < 2:
+            continue
+
+        parts.append(
+            f"{name} "
+            + " vs ".join(
+                values
+            )
+        )
+
+    return "; ".join(
+        parts
+    )
+
+
+def _resolve_duplicate_scheduled_captures(
+    window_id: str,
+    candidates: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Two records of one capture are that capture; of two, are a refusal.
+
+    Requiring exactly one scheduled capture per window is right about what
+    it was written for and cannot distinguish the only two things a second
+    record can mean. On 2026-10-23 it refused three games permanently,
+    because the capture log is append-only: the second record never goes
+    away, so the window was unpriceable for the rest of the slate's life.
+    The exclusive claim the collector now takes stops two sweeps recording
+    one window again and can do nothing for a record already written, nor
+    for one arriving by a route no claim covers -- a replayed log, a
+    restored backup, a manual sweep, a second host, a network lock that
+    silently does not lock.
+
+    So the two cases are separated, and only they are:
+
+      - records that :func:`_capture_identity` cannot tell apart denote one
+        point-in-time snapshot. Whichever is read, every field
+        :func:`select_capture_bundle` goes on to use is the same field, so
+        the bundle it returns is the same bundle and the capture it verifies
+        is the same capture -- which is why picking either is sound and why
+        nothing here needs to decide which record is "the" record. It is
+        still picked by a stable total order rather than by arrival, the
+        lexicographic minimum of the canonical encoding: file order, read
+        order and dict order cannot reach it, so two runs over one log
+        resolve it identically and a log read backwards resolves to the same
+        row.
+      - records that it can tell apart denote different snapshots of one
+        window. Both are genuine data, both may verify, and the data model
+        says nothing about which one T-20 pricing is entitled to read, so
+        serving either would be pricing a game off a snapshot nobody chose.
+        That refuses, and it refuses with the message production already had
+        plus the thing it could not say: how many captures the records
+        denote and exactly which recorded facts differ between them.
+
+    Nothing is relabelled, re-timed, merged, synthesized or widened here and
+    no capture is written: the return value is a sublist of the candidates
+    read off disk, so the only thing a resolution can produce is a record
+    the log already held. The log is not rewritten either -- it is the
+    append-only evidence that the duplicate happened, which is what an
+    operator needs most -- and every eligibility check below runs over the
+    resolved record unchanged, so a duplicate of a capture pricing would
+    refuse is still refused for the capture's own reason.
+    """
+    if len(
+        candidates
+    ) < 2:
+        return candidates
+
+    identities = {}
+
+    for envelope in candidates:
+        identities.setdefault(
+            _capture_identity(
+                envelope
+            ),
+            [],
+        ).append(
+            envelope
+        )
+
+    if len(
+        identities
+    ) != 1:
+        raise RuntimeError(
+            f"{window_id}: expected exactly one "
+            f"scheduled capture, found {len(candidates)}"
+            f", recording {len(identities)} "
+            "different point-in-time captures of "
+            "this window; nothing can decide which "
+            "of them T-20 pricing must read, and "
+            "they differ in "
+            + _describe_capture_conflict(
+                sorted(
+                    identities
+                )
+            )
+        )
+
+    return [
+        min(
+            candidates,
+            key=_canonical_json,
+        )
+    ]
+
+
 def select_capture_bundle(
     snapshot_dir: Path,
     *,
@@ -325,6 +596,13 @@ def select_capture_bundle(
         candidates.append(
             envelope
         )
+
+    candidates = (
+        _resolve_duplicate_scheduled_captures(
+            window_id,
+            candidates,
+        )
+    )
 
     if len(
         candidates

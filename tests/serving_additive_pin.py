@@ -34,14 +34,25 @@ PROJECT = Path(__file__).resolve().parents[1]
 
 #: The serving files an approved additive change may reach, each with the only
 #: functions whose bodies may differ. Mirrors
-#: ``ADDITIVE_ONLY_SERVING_ENTRY_POINTS``, ``ADDITIVE_ONLY_SERVING_SOURCES``
-#: and ``ADDITIVE_ONLY_SERVING_ORCHESTRATORS`` and their exempt-function
+#: ``ADDITIVE_ONLY_SERVING_ENTRY_POINTS``, ``ADDITIVE_ONLY_SERVING_SOURCES``,
+#: ``ADDITIVE_ONLY_SERVING_ORCHESTRATORS`` and
+#: ``ADDITIVE_ONLY_CAPTURE_SELECTION_SOURCES`` and their exempt-function
 #: lists; the branch-safety suite is what enforces the mapping, and this is
 #: how the numerical claims read it.
+#:
+#: ``prospective_snapshot.py`` is the fifth, and it is the one entry where
+#: byte-equality was reading a *correctness* claim as a numerical one. The
+#: module computes no probability and no price; it decides which
+#: point-in-time capture pricing may read, and requiring exactly one
+#: scheduled record per window made a window with two records permanently
+#: unpriceable. ``select_capture_bundle`` is the one function that may
+#: differ, so the digest functions every capture ever written is addressed by
+#: are held syntax-tree-identical here exactly as they are there.
 ADDITIVE_ONLY_SERVING_FILES: dict[str, tuple[str, ...]] = {
     "scripts/10_predict_slate.py": ("parse_args", "main"),
     "scripts/15_price_markets.py": ("parse_args", "main"),
     "src/nba_prop_quant/slate.py": ("build_upcoming_slate_features",),
+    "src/nba_prop_quant/prospective_snapshot.py": ("select_capture_bundle",),
     "ops/run_incumbent_production_serving.py": ("slate_readiness", "run"),
 }
 

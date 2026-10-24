@@ -148,6 +148,85 @@ ADDITIVE_ONLY_SERVING_SOURCES: tuple[str, ...] = (
     "src/nba_prop_quant/availability.py",
 )
 
+#: The serving source that *selects the capture*, and only additively.
+#:
+#: The sixth instance of the deadlock the carve-outs above resolved, and it is
+#: kept separate from the two serving sources above rather than added to them
+#: because its subject is not the same. Those two are about the numbers the
+#: fitted models are shown. This one is about which point-in-time snapshot
+#: pricing is allowed to read at all, which is upstream of every number and is
+#: the one thing this system must never get wrong.
+#:
+#: ``select_capture_bundle`` is the gate: it finds the scheduled captures of a
+#: window, requires exactly one, recomputes every component digest and the
+#: capture id, and refuses anything else. Requiring exactly one is right about
+#: what it was written for and cannot distinguish the only two things a second
+#: record can mean -- one capture recorded twice, and two captures of one
+#: window -- so it refused both, permanently, because the capture log is
+#: append-only and the second record never goes away.
+#:
+#: That is not hypothetical and it is the other half of the evening the
+#: capture carve-out above already records. On 2026-10-23 two sweeps recorded
+#: the 01:40Z window, serving raised ``21717943:T-20m: expected exactly one
+#: scheduled capture, found 2``, and the three games tipping at 02:00 UTC were
+#: captured, marked complete and never priced. The exclusive claim added
+#: there stops two sweeps recording one window again; it can do nothing for a
+#: record already on disk, and nothing for one arriving by a route no claim
+#: covers -- a replayed log, a restored backup concatenated onto the live
+#: file, a manual sweep, a second host, a network lock that silently does not
+#: lock. A deterministic reading of the log is the only thing that can, and
+#: ``select_capture_bundle`` is the only place the reading happens.
+#:
+#: So the module is declarable, on terms narrower than the two serving sources
+#: are held to, because what it decides is more dangerous than what they
+#: decide. :data:`CAPTURE_SELECTION_EXEMPT_FUNCTIONS` names the one function
+#: whose body may differ, every line production has must still be there, every
+#: other function in the module -- the canonical digest, the capture id, the
+#: component reader, the pre-tip check, the snapshot client and every accessor
+#: it serves records through -- is pinned syntax-tree-identical to production,
+#: every module constant is pinned too, and the one statement the exempt
+#: function may have gained is held to
+#: :data:`DECLARED_CAPTURE_RESOLUTION_NAMES`. In particular
+#: :func:`build_capture_id` and ``canonical_records_sha256`` are outside the
+#: exemption, so what identifies a capture cannot be redefined by the same
+#: branch that decides when two records denote one: a changed digest would
+#: invalidate every capture ever written.
+ADDITIVE_ONLY_CAPTURE_SELECTION_SOURCES: tuple[str, ...] = (
+    "src/nba_prop_quant/prospective_snapshot.py",
+)
+
+#: The only function in the declared capture-selection source whose body may
+#: differ from production. The selection, and nothing else: the error check,
+#: the component-digest recomputation, the capture-id recomputation, the
+#: target-game check and the pre-tip check all live inside it and all survive
+#: line for line, and every refusal the module states outside it is pinned.
+CAPTURE_SELECTION_EXEMPT_FUNCTIONS: tuple[str, ...] = (
+    "select_capture_bundle",
+)
+
+#: What a statement added to the capture selection is allowed to be about.
+#:
+#: The rule :data:`DECLARED_CAPTURE_SELECTION_NAMES` states, for the exemption
+#: whose subject is which of two records of one window is read. The way this
+#: exemption would widen is by coming to decide *between* captures rather than
+#: to recognise that two records are one, and the defence is that the added
+#: statement has to name this.
+#:
+#: It is one name and it narrows rather than chooses: it collapses records
+#: that agree on every field ``build_capture_id`` is derived from, plus the
+#: stored id and ``error_count``, to the lexicographically smallest of them,
+#: and refuses anything else with the message production already had plus the
+#: fields on which the records differ. It returns a sublist of what was read
+#: off disk, so nothing here can relabel, re-time, merge, synthesize or widen
+#: a capture, write one, or make an ineligible capture eligible -- every check
+#: in the function runs over the resolved record unchanged. It cannot name a
+#: probability, a price, an edge, an EV, a line or a route, and it does not
+#: write the capture log, which stays the append-only evidence that the
+#: duplicate happened.
+DECLARED_CAPTURE_RESOLUTION_NAMES: tuple[str, ...] = (
+    "_resolve_duplicate_scheduled_captures",
+)
+
 #: The only functions in a declared serving source whose bodies may differ
 #: from production. The live slate builder is where a feature the models
 #: require is produced; every prior, window, leakage guard and slate-date rule
@@ -870,6 +949,36 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: No workflow changes. The probe already decides whether the heavy job
 #: starts, so teaching it that an unpublished capture is work keeps the
 #: schedule the production branch runs byte-identical.
+#:
+#: The third defect is the first two read from the serving side, and it is
+#: why this branch also declares ``src/nba_prop_quant/prospective_snapshot.py``
+#: under a carve-out of its own. The claim stops two sweeps recording one
+#: window again and the ledger makes a captured-but-unpublished window
+#: recoverable; neither does anything for a window that already has two
+#: records, which is the state 2026-10-23 is still in, and neither does
+#: anything for a second record arriving by a route no claim covers -- a
+#: replayed log, a restored backup, a manual sweep, a second host, a network
+#: lock that silently does not lock. ``select_capture_bundle`` refuses any
+#: window with two records, so recovery through it refuses too.
+#:
+#: Two records can mean exactly two things and the refusal could not tell them
+#: apart. Records that agree on every field ``build_capture_id`` is derived
+#: from -- the instant, the window ids, the due game ids and all five
+#: component digests -- denote one point-in-time snapshot, so whichever is
+#: read the bundle is the same bundle, and they now collapse to the
+#: lexicographically smallest of them rather than refusing. Records that
+#: differ anywhere in that preimage denote two snapshots of one window, both
+#: genuine, with nothing in the data model saying which one T-20 pricing is
+#: entitled to read -- so those keep refusing, with the message production
+#: already had plus the fields they differ in.
+#:
+#: Nothing is relabelled, re-timed, merged, synthesized or widened by it: the
+#: resolution returns a sublist of the records read off disk and every
+#: eligibility check runs over the result unchanged, so a duplicate of a
+#: post-tip capture is still post-tip and a duplicate whose digests do not
+#: match the bytes on disk is still a hash mismatch. The capture log is not
+#: written, because it is the append-only evidence that the duplicate
+#: happened.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
         "ops/run_t20_production_controller.py": (
@@ -925,20 +1034,56 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
             "written -- and no probability, price, edge, EV, quantile, line, "
             "calibration or Gate 3 route is computed or changed"
         ),
+        "src/nba_prop_quant/prospective_snapshot.py": (
+            "a window with two records of one capture is now served rather "
+            "than refused for the rest of the slate's life, and a window "
+            "with records of two captures still refuses. select_capture_bundle "
+            "gains one statement, _resolve_duplicate_scheduled_captures, "
+            "which is declared capture resolution. Records that agree on "
+            "every field build_capture_id is derived from -- the instant, "
+            "the window ids, the due game ids and all five component digests "
+            "-- plus the stored capture id and error_count, denote one "
+            "point-in-time snapshot and collapse to the lexicographically "
+            "smallest canonical encoding among them, which is a stable total "
+            "order and therefore independent of file order, read order, dict "
+            "order and the clock; anything else refuses with the message "
+            "production already had plus how many captures the records "
+            "denote and which recorded facts differ. The preimage is "
+            "compared rather than the stored id, so a row carrying a copied "
+            "id over a different instant is a conflict rather than a "
+            "duplicate. Nothing is relabelled, re-timed, merged, "
+            "synthesized or widened and no capture is written: the "
+            "resolution returns a sublist of the records read off disk, the "
+            "capture log is not rewritten, and the error check, the "
+            "component-digest recomputation, the capture-id recomputation, "
+            "the target-game check and the pre-tip check all run over the "
+            "resolved record exactly as they ran before. No line production "
+            "has was removed or edited, every other function in the module "
+            "and every module constant is syntax-tree-identical to "
+            "production -- build_capture_id and canonical_records_sha256 "
+            "among them, so what identifies a capture is not redefined by "
+            "the change that decides when two records denote one -- and no "
+            "probability, price, edge, EV, quantile, line, distribution, "
+            "calibration, dependence coefficient, Gate 3 route or "
+            "publication rule is computed or changed"
+        ),
         "models/frozen_manifests/"
         "nba_prop_quant_v2_adaptive_serving_source_contract.json": (
-            "relocks scripts/11_collect_snapshots.py at the bytes above and "
-            "records the second reason that file diverges from the "
-            "historical reference, which is what this registry exists for: "
-            "its own purpose requires every difference to be enumerated and "
-            "justified in it. The historical reference hashes are untouched, "
-            "no locked file is dropped or added, the divergence count is "
-            "unchanged because the file was already a declared divergence, "
-            "the four serving sources locked at version 9 are unchanged, and "
-            "every invariant flag -- feature definitions, training feature "
-            "definitions, model mathematics, mean-model routing, marginal "
-            "family, calibration, dependence, Gate 3 routing, fitted "
-            "artifacts -- stays false"
+            "relocks scripts/11_collect_snapshots.py and "
+            "src/nba_prop_quant/prospective_snapshot.py at the bytes above "
+            "and records the reason each diverges from the historical "
+            "reference, which is what this registry exists for: its own "
+            "purpose requires every difference to be enumerated and "
+            "justified in it. The snapshot module is a new divergence, so "
+            "the divergence count goes from five to six and its "
+            "matches_historical_reference becomes false; the collector was "
+            "already a declared divergence and gains a second reason. The "
+            "historical reference hashes are untouched, no locked file is "
+            "dropped or added, the four serving sources locked at version 9 "
+            "are unchanged, and every invariant flag -- feature "
+            "definitions, training feature definitions, model mathematics, "
+            "mean-model routing, marginal family, calibration, dependence, "
+            "Gate 3 routing, fitted artifacts -- stays false"
         ),
         "models/frozen_manifests/"
         "nba_prop_quant_v2_adaptive_update_protocol.json": (
