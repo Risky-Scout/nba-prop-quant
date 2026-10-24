@@ -2287,6 +2287,201 @@ def test_a_segment_that_cannot_publish_a_capture_it_made_fails(tmp_path):
     ) == set()
 
 
+def replay_the_capture_log(world: World) -> None:
+    """Append every capture-run row of this slate again, byte for byte.
+
+    The duplicate 2026-10-23 is still in, reproduced by the route a claim
+    cannot cover: the envelope is repeated and the component rows are left
+    alone, so the two records carry one instant, one window set, one due-game
+    set and one set of component digests because they are one capture.
+    """
+    path = world.snapshot_dir / "capture_runs" / f"{SLATE}.jsonl"
+
+    lines = [
+        line
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+    with path.open("a", encoding="utf-8") as handle:
+        for line in lines:
+            handle.write(line + "\n")
+
+
+def test_a_window_recorded_twice_is_recovered_rather_than_stuck(tmp_path):
+    """The state the three lost games are still in, and the way out of it.
+
+    A captured-but-unpublished window is recoverable only if the capture can
+    be proved, and ``_verify_captured`` proves it with the pricing path's own
+    ``select_capture_bundle``. A second record of that capture used to make
+    that proof impossible for the rest of the slate's life, so the recovery
+    this controller gained had nothing to recover with: the probe asked for
+    the job, the job verified the capture, and the verification refused.
+
+    Both records are records of one capture, so the capture is proved and the
+    window reaches the feed. Nothing recaptures: the collector is not invoked
+    and the log still holds both rows afterwards.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0))]
+
+    world = captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    replay_the_capture_log(world)
+
+    capture_log = world.snapshot_dir / "capture_runs" / f"{SLATE}.jsonl"
+
+    before = capture_log.read_bytes()
+
+    recovery_clock = Clock(at(23, 50))
+
+    recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
+
+    write_morning_receipt(recovery)
+
+    receipt = build(
+        recovery,
+        clock=recovery_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    assert receipt["final_outcome"] == controller.OUTCOME_SEGMENT_COMPLETE
+
+    assert [
+        record["window_ids"] for record in receipt["recovered_windows"]
+    ] == [["101:T-20m"]]
+
+    assert receipt["captured_unserved_windows"] == []
+
+    assert [row["window_ids"] for row in served_records(recovery)] == [
+        ["101:T-20m"]
+    ]
+
+    # The capture the failed run took, not a later one.
+    bundle = receipt["recovered_windows"][0]["verified_bundles"][0]
+
+    assert bundle["captured_at_utc"] == at(22, 40).isoformat()
+
+    # No collector ran, and the append-only log is the log it was.
+    assert collector_commands(recovery) == []
+
+    assert capture_log.read_bytes() == before
+
+
+def test_recovering_a_duplicated_window_twice_yields_the_same_release(
+    tmp_path,
+):
+    """Idempotency over a log that has two records of one capture.
+
+    The second run has to read the duplicate the same way the first did,
+    otherwise a window could be published once per reading. It finds the
+    window recorded as served, has nothing pending, and leaves the slate with
+    the one release the first run published.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0))]
+
+    world = captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    replay_the_capture_log(world)
+
+    first_clock = Clock(at(23, 50))
+
+    first = World(tmp_path, schedules=[games], clock=first_clock)
+
+    write_morning_receipt(first)
+
+    build(
+        first,
+        clock=first_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    released = served_records(first)
+
+    second_clock = Clock(at(23, 55))
+
+    second = World(tmp_path, schedules=[games], clock=second_clock)
+
+    write_morning_receipt(second)
+
+    receipt = build(
+        second,
+        clock=second_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    assert receipt["final_outcome"] == controller.OUTCOME_NO_WINDOWS
+
+    assert second.commands == []
+
+    assert second.published == []
+
+    assert served_records(second) == released
+
+    assert [row["release_id"] for row in released] == ["release-1"]
+
+
+def test_two_captures_of_one_window_still_stop_the_recovery(tmp_path):
+    """And the refusal says which recorded facts the two differ in.
+
+    A second *capture* is not a second record of one capture. Both are
+    genuine point-in-time data, nothing in the data model says which one T-20
+    pricing is entitled to read, and a controller that published either would
+    be publishing a snapshot nobody chose. So recovery refuses, names the
+    outcome the capture is missing under, and carries the window out with it
+    so the run that abandons it says what it abandoned.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0))]
+
+    world = captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    # A second sweep of the same window a minute later: its own instant, its
+    # own component rows, its own digests.
+    write_capture(
+        world.snapshot_dir,
+        date=SLATE,
+        captured_at=at(22, 41).isoformat(),
+        window_ids=["101:T-20m"],
+        due_game_ids=[101],
+        games=[game(101, at(23, 0))],
+        props=[prop(101, 701)],
+    )
+
+    recovery_clock = Clock(at(23, 50))
+
+    recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
+
+    write_morning_receipt(recovery)
+
+    with pytest.raises(controller.ControllerRefused) as refusal:
+        build(
+            recovery,
+            clock=recovery_clock,
+            segment_start=SEGMENT_2[0],
+            segment_end=SEGMENT_2[1],
+        ).run()
+
+    assert refusal.value.outcome == controller.OUTCOME_REQUIRED_SNAPSHOT_MISSING
+
+    message = " ".join(str(refusal.value).split())
+
+    assert "2 different point-in-time captures" in message
+
+    assert "captured_at" in message
+
+    assert refusal.value.captured_unserved_windows == ["101:T-20m"]
+
+    assert served_records(recovery) == []
+
+
 def test_recovery_is_safe_to_run_twice(tmp_path):
     """A re-serve is idempotent: the second run finds nothing to do."""
     clock = Clock(at(19, 25))
