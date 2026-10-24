@@ -103,6 +103,13 @@ class Clock:
 
         self.slept: list[float] = []
 
+        #: The moments the controller woke up at, in order. Asserted on in
+        #: preference to :attr:`slept` wherever a test is about which windows
+        #: the controller came awake for, because the number of sleeps now
+        #: depends on how many advisory windows share the segment and the
+        #: moments do not.
+        self.woke: list[datetime] = []
+
     def __call__(self) -> datetime:
         return self.now
 
@@ -110,6 +117,8 @@ class Clock:
         self.slept.append(seconds)
 
         self.now = self.now + timedelta(seconds=seconds)
+
+        self.woke.append(self.now)
 
 
 class World:
@@ -132,6 +141,9 @@ class World:
         serving_outcome: str = "SERVED",
         feed_outcome: str = "PUBLISHED",
         collector_returncode: int = 0,
+        advisory_serving_outcome: str = "SERVED",
+        advisory_serving_returncode: int = 0,
+        advisory_feed_outcome: str = "PUBLISHED",
     ) -> None:
         self.data_root = tmp_path / "data"
 
@@ -155,13 +167,33 @@ class World:
 
         self.collector_returncode = collector_returncode
 
+        self.advisory_serving_outcome = advisory_serving_outcome
+
+        self.advisory_serving_returncode = advisory_serving_returncode
+
+        self.advisory_feed_outcome = advisory_feed_outcome
+
         self.commands: list[list[str]] = []
+
+        #: When each command in :attr:`commands` was issued, by the injected
+        #: clock. The reservation before a T-20 capture is a statement about
+        #: time, so proving it needs the time and not only the order.
+        self.command_times: list[datetime] = []
 
         self.schedule_reads: list[str] = []
 
         self.served: list[list[int]] = []
 
         self.published: list[list[int]] = []
+
+        # The advisory windows are recorded apart from the T-20 ones all the
+        # way through, so every assertion in this module about what production
+        # served and published stays an assertion about T-20. Mixing them into
+        # one list would make a test that says "the slate was served twice"
+        # quietly mean "something was served twice".
+        self.advisory_served: list[tuple[int, list[int]]] = []
+
+        self.advisory_published: list[tuple[str, str]] = []
 
     # -- injected collaborators ---------------------------------------
 
@@ -175,6 +207,8 @@ class World:
     def __call__(self, command, *, environment, cwd):
         self.commands.append(list(command))
 
+        self.command_times.append(self.clock())
+
         script = str(command[1])
 
         if script.endswith("11_collect_snapshots.py"):
@@ -182,6 +216,9 @@ class World:
 
         if script.endswith("run_incumbent_production_serving.py"):
             return self._serve(command)
+
+        if script.endswith("run_advisory_window_serving.py"):
+            return self._serve_advisory(command)
 
         if script.endswith("nba_distribution_publication.py"):
             return self._completed(command)
@@ -204,6 +241,10 @@ class World:
             for position, token in enumerate(command)
             if token == flag
         ]
+
+    @staticmethod
+    def _optional(command, flag):
+        return command[command.index(flag) + 1] if flag in command else None
 
     def _completed(self, command, *, returncode: int = 0, stdout: str = ""):
         import subprocess
@@ -300,12 +341,84 @@ class World:
 
         return self._completed(command)
 
+    def _serve_advisory(self, command):
+        """What ops/run_advisory_window_serving.py writes, in receipt shape.
+
+        A real receipt, built the way the real one is: the production outcome
+        and provenance ``build_receipt`` emits, plus the three advisory fields.
+        The served games are read out of the capture log at this window's own
+        offset, so the fake agrees with what was actually captured rather than
+        with the controller that asked for it.
+        """
+        offset = int(self._value(command, "--snapshot-offset-minutes"))
+
+        receipt_path = Path(self._value(command, "--receipt-path"))
+
+        served_ids = eligible_game_ids(
+            self.snapshot_dir, SLATE, offset_minutes=offset
+        )
+
+        self.advisory_served.append((offset, served_ids))
+
+        outcome = self.advisory_serving_outcome
+
+        if outcome == "SERVED" and not served_ids:
+            outcome = "NO_GAMES_ON_SLATE"
+
+        digest = hashlib.sha256(
+            json.dumps([offset, served_ids]).encode("utf-8")
+        ).hexdigest()
+
+        receipt_path.parent.mkdir(parents=True, exist_ok=True)
+
+        receipt_path.write_text(
+            json.dumps(
+                {
+                    "advisory": True,
+                    "advisory_capture_offset_minutes": offset,
+                    "advisory_capture_window_ids": self._values(
+                        command, "--capture-window-id"
+                    ),
+                    "outcome": outcome,
+                    "prediction_artifact": (
+                        {"sha256": digest} if outcome == "SERVED" else None
+                    ),
+                    "priced_market_artifact": (
+                        {"sha256": digest} if outcome == "SERVED" else None
+                    ),
+                    "served_game_ids": served_ids,
+                    "slate_date": self._value(command, "--slate-date"),
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        return self._completed(
+            command, returncode=self.advisory_serving_returncode
+        )
+
     def _publish(self, command):
         stage = self._value(command, "--stage")
 
         receipt_path = Path(self._value(command, "--receipt-path"))
 
         receipt_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # A named destination is how an advisory release is addressed and the
+        # T-20 release is published by not naming one, so this is the same
+        # distinction the controller makes.
+        feed_destination = self._optional(command, "--feed-destination-name")
+
+        page_destination = self._optional(command, "--page-destination-name")
+
+        if feed_destination or page_destination:
+            return self._publish_advisory(
+                command,
+                stage=stage,
+                receipt_path=receipt_path,
+                feed_destination=feed_destination,
+                page_destination=page_destination,
+            )
 
         if stage == "feed":
             served = json.loads(
@@ -342,6 +455,67 @@ class World:
                     "mode": self._value(command, "--mode"),
                     "slate_date": self._value(command, "--slate-date"),
                     "page_sha256": "0" * 64,
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        return self._completed(command)
+
+    def _publish_advisory(
+        self, command, *, stage, receipt_path, feed_destination, page_destination
+    ):
+        served = (
+            json.loads(
+                Path(
+                    self._value(command, "--serving-receipt")
+                ).read_text(encoding="utf-8")
+            )
+            if stage == "feed"
+            else {}
+        )
+
+        offset = int(served.get("advisory_capture_offset_minutes") or 0)
+
+        self.advisory_published.append(
+            (stage, str(feed_destination or page_destination))
+        )
+
+        if stage == "feed":
+            digest = str(
+                (served.get("priced_market_artifact") or {}).get("sha256") or ""
+            )
+
+            receipt_path.write_text(
+                json.dumps(
+                    {
+                        "mode": self._value(command, "--mode"),
+                        "outcome": self.advisory_feed_outcome,
+                        "published_game_ids": list(
+                            served.get("served_game_ids") or []
+                        ),
+                        "release": {
+                            "release_id": (
+                                f"nba_prop_quant_advisory_t{offset}m__{SLATE}__"
+                                + digest[:16]
+                            )
+                        },
+                        "slate_date": self._value(command, "--slate-date"),
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            return self._completed(command)
+
+        receipt_path.write_text(
+            json.dumps(
+                {
+                    "mode": self._value(command, "--mode"),
+                    "outcome": "PUBLISHED",
+                    "page_prefix": self._optional(command, "--page-prefix"),
+                    "page_sha256": "1" * 64,
+                    "slate_date": self._value(command, "--slate-date"),
                 }
             ),
             encoding="utf-8",
@@ -454,6 +628,18 @@ def served_records(world: World, *, slate_date: str = SLATE) -> list[dict]:
     ]
 
 
+def served_window_ids_for(
+    world: World, *, slate_date: str = SLATE
+) -> set[str]:
+    """Every T-20 window the durable ledger says a release carries."""
+    return controller.served_window_ids(
+        world.data_root
+        / "processed"
+        / "t20_served_windows"
+        / f"{slate_date}.jsonl"
+    )
+
+
 def build(
     world: World,
     *,
@@ -485,11 +671,52 @@ SEGMENT_2 = (at(19, 25), at(0, 25, day=21))
 SEGMENT_1 = (at(14, 25), at(19, 25))
 
 
-def collector_commands(world: World) -> list[list[str]]:
+def capture_commands(world: World) -> list[list[str]]:
+    """Every collector invocation, at whatever offset it asked for."""
     return [
         command
         for command in world.commands
         if str(command[1]).endswith("11_collect_snapshots.py")
+    ]
+
+
+def collector_commands(
+    world: World, *, offset_minutes: int = 20
+) -> list[list[str]]:
+    """The collector invocations at one offset, the production one by default.
+
+    Narrowed to an offset because the controller now captures the advisory
+    windows through the same collector. Every assertion in this module about
+    the production capture is an assertion about T-20 specifically, and
+    counting advisory invocations into it would make "one capture per due
+    group" mean something else.
+    """
+    wanted = str(int(offset_minutes))
+
+    return [
+        command
+        for command in capture_commands(world)
+        if "--offset-minutes" in command
+        and command[command.index("--offset-minutes") + 1] == wanted
+    ]
+
+
+def publication_commands(world: World, *, stage: str) -> list[list[str]]:
+    """The T-20 publication invocations at one stage.
+
+    An advisory release is addressed by naming its destination; the T-20
+    release is published by naming none, because its destination is the
+    mode's default. Filtering on that is what keeps every assertion in this
+    module about what production published an assertion about T-20.
+    """
+    return [
+        command
+        for command in world.commands
+        if str(command[1]).endswith("run_wizardofodds_publication.py")
+        and "--stage" in command
+        and command[command.index("--stage") + 1] == stage
+        and "--feed-destination-name" not in command
+        and "--page-destination-name" not in command
     ]
 
 
@@ -613,8 +840,20 @@ def test_one_due_game_is_one_capture(tmp_path):
 
     assert len(receipt["capture_ids"]) == 1
 
-    # Slept to the window rather than polling toward it.
-    assert clock.slept == [(at(22, 40) - at(19, 25)).total_seconds()]
+    # Slept to the window rather than polling toward it. Asserted as the
+    # total rather than as one sleep, because the advisory windows between
+    # 19:25 and 22:40 are what the controller wakes up for on the way, and
+    # what this test is about is that it was awake at 22:40 and not before.
+    assert sum(clock.slept) == (at(22, 40) - at(19, 25)).total_seconds()
+
+    assert receipt["captures"][0]["attempted_at_utc"] == at(22, 40).isoformat()
+
+    assert (
+        collector_commands(world)[0][
+            collector_commands(world)[0].index("--now-utc") + 1
+        ]
+        == at(22, 40).isoformat()
+    )
 
     # Served once, derived once, published once.
     assert len(receipt["serving_invocations"]) == 1
@@ -698,8 +937,17 @@ def test_each_unique_t20_time_is_its_own_capture(tmp_path):
     assert len(receipt["feed_publication_outcomes"]) == 3
 
 
-def test_production_schedules_only_the_t20_offset(tmp_path):
-    """Case 6: the six research windows are never scheduled by production."""
+def test_production_schedules_only_the_t20_and_advisory_offsets(tmp_path):
+    """Case 6: the research windows are never scheduled by production.
+
+    Narrower than it was, and stronger where it counts. It used to assert
+    that T-20 was the only window production ever captured, which stopped
+    being true when the early advisory windows were added. What it asserts
+    now is the part that was always the point: T-1440, T-480 and T-5 are
+    research windows and production schedules none of them, every capture is
+    taken at a named offset rather than at all of them, and T-20 is still the
+    only window that is served to the production canary.
+    """
     clock = Clock(at(19, 25))
 
     world = World(
@@ -714,36 +962,303 @@ def test_production_schedules_only_the_t20_offset(tmp_path):
 
     assert receipt["captures_completed"] == 1
 
-    for command in collector_commands(world):
-        assert "--offset-minutes" in command
+    # Every capture names exactly one offset. Omitting the flag is what
+    # selects every offset the schedule defines, which is what research and
+    # manual callers get and what production must never ask for.
+    requested = set()
 
-        assert command[command.index("--offset-minutes") + 1] == "20"
+    for command in capture_commands(world):
+        assert command.count("--offset-minutes") == 1
+
+        requested.add(int(command[command.index("--offset-minutes") + 1]))
+
+    assert requested == {20, 180, 90, 45}
 
     captured = controller.completed_window_ids(
         world.snapshot_dir / "capture_runs" / f"{SLATE}.jsonl"
     )
 
-    assert captured == {"101:T-20m"}
+    assert captured == {
+        "101:T-20m",
+        "101:T-180m",
+        "101:T-90m",
+        "101:T-45m",
+    }
 
     research = {
         f"101:T-{offset}m"
         for offset in CAPTURE_OFFSETS_MINUTES
-        if offset != 20
+        if offset != controller.PRODUCTION_OFFSET_MINUTES
+        and offset not in controller.ADVISORY_OFFSETS_MINUTES
     }
 
+    assert research == {"101:T-1440m", "101:T-480m", "101:T-5m"}
+
     assert not (captured & research)
+
+    # The production canary is served from the T-20 window and from nothing
+    # else: one serving invocation and one feed publication for the one T-20
+    # group, whatever the advisory windows did beside it.
+    assert len(receipt["serving_invocations"]) == 1
+
+    assert [record["outcome"] for record in receipt["feed_publication_outcomes"]] == [
+        "PUBLISHED"
+    ]
+
+    assert [offset for offset, _ in world.advisory_served] == [180, 90, 45]
 
     # And the capability itself is untouched.
     assert CAPTURE_OFFSETS_MINUTES == (1440, 480, 180, 90, 45, 20, 5)
 
 
+def advisory_commands(world: World) -> list[list[str]]:
+    """Every command the advisory path issued, serving and publication both."""
+    return [
+        command
+        for command in world.commands
+        if str(command[1]).endswith("run_advisory_window_serving.py")
+        or "--feed-destination-name" in command
+        or "--page-destination-name" in command
+    ]
+
+
+def test_a_segment_owning_no_t20_window_still_serves_its_advisory_windows(
+    tmp_path,
+):
+    """The early exit is about all three kinds of work, not just the T-20 one.
+
+    A segment that owns no T-20 window used to be the cheap no-op the probe
+    exists to make cheap, and two changes now have a claim on that branch:
+    one adds a captured-but-unserved window as work, the other adds advisory
+    windows. The afternoon segment of a normal slate is the case where only
+    the second applies -- it owns the first T-180 window of the evening and
+    nothing else -- and dropping that term from the condition would make it
+    exit green with the window uncaptured and nothing said about it.
+
+    A game tipping at 22:00 puts T-180 at 19:00, inside the 14:25 segment,
+    and leaves T-90, T-45 and T-20 to the 19:25 one.
+    """
+    clock = Clock(at(14, 25))
+
+    games = [game(101, at(22, 0))]
+
+    world = World(tmp_path, schedules=[games], clock=clock)
+
+    write_morning_receipt(world)
+
+    receipt = build(
+        world, clock=clock, segment_start=SEGMENT_1[0], segment_end=SEGMENT_1[1]
+    ).run()
+
+    assert receipt["t20_windows_in_segment"] == []
+
+    assert receipt["advisory_windows_in_segment"] == ["101:T-180m"]
+
+    assert receipt["final_outcome"] != controller.OUTCOME_NO_WINDOWS
+
+    # Captured at its own offset, and no T-20 capture was taken.
+    assert [
+        command[command.index("--offset-minutes") + 1]
+        for command in capture_commands(world)
+    ] == ["180"]
+
+    assert collector_commands(world) == []
+
+    # And served and published, through the advisory entry point.
+    assert [offset for offset, _ in world.advisory_served] == [180]
+
+    assert receipt["captures_completed"] == 0
+
+
+def test_an_advisory_window_publishes_to_its_own_destinations(tmp_path):
+    """Addressed by name, and never by the T-20 destination's name."""
+    clock = Clock(at(19, 25))
+
+    world = World(tmp_path, schedules=[[game(101, at(23, 0))]], clock=clock)
+
+    write_morning_receipt(world)
+
+    receipt = build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    ).run()
+
+    assert receipt["final_outcome"] == controller.OUTCOME_SEGMENT_COMPLETE
+
+    expected = []
+
+    for offset in controller.ADVISORY_OFFSETS_MINUTES:
+        expected += [
+            ("feed", controller.ADVISORY_FEED_DESTINATIONS[offset]),
+            ("page", controller.ADVISORY_PAGE_DESTINATIONS[offset]),
+        ]
+
+    assert world.advisory_published == expected
+
+    named = {name for _, name in world.advisory_published}
+
+    assert controller.T20_FEED_DESTINATION not in named
+
+    assert controller.T20_PAGE_DESTINATION not in named
+
+    # Each release id carries the offset it was captured at.
+    for offset in controller.ADVISORY_OFFSETS_MINUTES:
+        assert any(
+            f"advisory_t{offset}m" in release
+            for release in receipt["advisory_releases"]
+        ), receipt["advisory_releases"]
+
+    assert len(receipt["advisory_releases"]) == len(
+        controller.ADVISORY_OFFSETS_MINUTES
+    )
+
+    # And no advisory release id could be read as a T-20 one.
+    for release in receipt["advisory_releases"]:
+        assert release.startswith("nba_prop_quant_advisory_t")
+
+
+def test_no_advisory_work_interleaves_a_t20_serve_and_its_publication(tmp_path):
+    """The T-20 sequence is one uninterrupted run of commands.
+
+    The priced-markets parquet is one file per slate and both the T-20 path
+    and the advisory path rewrite it, so the T-20 serve, the derivation behind
+    its prices and its two publications have to be contiguous. The publisher
+    and the grader both re-hash that file against the receipt, so advisory
+    bytes could never be published or graded as T-20 -- but a serve
+    interrupted halfway would still fail the segment, which is the thing this
+    rules out.
+    """
+    clock = Clock(at(19, 25))
+
+    world = World(tmp_path, schedules=[[game(101, at(23, 0))]], clock=clock)
+
+    write_morning_receipt(world)
+
+    build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    ).run()
+
+    serve = next(
+        index
+        for index, command in enumerate(world.commands)
+        if str(command[1]).endswith("run_incumbent_production_serving.py")
+    )
+
+    page = max(
+        index
+        for index, command in enumerate(world.commands)
+        if command in publication_commands(world, stage="page")
+    )
+
+    assert serve < page
+
+    interleaved = [
+        command
+        for command in world.commands[serve : page + 1]
+        if command in advisory_commands(world)
+    ]
+
+    assert interleaved == []
+
+
+def test_an_advisory_serve_does_not_start_inside_the_t20_reservation(tmp_path):
+    """The one rule that keeps the advisory path from costing a T-20 window.
+
+    The T-45 window of the 23:00 game falls at 22:15, five minutes before the
+    22:20 T-20 window of the 22:40 game. Five minutes is inside the ten-minute
+    reservation, so that capture is still taken on the clock -- it is cheap and
+    it is the point-in-time market -- and its serving waits until the T-20
+    group is done.
+    """
+    clock = Clock(at(19, 25))
+
+    world = World(
+        tmp_path,
+        schedules=[[game(101, at(23, 0)), game(102, at(22, 40))]],
+        clock=clock,
+    )
+
+    write_morning_receipt(world)
+
+    receipt = build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    ).run()
+
+    reservation = timedelta(minutes=controller.T20_RESERVATION_MINUTES)
+
+    t20_due = [at(22, 20), at(22, 40)]
+
+    issued_at = dict(
+        zip(
+            [tuple(command) for command in world.commands],
+            world.command_times,
+            strict=True,
+        )
+    )
+
+    # The T-45 capture at 22:15 happened, on the clock, inside the reservation.
+    assert at(22, 15) in {
+        issued_at[tuple(command)]
+        for command in capture_commands(world)
+        if command[command.index("--offset-minutes") + 1] == "45"
+    }
+
+    # And no advisory serving or publication command was issued inside the
+    # reservation before either T-20 capture.
+    for command in advisory_commands(world):
+        issued = issued_at[tuple(command)]
+
+        for due in t20_due:
+            assert not (due - reservation <= issued < due), (
+                f"{command[1]} ran at {issued.isoformat()}, inside the "
+                f"reservation before the T-20 capture due at {due.isoformat()}"
+            )
+
+    # The held window was served once the T-20 group it was waiting on had
+    # been captured, which is what the reservation is for: it delays an
+    # advisory release and never drops one.
+    t20_capture = max(
+        index
+        for index, command in enumerate(world.commands)
+        if command in collector_commands(world)
+        and command[command.index("--now-utc") + 1] == at(22, 20).isoformat()
+    )
+
+    held = [
+        index
+        for index, command in enumerate(world.commands)
+        if str(command[1]).endswith("run_advisory_window_serving.py")
+        and command[command.index("--snapshot-offset-minutes") + 1] == "45"
+        and issued_at[tuple(command)] >= at(22, 15)
+    ]
+
+    assert held and min(held) > t20_capture
+
+    # Both T-20 windows were captured on time regardless.
+    assert receipt["captures_completed"] == 2
+
+    assert [capture["attempted_at_utc"] for capture in receipt["captures"]] == [
+        at(22, 20).isoformat(),
+        at(22, 40).isoformat(),
+    ]
+
+    # And the held window was served in the end rather than lost.
+    assert 45 in {offset for offset, _ in world.advisory_served}
+
+
 def test_an_already_completed_window_is_not_recaptured(tmp_path):
     """Case 7: the capture log is the authority on restart and retry.
 
-    The window is captured and no release carries it, so this run serves
-    and publishes it -- from the capture that already exists. What it must
-    not do, and does not do, is run the collector again: the window's T-20
-    time has passed and a snapshot taken now would be a snapshot of now.
+    Every window this segment owns is already in it, advisory included, so
+    the restart recaptures nothing: the capture log is one log and it is the
+    authority for all four windows.
+
+    It is no longer a no-op, which is the one claim here that the served-
+    window ledger took away. The T-20 window is captured and no release
+    carries it, so this run serves and publishes it from the capture that
+    already exists. What it must not do, and still does not do, is run the
+    collector again -- the window's T-20 time has passed and a snapshot taken
+    now would be a snapshot of now. The no-op case is the test below, where
+    publication has been recorded as well.
     """
     clock = Clock(at(19, 25))
 
@@ -753,21 +1268,29 @@ def test_an_already_completed_window_is_not_recaptured(tmp_path):
 
     write_morning_receipt(world)
 
-    write_capture(
-        world.snapshot_dir,
-        date=SLATE,
-        captured_at=at(22, 40).isoformat(),
-        window_ids=["101:T-20m"],
-        due_game_ids=[101],
-        games=games,
-        props=[prop(101, 601)],
-    )
+    for captured_at, window_id in (
+        (at(20, 0), "101:T-180m"),
+        (at(21, 30), "101:T-90m"),
+        (at(22, 15), "101:T-45m"),
+        (at(22, 40), "101:T-20m"),
+    ):
+        write_capture(
+            world.snapshot_dir,
+            date=SLATE,
+            captured_at=captured_at.isoformat(),
+            window_ids=[window_id],
+            due_game_ids=[101],
+            games=games,
+            props=[prop(101, 601)],
+        )
 
     receipt = build(
         world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
     ).run()
 
     assert receipt["already_completed_windows"] == ["101:T-20m"]
+
+    assert receipt["advisory_pending_windows"] == []
 
     assert collector_commands(world) == []
 
@@ -777,10 +1300,16 @@ def test_an_already_completed_window_is_not_recaptured(tmp_path):
 def test_a_window_a_release_already_carries_is_the_cheap_no_op(tmp_path):
     """Case 7 once publication has been recorded: there is nothing to do.
 
-    The same capture as above, with the durable statement that a release
-    carried it. Nothing runs at all -- no collector, no serving, no
-    publication -- which is what every later segment of a finished slate
-    has to cost.
+    The same four captures as above, with the durable statement that a
+    release carried the T-20 one. Nothing runs at all -- no collector, no
+    serving, no publication -- which is what every later segment of a
+    finished slate has to cost.
+
+    A finished slate means all four windows now, not just the T-20 one. The
+    advisory captures are written for the same reason the test above writes
+    them: a segment that owns three uncaptured advisory windows has work to
+    do whatever the T-20 window's state is, and the statement being made
+    here is about the segment that has none.
     """
     clock = Clock(at(19, 25))
 
@@ -790,15 +1319,21 @@ def test_a_window_a_release_already_carries_is_the_cheap_no_op(tmp_path):
 
     write_morning_receipt(world)
 
-    write_capture(
-        world.snapshot_dir,
-        date=SLATE,
-        captured_at=at(22, 40).isoformat(),
-        window_ids=["101:T-20m"],
-        due_game_ids=[101],
-        games=games,
-        props=[prop(101, 601)],
-    )
+    for captured_at, window_id in (
+        (at(20, 0), "101:T-180m"),
+        (at(21, 30), "101:T-90m"),
+        (at(22, 15), "101:T-45m"),
+        (at(22, 40), "101:T-20m"),
+    ):
+        write_capture(
+            world.snapshot_dir,
+            date=SLATE,
+            captured_at=captured_at.isoformat(),
+            window_ids=[window_id],
+            due_game_ids=[101],
+            games=games,
+            props=[prop(101, 601)],
+        )
 
     write_served_record(world, window_ids=["101:T-20m"])
 
@@ -811,6 +1346,8 @@ def test_a_window_a_release_already_carries_is_the_cheap_no_op(tmp_path):
     assert receipt["already_completed_windows"] == ["101:T-20m"]
 
     assert receipt["captured_unserved_windows"] == []
+
+    assert receipt["advisory_pending_windows"] == []
 
     assert world.commands == []
 
@@ -846,8 +1383,11 @@ def test_a_tip_that_moved_later_is_rescheduled(tmp_path):
 
     assert receipt["captures"][0]["due_at_utc"] == at(23, 10).isoformat()
 
-    # Slept to the original window, found the move, slept to the new one.
-    assert len(clock.slept) == 2
+    # Woke at the original window, found the move, slept to the new one and
+    # woke there last of all.
+    assert at(22, 40) in clock.woke
+
+    assert clock.woke[-1] == at(23, 10)
 
 
 def test_a_tip_that_moved_into_a_later_segment_is_deferred(tmp_path):
@@ -1046,11 +1586,9 @@ def test_serving_reporting_no_games_after_a_capture_is_a_failure(tmp_path):
     assert "about to be recorded as an empty one" in str(error.value)
 
     # And nothing was published behind it.
-    assert [
-        command
-        for command in world.commands
-        if str(command[1]).endswith("run_wizardofodds_publication.py")
-    ] == []
+    assert publication_commands(world, stage="feed") == []
+
+    assert publication_commands(world, stage="page") == []
 
 
 def test_a_refused_feed_publication_fails_the_segment(tmp_path):
@@ -1075,11 +1613,7 @@ def test_a_refused_feed_publication_fails_the_segment(tmp_path):
 
     assert error.value.outcome == controller.OUTCOME_FAILED
 
-    assert [
-        command
-        for command in world.commands
-        if "--stage" in command and command[command.index("--stage") + 1] == "page"
-    ] == []
+    assert publication_commands(world, stage="page") == []
 
 
 # ----------------------------------------------------------------------
@@ -1106,6 +1640,79 @@ def test_an_absent_morning_receipt_is_morning_production_not_ready(tmp_path):
     assert error.value.outcome == controller.OUTCOME_MORNING_NOT_READY
 
     assert world.commands == []
+
+
+def test_an_advisory_only_segment_degrades_when_the_morning_proves_nothing():
+    """A segment with nothing but advisory work must not turn the evening red.
+
+    The first half of the readiness guard. Before the advisory windows a
+    segment owning no T-20 window was a green no-op, and an advisory window
+    is a reading aid: a missing morning receipt is recorded as the advisory
+    failure it is and the segment still ends successfully, so the exit code
+    keeps saying what it said about production.
+    """
+    assert (
+        controller.OUTCOME_SEGMENT_COMPLETE_ADVISORY_DEGRADED
+        in controller.OUTCOMES_THAT_SUCCEED
+    )
+
+
+def test_a_readiness_refusal_is_not_degraded_while_a_capture_is_unserved(
+    tmp_path,
+):
+    """The other half, and the one the two changes had to agree on.
+
+    An unserved window is a T-20 window production is still missing, and
+    recovering it publishes a production release off a capture that already
+    exists. That needs the same verified incumbent a fresh capture does. So
+    the refusal stands here rather than being filed as an advisory failure:
+    degrading it would end the segment at an outcome that exits zero, with
+    the window still uncarried by any release and nothing saying so.
+
+    The segment has no pending T-20 window and no pending advisory window --
+    every one of the four was captured by the run that then died in serving
+    -- so the unserved window is the only thing keeping this out of the
+    degraded branch.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0))]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    recovery_clock = Clock(at(23, 50))
+
+    recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
+
+    # The failing run wrote one; removing it is how this segment gets the
+    # refusal under test, rather than by omitting a call whose effect the
+    # shared data root would keep anyway.
+    (
+        recovery.data_root / "processed" / "incumbent_serving" / f"{SLATE}.json"
+    ).unlink()
+
+    segment = build(
+        recovery,
+        clock=recovery_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    )
+
+    plan = segment.plan()
+
+    assert plan["pending_rows"] == []
+
+    assert plan["advisory_pending_rows"] == []
+
+    assert plan["captured_unserved_windows"] == ["101:T-20m"]
+
+    with pytest.raises(controller.ControllerRefused) as error:
+        segment.run()
+
+    assert error.value.outcome == controller.OUTCOME_MORNING_NOT_READY
+
+    # Nothing was served or published off an unproven incumbent on the way.
+    assert recovery.commands == []
 
 
 @pytest.mark.parametrize(
@@ -1563,10 +2170,18 @@ def test_the_lifecycle_workflow_still_owns_the_once_daily_work():
     """This change adds a scheduler; it does not move the heavy path."""
     lifecycle = LIFECYCLE_WORKFLOW.read_text(encoding="utf-8")
 
-    for entry_point in validator.T20_FORBIDDEN_ENTRY_POINTS:
+    for entry_point in validator.LIFECYCLE_ENTRY_POINTS:
         assert entry_point in lifecycle, entry_point
 
     assert "cron: '37 9 * * *'" in lifecycle
+
+    # The entry points the controller owns belong to neither workflow. They
+    # are forbidden in the T-20 workflow for a reason of their own, which is
+    # why they are a separate list rather than more of the lifecycle's work.
+    for entry_point in validator.CONTROLLER_OWNED_ENTRY_POINTS:
+        assert entry_point not in lifecycle, entry_point
+
+        assert entry_point not in T20_WORKFLOW.read_text(encoding="utf-8")
 
 
 def test_the_static_validator_covers_the_new_workflow():
@@ -1836,6 +2451,64 @@ def test_the_receipt_carries_everything_a_segment_must_record(tmp_path):
     )
 
 
+def test_the_reservation_leaves_the_capture_claim_clear_of_a_t20_sweep():
+    """The arithmetic behind the reservation, where the two changes meet.
+
+    The capture claim is an exclusive lock held across a whole collector
+    sweep, so a sweep that overruns delays the next one rather than racing
+    it. Before the advisory windows there was only ever one sweep per group;
+    now a segment can take an advisory capture in the gap before a T-20
+    capture it also owns, and the reservation is what keeps the two apart.
+
+    Three things have to hold at once, and each is a different bound:
+
+    * the reservation has to be a large multiple of what an advisory window
+      actually costs, or a window that ran a little long would eat into it;
+    * it has to stay under the twenty-five minutes between T-45 and T-20, or
+      every T-45 window whose T-20 the same segment owns would be deferred
+      and the T-45 release would reliably arrive after the T-20 one;
+    * and the measured cost has to fit inside the capture grace window, which
+      is the real bound on the claim. The reservation gates advisory
+      *serving*; an advisory *capture* may be taken at any time strictly
+      before the T-20 capture, because another game's T-45 can fall on the
+      same minute as this game's T-20. The claim is therefore held for one
+      collector invocation at worst, and the T-20 sweep behind it still has
+      to find the claim free inside its grace or refuse.
+
+    Pinned as arithmetic rather than left as prose because the third bound is
+    the one neither branch could state on its own.
+    """
+    reservation_seconds = controller.T20_RESERVATION_MINUTES * 60
+    measured = controller.ADVISORY_SWEEP_MEASURED_SECONDS
+
+    assert reservation_seconds >= 4 * measured, (
+        f"a {controller.T20_RESERVATION_MINUTES}-minute reservation is only "
+        f"{reservation_seconds / measured:.1f}x the measured {measured}s "
+        "advisory cycle, which is not enough room for a stage that runs long"
+    )
+
+    assert controller.T20_RESERVATION_MINUTES < 25, (
+        "a reservation of twenty-five minutes or more defers every T-45 "
+        "window whose T-20 the same segment owns, because that is the gap "
+        "between the two by definition"
+    )
+
+    # Read off the parser rather than restated, because this is the value the
+    # controller actually hands the collector as --grace-minutes.
+    grace_seconds = (
+        controller.parse_args(
+            ["--data-root", "/tmp", "--production-sha", "0" * 40]
+        ).grace_minutes
+        * 60
+    )
+
+    assert measured < grace_seconds, (
+        f"an advisory sweep measured at {measured}s does not clear the "
+        f"{grace_seconds}s capture grace, so a T-20 sweep waiting on the "
+        "claim behind it could refuse with its window uncaptured"
+    )
+
+
 # ----------------------------------------------------------------------
 # captured, and never published
 # ----------------------------------------------------------------------
@@ -2051,10 +2724,22 @@ def test_the_recovered_capture_is_the_one_the_failed_run_took(tmp_path):
 
     world = captured_but_unpublished(tmp_path, clock=clock, games=games)
 
-    captured = json.loads(
-        (world.snapshot_dir / "capture_runs" / f"{SLATE}.jsonl")
+    # The row naming the T-20 window, not the first row in the log. The
+    # segment takes its advisory captures before it reaches the T-20 one, so
+    # the log opens with T-180 and the first line stopped being the capture
+    # this test is about.
+    rows = [
+        json.loads(line)
+        for line in (world.snapshot_dir / "capture_runs" / f"{SLATE}.jsonl")
         .read_text(encoding="utf-8")
-        .splitlines()[0]
+        .splitlines()
+        if line.strip()
+    ]
+
+    captured = next(
+        row
+        for row in rows
+        if "101:T-20m" in (row.get("payload") or {}).get("window_ids", [])
     )
 
     recovery_clock = Clock(at(23, 50))
@@ -2524,6 +3209,605 @@ def test_recovery_is_safe_to_run_twice(tmp_path):
 
     # One release, from the first recovery, and one row recording it.
     assert len(served_records(first)) == 1
+
+
+# ----------------------------------------------------------------------
+# a window that can never be recovered costs only itself
+# ----------------------------------------------------------------------
+
+
+def conflict(tmp_path, *, games, window_id: str, game_id: int, captured_at):
+    """A second scheduled capture of one window, which is a real conflict.
+
+    Written at its own ``captured_at`` so no other window's component
+    digests move: ``_component_records`` groups by that timestamp, and a
+    duplicate sharing one would corrupt the capture it was meant to leave
+    alone. Both rows are genuine scheduled captures and the log is
+    append-only, so nothing can undo this -- which is the point.
+    """
+    return write_capture(
+        tmp_path / "data" / "snapshots",
+        date=SLATE,
+        captured_at=captured_at.isoformat(),
+        window_ids=[window_id],
+        due_game_ids=[game_id],
+        games=[dict(row) for row in games],
+        props=[prop(game_id, 600 + game_id)],
+    )
+
+
+def test_an_unrecoverable_window_does_not_cost_the_segment_its_own_captures(
+    tmp_path,
+):
+    """The blast radius of one capture production can never serve.
+
+    ``_recover`` verified every unserved window of the slate in one call and
+    raised on the first refusal, so one conflicted capture took the whole
+    segment with it: the pending T-20 windows of games that had not tipped
+    were never captured, and the advisory windows after them never ran. On
+    the 2026-10-24 slate the 19:25Z segment owns 27 of the 32 windows, so
+    one unservable capture existing by 15:25Z cost all 27.
+
+    The window itself is lost either way. What must not be lost with it is
+    everything the segment still could have done.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [
+        game(101, at(23, 0)),
+        game(102, at(23, 0), home=3, away=4),
+        game(103, at(0, 0, day=21), home=5, away=6),
+    ]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    conflict(
+        tmp_path,
+        games=games,
+        window_id="101:T-20m",
+        game_id=101,
+        captured_at=at(22, 45),
+    )
+
+    recovery_clock = Clock(at(23, 0))
+
+    recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
+
+    write_morning_receipt(recovery)
+
+    receipt = build(
+        recovery,
+        clock=recovery_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    # The one window nothing can serve, named with the reason selection
+    # refused it rather than as an anonymous count.
+    assert [
+        record["window_id"] for record in receipt["unrecoverable_windows"]
+    ] == ["101:T-20m"]
+
+    assert (
+        "expected exactly one scheduled capture"
+        in receipt["unrecoverable_windows"][0]["reason"]
+    )
+
+    # The segment's own T-20 window: captured, served and published.
+    assert "103:T-20m" in served_window_ids_for(recovery)
+
+    # The advisory window after it ran too.
+    assert "103:T-45m" in {
+        str(record["window_id"]) for record in receipt["advisory_windows"]
+    }
+
+    # Still fails closed, and still on the outcome that reaches the exit
+    # code: production is missing a window and that is not a success.
+    assert receipt["final_outcome"] == controller.OUTCOME_CAPTURED_NOT_SERVED
+
+    assert (
+        controller.OUTCOME_CAPTURED_NOT_SERVED
+        not in controller.OUTCOMES_THAT_SUCCEED
+    )
+
+
+def test_one_unrecoverable_window_does_not_discard_the_one_beside_it(
+    tmp_path,
+):
+    """Verification was a single call over every unserved window at once.
+
+    The first refusal ended it, so a window that would have verified was
+    discarded for being in the same batch as one that would not.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0)), game(102, at(23, 0), home=3, away=4)]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    conflict(
+        tmp_path,
+        games=games,
+        window_id="101:T-20m",
+        game_id=101,
+        captured_at=at(22, 45),
+    )
+
+    recovery_clock = Clock(at(23, 30))
+
+    recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
+
+    write_morning_receipt(recovery)
+
+    receipt = build(
+        recovery,
+        clock=recovery_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    # The recoverable one reached a release.
+    assert [
+        record["window_ids"] for record in receipt["recovered_windows"]
+    ] == [["102:T-20m"]]
+
+    assert "102:T-20m" in served_window_ids_for(recovery)
+
+    # The refusal names the other one, and only the other one.
+    assert [
+        record["window_id"] for record in receipt["unrecoverable_windows"]
+    ] == ["101:T-20m"]
+
+    assert receipt["captured_unserved_windows"] == ["101:T-20m"]
+
+    assert receipt["final_outcome"] == controller.OUTCOME_CAPTURED_NOT_SERVED
+
+
+def test_a_capture_serving_could_not_select_is_not_recorded_as_served(
+    tmp_path,
+):
+    """The ledger row says what the release it names actually carries.
+
+    ``_record_served_windows`` writes every T-20 window in the capture log,
+    on the stated grounds that a window serving could not have used would
+    have refused the run before reaching that line. Isolating the refusal
+    makes that false: the publication now happens *beside* a window
+    selection rejects. Recording it would claim a release carries a window
+    no release can carry, and -- worse -- would retire it from the unserved
+    set, turning the permanently missing window into a green segment.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0)), game(102, at(23, 0), home=3, away=4)]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    conflict(
+        tmp_path,
+        games=games,
+        window_id="101:T-20m",
+        game_id=101,
+        captured_at=at(22, 45),
+    )
+
+    recovery_clock = Clock(at(23, 30))
+
+    recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
+
+    write_morning_receipt(recovery)
+
+    build(
+        recovery,
+        clock=recovery_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    rows = [
+        row
+        for row in served_records(recovery)
+        if row["offset_minutes"] == 20
+    ]
+
+    assert rows, "the recoverable window should have produced a ledger row"
+
+    for row in rows:
+        assert "101:T-20m" not in row["window_ids"], (
+            "the ledger claims a release carries a window selection refuses"
+        )
+
+    assert controller.served_window_ids(
+        recovery.data_root
+        / "processed"
+        / "t20_served_windows"
+        / f"{SLATE}.jsonl"
+    ) == {"102:T-20m"}
+
+
+def test_a_post_tip_capture_is_isolated_the_way_a_conflict_is(tmp_path):
+    """A second permanent cause, to show the isolation is not conflict-shaped.
+
+    A capture taken after its game tipped is refused by a different check
+    than a duplicate is, and is just as permanent: the window is in the
+    past, so no later run can take a pre-tip capture of it.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0)), game(102, at(23, 0), home=3, away=4)]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    # 104 tips at 23:20 and nothing captured its T-20 window at 23:00,
+    # because the run that owned it died at 22:40. This is a capture of it
+    # taken after the game started.
+    late = game(104, at(23, 20), home=7, away=8)
+
+    with_late = [*games, late]
+
+    write_capture(
+        tmp_path / "data" / "snapshots",
+        date=SLATE,
+        captured_at=at(23, 25).isoformat(),
+        window_ids=["104:T-20m"],
+        due_game_ids=[104],
+        games=[dict(row) for row in with_late],
+        props=[prop(104, 704)],
+    )
+
+    recovery_clock = Clock(at(23, 40))
+
+    recovery = World(tmp_path, schedules=[with_late], clock=recovery_clock)
+
+    write_morning_receipt(recovery)
+
+    receipt = build(
+        recovery,
+        clock=recovery_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    unrecoverable = {
+        record["window_id"]: record["reason"]
+        for record in receipt["unrecoverable_windows"]
+    }
+
+    assert list(unrecoverable) == ["104:T-20m"]
+
+    assert "not pre-tip" in unrecoverable["104:T-20m"]
+
+    # The two windows beside it were served from the captures that existed.
+    assert served_window_ids_for(recovery) == {"101:T-20m", "102:T-20m"}
+
+    assert receipt["final_outcome"] == controller.OUTCOME_CAPTURED_NOT_SERVED
+
+
+def test_the_unrecoverable_window_stops_blocking_the_segments_after_it(
+    tmp_path,
+):
+    """The condition was sticky, and that is what made it expensive.
+
+    Every cause is permanent, so each later segment re-derived the same
+    unserved set, re-attempted the same doomed recovery and skipped its own
+    work in the same place. One conflicted capture at 15:25Z therefore cost
+    every segment for the rest of the slate, not only the one it appeared
+    in. Here the third segment of the day runs after the second has already
+    met the window and failed on it.
+    """
+    clock = Clock(at(19, 25))
+
+    # 104 tips late enough that its T-20 window belongs to the third
+    # segment, so the two runs below own genuinely different work.
+    games = [
+        game(101, at(23, 0)),
+        game(102, at(23, 0), home=3, away=4),
+        game(104, at(2, 0, day=21), home=5, away=6),
+    ]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    conflict(
+        tmp_path,
+        games=games,
+        window_id="101:T-20m",
+        game_id=101,
+        captured_at=at(22, 45),
+    )
+
+    second_clock = Clock(at(22, 50))
+
+    second_segment = World(tmp_path, schedules=[games], clock=second_clock)
+
+    write_morning_receipt(second_segment)
+
+    second_receipt = build(
+        second_segment,
+        clock=second_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    assert (
+        second_receipt["final_outcome"]
+        == controller.OUTCOME_CAPTURED_NOT_SERVED
+    )
+
+    # The third segment, over the same state. The window is still
+    # unrecoverable and still named, and this segment still does its own
+    # work rather than stopping where the last one stopped.
+    third_clock = Clock(at(0, 25, day=21))
+
+    third_segment = World(tmp_path, schedules=[games], clock=third_clock)
+
+    write_morning_receipt(third_segment)
+
+    receipt = build(
+        third_segment,
+        clock=third_clock,
+        segment_start=at(0, 25, day=21),
+        segment_end=at(5, 25, day=21),
+    ).run()
+
+    assert [
+        record["window_id"] for record in receipt["unrecoverable_windows"]
+    ] == ["101:T-20m"]
+
+    assert "104:T-20m" in served_window_ids_for(third_segment)
+
+    assert "104:T-45m" in {
+        str(record["window_id"]) for record in receipt["advisory_windows"]
+    }
+
+    assert receipt["final_outcome"] == controller.OUTCOME_CAPTURED_NOT_SERVED
+
+
+def test_a_recovery_that_cannot_publish_still_takes_the_capture_it_owns(
+    tmp_path,
+):
+    """The capture is the half of this that cannot be retried.
+
+    Recovery's second failure mode: the windows verify and the serving
+    stage refuses anyway. That refusal used to land before any collector
+    had run, so the segment lost the T-20 captures of games that had not
+    tipped. The market at T-20 exists once -- a publication can wait for
+    the next segment and a snapshot cannot -- so the refusal is deferred
+    until after the work rather than raised instead of it.
+
+    This is the shape the live slate is in until the serving half of the
+    defect is fixed: one capture selection cannot accept makes
+    ``ProspectiveSnapshotClient`` refuse the whole slate, so recovery's
+    serve fails for a reason the controller cannot do anything about.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [
+        game(101, at(23, 0)),
+        game(103, at(0, 0, day=21), home=5, away=6),
+    ]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    retry_clock = Clock(at(23, 0))
+
+    retry = World(
+        tmp_path,
+        schedules=[games],
+        clock=retry_clock,
+        serving_outcome="FAILED",
+    )
+
+    write_morning_receipt(retry)
+
+    with pytest.raises(controller.ControllerRefused) as refused:
+        build(
+            retry,
+            clock=retry_clock,
+            segment_start=SEGMENT_2[0],
+            segment_end=SEGMENT_2[1],
+        ).run()
+
+    # Deferred, never downgraded: the refusal keeps its own outcome.
+    assert refused.value.outcome == controller.OUTCOME_FAILED
+
+    assert refused.value.captured_unserved_windows == [
+        "101:T-20m",
+        "103:T-20m",
+    ]
+
+    # The window this segment owned was captured, which is what the early
+    # refusal used to cost. Serving still cannot publish it, so it is
+    # named above as unserved and a later run can still recover it.
+    assert "103:T-20m" in controller.completed_window_ids(
+        retry.snapshot_dir / "capture_runs" / f"{SLATE}.jsonl"
+    )
+
+
+class ServingFailsThenWorks(World):
+    """A world whose first production serve fails and whose later ones do not.
+
+    Recovery and the segment's own capture work serve through separate
+    invocations of the same entry point, and the case below is the one
+    where they differ: the serving failure that deferred the refusal is
+    gone by the time the capture is served, and the release that capture
+    publishes carries the recovered windows too.
+    """
+
+    def _serve(self, command):
+        self.serving_outcome = "FAILED" if not self.served else "SERVED"
+
+        return super()._serve(command)
+
+
+def test_a_deferred_refusal_the_later_release_resolved_is_not_raised(
+    tmp_path,
+):
+    """A deferred refusal is re-raised only while it is still true.
+
+    The slate is re-served whole after every capture, so a release
+    published later in the same segment carries the windows the earlier
+    recovery could not. Raising the deferred refusal anyway would fail a
+    segment that had in fact published everything, which is its own kind of
+    false report -- and the opposite error to the one being fixed here.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [
+        game(101, at(23, 0)),
+        game(103, at(0, 0, day=21), home=5, away=6),
+    ]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    retry_clock = Clock(at(23, 0))
+
+    retry = ServingFailsThenWorks(
+        tmp_path, schedules=[games], clock=retry_clock
+    )
+
+    write_morning_receipt(retry)
+
+    receipt = build(
+        retry,
+        clock=retry_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    # The recovery failure is reported rather than hidden ...
+    assert [
+        record["outcome"] for record in receipt["recovery_faults"]
+    ] == [controller.OUTCOME_FAILED]
+
+    # ... and is not raised, because the capture work's own release carries
+    # the window the failed recovery was about.
+    assert receipt["final_outcome"] == controller.OUTCOME_SEGMENT_COMPLETE
+
+    assert receipt["captured_unserved_windows"] == []
+
+    assert served_window_ids_for(retry) == {"101:T-20m", "103:T-20m"}
+
+
+def test_a_slate_with_nothing_recoverable_is_not_served_again(tmp_path):
+    """No window verified, so there is nothing to publish from.
+
+    Serving anyway would re-price and re-publish the slate's existing
+    release for no reason, minting a release that carries exactly what the
+    last one carried. The windows that caused it are recorded either way.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0))]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    conflict(
+        tmp_path,
+        games=games,
+        window_id="101:T-20m",
+        game_id=101,
+        captured_at=at(22, 45),
+    )
+
+    retry_clock = Clock(at(23, 50))
+
+    retry = World(tmp_path, schedules=[games], clock=retry_clock)
+
+    write_morning_receipt(retry)
+
+    receipt = build(
+        retry,
+        clock=retry_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    assert retry.served == []
+
+    assert retry.published == []
+
+    assert receipt["recovered_windows"] == []
+
+    assert [
+        record["window_id"] for record in receipt["unrecoverable_windows"]
+    ] == ["101:T-20m"]
+
+    assert receipt["final_outcome"] == controller.OUTCOME_CAPTURED_NOT_SERVED
+
+
+def test_the_receipt_says_which_unserved_windows_no_run_will_ever_serve(
+    tmp_path, monkeypatch
+):
+    """The reason string was actively misleading for a permanent cause.
+
+    It said the captures "stay exactly as they were taken; a later run will
+    serve and publish from them without recapturing", which is true of a
+    window waiting for a later run and false of a conflicted or post-tip
+    one. An operator reading it would wait for a recovery that can never
+    happen.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0)), game(102, at(23, 0), home=3, away=4)]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    conflict(
+        tmp_path,
+        games=games,
+        window_id="101:T-20m",
+        game_id=101,
+        captured_at=at(22, 45),
+    )
+
+    recovery_clock = Clock(at(23, 30))
+
+    recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
+
+    write_morning_receipt(recovery)
+
+    as_the_entry_point_sees_it(monkeypatch, recovery)
+
+    receipt_path = tmp_path / "receipt.json"
+
+    summary_path = tmp_path / "summary.md"
+
+    exit_code = controller.main(
+        [
+            "--data-root",
+            str(recovery.data_root),
+            "--production-sha",
+            PRODUCTION_SHA,
+            "--segment-start-utc",
+            SEGMENT_2[0].isoformat(),
+            "--segment-end-utc",
+            SEGMENT_2[1].isoformat(),
+            "--slate-date",
+            SLATE,
+            "--receipt-path",
+            str(receipt_path),
+            "--summary-path",
+            str(summary_path),
+        ]
+    )
+
+    assert exit_code == 1
+
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+
+    assert "101:T-20m" in receipt["reason"]
+
+    assert "no later run" in receipt["reason"]
+
+    # The misleading promise must not be made about this window.
+    assert "a later run will serve and publish from them" not in (
+        receipt["reason"]
+    )
+
+    summary = controller.render(receipt)
+
+    assert "101:T-20m" in summary
+
+    assert "expected exactly one scheduled capture" in summary
 
 
 def test_publication_is_recorded_on_publication_and_names_the_release(

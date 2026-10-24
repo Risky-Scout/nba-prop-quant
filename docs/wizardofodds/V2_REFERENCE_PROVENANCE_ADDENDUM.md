@@ -154,14 +154,34 @@ serving path, that the locked set is a superset of the historically pinned set,
 that every file matches its locked hash, and that editing any locked serving
 source is detected.
 
-### A deferred obligation, still open
+### The deferred obligation, discharged
 
-`scripts/19_build_wizardofodds_runtime_bundle.py` still verifies serving
-sources against the architecture reference alone, so building a runtime bundle
-from the corrected source would fail its frozen-source check. Teaching the
-bundle builder about this contract is a Step 3D deployment obligation.
-Expanding this contract does not resolve it, and a test asserts the limitation
-stays recorded rather than quietly dropped.
+`scripts/19_build_wizardofodds_runtime_bundle.py` verified serving sources
+against the architecture reference alone, so building a runtime bundle from
+the corrected source failed its frozen-source check. That check could not be
+satisfied by any tree capable of serving: two of the declared divergences add
+`--frozen-bundle-root`, without which the entry points resolve the frozen
+manifest against the working directory and no bundle can be used at all. The
+builder refused to package the only source that could consume its own output.
+
+The builder now reads this contract. Every locked serving source is pinned
+byte-exactly: a declared divergence to the `current_sha256` recorded here, and
+every other historically pinned file to the architecture reference as before.
+Eleven files are pinned where nine were, and the builder additionally requires
+that the contract still names the same anchor, that it still hashes the
+historical contract it claims not to amend, that each recorded
+`historical_reference_sha256` is still the anchor's bytes, that a file claimed
+to diverge genuinely differs from them and carries a justification, that a
+file not claimed to diverge does not differ, and that every invariant above is
+still asserted false. The round-trip check refuses a bundle in which any
+historically pinned file is absent from both verification blocks.
+
+The manifest therefore carries two source records.
+`frozen_model_source_verification` lists only what the anchor verified, so the
+three diverged scripts are deliberately absent from it and appear in
+`adaptive_serving_source_verification`. That is the residual hazard the
+contract's `known_limitation` now records: a reviewer reading only the first
+block would wrongly conclude those files shipped unpinned.
 
 ---
 

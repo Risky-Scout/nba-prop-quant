@@ -33,6 +33,7 @@ import pytest
 
 from nba_prop_quant.research.game_latent_state.safety import (
     ADDITIVE_ONLY_CAPTURE_SELECTION_SOURCES,
+    ADDITIVE_ONLY_NAMED_DESTINATIONS,
     ADDITIVE_ONLY_PAGE_CONSISTENCY_CHECKS,
     ADDITIVE_ONLY_PUBLICATION_TRANSPORTS,
     ADDITIVE_ONLY_SERVING_ENTRY_POINTS,
@@ -1186,6 +1187,97 @@ def assert_only_the_serving_entry_point_moved(
             )
 
 
+def assert_only_named_destinations_were_added(
+    relative: str, before: str, after: str
+) -> None:
+    """Nowhere production publishes to may move; somewhere new may be added.
+
+    The byte pin on this registry is right about every destination in it and
+    was reading the same for two different kinds of change: moving a
+    destination production already publishes to, and configuring somewhere
+    new. Only the first is what "the published record is frozen" is about, and
+    conflating them made the file unable to gain a destination at all, which
+    is the one thing a new publication stream needs.
+
+    So the pin is restated here in the form that distinguishes them, and it is
+    stronger than the byte comparison was once a file was allowed to differ:
+    every top-level key and every destination the production ref has must be
+    deeply equal, and an added destination must be a canary confined to a
+    non-empty subpath, with its own release prefix and a transport this file
+    itself declares supported. The two live destinations, the transport
+    allow-list and the contract version are therefore unmovable, and a live
+    destination cannot be added.
+    """
+    document_before = json.loads(before)
+
+    document_after = json.loads(after)
+
+    for key, value in document_before.items():
+        if key == "named_destinations":
+            continue
+
+        assert document_after.get(key) == value, (
+            f"{relative}:{key} is not what production has, and only added "
+            "named destinations may differ"
+        )
+
+    named_before = document_before.get("named_destinations") or {}
+
+    named_after = document_after.get("named_destinations") or {}
+
+    assert set(named_before) <= set(named_after), (
+        f"{relative} dropped {sorted(set(named_before) - set(named_after))}"
+    )
+
+    for name, declared in named_before.items():
+        assert named_after[name] == declared, (
+            f"{relative}:{name} is a destination production already "
+            "publishes to and may not move"
+        )
+
+    supported = set(document_after.get("supported_transports") or [])
+
+    reserved = {
+        str(declared.get("release_prefix") or "")
+        for declared in named_before.values()
+    }
+
+    for name in sorted(set(named_after) - set(named_before)):
+        declared = named_after[name]
+
+        assert declared.get("mode") == "canary", (
+            f"{relative}:{name} is added as {declared.get('mode')!r}; an "
+            "added destination may only be a canary, because a live "
+            "destination is an activation decision and not configuration"
+        )
+
+        subpath = str(declared.get("canary_subpath") or "")
+
+        assert subpath and not subpath.startswith("/"), (
+            f"{relative}:{name} declares canary_subpath {subpath!r}, so it "
+            "would resolve at or above the served root rather than confined "
+            "below it"
+        )
+
+        prefix = str(declared.get("release_prefix") or "")
+
+        assert prefix and prefix not in reserved, (
+            f"{relative}:{name} reuses the release prefix {prefix!r}, so its "
+            "releases would be indistinguishable from an existing stream's"
+        )
+
+        assert declared.get("transport") in supported, (
+            f"{relative}:{name} declares the transport "
+            f"{declared.get('transport')!r}, which this file does not list "
+            "as supported"
+        )
+
+        assert int(declared.get("retained_releases") or 0) >= 2, (
+            f"{relative}:{name} retains fewer than the two releases a "
+            "rollback target needs"
+        )
+
+
 #: Each declared file on the numerical list, and the stronger statement it is
 #: held to instead of its bytes. A module reaches this mapping by having a
 #: defect a byte pin makes unfixable while protecting nothing numerical, and
@@ -1195,6 +1287,7 @@ NARROWED_NUMERICAL_PINS: tuple[tuple[tuple[str, ...], object], ...] = (
     (ADDITIVE_ONLY_PAGE_CONSISTENCY_CHECKS, assert_only_the_page_consistency_check_moved),
     (ADDITIVE_ONLY_SERVING_SOURCES, assert_only_the_slate_builder_moved),
     (ADDITIVE_ONLY_SERVING_ENTRY_POINTS, assert_only_the_serving_entry_point_moved),
+    (ADDITIVE_ONLY_NAMED_DESTINATIONS, assert_only_named_destinations_were_added),
     (
         ADDITIVE_ONLY_CAPTURE_SELECTION_SOURCES,
         assert_only_the_capture_selection_moved,

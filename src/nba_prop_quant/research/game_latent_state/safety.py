@@ -539,6 +539,41 @@ ADDITIVE_ONLY_CAPTURE_ENTRY_POINTS: tuple[str, ...] = (
     "scripts/11_collect_snapshots.py",
 )
 
+#: The deployment-integrity tool under ``scripts/`` that packages the frozen
+#: model rather than computing anything with it.
+#:
+#: ``scripts/`` was undeclarable apart from the serving entry points and the
+#: collector, and the same conflation that made those unfixable made this one
+#: unfixable too: it reads the same for the numbers a script computes and the
+#: bytes a script verifies. This script computes nothing. Its own module
+#: docstring states it "performs no training, fitting, selection or
+#: recalibration, and it never contacts an external API", a test pins that it
+#: cannot reach the network at all, and nothing on the serving path imports
+#: it. What it does is verify and archive the already-frozen model, so the
+#: lifecycle has a bundle to install.
+#:
+#: It could not do that. It verified the nine files
+#: :data:`DECLARABLE_SERVING_SOURCE_REGISTRIES`' first entry locks against the
+#: architecture reference alone, and three of them had been corrected under
+#: that very registry, so every build refused. The refusal was unsatisfiable
+#: rather than merely strict: two of those corrections add the
+#: ``--frozen-bundle-root`` argument without which the entry points resolve
+#: the frozen manifest against the working directory, so the only tree able to
+#: serve was the one tree it would not package. The registry's own
+#: ``known_limitation`` named teaching this script about it as the deferred
+#: deployment obligation, and a declaration was the only reviewed way in.
+#:
+#: So it is declarable, and the carve-out is narrower in risk than the three
+#: before it, because the file is not on the serving path and holds no model
+#: state. The rest of ``scripts/`` remains undeclarable, and what this script
+#: may do with the registry is itself bounded: a library module under ``src/``
+#: that the historical runtime contract byte-pins can never be relocked, so
+#: the mathematics stays pinned to the architecture reference and no
+#: declaration here can move it.
+DECLARABLE_DEPLOYMENT_PACKAGING_TOOLS: tuple[str, ...] = (
+    "scripts/19_build_wizardofodds_runtime_bundle.py",
+)
+
 #: The only functions in the declared capture entry point whose bodies may
 #: differ from production. ``parse_args`` is where the offset argument is
 #: declared and ``main`` is where it narrows the due list; computing the
@@ -1101,6 +1136,47 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: happened.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
+        "ops/run_t20_production_controller.py": (
+            "the blast radius of a recovery that cannot succeed, narrowed to "
+            "the window it is about. _recover verified every unserved window "
+            "of the slate in one call and the first refusal raised, so one "
+            "capture selection can never accept took the segment with it: "
+            "the verifiable windows beside it, the pending T-20 captures of "
+            "games that had not tipped, and the advisory windows after them. "
+            "Every cause is permanent and every one is a correct refusal -- a "
+            "duplicate conflict, a post-tip capture, a component digest that "
+            "no longer matches the bytes, a recorded error_count -- so each "
+            "later segment re-derived the same unserved set and stopped in "
+            "the same place. "
+            "What changes: the per-game selection is split into "
+            "_select_capture, which returns the refusal instead of raising "
+            "it, so the two callers can differ. _verify_captured, which is "
+            "the caller for a capture the run has just taken, still raises "
+            "with the same outcome and the same message and is byte-for-byte "
+            "as loud as it was. _recover verifies one window at a time, "
+            "records each refusal with the selection's own reason, and "
+            "recovers the rest. The isolation is the verification and not "
+            "the publication because publication is not divisible -- the "
+            "serving entry point prices the whole slate -- and that costs "
+            "nothing, because the selection performed here is the selection "
+            "serving performs. A serving or publication stage that refuses "
+            "after the windows verified is deferred rather than discarded: "
+            "it leaves run() with its own outcome and its own message, after "
+            "the capture work instead of instead of it, and only while the "
+            "windows are still unserved. _record_served_windows subtracts "
+            "the windows this segment proved serving cannot select, which "
+            "keeps the row's claim true and keeps the lost window in the "
+            "unserved set rather than retiring it into a green segment. "
+            "What does not change: T20_CAPTURED_WINDOWS_UNSERVED, its "
+            "absence from OUTCOMES_THAT_SUCCEED and the non-zero exit; "
+            "every capture-path refusal; the duplicate-capture claim; the "
+            "advisory reservation, destinations and refusals; the cumulative "
+            "re-serving; and the order recovery runs in. Nothing is "
+            "repaired, relabelled, re-timed, merged or synthesised, no "
+            "unverified capture is published, no non-T-20 snapshot can stand "
+            "in for a T-20 one, and no model, calibration, price or routing "
+            "is reached from here"
+        ),
         "src/nba_prop_quant/prospective_snapshot.py": (
             "a window with two records of one capture is now served rather "
             "than refused for the rest of the slate's life, and a window "
@@ -1477,6 +1553,29 @@ SHADOW_OWNED_PRODUCTION_PATHS: Mapping[str, str] = MappingProxyType(
 #: production ref rather than trusting either mapping.
 ADDITIVE_ONLY_WORKFLOWS: tuple[str, ...] = (
     ".github/workflows/nba_production_lifecycle.yml",
+)
+
+#: The destination registry, declarable only for added named destinations.
+#:
+#: Same correction as the serving entry points above, in a different place.
+#: The registry was pinned by its bytes because it decides where a published
+#: record goes, and that is right about every destination in it -- but it read
+#: the same for two different kinds of change: moving a destination production
+#: already publishes to, and configuring somewhere new. Only the first is what
+#: the pin is about, and conflating them made the file permanently unable to
+#: gain a destination, which is the one thing a new publication stream needs
+#: and the only thing it needs.
+#:
+#: So it is declarable, under a rule stronger than the byte pin was once a
+#: file was allowed to differ at all: every top-level key and every
+#: destination the production ref has must be deeply equal, and an added
+#: destination must be a canary confined to a non-empty subpath of its served
+#: root, with its own release prefix and a transport the file itself declares
+#: supported. The two live destinations, the disabled live switch and the
+#: transport allow-list are therefore unmovable, and a live destination cannot
+#: be added at all.
+ADDITIVE_ONLY_NAMED_DESTINATIONS: tuple[str, ...] = (
+    "ops/wizardofodds_destinations.json",
 )
 
 
