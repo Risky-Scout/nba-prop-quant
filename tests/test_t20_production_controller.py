@@ -395,6 +395,65 @@ def write_morning_receipt(
     return path
 
 
+def write_served_record(
+    world: World,
+    *,
+    window_ids: list[str],
+    slate_date: str = SLATE,
+    release_id: str = "release-0",
+) -> Path:
+    """The durable statement that a published release carried these windows."""
+    path = (
+        world.data_root
+        / "processed"
+        / "t20_served_windows"
+        / f"{slate_date}.jsonl"
+    )
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(
+            json.dumps(
+                {
+                    "offset_minutes": 20,
+                    "page_sha256": "0" * 64,
+                    "priced_market_artifact_sha256": "1" * 64,
+                    "production_sha": PRODUCTION_SHA,
+                    "publication_mode": "canary",
+                    "publication_outcome": "PUBLISHED",
+                    "record_type": controller.SERVED_RECORD_TYPE,
+                    "recorded_at_utc": at(23, 0).isoformat(),
+                    "release_id": release_id,
+                    "slate_date": slate_date,
+                    "window_ids": list(window_ids),
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        )
+
+    return path
+
+
+def served_records(world: World, *, slate_date: str = SLATE) -> list[dict]:
+    path = (
+        world.data_root
+        / "processed"
+        / "t20_served_windows"
+        / f"{slate_date}.jsonl"
+    )
+
+    if not path.exists():
+        return []
+
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
 def build(
     world: World,
     *,
@@ -679,7 +738,13 @@ def test_production_schedules_only_the_t20_offset(tmp_path):
 
 
 def test_an_already_completed_window_is_not_recaptured(tmp_path):
-    """Case 7: the capture log is the authority on restart and retry."""
+    """Case 7: the capture log is the authority on restart and retry.
+
+    The window is captured and no release carries it, so this run serves
+    and publishes it -- from the capture that already exists. What it must
+    not do, and does not do, is run the collector again: the window's T-20
+    time has passed and a snapshot taken now would be a snapshot of now.
+    """
     clock = Clock(at(19, 25))
 
     games = [game(101, at(23, 0))]
@@ -702,9 +767,50 @@ def test_an_already_completed_window_is_not_recaptured(tmp_path):
         world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
     ).run()
 
+    assert receipt["already_completed_windows"] == ["101:T-20m"]
+
+    assert collector_commands(world) == []
+
+    assert receipt["final_outcome"] == controller.OUTCOME_SEGMENT_COMPLETE
+
+
+def test_a_window_a_release_already_carries_is_the_cheap_no_op(tmp_path):
+    """Case 7 once publication has been recorded: there is nothing to do.
+
+    The same capture as above, with the durable statement that a release
+    carried it. Nothing runs at all -- no collector, no serving, no
+    publication -- which is what every later segment of a finished slate
+    has to cost.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0))]
+
+    world = World(tmp_path, schedules=[games], clock=clock)
+
+    write_morning_receipt(world)
+
+    write_capture(
+        world.snapshot_dir,
+        date=SLATE,
+        captured_at=at(22, 40).isoformat(),
+        window_ids=["101:T-20m"],
+        due_game_ids=[101],
+        games=games,
+        props=[prop(101, 601)],
+    )
+
+    write_served_record(world, window_ids=["101:T-20m"])
+
+    receipt = build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    ).run()
+
     assert receipt["final_outcome"] == controller.OUTCOME_NO_WINDOWS
 
     assert receipt["already_completed_windows"] == ["101:T-20m"]
+
+    assert receipt["captured_unserved_windows"] == []
 
     assert world.commands == []
 
@@ -1728,3 +1834,613 @@ def test_the_receipt_carries_everything_a_segment_must_record(tmp_path):
     assert controller.render(receipt).startswith(
         "## NBA T-20 production controller"
     )
+
+
+# ----------------------------------------------------------------------
+# captured, and never published
+# ----------------------------------------------------------------------
+#
+# The 2026-10-23 defect, in the controller's own terms. A run captured the
+# 01:40Z window for three games and died in serving. The capture-run log
+# said the window was done, because that log is the only place completion
+# was ever recorded, so the next run's probe saw it under
+# already_completed_windows, had nothing pending, and exited a green no-op.
+# The three games were captured, marked complete, never priced, and absent
+# from the published feed without anything saying so.
+
+
+def captured_but_unpublished(tmp_path, *, clock, games):
+    """The state a run that captured and then died in serving leaves.
+
+    Produced by actually running the controller and actually failing the
+    serving step, rather than by writing the capture by hand: the whole
+    claim is about what the real sequence leaves on disk.
+    """
+    world = World(
+        tmp_path, schedules=[games], clock=clock, serving_outcome="FAILED"
+    )
+
+    write_morning_receipt(world)
+
+    with pytest.raises(controller.ControllerRefused):
+        build(
+            world,
+            clock=clock,
+            segment_start=SEGMENT_2[0],
+            segment_end=SEGMENT_2[1],
+        ).run()
+
+    return world
+
+
+def as_the_entry_point_sees_it(monkeypatch, world: World) -> None:
+    """Point the module-level collaborators at this world.
+
+    ``run`` and ``main`` build the controller themselves, so a test that
+    goes in through the entry point has to replace the schedule source and
+    the subprocess runner where the controller looks them up.
+    """
+    monkeypatch.setattr(controller, "_bdl_games", world.schedule_source)
+
+    monkeypatch.setattr(controller, "_run_subprocess", world)
+
+
+def test_a_capture_that_died_in_serving_is_visible_to_the_next_run(
+    tmp_path, monkeypatch
+):
+    """The state the probe could not see, and now reports by name.
+
+    ``already_completed_windows`` said the window was done and it was the
+    only thing said about it. The probe now distinguishes a window a
+    release carries from one that was merely captured, reports the second
+    under its own key, and asks for the full job rather than exiting a
+    no-op -- which is the only way the recovery below can ever be started
+    by the schedule.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0)), game(102, at(23, 0), home=3, away=4)]
+
+    world = captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    as_the_entry_point_sees_it(monkeypatch, world)
+
+    probe = controller.run(
+        controller.parse_args(
+            [
+                "--data-root",
+                str(world.data_root),
+                "--production-sha",
+                PRODUCTION_SHA,
+                "--segment-start-utc",
+                SEGMENT_2[0].isoformat(),
+                "--segment-end-utc",
+                SEGMENT_2[1].isoformat(),
+                "--slate-date",
+                SLATE,
+                "--probe-only",
+            ]
+        )
+    )
+
+    assert probe["already_completed_windows"] == ["101:T-20m", "102:T-20m"]
+
+    assert probe["pending_windows"] == []
+
+    # The distinction that did not exist: captured is not served.
+    assert probe["captured_unserved_windows"] == [
+        "101:T-20m",
+        "102:T-20m",
+    ]
+
+    assert probe["final_outcome"] == "T20_WORK_IN_SEGMENT"
+
+
+def test_the_probe_asks_for_the_job_when_only_recovery_is_outstanding(
+    tmp_path, monkeypatch
+):
+    """``t20_work`` is what the schedule reads, and recovery is work.
+
+    The workflow the production branch runs is unchanged: the probe already
+    decides whether the heavy job starts, and this teaches it that an
+    unpublished capture is a reason to start it.
+    """
+    clock = Clock(at(19, 25))
+
+    world = captured_but_unpublished(
+        tmp_path, clock=clock, games=[game(101, at(23, 0))]
+    )
+
+    as_the_entry_point_sees_it(monkeypatch, world)
+
+    output = tmp_path / "github_output"
+
+    exit_code = controller.main(
+        [
+            "--data-root",
+            str(world.data_root),
+            "--production-sha",
+            PRODUCTION_SHA,
+            "--segment-start-utc",
+            SEGMENT_2[0].isoformat(),
+            "--segment-end-utc",
+            SEGMENT_2[1].isoformat(),
+            "--slate-date",
+            SLATE,
+            "--probe-only",
+            "--github-output",
+            str(output),
+        ]
+    )
+
+    assert exit_code == 0
+
+    written = output.read_text(encoding="utf-8")
+
+    assert "t20_work=true" in written
+
+    assert "pending_windows=0" in written
+
+    assert "captured_unserved_windows=1" in written
+
+
+def test_a_later_run_recovers_the_capture_without_recapturing_it(tmp_path):
+    """Recovery is serving and publication, and nothing else.
+
+    No collector invocation, so no snapshot is taken, re-timed or
+    relabelled; the capture-run log is byte-identical to what the failed
+    run left. What runs is the selection pricing performs, then the same
+    serving and publication entry points, over the capture that already
+    exists.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0)), game(102, at(23, 0), home=3, away=4)]
+
+    world = captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    capture_log = (
+        world.snapshot_dir / "capture_runs" / f"{SLATE}.jsonl"
+    )
+
+    before = capture_log.read_bytes()
+
+    recovery_clock = Clock(at(23, 50))
+
+    recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
+
+    write_morning_receipt(recovery)
+
+    receipt = build(
+        recovery,
+        clock=recovery_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    assert receipt["final_outcome"] == controller.OUTCOME_SEGMENT_COMPLETE
+
+    # Nothing captured, and nothing slept for: the window is in the past.
+    assert collector_commands(recovery) == []
+
+    assert recovery_clock.slept == []
+
+    assert capture_log.read_bytes() == before
+
+    assert [
+        record["window_ids"] for record in receipt["recovered_windows"]
+    ] == [["101:T-20m", "102:T-20m"]]
+
+    # Both games reached a release, from the capture the failed run made.
+    assert recovery.published == [[101, 102]]
+
+    assert receipt["captured_unserved_windows"] == []
+
+
+def test_the_recovered_capture_is_the_one_the_failed_run_took(tmp_path):
+    """Recovery may not fabricate, re-time or relabel a snapshot.
+
+    The bundle the recovery serves is asserted to be the same capture id,
+    at the same captured_at, under the same window id as the one the failed
+    run wrote -- which is the invariant that separates recovering a window
+    from quietly replacing it with a later snapshot.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0))]
+
+    world = captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    captured = json.loads(
+        (world.snapshot_dir / "capture_runs" / f"{SLATE}.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()[0]
+    )
+
+    recovery_clock = Clock(at(23, 50))
+
+    recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
+
+    write_morning_receipt(recovery)
+
+    receipt = build(
+        recovery,
+        clock=recovery_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    bundle = receipt["recovered_windows"][0]["verified_bundles"][0]
+
+    assert bundle["window_id"] == "101:T-20m"
+
+    assert bundle["captured_at_utc"] == captured["captured_at"]
+
+    assert bundle["capture_id"] == captured["payload"]["capture_id"]
+
+    # And the capture is still the T-20 capture it always was: taken at the
+    # window, long before the run that published it.
+    assert bundle["captured_at_utc"] == at(22, 40).isoformat()
+
+
+def test_a_refusal_after_a_capture_names_what_it_is_abandoning(
+    tmp_path, monkeypatch
+):
+    """The receipt the losing run of 2026-10-23 should have written.
+
+    Serving fails with the capture already on disk. The refusal stands and
+    keeps its own outcome -- nothing is downgraded -- but the receipt and
+    the job summary now say which windows exist and are carried by no
+    release, where before the operator had to read the capture log against
+    the published feed to find out.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0)), game(102, at(23, 0), home=3, away=4)]
+
+    world = captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    retry_clock = Clock(at(23, 50))
+
+    retry = World(
+        tmp_path,
+        schedules=[games],
+        clock=retry_clock,
+        serving_outcome="FAILED",
+    )
+
+    write_morning_receipt(retry)
+
+    as_the_entry_point_sees_it(monkeypatch, retry)
+
+    receipt_path = tmp_path / "receipt.json"
+
+    summary_path = tmp_path / "summary.md"
+
+    exit_code = controller.main(
+        [
+            "--data-root",
+            str(retry.data_root),
+            "--production-sha",
+            PRODUCTION_SHA,
+            "--segment-start-utc",
+            SEGMENT_2[0].isoformat(),
+            "--segment-end-utc",
+            SEGMENT_2[1].isoformat(),
+            "--slate-date",
+            SLATE,
+            "--receipt-path",
+            str(receipt_path),
+            "--summary-path",
+            str(summary_path),
+        ]
+    )
+
+    assert exit_code == 1
+
+    failure = json.loads(receipt_path.read_text(encoding="utf-8"))
+
+    assert failure["final_outcome"] == controller.OUTCOME_FAILED
+
+    assert failure["captured_unserved_windows"] == [
+        "101:T-20m",
+        "102:T-20m",
+    ]
+
+    assert "captured but unserved: 101:T-20m, 102:T-20m" in (
+        summary_path.read_text(encoding="utf-8")
+    )
+
+    # The capture is still there to be recovered from, which is the whole
+    # reason for naming it.
+    assert world.snapshot_dir.joinpath(
+        "capture_runs", f"{SLATE}.jsonl"
+    ).exists()
+
+
+def test_a_completed_segment_with_an_unserved_capture_is_not_a_success(
+    tmp_path, monkeypatch
+):
+    """The post-condition behind the two paths above.
+
+    Every path that publishes also records, so this ending should be
+    unreachable -- which is exactly why it is asserted rather than assumed.
+    A publication that forgot to record would otherwise reach the end of a
+    segment, exit 0, and leave the next run reading the window as
+    unpublished for the rest of the slate's life.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0))]
+
+    world = World(tmp_path, schedules=[games], clock=clock)
+
+    write_morning_receipt(world)
+
+    monkeypatch.setattr(
+        controller.T20Controller,
+        "_record_served_windows",
+        lambda self, **kwargs: None,
+    )
+
+    receipt = build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    ).run()
+
+    assert receipt["final_outcome"] == controller.OUTCOME_CAPTURED_NOT_SERVED
+
+    assert receipt["captured_unserved_windows"] == ["101:T-20m"]
+
+    assert (
+        controller.OUTCOME_CAPTURED_NOT_SERVED
+        not in controller.OUTCOMES_THAT_SUCCEED
+    )
+
+
+def test_an_outcome_that_is_not_a_success_exits_non_zero(
+    tmp_path, monkeypatch
+):
+    """``OUTCOMES_THAT_SUCCEED`` has always said which endings succeed.
+
+    Nothing consulted it, so a segment that captured three games and
+    published none of them exited 0 all the same.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0))]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    recovery_clock = Clock(at(23, 50))
+
+    recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
+
+    write_morning_receipt(recovery)
+
+    as_the_entry_point_sees_it(monkeypatch, recovery)
+
+    monkeypatch.setattr(
+        controller.T20Controller,
+        "_record_served_windows",
+        lambda self, **kwargs: None,
+    )
+
+    receipt_path = tmp_path / "receipt.json"
+
+    exit_code = controller.main(
+        [
+            "--data-root",
+            str(recovery.data_root),
+            "--production-sha",
+            PRODUCTION_SHA,
+            "--segment-start-utc",
+            SEGMENT_2[0].isoformat(),
+            "--segment-end-utc",
+            SEGMENT_2[1].isoformat(),
+            "--slate-date",
+            SLATE,
+            "--receipt-path",
+            str(receipt_path),
+        ]
+    )
+
+    assert exit_code == 1
+
+    failure = json.loads(receipt_path.read_text(encoding="utf-8"))
+
+    assert failure["final_outcome"] == controller.OUTCOME_CAPTURED_NOT_SERVED
+
+
+def test_a_segment_that_cannot_publish_a_capture_it_made_fails(tmp_path):
+    """The same ending reached without a refusal, which is the harder case.
+
+    Here the capture succeeds, serving succeeds and the feed reports that
+    it published nothing. The controller refuses that today; what is new is
+    that the window it captured is recorded as unserved rather than as
+    completed, so the next run can still recover it.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0))]
+
+    world = World(
+        tmp_path, schedules=[games], clock=clock, feed_outcome="NOTHING"
+    )
+
+    write_morning_receipt(world)
+
+    with pytest.raises(controller.ControllerRefused):
+        build(
+            world,
+            clock=clock,
+            segment_start=SEGMENT_2[0],
+            segment_end=SEGMENT_2[1],
+        ).run()
+
+    assert served_records(world) == []
+
+    assert controller.served_window_ids(
+        world.data_root
+        / "processed"
+        / "t20_served_windows"
+        / f"{SLATE}.jsonl"
+    ) == set()
+
+
+def test_recovery_is_safe_to_run_twice(tmp_path):
+    """A re-serve is idempotent: the second run finds nothing to do."""
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0))]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    first_clock = Clock(at(23, 50))
+
+    first = World(tmp_path, schedules=[games], clock=first_clock)
+
+    write_morning_receipt(first)
+
+    build(
+        first,
+        clock=first_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    second_clock = Clock(at(23, 55))
+
+    second = World(tmp_path, schedules=[games], clock=second_clock)
+
+    write_morning_receipt(second)
+
+    receipt = build(
+        second,
+        clock=second_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    assert receipt["final_outcome"] == controller.OUTCOME_NO_WINDOWS
+
+    assert second.commands == []
+
+    assert second.published == []
+
+    # One release, from the first recovery, and one row recording it.
+    assert len(served_records(first)) == 1
+
+
+def test_publication_is_recorded_on_publication_and_names_the_release(
+    tmp_path,
+):
+    """What the durable row has to carry for a later run to trust it."""
+    clock = Clock(at(19, 25))
+
+    world = World(
+        tmp_path, schedules=[[game(101, at(23, 0))]], clock=clock
+    )
+
+    write_morning_receipt(world)
+
+    build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    ).run()
+
+    records = served_records(world)
+
+    assert len(records) == 1
+
+    row = records[0]
+
+    assert row["record_type"] == controller.SERVED_RECORD_TYPE
+
+    assert row["window_ids"] == ["101:T-20m"]
+
+    assert row["publication_outcome"] == "PUBLISHED"
+
+    assert row["publication_mode"] == "canary"
+
+    assert row["release_id"] == "release-1"
+
+    assert row["slate_date"] == SLATE
+
+    assert row["production_sha"] == PRODUCTION_SHA
+
+    assert row["offset_minutes"] == 20
+
+
+def test_each_group_records_what_the_release_it_published_carries(tmp_path):
+    """Two groups, two releases, and the second row names both windows.
+
+    The slate is re-served whole after every capture, so the release the
+    second group publishes carries the first group's game too. The row has
+    to say so, otherwise a later run would read the first game as
+    unpublished and recover something that was never lost.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(20, 0)), game(102, at(23, 0), home=3, away=4)]
+
+    world = World(tmp_path, schedules=[games], clock=clock)
+
+    write_morning_receipt(world)
+
+    receipt = build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    ).run()
+
+    assert receipt["final_outcome"] == controller.OUTCOME_SEGMENT_COMPLETE
+
+    records = served_records(world)
+
+    assert [row["window_ids"] for row in records] == [
+        ["101:T-20m"],
+        ["101:T-20m", "102:T-20m"],
+    ]
+
+    assert receipt["captured_unserved_windows"] == []
+
+
+def test_the_summary_table_states_both_halves_of_done(tmp_path):
+    """A reader of the job summary can see which windows are unpublished."""
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0))]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    recovery_clock = Clock(at(23, 50))
+
+    recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
+
+    write_morning_receipt(recovery)
+
+    receipt = build(
+        recovery,
+        clock=recovery_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    summary = controller.render(receipt)
+
+    assert "| recovered without recapture | 101:T-20m |" in summary
+
+    assert "| captured but unserved | none |" in summary
+
+
+def test_a_torn_ledger_line_does_not_hide_the_rows_before_it(tmp_path):
+    """The log is append-only and read the way the capture log is read."""
+    clock = Clock(at(19, 25))
+
+    world = World(
+        tmp_path, schedules=[[game(101, at(23, 0))]], clock=clock
+    )
+
+    path = write_served_record(world, window_ids=["101:T-20m"])
+
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write('{"record_type": "t20_windows_serv')
+
+    assert controller.served_window_ids(path) == {"101:T-20m"}
