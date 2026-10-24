@@ -199,6 +199,40 @@ def main() -> None:
             )
         )
 
+        # Games on this slate that have no servable scheduled capture. One
+        # game's capture being unselectable no longer costs the rest of the
+        # slate its predictions, which means the slate below can be short,
+        # and a short slate that says nothing is a worse failure than the
+        # abort it replaced. So the names are taken here, before anything
+        # reads the slate, and the run refuses on them below.
+        excluded_games = (
+            client.excluded_games()
+            if args.input_source
+            == "snapshot"
+            else {}
+        )
+
+        # The empty case has its own refusal because the one below it is a
+        # success path: with every game of the slate excluded there is
+        # nothing to project, and "No games found" would exit zero and read
+        # as a quiet evening rather than as a slate nothing could serve.
+        if (
+            excluded_games
+            and games.empty
+        ):
+            raise SystemExit(
+                "ERROR: no game on the "
+                f"{args.date} slate has a "
+                "servable scheduled capture. "
+                "Excluded: "
+                + "; ".join(
+                    f"{game_id}: {reason}"
+                    for game_id, reason in (
+                        excluded_games.items()
+                    )
+                )
+            )
+
         if games.empty:
             console.print(
                 f"[yellow]No games found "
@@ -723,6 +757,44 @@ def main() -> None:
             "[yellow]PREDEPLOYMENT SMOKE MODE: "
             "these projections are not external-test "
             "production records.[/yellow]"
+        )
+
+    # Last, and non-zero. The projections above are written first on
+    # purpose: they are every game that could be served, they cost a full
+    # slate build to produce, and an operator adjudicating the excluded
+    # captures with a tip approaching should not have to regenerate them.
+    # But the run is not a success. These projections are missing games,
+    # the pipeline behind this script publishes what it is given, and a
+    # published page that is short by a game and says nothing about it is
+    # the failure this names rather than risks. Exiting non-zero keeps the
+    # automated path exactly as closed as it was when one refusal aborted
+    # the client: the segment refuses and nothing is published. What is new
+    # is that the refusal names each game and the reason selection gave,
+    # instead of a traceback out of a dict comprehension.
+    if excluded_games:
+        for game_id, reason in (
+            excluded_games.items()
+        ):
+            console.print(
+                "[red]EXCLUDED FROM THIS "
+                f"SLATE: game {game_id}"
+                "[/red] -- "
+                f"{reason}"
+            )
+
+        raise SystemExit(
+            "ERROR: "
+            f"{len(excluded_games)} game(s) "
+            f"on the {args.date} slate have "
+            "no servable scheduled capture "
+            "and are absent from these "
+            "projections: "
+            + ", ".join(
+                str(game_id)
+                for game_id in (
+                    excluded_games
+                )
+            )
         )
 
 

@@ -551,7 +551,22 @@ def test_this_branch_changes_no_model_surface_path():
     Derived from git rather than from a list kept here, so a file added to the
     branch later cannot escape it. The declaration in safety.py is the review
     record; this is the arithmetic behind it.
+
+    Which is also why a declared path is not an offender. The arithmetic was
+    written for a branch whose claim was that it touched no model surface at
+    all, and that branch has landed. Read on every later branch as a blanket
+    ban it would refuse the one thing the adaptive protocol *requires* of a
+    branch that changes a locked serving source -- relocking the frozen
+    manifest that pins it -- and it would do so with no review record
+    consulted, which is the opposite of what this file's own docstring says
+    this test is. An undeclared model-surface path is still an offender, so
+    nothing escapes by being added; what a declaration buys is adjudication
+    by the carve-out pins rather than by a count of paths.
     """
+    from nba_prop_quant.research.game_latent_state.safety import (
+        DECLARED_INTEGRATION_PATHS,
+    )
+
     base = subprocess.run(
         [
             "git",
@@ -587,21 +602,26 @@ def test_this_branch_changes_no_model_surface_path():
     )
 
     offenders = [
-        path for path in changed if path.startswith(model_surface)
+        path
+        for path in changed
+        if path.startswith(model_surface)
+        and path not in DECLARED_INTEGRATION_PATHS
     ]
 
     assert offenders == [], (
         f"{offenders} is model surface: a fitted artifact, a frozen config, "
-        "a serving script or the release surface"
+        "a serving script or the release surface, and none of them is declared"
     )
 
-    # The only source module this branch may touch is the containment
-    # declaration itself, which computes nothing the model path reads.
+    # The only undeclared source module this branch may touch is the
+    # containment declaration itself, which computes nothing the model path
+    # reads.
     sources = [
         path
         for path in changed
         if path.startswith("src/")
         and path != "src/nba_prop_quant/research/game_latent_state/safety.py"
+        and path not in DECLARED_INTEGRATION_PATHS
     ]
 
     assert sources == []

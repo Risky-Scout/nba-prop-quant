@@ -3471,16 +3471,38 @@ def captured_but_unpublished(tmp_path, *, clock, games):
     return world
 
 
-def as_the_entry_point_sees_it(monkeypatch, world: World) -> None:
+def as_the_entry_point_sees_it(
+    monkeypatch, world: World, *, clock: Clock | None = None
+) -> None:
     """Point the module-level collaborators at this world.
 
     ``run`` and ``main`` build the controller themselves, so a test that
     goes in through the entry point has to replace the schedule source and
     the subprocess runner where the controller looks them up.
+
+    ``clock`` replaces the wall clock the entry point would otherwise build
+    the controller with. Required by any test whose subject depends on where
+    now sits relative to a tip: the fixture slate is a fixed day in the past,
+    so under the real clock every one of its games has tipped and the
+    post-tip publication guard decides the whole run.
     """
     monkeypatch.setattr(controller, "_bdl_games", world.schedule_source)
 
     monkeypatch.setattr(controller, "_run_subprocess", world)
+
+    if clock is None:
+        return
+
+    # A subclass rather than a factory function, so a test that goes on to
+    # patch a method of ``controller.T20Controller`` still patches something
+    # the instances the entry point builds inherit from.
+    class WithInjectedClock(controller.T20Controller):
+        def __init__(self, **kwargs):
+            super().__init__(
+                **{**kwargs, "clock": clock, "sleep": clock.sleep}
+            )
+
+    monkeypatch.setattr(controller, "T20Controller", WithInjectedClock)
 
 
 def test_a_capture_that_died_in_serving_is_visible_to_the_next_run(
@@ -3603,7 +3625,7 @@ def test_a_later_run_recovers_the_capture_without_recapturing_it(tmp_path):
 
     before = capture_log.read_bytes()
 
-    recovery_clock = Clock(at(23, 50))
+    recovery_clock = Clock(at(22, 50))
 
     recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
 
@@ -3667,7 +3689,7 @@ def test_the_recovered_capture_is_the_one_the_failed_run_took(tmp_path):
         if "101:T-20m" in (row.get("payload") or {}).get("window_ids", [])
     )
 
-    recovery_clock = Clock(at(23, 50))
+    recovery_clock = Clock(at(22, 50))
 
     recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
 
@@ -3689,7 +3711,7 @@ def test_the_recovered_capture_is_the_one_the_failed_run_took(tmp_path):
     assert bundle["capture_id"] == captured["payload"]["capture_id"]
 
     # And the capture is still the T-20 capture it always was: taken at the
-    # window, long before the run that published it.
+    # window, by the run before the one that published it.
     assert bundle["captured_at_utc"] == at(22, 40).isoformat()
 
 
@@ -3710,7 +3732,7 @@ def test_a_refusal_after_a_capture_names_what_it_is_abandoning(
 
     world = captured_but_unpublished(tmp_path, clock=clock, games=games)
 
-    retry_clock = Clock(at(23, 50))
+    retry_clock = Clock(at(22, 50))
 
     retry = World(
         tmp_path,
@@ -3721,7 +3743,7 @@ def test_a_refusal_after_a_capture_names_what_it_is_abandoning(
 
     write_morning_receipt(retry)
 
-    as_the_entry_point_sees_it(monkeypatch, retry)
+    as_the_entry_point_sees_it(monkeypatch, retry, clock=retry_clock)
 
     receipt_path = tmp_path / "receipt.json"
 
@@ -3821,13 +3843,13 @@ def test_an_outcome_that_is_not_a_success_exits_non_zero(
 
     captured_but_unpublished(tmp_path, clock=clock, games=games)
 
-    recovery_clock = Clock(at(23, 50))
+    recovery_clock = Clock(at(22, 50))
 
     recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
 
     write_morning_receipt(recovery)
 
-    as_the_entry_point_sees_it(monkeypatch, recovery)
+    as_the_entry_point_sees_it(monkeypatch, recovery, clock=recovery_clock)
 
     monkeypatch.setattr(
         controller.T20Controller,
@@ -3897,15 +3919,108 @@ def test_a_segment_that_cannot_publish_a_capture_it_made_fails(tmp_path):
     ) == set()
 
 
-def test_recovery_is_safe_to_run_twice(tmp_path):
-    """A re-serve is idempotent: the second run finds nothing to do."""
+def replay_the_capture_log(world: World) -> None:
+    """Append every capture-run row of this slate again, byte for byte.
+
+    The duplicate 2026-10-23 is still in, reproduced by the route a claim
+    cannot cover: the envelope is repeated and the component rows are left
+    alone, so the two records carry one instant, one window set, one due-game
+    set and one set of component digests because they are one capture.
+    """
+    path = world.snapshot_dir / "capture_runs" / f"{SLATE}.jsonl"
+
+    lines = [
+        line
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+    with path.open("a", encoding="utf-8") as handle:
+        for line in lines:
+            handle.write(line + "\n")
+
+
+def test_a_window_recorded_twice_is_recovered_rather_than_stuck(tmp_path):
+    """The state the three lost games are still in, and the way out of it.
+
+    A captured-but-unpublished window is recoverable only if the capture can
+    be proved, and ``_verify_captured`` proves it with the pricing path's own
+    ``select_capture_bundle``. A second record of that capture used to make
+    that proof impossible for the rest of the slate's life, so the recovery
+    this controller gained had nothing to recover with: the probe asked for
+    the job, the job verified the capture, and the verification refused.
+
+    Both records are records of one capture, so the capture is proved and the
+    window reaches the feed. Nothing recaptures: the collector is not invoked
+    and the log still holds both rows afterwards.
+    """
     clock = Clock(at(19, 25))
 
     games = [game(101, at(23, 0))]
 
-    captured_but_unpublished(tmp_path, clock=clock, games=games)
+    world = captured_but_unpublished(tmp_path, clock=clock, games=games)
 
-    first_clock = Clock(at(23, 50))
+    replay_the_capture_log(world)
+
+    capture_log = world.snapshot_dir / "capture_runs" / f"{SLATE}.jsonl"
+
+    before = capture_log.read_bytes()
+
+    recovery_clock = Clock(at(22, 50))
+
+    recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
+
+    write_morning_receipt(recovery)
+
+    receipt = build(
+        recovery,
+        clock=recovery_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    assert receipt["final_outcome"] == controller.OUTCOME_SEGMENT_COMPLETE
+
+    assert [
+        record["window_ids"] for record in receipt["recovered_windows"]
+    ] == [["101:T-20m"]]
+
+    assert receipt["captured_unserved_windows"] == []
+
+    assert [row["window_ids"] for row in served_records(recovery)] == [
+        ["101:T-20m"]
+    ]
+
+    # The capture the failed run took, not a later one.
+    bundle = receipt["recovered_windows"][0]["verified_bundles"][0]
+
+    assert bundle["captured_at_utc"] == at(22, 40).isoformat()
+
+    # No collector ran, and the append-only log is the log it was.
+    assert collector_commands(recovery) == []
+
+    assert capture_log.read_bytes() == before
+
+
+def test_recovering_a_duplicated_window_twice_yields_the_same_release(
+    tmp_path,
+):
+    """Idempotency over a log that has two records of one capture.
+
+    The second run has to read the duplicate the same way the first did,
+    otherwise a window could be published once per reading. It finds the
+    window recorded as served, has nothing pending, and leaves the slate with
+    the one release the first run published.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0))]
+
+    world = captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    replay_the_capture_log(world)
+
+    first_clock = Clock(at(22, 50))
 
     first = World(tmp_path, schedules=[games], clock=first_clock)
 
@@ -3918,7 +4033,119 @@ def test_recovery_is_safe_to_run_twice(tmp_path):
         segment_end=SEGMENT_2[1],
     ).run()
 
-    second_clock = Clock(at(23, 55))
+    released = served_records(first)
+
+    second_clock = Clock(at(22, 55))
+
+    second = World(tmp_path, schedules=[games], clock=second_clock)
+
+    write_morning_receipt(second)
+
+    receipt = build(
+        second,
+        clock=second_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    assert receipt["final_outcome"] == controller.OUTCOME_NO_WINDOWS
+
+    assert second.commands == []
+
+    assert second.published == []
+
+    assert served_records(second) == released
+
+    assert [row["release_id"] for row in released] == ["release-1"]
+
+
+def test_two_captures_of_one_window_still_stop_the_recovery(tmp_path):
+    """And the refusal says which recorded facts the two differ in.
+
+    A second *capture* is not a second record of one capture. Both are
+    genuine point-in-time data, nothing in the data model says which one T-20
+    pricing is entitled to read, and a controller that published either would
+    be publishing a snapshot nobody chose. So recovery refuses, records the
+    window with the reason the selection gave, carries it out under
+    ``captured_unserved_windows``, and ends the segment on the outcome that
+    is not a success -- which is how a refusal that costs only its own window
+    still says what it abandoned.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0))]
+
+    world = captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    # A second sweep of the same window a minute later: its own instant, its
+    # own component rows, its own digests.
+    write_capture(
+        world.snapshot_dir,
+        date=SLATE,
+        captured_at=at(22, 41).isoformat(),
+        window_ids=["101:T-20m"],
+        due_game_ids=[101],
+        games=[game(101, at(23, 0))],
+        props=[prop(101, 701)],
+    )
+
+    recovery_clock = Clock(at(23, 50))
+
+    recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
+
+    write_morning_receipt(recovery)
+
+    receipt = build(
+        recovery,
+        clock=recovery_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    assert [
+        record["window_id"] for record in receipt["unrecoverable_windows"]
+    ] == ["101:T-20m"]
+
+    reason = " ".join(receipt["unrecoverable_windows"][0]["reason"].split())
+
+    assert "2 different point-in-time captures" in reason
+
+    assert "captured_at" in reason
+
+    assert receipt["captured_unserved_windows"] == ["101:T-20m"]
+
+    assert receipt["final_outcome"] == controller.OUTCOME_CAPTURED_NOT_SERVED
+
+    assert (
+        controller.OUTCOME_CAPTURED_NOT_SERVED
+        not in controller.OUTCOMES_THAT_SUCCEED
+    )
+
+    assert served_records(recovery) == []
+
+
+def test_recovery_is_safe_to_run_twice(tmp_path):
+    """A re-serve is idempotent: the second run finds nothing to do."""
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0))]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    first_clock = Clock(at(22, 50))
+
+    first = World(tmp_path, schedules=[games], clock=first_clock)
+
+    write_morning_receipt(first)
+
+    build(
+        first,
+        clock=first_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    second_clock = Clock(at(22, 55))
 
     second = World(tmp_path, schedules=[games], clock=second_clock)
 
@@ -3999,7 +4226,7 @@ def test_an_unrecoverable_window_does_not_cost_the_segment_its_own_captures(
         captured_at=at(22, 45),
     )
 
-    recovery_clock = Clock(at(23, 0))
+    recovery_clock = Clock(at(22, 50))
 
     recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
 
@@ -4063,7 +4290,7 @@ def test_one_unrecoverable_window_does_not_discard_the_one_beside_it(
         captured_at=at(22, 45),
     )
 
-    recovery_clock = Clock(at(23, 30))
+    recovery_clock = Clock(at(22, 50))
 
     recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
 
@@ -4120,7 +4347,7 @@ def test_a_capture_serving_could_not_select_is_not_recorded_as_served(
         captured_at=at(22, 45),
     )
 
-    recovery_clock = Clock(at(23, 30))
+    recovery_clock = Clock(at(22, 50))
 
     recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
 
@@ -4167,24 +4394,27 @@ def test_a_post_tip_capture_is_isolated_the_way_a_conflict_is(tmp_path):
 
     captured_but_unpublished(tmp_path, clock=clock, games=games)
 
-    # 104 tips at 23:20 and nothing captured its T-20 window at 23:00,
-    # because the run that owned it died at 22:40. This is a capture of it
-    # taken after the game started.
-    late = game(104, at(23, 20), home=7, away=8)
+    # 104 tips at 22:20 and nothing captured its T-20 window at 22:00,
+    # because the run that owned it never saw it on the schedule. This is a
+    # capture of it taken after the game started.
+    late = game(104, at(22, 20), home=7, away=8)
 
     with_late = [*games, late]
 
     write_capture(
         tmp_path / "data" / "snapshots",
         date=SLATE,
-        captured_at=at(23, 25).isoformat(),
+        captured_at=at(22, 25).isoformat(),
         window_ids=["104:T-20m"],
         due_game_ids=[104],
         games=[dict(row) for row in with_late],
         props=[prop(104, 704)],
     )
 
-    recovery_clock = Clock(at(23, 40))
+    # Before the two games beside it tip, so this is a test about the
+    # capture selection refuses and not about the post-tip publication
+    # guard, which would otherwise refuse all three windows at once.
+    recovery_clock = Clock(at(22, 50))
 
     recovery = World(tmp_path, schedules=[with_late], clock=recovery_clock)
 
@@ -4388,7 +4618,7 @@ def test_a_deferred_refusal_the_later_release_resolved_is_not_raised(
 
     captured_but_unpublished(tmp_path, clock=clock, games=games)
 
-    retry_clock = Clock(at(23, 0))
+    retry_clock = Clock(at(22, 50))
 
     retry = ServingFailsThenWorks(
         tmp_path, schedules=[games], clock=retry_clock
@@ -4489,13 +4719,13 @@ def test_the_receipt_says_which_unserved_windows_no_run_will_ever_serve(
         captured_at=at(22, 45),
     )
 
-    recovery_clock = Clock(at(23, 30))
+    recovery_clock = Clock(at(22, 50))
 
     recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
 
     write_morning_receipt(recovery)
 
-    as_the_entry_point_sees_it(monkeypatch, recovery)
+    as_the_entry_point_sees_it(monkeypatch, recovery, clock=recovery_clock)
 
     receipt_path = tmp_path / "receipt.json"
 
@@ -4619,7 +4849,7 @@ def test_the_summary_table_states_both_halves_of_done(tmp_path):
 
     captured_but_unpublished(tmp_path, clock=clock, games=games)
 
-    recovery_clock = Clock(at(23, 50))
+    recovery_clock = Clock(at(22, 50))
 
     recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
 
@@ -4653,3 +4883,651 @@ def test_a_torn_ledger_line_does_not_hide_the_rows_before_it(tmp_path):
         handle.write('{"record_type": "t20_windows_serv')
 
     assert controller.served_window_ids(path) == {"101:T-20m"}
+
+
+# ----------------------------------------------------------------------
+# nothing is published after tip
+# ----------------------------------------------------------------------
+
+
+class PublishesToADirectory(World):
+    """A world whose publication stage leaves a release and a pointer behind.
+
+    The other fakes in this module write receipts, which is enough to assert
+    what the controller did. It is not enough to assert what a *refusal* left
+    alone: "the release already serving is untouched" is a claim about bytes
+    on the far side of the publisher, so this one writes them. The shape is
+    the publisher's own -- an immutable release directory and a
+    ``current.json`` naming it, read back by every downstream consumer.
+    """
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+        self.published_root = self.data_root.parent / "published"
+
+    def _publish(self, command):
+        result = super()._publish(command)
+
+        # The T-20 release only. An advisory release is addressed by naming
+        # its destination and lands in a confined root of its own, which is
+        # the distinction the controller itself makes.
+        if self._optional(command, "--feed-destination-name") or self._optional(
+            command, "--page-destination-name"
+        ):
+            return result
+
+        if self._value(command, "--stage") != "feed":
+            return result
+
+        receipt = json.loads(
+            Path(self._value(command, "--receipt-path")).read_text(
+                encoding="utf-8"
+            )
+        )
+
+        release_id = str((receipt.get("release") or {}).get("release_id") or "")
+
+        release_dir = self.published_root / "releases" / release_id
+
+        release_dir.mkdir(parents=True, exist_ok=True)
+
+        release_dir.joinpath("rows.json").write_text(
+            json.dumps(receipt.get("published_game_ids") or [], sort_keys=True),
+            encoding="utf-8",
+        )
+
+        self.published_root.joinpath(controller_pointer()).write_text(
+            json.dumps({"release_id": release_id}, sort_keys=True),
+            encoding="utf-8",
+        )
+
+        return result
+
+
+def controller_pointer() -> str:
+    """The pointer name the real publisher writes, not a name invented here."""
+    return publisher_module().CURRENT_POINTER
+
+
+def publisher_module():
+    return load_ops("publish_incumbent_to_wizardofodds")
+
+
+def tree_digest(root: Path) -> list[tuple[str, str]]:
+    """Every file under ``root`` with its digest, so equality means bytes."""
+    if not root.exists():
+        return []
+
+    return sorted(
+        (
+            str(path.relative_to(root)),
+            hashlib.sha256(path.read_bytes()).hexdigest(),
+        )
+        for path in root.rglob("*")
+        if path.is_file()
+    )
+
+
+def test_a_window_whose_game_has_tipped_is_not_published(tmp_path):
+    """The guard the 2026-10-23 slate did not have.
+
+    A sound pre-tip capture that an earlier run never published, reached by
+    a later run after the game has started. Everything about the capture is
+    still correct -- it was taken at the window, it is the only scheduled
+    capture of it and every component digest still matches -- so selection
+    accepts it and the old controller served and published it. The release
+    that produced was a pregame page for a game already under way.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0))]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    # Ten minutes after the game started, which is the smallest version of
+    # the real incident's two hours and forty minutes.
+    recovery_clock = Clock(at(23, 10))
+
+    recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
+
+    write_morning_receipt(recovery)
+
+    receipt = build(
+        recovery,
+        clock=recovery_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    refused = receipt["post_tip_refused_windows"]
+
+    assert [record["window_id"] for record in refused] == ["101:T-20m"]
+
+    assert (
+        refused[0]["outcome"] == controller.OUTCOME_POST_TIP_PUBLICATION
+    )
+
+    # The refusal says the game, when it started and how long ago that was.
+    assert refused[0]["reason"] == (
+        "game 101 tipped at 2026-10-20T23:00:00+00:00, 10 minutes before "
+        "2026-10-20T23:10:00+00:00, so the window 101:T-20m is not a "
+        "pregame price and is not published. The release already serving "
+        "is left exactly as it is: nothing is retracted, overwritten or "
+        "repointed"
+    )
+
+    # Refused before the serving entry point, so nothing was priced, nothing
+    # was published and no ledger row was appended.
+    assert recovery.served == []
+
+    assert recovery.published == []
+
+    assert publication_commands(recovery, stage="feed") == []
+
+    assert served_records(recovery) == []
+
+    # And the window stays outstanding, on the outcome that reaches the exit
+    # code rather than on one that reads as a success.
+    assert receipt["captured_unserved_windows"] == ["101:T-20m"]
+
+    assert receipt["final_outcome"] == controller.OUTCOME_CAPTURED_NOT_SERVED
+
+    assert (
+        controller.OUTCOME_POST_TIP_PUBLICATION
+        not in controller.OUTCOMES_THAT_SUCCEED
+    )
+
+
+def test_a_post_tip_refusal_exits_non_zero(tmp_path, monkeypatch):
+    """A loud refusal, not a silent skip.
+
+    The whole defect was that every stage of the late run reported success,
+    so this is asserted through ``main`` -- the thing the workflow's exit
+    status actually comes from -- rather than off the receipt.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0))]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    recovery_clock = Clock(at(23, 10))
+
+    recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
+
+    write_morning_receipt(recovery)
+
+    as_the_entry_point_sees_it(monkeypatch, recovery, clock=recovery_clock)
+
+    receipt_path = tmp_path / "receipt.json"
+
+    summary_path = tmp_path / "summary.md"
+
+    exit_code = controller.main(
+        [
+            "--data-root",
+            str(recovery.data_root),
+            "--production-sha",
+            PRODUCTION_SHA,
+            "--segment-start-utc",
+            SEGMENT_2[0].isoformat(),
+            "--segment-end-utc",
+            SEGMENT_2[1].isoformat(),
+            "--slate-date",
+            SLATE,
+            "--receipt-path",
+            str(receipt_path),
+            "--summary-path",
+            str(summary_path),
+        ]
+    )
+
+    assert exit_code == 1
+
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+
+    assert [
+        record["outcome"] for record in receipt["post_tip_refused_windows"]
+    ] == [controller.OUTCOME_POST_TIP_PUBLICATION]
+
+    summary = summary_path.read_text(encoding="utf-8")
+
+    assert "| refused for being post-tip | 101:T-20m |" in summary
+
+    assert "tipped at 2026-10-20T23:00:00+00:00" in summary
+
+
+def test_a_game_tipping_exactly_now_is_refused(tmp_path):
+    """The boundary, pinned in the closed direction.
+
+    A game whose tip is this instant has started. ``select_capture_bundle``
+    draws the capture-side boundary the same way -- it requires the capture
+    to be strictly before the tip -- so a release at exactly the tip is
+    refused for the same reason a capture at exactly the tip is.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0))]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    recovery_clock = Clock(at(23, 0))
+
+    recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
+
+    write_morning_receipt(recovery)
+
+    receipt = build(
+        recovery,
+        clock=recovery_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    assert [
+        record["window_id"] for record in receipt["post_tip_refused_windows"]
+    ] == ["101:T-20m"]
+
+    assert "0 minutes before" in receipt["post_tip_refused_windows"][0][
+        "reason"
+    ]
+
+    assert recovery.published == []
+
+    # One second earlier is still a pregame price, and is published.
+    before = Clock(at(23, 0) - timedelta(seconds=1))
+
+    ahead = World(tmp_path, schedules=[games], clock=before)
+
+    write_morning_receipt(ahead)
+
+    cleared = build(
+        ahead,
+        clock=before,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    assert cleared["post_tip_refused_windows"] == []
+
+    assert ahead.published == [[101]]
+
+    assert cleared["pre_tip_margins"] == [
+        {
+            "game_id": 101,
+            "minutes_before_tip": 0.017,
+            "tip_utc": "2026-10-20T23:00:00+00:00",
+            "window_id": "101:T-20m",
+        }
+    ]
+
+
+def test_a_game_that_tipped_in_an_earlier_group_does_not_block_a_later_one(
+    tmp_path,
+):
+    """The scoping the guard would be useless -- or harmful -- without.
+
+    A release is cumulative: one serve at T-20 prices every game with an
+    eligible capture at that offset, so the last group of a staggered slate
+    is published long after the first game of it tipped. Here the 20:00 game
+    tipped two hours and forty minutes before the 23:00 game's window is
+    published, which is exactly the interval the real incident ran late by.
+    Its rows belong in that release, because they were priced and published
+    before its own tip, and the guard must say nothing about it: the windows
+    a publication is refused for are the windows it is *for*.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [
+        game(101, at(20, 0)),
+        game(102, at(23, 0), home=3, away=4),
+    ]
+
+    world = World(tmp_path, schedules=[games], clock=clock)
+
+    write_morning_receipt(world)
+
+    receipt = build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    ).run()
+
+    # Two groups, both published, and the second published at 22:40 -- two
+    # hours and forty minutes after the first game started.
+    assert world.published == [[101], [101, 102]]
+
+    assert [moment.isoformat() for moment in world.clock.woke][-1:] == [
+        "2026-10-20T22:40:00+00:00"
+    ]
+
+    assert receipt["post_tip_refused_windows"] == []
+
+    assert receipt["final_outcome"] == controller.OUTCOME_SEGMENT_COMPLETE
+
+    # The guard cleared only the second group's own window at the second
+    # publication, and the margin it records is that window's own.
+    assert [
+        (record["window_id"], record["minutes_before_tip"])
+        for record in receipt["pre_tip_margins"]
+    ] == [("101:T-20m", 20.0), ("102:T-20m", 20.0)]
+
+    assert served_window_ids_for(world) == {"101:T-20m", "102:T-20m"}
+
+
+def test_a_refusal_leaves_the_release_and_its_pointer_exactly_as_they_were(
+    tmp_path,
+):
+    """The guard declines to add. It never retracts.
+
+    A slate with a release already published and a second window that no
+    release carries, reached after that second game has tipped. The refusal
+    has to cost exactly the new publication: the release directory, its rows
+    and the ``current.json`` that names it are the bytes the earlier run
+    left, down to the digest, and the pointer still names the same release.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [
+        game(101, at(20, 0)),
+        game(102, at(23, 0), home=3, away=4),
+    ]
+
+    world = PublishesToADirectory(tmp_path, schedules=[games], clock=clock)
+
+    write_morning_receipt(world)
+
+    # The first group only: the controller is stopped before the second
+    # window by a segment that ends between them, which is how a staggered
+    # slate is genuinely split across invocations.
+    build(
+        world,
+        clock=clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=at(21, 0),
+    ).run()
+
+    pointer = world.published_root / controller_pointer()
+
+    assert json.loads(pointer.read_text(encoding="utf-8")) == {
+        "release_id": "release-1"
+    }
+
+    before = tree_digest(world.published_root)
+
+    assert before, "the first group should have published a release"
+
+    # Now the second window, captured by a run that died before publishing
+    # it, reached after its game has tipped.
+    late_clock = Clock(at(22, 40))
+
+    late = PublishesToADirectory(
+        tmp_path,
+        schedules=[games],
+        clock=late_clock,
+        serving_outcome="FAILED",
+    )
+
+    write_morning_receipt(late)
+
+    with pytest.raises(controller.ControllerRefused):
+        build(
+            late,
+            clock=late_clock,
+            segment_start=at(21, 0),
+            segment_end=SEGMENT_2[1],
+        ).run()
+
+    recovery_clock = Clock(at(23, 20))
+
+    recovery = PublishesToADirectory(
+        tmp_path, schedules=[games], clock=recovery_clock
+    )
+
+    write_morning_receipt(recovery)
+
+    receipt = build(
+        recovery,
+        clock=recovery_clock,
+        segment_start=at(21, 0),
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    assert [
+        record["window_id"] for record in receipt["post_tip_refused_windows"]
+    ] == ["102:T-20m"]
+
+    # Byte-identical, and the pointer still names the release it named.
+    assert tree_digest(world.published_root) == before
+
+    assert json.loads(pointer.read_text(encoding="utf-8")) == {
+        "release_id": "release-1"
+    }
+
+    # Nothing was written towards a new release either: no publication
+    # command ran, and the durable ledger still says what it said.
+    assert publication_commands(recovery, stage="feed") == []
+
+    assert [row["window_ids"] for row in served_records(recovery)] == [
+        ["101:T-20m"]
+    ]
+
+
+def test_an_advisory_window_reached_after_its_tip_is_refused(tmp_path):
+    """The advisory half, which is reached by a different route.
+
+    An advisory window is captured hours before tip and is normally served
+    long before it, but a serve that would run inside the reservation before
+    a T-20 capture is held back and retried in a later gap -- and that gap
+    can fall after the game. The release it would make carries the same wrong
+    claim the T-20 one would, published to the advisory destination instead
+    of to the canary.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0))]
+
+    world = World(tmp_path, schedules=[games], clock=clock)
+
+    write_morning_receipt(world)
+
+    held = build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    )
+
+    # The T-45 window's capture, taken at 22:15 and still unserved when the
+    # game starts: the same state a held window is left in by a segment that
+    # ran out of gaps.
+    held._advisory_pending = {}
+
+    held._advisory_held = {
+        45: [
+            {
+                "game_id": 101,
+                "offset_minutes": 45,
+                "capture_at_utc": at(22, 15),
+                "tip_utc": at(23, 0),
+                "window_id": "101:T-45m",
+            }
+        ]
+    }
+
+    world.clock.now = at(23, 5)
+
+    held._drain_advisory(readiness=morning_readiness_for(world), next_t20_due=None)
+
+    assert [
+        (record["window_id"], record["outcome"])
+        for record in held.advisory
+    ] == [("101:T-45m", controller.ADVISORY_OUTCOME_POST_TIP)]
+
+    assert (
+        controller.ADVISORY_OUTCOME_POST_TIP
+        not in controller.ADVISORY_OUTCOMES_WITHOUT_FAULT
+    )
+
+    # Nothing was served and nothing was published for it.
+    assert world.advisory_served == []
+
+    assert world.advisory_published == []
+
+
+def morning_readiness_for(world: World) -> dict:
+    return controller.morning_readiness(
+        data_root=world.data_root,
+        slate_date=SLATE,
+        production_sha=PRODUCTION_SHA,
+        project_root=PROJECT,
+    )
+
+
+def test_an_advisory_post_tip_refusal_fails_the_segment_after_the_captures(
+    tmp_path,
+):
+    """Loud, and still unable to cost the slate a capture.
+
+    Every other advisory failure degrades the segment and lets it succeed,
+    because a defect in a reading aid must not cost the production release.
+    A release for a game already under way is not that kind of defect, so it
+    reaches the exit code -- but it reaches it from ``run`` after all the
+    capture work, never by raising out of the advisory path with a later
+    T-20 group still ahead of it.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [
+        game(101, at(20, 0)),
+        game(102, at(23, 0), home=3, away=4),
+    ]
+
+    world = World(tmp_path, schedules=[games], clock=clock)
+
+    write_morning_receipt(world)
+
+    segment = build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    )
+
+    # Game 101's T-90 window, captured and still unserved when the segment
+    # runs out of T-20 work: the state a window held back for a reservation
+    # is left in. Seeded at the start of the last drain, which is where a
+    # real one would still be sitting, and which is after both captures.
+    original = segment._finish_advisory
+
+    def hold_the_first_window(readiness):
+        segment._advisory_held.setdefault(90, []).append(
+            {
+                "game_id": 101,
+                "offset_minutes": 90,
+                "capture_at_utc": at(18, 30),
+                "tip_utc": at(20, 0),
+                "window_id": "101:T-90m",
+            }
+        )
+
+        return original(readiness)
+
+    segment._finish_advisory = hold_the_first_window
+
+    receipt = segment.run()
+
+    # The refusal is there, named, with the tip and the interval.
+    post_tip = [
+        record
+        for record in receipt["advisory_windows"]
+        if record["outcome"] == controller.ADVISORY_OUTCOME_POST_TIP
+    ]
+
+    assert [record["window_id"] for record in post_tip] == ["101:T-90m"]
+
+    assert "tipped at 2026-10-20T20:00:00+00:00" in post_tip[0]["reason"]
+
+    # The segment's own T-20 captures both happened and both were published:
+    # the refusal cost the advisory release and nothing else.
+    assert world.published == [[101], [101, 102]]
+
+    assert served_window_ids_for(world) == {"101:T-20m", "102:T-20m"}
+
+    # And it is not a success.
+    assert (
+        receipt["final_outcome"] == controller.OUTCOME_POST_TIP_PUBLICATION
+    )
+
+    assert (
+        receipt["final_outcome"] not in controller.OUTCOMES_THAT_SUCCEED
+    )
+
+
+def test_every_production_release_declares_the_windows_it_is_for(tmp_path):
+    """The guard is a property of the chokepoint, not of its callers.
+
+    ``_serve_and_publish`` is the only way to a production release -- the
+    capture path and the recovery path both go through it -- and it takes
+    the windows it is publishing for as a required argument. A caller that
+    forgot them would not reach a publication; it would fail to call.
+    """
+    import inspect
+
+    signature = inspect.signature(
+        controller.T20Controller._serve_and_publish
+    )
+
+    windows = signature.parameters["windows"]
+
+    assert windows.kind is inspect.Parameter.KEYWORD_ONLY
+
+    assert windows.default is inspect.Parameter.empty
+
+    source = inspect.getsource(controller.T20Controller)
+
+    assert source.count("self._serve_and_publish(") == 2
+
+    assert "assert_no_window_has_tipped(" in source
+
+
+def test_the_2026_10_23_incident_shape_is_refused():
+    """The real slate's numbers, through the guard that was missing.
+
+    Game 21717941 -- CHI at MIL -- tipped at 20:00 UTC on 2026-10-23 and its
+    T-20 window was priced and published at 22:40, two hours and forty
+    minutes later. Asserted on the guard directly, with that game's own id
+    and those two instants, so the refusal that evening needed is pinned to
+    the evening it is about rather than to a fixture slate.
+    """
+    tip = datetime(2026, 10, 23, 20, 0, tzinfo=UTC)
+
+    published_at = datetime(2026, 10, 23, 22, 40, tzinfo=UTC)
+
+    row = {
+        "game_id": 21717941,
+        "tip_utc": tip,
+        "offset_minutes": 20,
+        "capture_at_utc": tip - timedelta(minutes=20),
+        "window_id": "21717941:T-20m",
+    }
+
+    with pytest.raises(controller.ControllerRefused) as refused:
+        controller.assert_no_window_has_tipped([row], now=published_at)
+
+    assert (
+        refused.value.outcome == controller.OUTCOME_POST_TIP_PUBLICATION
+    )
+
+    assert str(refused.value) == (
+        "game 21717941 tipped at 2026-10-23T20:00:00+00:00, 160 minutes "
+        "before 2026-10-23T22:40:00+00:00, so the window 21717941:T-20m is "
+        "not a pregame price and is not published. The release already "
+        "serving is left exactly as it is: nothing is retracted, "
+        "overwritten or repointed"
+    )
+
+    # The same window, at the time it was actually for, is published.
+    assert controller.assert_no_window_has_tipped(
+        [row], now=row["capture_at_utc"]
+    ) == [
+        {
+            "game_id": 21717941,
+            "minutes_before_tip": 20.0,
+            "tip_utc": "2026-10-23T20:00:00+00:00",
+            "window_id": "21717941:T-20m",
+        }
+    ]

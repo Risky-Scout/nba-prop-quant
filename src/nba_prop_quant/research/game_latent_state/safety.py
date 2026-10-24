@@ -148,6 +148,179 @@ ADDITIVE_ONLY_SERVING_SOURCES: tuple[str, ...] = (
     "src/nba_prop_quant/availability.py",
 )
 
+#: The serving source that *selects the capture*, and only additively.
+#:
+#: The sixth instance of the deadlock the carve-outs above resolved, and it is
+#: kept separate from the two serving sources above rather than added to them
+#: because its subject is not the same. Those two are about the numbers the
+#: fitted models are shown. This one is about which point-in-time snapshot
+#: pricing is allowed to read at all, which is upstream of every number and is
+#: the one thing this system must never get wrong.
+#:
+#: ``select_capture_bundle`` is the gate: it finds the scheduled captures of a
+#: window, requires exactly one, recomputes every component digest and the
+#: capture id, and refuses anything else. Requiring exactly one is right about
+#: what it was written for and cannot distinguish the only two things a second
+#: record can mean -- one capture recorded twice, and two captures of one
+#: window -- so it refused both, permanently, because the capture log is
+#: append-only and the second record never goes away.
+#:
+#: That is not hypothetical and it is the other half of the evening the
+#: capture carve-out above already records. On 2026-10-23 two sweeps recorded
+#: the 01:40Z window, serving raised ``21717943:T-20m: expected exactly one
+#: scheduled capture, found 2``, and the three games tipping at 02:00 UTC were
+#: captured, marked complete and never priced. The exclusive claim added
+#: there stops two sweeps recording one window again; it can do nothing for a
+#: record already on disk, and nothing for one arriving by a route no claim
+#: covers -- a replayed log, a restored backup concatenated onto the live
+#: file, a manual sweep, a second host, a network lock that silently does not
+#: lock. A deterministic reading of the log is the only thing that can, and
+#: ``select_capture_bundle`` is the only place the reading happens.
+#:
+#: So the module is declarable, on terms narrower than the two serving sources
+#: are held to, because what it decides is more dangerous than what they
+#: decide. :data:`CAPTURE_SELECTION_EXEMPT_FUNCTIONS` names the one function
+#: whose body may differ and :data:`CAPTURE_SELECTION_EXEMPT_METHODS` the one
+#: method, every line production has must still be there, every other
+#: definition in the module -- the canonical digest, the capture id, the
+#: component reader, the pre-tip check, and the snapshot client's every other
+#: method, each accessor it serves records through among them -- is pinned
+#: syntax-tree-identical to production one definition at a time,
+#: every module constant is pinned too, and the one statement the exempt
+#: function may have gained is held to
+#: :data:`DECLARED_CAPTURE_RESOLUTION_NAMES`. In particular
+#: :func:`build_capture_id` and ``canonical_records_sha256`` are outside the
+#: exemption, so what identifies a capture cannot be redefined by the same
+#: branch that decides when two records denote one: a changed digest would
+#: invalidate every capture ever written.
+ADDITIVE_ONLY_CAPTURE_SELECTION_SOURCES: tuple[str, ...] = (
+    "src/nba_prop_quant/prospective_snapshot.py",
+)
+
+#: The only function in the declared capture-selection source whose body may
+#: differ from production. The selection, and nothing else: the error check,
+#: the component-digest recomputation, the capture-id recomputation, the
+#: target-game check and the pre-tip check all live inside it and all survive
+#: line for line, and every refusal the module states outside it is pinned.
+CAPTURE_SELECTION_EXEMPT_FUNCTIONS: tuple[str, ...] = (
+    "select_capture_bundle",
+)
+
+#: What a statement added to the capture selection is allowed to be about.
+#:
+#: The rule :data:`DECLARED_CAPTURE_SELECTION_NAMES` states, for the exemption
+#: whose subject is which of two records of one window is read. The way this
+#: exemption would widen is by coming to decide *between* captures rather than
+#: to recognise that two records are one, and the defence is that the added
+#: statement has to name this.
+#:
+#: It is one name and it narrows rather than chooses: it collapses records
+#: that agree on every field ``build_capture_id`` is derived from, plus the
+#: stored id and ``error_count``, to the lexicographically smallest of them,
+#: and refuses anything else with the message production already had plus the
+#: fields on which the records differ. It returns a sublist of what was read
+#: off disk, so nothing here can relabel, re-time, merge, synthesize or widen
+#: a capture, write one, or make an ineligible capture eligible -- every check
+#: in the function runs over the resolved record unchanged. It cannot name a
+#: probability, a price, an edge, an EV, a line or a route, and it does not
+#: write the capture log, which stays the append-only evidence that the
+#: duplicate happened.
+DECLARED_CAPTURE_RESOLUTION_NAMES: tuple[str, ...] = (
+    "_resolve_duplicate_scheduled_captures",
+)
+
+#: The only *method* of the declared capture-selection source whose body may
+#: differ from production.
+#:
+#: The carve-out above was written for a defect in a function, and there is a
+#: second defect in the same module that is not in a function. Selecting a
+#: capture refuses per game, which is right; the client assembled the whole
+#: slate by selecting every game of it in one dict comprehension, so the
+#: first game that refused aborted construction and no game of the slate was
+#: priced. The blast radius of a per-game refusal was the evening.
+#:
+#: That is the other half of what 2026-10-23 cost. Three games lost their
+#: predictions and the crash was in this client's construction, so one
+#: conflicted window is sufficient to explain all three, the other two as
+#: collateral rather than as three independent duplicates -- a reading that
+#: fits the evidence and that nobody has confirmed against the production
+#: log. Either way the refusals involved are permanent: two captures of a
+#: window stay two captures and a capture taken after its game tipped stays
+#: post-tip, so for the games they belong to there is no later run that
+#: repairs anything, and for every *other* game of the slate there was no
+#: reason to be paying for it at all.
+#:
+#: So ``__init__`` is exempt, and only ``__init__``. It is where the slate is
+#: assembled and the one place the isolation can be stated; every other
+#: method of the client -- ``games``, ``lineups``, ``live_player_props``,
+#: ``active_players``, ``injuries``, ``lineage_for_game``, ``lineage_frame``
+#: -- is an accessor serving reads records through, and all of them stay
+#: pinned, which is what keeps "one game is excluded" from becoming "a game
+#: is served from something else". Note the unit: these are methods, so the
+#: pins compare the module one method at a time rather than comparing the
+#: class whole, and the exemption buys exactly the one named here.
+CAPTURE_SELECTION_CLASS: str = "ProspectiveSnapshotClient"
+
+CAPTURE_SELECTION_EXEMPT_METHODS: tuple[str, ...] = (
+    "__init__",
+)
+
+#: What a statement added to the capture-selection client is allowed to be
+#: about, and what the module may have gained a definition for.
+#:
+#: The rule :data:`DECLARED_CAPTURE_RESOLUTION_NAMES` states, for the
+#: exemption whose subject is which games of a slate a refusal costs. The way
+#: this exemption would widen is by coming to decide something about a game
+#: it excluded, or by letting an excluded game be quietly absent instead of
+#: named, and the defence is that every added statement has to name one of
+#: these three.
+#:
+#: ``_isolated_capture_refusals`` performs the selection one game at a time
+#: and returns the refusals rather than the bundles, so it cannot become a
+#: second place a capture is chosen; it catches only ``RuntimeError``, which
+#: is every refusal the selection states, so a log that cannot be read at all
+#: still aborts the slate rather than being isolated into one game.
+#: ``_refusals`` is where they are kept and is the only thing the assembly
+#: is allowed to narrow itself by. ``excluded_games`` is how a caller reaches
+#: them, because a release that is missing a game and does not say so is a
+#: worse failure than the one being fixed. None of the three can name a
+#: probability, a price, an edge, an EV, a line or a route, none writes the
+#: capture log, and none can make an ineligible capture eligible: the
+#: comprehension that builds the slate is unchanged, so every eligibility
+#: check still runs over the resolved record exactly where it always ran.
+DECLARED_CAPTURE_ISOLATION_NAMES: tuple[str, ...] = (
+    "_isolated_capture_refusals",
+    "_refusals",
+    "excluded_games",
+)
+
+#: Every definition the declared capture-selection source may have gained.
+#:
+#: The two rules above govern the *statements* an exempt definition may have
+#: gained, and neither says anything about a definition that did not exist
+#: before. A module can be changed as thoroughly by what is added beside a
+#: pinned function as by editing it, and the line-set rule does not notice:
+#: adding is all it permits.
+#:
+#: So the additions are enumerated, by exact name rather than by substring,
+#: and they are the only five. Three belong to the resolution:
+#: ``_capture_identity`` states which fields of a ``capture_run`` envelope
+#: decide that two records are one capture, ``_describe_capture_conflict``
+#: renders the difference when they are not, and
+#: ``_resolve_duplicate_scheduled_captures`` is what
+#: ``select_capture_bundle`` calls. Two belong to the isolation:
+#: ``_isolated_capture_refusals`` finds the games that cannot be served and
+#: ``excluded_games`` is how a caller reaches them. Anything else appearing
+#: in this module is a change nobody declared, whatever the pinned functions
+#: still say.
+DECLARED_CAPTURE_SELECTION_DEFINITIONS: tuple[str, ...] = (
+    "_capture_identity",
+    "_describe_capture_conflict",
+    "_isolated_capture_refusals",
+    "_resolve_duplicate_scheduled_captures",
+    "excluded_games",
+)
+
 #: The only functions in a declared serving source whose bodies may differ
 #: from production. The live slate builder is where a feature the models
 #: require is produced; every prior, window, leakage guard and slate-date rule
@@ -234,6 +407,32 @@ DECLARED_SERVING_PLUMBING_NAMES: tuple[str, ...] = (
     "_prior_window_participation",
     "prior_participation_rate",
     "NO_APPEARANCE_PRIOR",
+)
+
+#: What a serving entry point may have gained that is not a quantity.
+#:
+#: Every name above is something carried forward: a column the fitted models
+#: want, a flag, a value substituted where training puts one. A refusal is
+#: not one of those, so it gets its own name rather than being filed among
+#: them, and the entry-point pin accepts both lists while the serving-source
+#: pin still accepts only the first.
+#:
+#: There is exactly one, and it exists because the capture-selection
+#: carve-out made a short slate possible. Selecting a capture refuses per
+#: game and the snapshot client used to assemble the whole slate in one
+#: comprehension, so one game's refusal aborted every game's; isolating that
+#: means ``10_predict_slate.py`` can now be handed a slate with a game
+#: missing. A release that is missing a game and does not say so is a worse
+#: failure than the abort it replaced, so ``excluded_games`` is read from
+#: the client and the run refuses on it -- once where every game of the
+#: slate was excluded, which would otherwise take the existing empty-slate
+#: path and exit zero, and once at the end after the projections for the
+#: games that *could* be served are safely written. It names games and
+#: reasons and nothing else: it cannot reach a projection, a probability, a
+#: price, an edge, an EV, a quantile, a line, a feature, a calibration or a
+#: Gate 3 route, and the only thing it can do to a run is stop it.
+DECLARED_SERVING_EXCLUSION_NAMES: tuple[str, ...] = (
+    "excluded_games",
 )
 
 #: The serving *orchestrator* a declaration may name, and only additively.
@@ -367,10 +566,33 @@ ADDITIVE_ONLY_CAPTURE_ENTRY_POINTS: tuple[str, ...] = (
 #: So it is declarable, and the carve-out is narrower in risk than the three
 #: before it, because the file is not on the serving path and holds no model
 #: state. The rest of ``scripts/`` remains undeclarable, and what this script
-#: may do with the registry is itself bounded: a library module under ``src/``
-#: that the historical runtime contract byte-pins can never be relocked, so
-#: the mathematics stays pinned to the architecture reference and no
-#: declaration here can move it.
+#: may do with the registry is itself bounded: it decides whether a
+#: historically pinned file may be relocked by the directory the file sits in,
+#: and everything under ``src/`` is refused by that rule.
+#:
+#: That rule is a proxy, and the second use of this carve-out is to correct it
+#: where it is factually wrong. It reads the same for two different kinds of
+#: module: the four library modules that are the mathematics, and
+#: ``prospective_snapshot.py``, which decides which point-in-time capture may
+#: be read and computes nothing. The deadlock was the same one as before --
+#: the capture-selection carve-out above authorised correcting that module and
+#: every bundle then refused to package it, so the only tree able to serve was
+#: again the one tree the builder would not package.
+#:
+#: The correction is a second allowance beside the prefix rule rather than a
+#: wider prefix, because widening the prefix would have made all four
+#: mathematics files relockable. The prefix rule is unchanged. The script's own
+#: ``RECLASSIFIED_AS_CAPTURE_SELECTION`` enumerates the one file, and a file
+#: named there may be relocked only while the script's own measurement reads
+#: nothing mathematical out of the bytes in the working tree -- no import of a
+#: computing library, no import of a model module, no identifier naming a
+#: probability, a price, an edge, a quantile, a distribution, a calibration, a
+#: dependence, a route, a marginal, a fit, a model, a prediction or training.
+#: It is a measurement rather than a list somebody has to remember to update,
+#: in the sense :func:`serving_reachable_sources` means it: the four
+#: mathematics files fail the same measurement by import and by identifier
+#: both, so the allowance cannot be reached by appealing to it, and an edit
+#: that put mathematics into the reclassified file would refuse the build.
 DECLARABLE_DEPLOYMENT_PACKAGING_TOOLS: tuple[str, ...] = (
     "scripts/19_build_wizardofodds_runtime_bundle.py",
 )
@@ -823,88 +1045,92 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: rather than introduced and are recorded nowhere, so touching any of them
 #: again requires declaring it again.
 #:
-#: This branch declares the capture entry point, the T-20 controller and
-#: both serving-source registries, and widens the capture entry point's
-#: selection names by one, all named above. The controller is owned below,
-#: which is the reason it is declared again. The two defects it fixes are
-#: the two halves of one evening: the first made a window unpriceable, the
-#: second made that invisible and permanent.
+#: The duplicate-claim branch's four entries were retired in turn when they
+#: landed, and the recovery-isolation branch's one entry was retired the same
+#: way. That one declared the T-20 controller again, and the controller is
+#: owned below, which is the reason both of those entries gave.
 #:
-#: The first is the capture carve-out's first use for a defect rather than
-#: for an argument, and the defect is one the carve-out's own text did not
-#: anticipate: not what the collector captures, nor which window it
-#: captures, but what happens when two sweeps capture at once.
+#: The duplicate-capture-resolution branch's five entries -- the
+#: capture-selection source, the serving entry point that prices a slate, the
+#: runtime bundle builder and both serving-source registries -- were retired
+#: in turn when they landed. Its deterministic resolution of two records of
+#: one capture, its per-game capture isolation and the measured
+#: reclassification that let the capture-selection source be relocked at all
+#: are in production now, so the entries that described them have gone and
+#: their text with them. All five are pre-existing production files that
+#: lineage changed rather than introduced and are recorded nowhere, and this
+#: branch touches none of them, so all five are retired and not replaced.
 #:
-#: A scheduled sweep decides which windows are unclaimed by reading the
-#: capture-run log, then collects for as long as the slate takes, then
-#: appends its own claim. Nothing holds the log across those three steps, so
-#: two sweeps whose collections overlap both read the window as unclaimed
-#: and both record it. ``select_capture_bundle`` requires exactly one
-#: scheduled capture per window and refuses two, which is correct and which
-#: is permanent: the log is append-only, both captures are genuine
-#: point-in-time data, and nothing may retract or relabel either. The window
-#: becomes unpriceable for the rest of the slate's life.
+#: This branch declares the T-20 controller, and only the T-20 controller.
+#: It adds the one refusal the integration never had: nothing is published
+#: for a game that has already started.
 #:
-#: That is not hypothetical. On 2026-10-23 a catch-up run and the scheduled
-#: segment run both swept the 01:40Z window, serving raised
-#: ``21717943:T-20m: expected exactly one scheduled capture, found 2``, and
-#: the three games tipping at 02:00 UTC were captured, marked complete and
-#: never priced. The published canary carried nine of the slate's twelve
-#: games and nothing in either run's receipt said which three were missing.
+#: ``select_capture_bundle`` refuses a capture *taken* after its game tipped
+#: and nothing refused a release *published* after its game tipped, which
+#: are not the same question. The first is about when a snapshot may exist.
+#: The second is about when a price may be shown, and between them sits
+#: every way a sound pre-tip capture can be reached late: a runner picked up
+#: hours after the window, a recovery of a capture an earlier run never
+#: published, an advisory window held back for a T-20 reservation and
+#: retried in a gap that has moved past the game.
 #:
-#: The fix is an exclusive ``flock`` on a lock file beside the capture-run
-#: log, taken before the log is read and released after the claim is
-#: appended, so the second sweep reads the claim set the first one left
-#: rather than the one it found and captures nothing. It is held across the
-#: collection rather than only across the append because a capture's
-#: component digests are recomputed from every row carrying its
-#: ``captured_at``: two sweeps invoked with the same instant write into one
-#: another's digests whatever either of them claims, so claiming later would
-#: have replaced an ambiguous window with a corrupt one. The wait is bounded
-#: by the capture grace window, which is the span in which a due window may
-#: legitimately be captured at all, and a sweep that cannot get the claim
-#: inside it refuses and exits non-zero rather than appending a second claim.
+#: That is not hypothetical either. On 2026-10-23 the T-20 group holding
+#: game 21717941 was priced and published two hours and forty minutes after
+#: that game tipped, and every stage reported success: the capture was
+#: pre-tip and eligible, the serving receipt said SERVED and the feed said
+#: PUBLISHED. The release that landed was a pregame page for a game in its
+#: third quarter.
 #:
-#: Nothing about what is captured moves. Every component, every API call,
-#: every digest, the grace window, the due-window rule and all sixteen keys
-#: of the ``capture_run`` envelope are the ones production has, which the
-#: branch-safety tests and the capture-policy tests both pin; every function
-#: in the file except ``parse_args`` and ``main`` is syntax-tree-identical to
-#: production and neither of those lost a line. No probability, price, edge,
-#: EV, quantile, line, distribution, calibration, dependence coefficient,
-#: Gate 3 route or publication rule is computed or changed anywhere in this
-#: change, and no fitted artifact is touched.
+#: The guard is ``assert_no_window_has_tipped`` and it sits at
+#: ``_serve_and_publish``, which every production release goes through --
+#: the capture path and the recovery path both call it and there is no
+#: third caller. The windows it is about are the ones the caller declares
+#: the publication is for, as a required keyword-only argument, so a new
+#: caller cannot reach a publication without answering the question. The
+#: advisory path is guarded at its own publication entry the same way.
 #:
-#: The second defect is the durability one, and it is the one that made the
-#: first unrecoverable. Completion was recorded on capture and nowhere else:
-#: ``completed_window_ids`` reads the collector's capture log, and both the
-#: collector and the controller treat a window in it as done. That is right
-#: for capture, which is the input, and wrong for the question a run is
-#: answering, which is whether anybody was served. So a run that captured a
-#: window and then died in serving left that window indistinguishable from
-#: one a release carried. The next run's probe saw it under
-#: ``already_completed_windows``, found nothing pending, and exited a green
-#: no-op. Three games were captured, marked complete, never priced, and
-#: absent from the published feed with nothing anywhere saying which three.
+#: The scoping is the load-bearing part. A release is cumulative -- one
+#: serve at an offset prices every game with an eligible capture at that
+#: offset -- so the last T-20 group of a staggered twelve-game slate is
+#: published hours after the first game of it tipped, and that first game's
+#: rows belong in the release because they were priced and published before
+#: its own tip. A guard that read the whole release rather than the windows
+#: the publication is for would refuse every late group of every staggered
+#: evening.
 #:
-#: Publication is now recorded too, separately and durably, as an
-#: append-only row per published release under
-#: ``<data_root>/processed/t20_served_windows/``. The capture log is not
-#: touched and stays the capture authority: this is a second fact beside it,
-#: not a rewrite of it. A window that is captured and that no row names is
-#: reported by the probe, named in the receipt and shown in the job summary,
-#: makes the probe ask for the full job, and is recovered by the next run --
-#: which verifies the existing captures through ``select_capture_bundle``
-#: and then runs the same serving and publication entry points, with no
-#: collector invocation and nothing slept for. Nothing in it can fabricate,
-#: re-time or relabel a snapshot, and a window with no capture is not made
-#: recoverable by any of it. A segment that nonetheless ends with such a
-#: window reports ``T20_CAPTURED_WINDOWS_UNSERVED`` and exits non-zero,
-#: which is the first thing that has ever consulted ``OUTCOMES_THAT_SUCCEED``.
+#: A refusal is taken before the serving entry point runs, so it writes
+#: nothing: no priced artifact is rebuilt, no release is minted, no
+#: ``current.json`` is repointed and no ledger row is appended. It declines
+#: to add and it never retracts -- the release already serving stays exactly
+#: as it is, and the pointer still names what it named.
 #:
-#: No workflow changes. The probe already decides whether the heavy job
-#: starts, so teaching it that an unpublished capture is work keeps the
-#: schedule the production branch runs byte-identical.
+#: It is loud. ``POST_TIP_PUBLICATION_REFUSED`` is not in
+#: ``OUTCOMES_THAT_SUCCEED``, the refusal names the game, its tip and how
+#: long ago that was, and the run exits non-zero -- through the refused
+#: window staying in the unserved set on the T-20 path, and through the
+#: segment outcome on the advisory path. The advisory refusal is still never
+#: raised from inside the advisory path: it is recorded there and escalated
+#: by ``run`` once every capture is behind it, which is the arrangement
+#: production already uses for a deferred recovery refusal, and which is
+#: what keeps a reading aid from costing the slate a capture.
+#:
+#: It composes with the per-window recovery isolation production already
+#: has rather than duplicating it. A post-tip window is recorded through
+#: ``_record_unrecoverable`` beside the duplicate conflicts and the digest
+#: mismatches, under its own outcome because the operator response differs,
+#: and it is subtracted from the ledger row by the subtraction that is
+#: already there. It is checked behind the selection, not in front of it,
+#: so a capture that is itself post-tip is still reported with selection's
+#: own more specific reason.
+#:
+#: Nothing else moves. No capture is taken, re-timed, relabelled, merged or
+#: synthesised; the capture log is not read differently and not written at
+#: all; no non-T-20 snapshot can stand in for a T-20 one; and no
+#: probability, price, edge, EV, quantile, line, distribution, calibration,
+#: dependence coefficient, Gate 3 route, routing decision or publication
+#: destination is computed or changed anywhere in this change. No fitted
+#: artifact is touched, no gate or receipt is weakened, and no workflow,
+#: publishing switch, model, config, release or review path is modified.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
         "ops/wizardofodds_publishing_switch.json": (

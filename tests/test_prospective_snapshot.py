@@ -9,6 +9,7 @@ from nba_prop_quant.prospective_snapshot import (
     ProspectiveSnapshotClient,
     build_capture_id,
     canonical_records_sha256,
+    select_capture_bundle,
 )
 from nba_prop_quant.storage import (
     timestamped_jsonl_append,
@@ -351,14 +352,58 @@ def test_snapshot_hash_tampering_fails(
             + "\n"
         )
 
+    # The check itself, unchanged: a component whose rows are not the rows
+    # the capture recorded a digest for is refused by selection.
     with pytest.raises(
         RuntimeError,
         match=(
             "component hash mismatch"
         ),
     ):
-        ProspectiveSnapshotClient(
-            snapshot_dir=tmp_path,
-            target_date=DATE,
+        select_capture_bundle(
+            tmp_path,
+            date=DATE,
+            game_id=999,
             offset_minutes=20,
         )
+
+    # Through the client the same refusal now costs this game and no other,
+    # because a tampered component belongs to the capture whose digest it
+    # breaks and the rest of a slate has nothing to do with it. Closed in
+    # every direction that matters: the game is not in the slate, nothing
+    # will hand out its records, and it is named with the reason rather
+    # than being quietly absent.
+    client = ProspectiveSnapshotClient(
+        snapshot_dir=tmp_path,
+        target_date=DATE,
+        offset_minutes=20,
+    )
+
+    assert sorted(
+        client.excluded_games()
+    ) == [999]
+
+    assert (
+        "component hash mismatch"
+        in client.excluded_games()[
+            999
+        ]
+    )
+
+    assert client.games() == []
+
+    for call in (
+        lambda: client.lineage_for_game(
+            999
+        ),
+        lambda: client.live_player_props(
+            999
+        ),
+        lambda: client.lineups(
+            [999]
+        ),
+    ):
+        with pytest.raises(
+            RuntimeError
+        ):
+            call()

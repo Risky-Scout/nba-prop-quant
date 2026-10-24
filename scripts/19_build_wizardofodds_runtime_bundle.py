@@ -52,6 +52,103 @@ DEFAULT_ADAPTIVE_SERVING_CONTRACT = (
 #: here: it had no anchor pin to relock.
 DIVERGEABLE_PINNED_PREFIX = "scripts/"
 
+#: Historically pinned files outside ``scripts/`` whose classification by the
+#: rule above is factually wrong, enumerated one at a time.
+#:
+#: :data:`DIVERGEABLE_PINNED_PREFIX` is a proxy: it decides whether a file is
+#: mathematics by reading the directory it sits in. For the four library
+#: modules the historical contract pins -- ``distributions.py``,
+#: ``gate3_v2.py``, ``pricing.py`` and ``production.py`` -- the proxy is
+#: right, because all four are the mathematics. For
+#: ``prospective_snapshot.py`` it is wrong: that module decides which
+#: point-in-time capture may be read at all, and it computes no probability,
+#: price, edge, quantile, distribution or route and holds no fitted state.
+#:
+#: Being named here is not permission by itself, and deliberately so. A file
+#: named here may be relocked only when :func:`mathematics_findings` is run
+#: over the file as it stands in the working tree and finds nothing, so the
+#: reclassification is a measurement rather than a claim somebody has to
+#: remember to re-check. The four files above fail that measurement many
+#: times over -- which is what shows the carve-out cannot be widened by
+#: appealing to it -- and an edit that put mathematics into a reclassified
+#: file would fail it too and refuse the build.
+RECLASSIFIED_AS_CAPTURE_SELECTION = (
+    "src/nba_prop_quant/prospective_snapshot.py",
+)
+
+#: Libraries whose whole purpose is to compute. Importing one is mathematics,
+#: whatever the importing module then does with it.
+MATHEMATICS_LIBRARIES = (
+    "numpy",
+    "pandas",
+    "scipy",
+    "sklearn",
+    "xgboost",
+)
+
+#: The one library above that is a container as well as a calculator, and the
+#: only names on it a reclassified file may reach.
+#:
+#: ``pandas`` is listed as mathematics because a frame aggregates, rolls,
+#: resamples and coerces, and any of those in a file claiming to contain no
+#: mathematics is a false claim. Constructing a frame is none of those: it
+#: hands a caller a table of records it was already holding. So the allowance
+#: is measured rather than granted -- every attribute the file reaches on the
+#: pandas module must be named here, and anything else refuses. There is no
+#: such allowance for numpy, scipy, sklearn or xgboost, which have no
+#: container to construct.
+CONTAINER_ONLY_PANDAS_ATTRIBUTES = ("DataFrame",)
+
+#: The repository's own model modules. Importing one is importing the
+#: mathematics by reference.
+MODEL_MODULES = (
+    "adaptive_fit_registry",
+    "adaptive_training",
+    "availability",
+    "copula",
+    "decay",
+    "distributions",
+    "experience",
+    "features",
+    "game_context",
+    "gate3_v2",
+    "kalman",
+    "model",
+    "pipeline",
+    "pricing",
+    "production",
+    "slate",
+)
+
+#: Fragments that make an identifier a mathematical one.
+#:
+#: Matched against the lowercase form of every name the module declares,
+#: assigns, reaches as an attribute or calls, so a module that computes a
+#: price without importing anything is still caught. The list is deliberately
+#: blunt -- ``fit`` matches ``refit`` and ``best_fit`` as well as ``fit`` --
+#: because a measurement that refuses a borderline name costs a reviewer one
+#: conversation, while one that misses a real name costs the pin.
+MATHEMATICS_IDENTIFIER_FRAGMENTS = (
+    "probab",
+    "price",
+    "pricing",
+    "edge",
+    "expected_value",
+    "quantile",
+    "distribution",
+    "calibrat",
+    "depend",
+    "copula",
+    "route",
+    "routing",
+    "gate3",
+    "marginal",
+    "fit",
+    "model",
+    "predict",
+    "train",
+)
+
 #: Invariants the adaptive serving source contract must still assert before a
 #: declared divergence may be packaged. Every one is a statement that the
 #: mathematics did not move; a divergence that needed any of them relaxed is a
@@ -356,6 +453,159 @@ def verify_frozen_model_sources(
     return verified
 
 
+def declared_identifiers(tree: ast.AST) -> set[str]:
+    """Every name a module declares, assigns, reaches or calls.
+
+    Functions, classes, assignment targets, attribute names and the names of
+    called functions. That is every place a mathematical quantity can be
+    spelled: computing one means either naming it or reaching for something
+    that is named.
+    """
+
+    names: set[str] = set()
+
+    for node in ast.walk(tree):
+        if isinstance(
+            node,
+            (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef),
+        ):
+            names.add(node.name)
+        elif isinstance(node, ast.Attribute):
+            names.add(node.attr)
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                names.update(
+                    sub.id
+                    for sub in ast.walk(target)
+                    if isinstance(sub, ast.Name)
+                )
+        elif isinstance(node, (ast.AnnAssign, ast.AugAssign)):
+            names.update(
+                sub.id
+                for sub in ast.walk(node.target)
+                if isinstance(sub, ast.Name)
+            )
+        elif isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name):
+                names.add(node.func.id)
+            elif isinstance(node.func, ast.Attribute):
+                names.add(node.func.attr)
+
+    return names
+
+
+def mathematics_findings(path: Path) -> list[str]:
+    """Everything mathematical in a module, measured off its syntax tree.
+
+    An empty list is the measurement that lets a file named in
+    :data:`RECLASSIFIED_AS_CAPTURE_SELECTION` be relocked. It is read off the
+    file in the working tree at build time, so it describes the bytes being
+    packaged rather than the bytes somebody reviewed.
+
+    Three things are looked for, in the three places mathematics can enter a
+    module: an import of a computing library, an import of one of this
+    repository's own model modules, and an identifier naming a mathematical
+    quantity. Each finding is rendered as a sentence so a refusal says which
+    of the three it was and where.
+    """
+
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+
+    findings: list[str] = []
+    pandas_aliases: set[str] = set()
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                parts = alias.name.split(".")
+                root_name = parts[0]
+
+                if root_name == "pandas":
+                    pandas_aliases.add(
+                        (alias.asname or alias.name).split(".")[0]
+                    )
+                    continue
+
+                if root_name in MATHEMATICS_LIBRARIES:
+                    findings.append(f"imports {alias.name}")
+                    continue
+
+                if (
+                    root_name == "nba_prop_quant"
+                    and len(parts) > 1
+                    and parts[1] in MODEL_MODULES
+                ):
+                    findings.append(f"imports the model module {alias.name}")
+
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            parts = module.split(".") if module else []
+
+            if node.level:
+                # A relative import: ``from .pricing import x`` names the
+                # model module in ``module``, ``from . import pricing`` names
+                # it in the imported aliases.
+                if parts and parts[0] in MODEL_MODULES:
+                    findings.append(
+                        f"imports the model module .{module}"
+                    )
+
+                if not parts:
+                    findings.extend(
+                        f"imports the model module .{alias.name}"
+                        for alias in node.names
+                        if alias.name in MODEL_MODULES
+                    )
+
+                continue
+
+            if parts and parts[0] == "pandas":
+                findings.extend(
+                    f"imports pandas.{alias.name}, which is not a container"
+                    for alias in node.names
+                    if alias.name not in CONTAINER_ONLY_PANDAS_ATTRIBUTES
+                )
+                continue
+
+            if parts and parts[0] in MATHEMATICS_LIBRARIES:
+                findings.append(f"imports from {module}")
+                continue
+
+            if parts and parts[0] == "nba_prop_quant":
+                if len(parts) > 1 and parts[1] in MODEL_MODULES:
+                    findings.append(f"imports the model module {module}")
+                elif len(parts) == 1:
+                    findings.extend(
+                        f"imports the model module nba_prop_quant.{alias.name}"
+                        for alias in node.names
+                        if alias.name in MODEL_MODULES
+                    )
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Attribute):
+            continue
+
+        if not isinstance(node.value, ast.Name):
+            continue
+
+        if node.value.id not in pandas_aliases:
+            continue
+
+        if node.attr not in CONTAINER_ONLY_PANDAS_ATTRIBUTES:
+            findings.append(
+                f"computes with pandas.{node.attr}, which is not a container"
+            )
+
+    findings.extend(
+        f"names {name}, which reads as {fragment}"
+        for name in sorted(declared_identifiers(tree))
+        for fragment in MATHEMATICS_IDENTIFIER_FRAGMENTS
+        if fragment in name.lower()
+    )
+
+    return sorted(set(findings))
+
+
 def verify_adaptive_serving_sources(
     root: Path,
     adaptive: dict[str, Any],
@@ -381,6 +631,14 @@ def verify_adaptive_serving_sources(
     must still record each file's anchor bytes, those must still be the bytes
     at the anchor commit, and a file claimed to diverge must genuinely differ
     from them, so the exemption cannot wave an unchanged file through.
+
+    A second, narrower allowance exists for the files
+    :data:`RECLASSIFIED_AS_CAPTURE_SELECTION` enumerates, and it is a
+    measurement rather than a second prefix: such a file may be relocked only
+    while :func:`mathematics_findings` reads nothing mathematical out of the
+    bytes in the working tree, and only while the contract records why the
+    historical classification of it was wrong. Everything else outside
+    :data:`DIVERGEABLE_PINNED_PREFIX` keeps refusing exactly as before.
     """
 
     problems: list[str] = []
@@ -446,11 +704,46 @@ def verify_adaptive_serving_sources(
             f"divergence(s) declared but not locked: {unlocked}"
         )
 
-    undivergeable = sorted(
-        relative
-        for relative in declared_set & pinned
-        if not relative.startswith(DIVERGEABLE_PINNED_PREFIX)
-    )
+    undivergeable: list[str] = []
+
+    for relative in sorted(declared_set & pinned):
+        if relative.startswith(DIVERGEABLE_PINNED_PREFIX):
+            continue
+
+        if relative not in RECLASSIFIED_AS_CAPTURE_SELECTION:
+            undivergeable.append(relative)
+            continue
+
+        path = root / relative
+
+        if not path.exists():
+            problems.append(
+                f"{relative}: is reclassified as capture selection but is "
+                "missing from the worktree, so the measurement that it "
+                "contains no mathematics cannot be taken"
+            )
+            continue
+
+        findings = mathematics_findings(path)
+
+        if findings:
+            problems.append(
+                f"{relative}: is reclassified as capture selection, but the "
+                "working tree contains mathematics in it, so the "
+                "reclassification does not hold and it may not be relocked: "
+                f"{findings}"
+            )
+            continue
+
+        if not str(
+            locked.get(relative, {}).get("reclassification_reason") or ""
+        ).strip():
+            problems.append(
+                f"{relative}: is relocked outside "
+                f"{DIVERGEABLE_PINNED_PREFIX} without recording why the "
+                "runtime contract's classification of it as mathematics is "
+                "wrong"
+            )
 
     if undivergeable:
         problems.append(

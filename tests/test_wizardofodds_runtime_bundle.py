@@ -1551,8 +1551,38 @@ def test_the_real_lock_lets_the_real_contract_be_packaged():
     assert len(adaptive["files"]) > len(pinned)
 
 
+#: The four historically pinned library modules that really are the
+#: mathematics. Enumerated here rather than derived from the directory they
+#: sit in, because the directory is the proxy this test exists to check and a
+#: test cannot check a proxy against itself.
+THE_MATHEMATICS = (
+    "src/nba_prop_quant/distributions.py",
+    "src/nba_prop_quant/gate3_v2.py",
+    "src/nba_prop_quant/pricing.py",
+    "src/nba_prop_quant/production.py",
+)
+
+
 def test_the_real_lock_diverges_only_on_command_line_drivers():
-    """The mathematics is still anchor-pinned and cannot be relocked."""
+    """The mathematics is still anchor-pinned and cannot be relocked.
+
+    The rule used to be the directory a pinned file sits in: ``scripts/`` is a
+    command-line driver and may be relocked, everything else is the
+    mathematics and may not. That was a proxy, and it was wrong about
+    ``prospective_snapshot.py``, which decides which point-in-time capture may
+    be read and computes nothing -- so the builder now carries one enumerated
+    reclassification beside the prefix rule, and a file named there may be
+    relocked only while a measurement over the working tree finds no
+    mathematics in it.
+
+    So this asserts three things rather than one. The four files that are the
+    mathematics are byte-identical to the anchor and cannot be relocked by
+    either route. The only historically pinned divergence outside ``scripts/``
+    is the one enumerated reclassified file. And the measurement that
+    authorises it is checked in both directions: it passes for the
+    reclassified file and fails for each of the four, which is what makes the
+    reclassification unreachable by appeal rather than merely narrow.
+    """
 
     contract = json.loads(REAL_CONTRACT_PATH.read_text(encoding="utf-8"))
 
@@ -1560,29 +1590,86 @@ def test_the_real_lock_diverges_only_on_command_line_drivers():
 
     adaptive = adaptive_serving_contract()
 
-    for relative in adaptive["diverged_from_historical_reference"]:
-        if relative in pinned:
-            assert relative.startswith(builder.DIVERGEABLE_PINNED_PREFIX)
+    # The carve-out is one file, so it cannot have become a second prefix.
+    assert builder.RECLASSIFIED_AS_CAPTURE_SELECTION == (
+        "src/nba_prop_quant/prospective_snapshot.py",
+    )
+    assert builder.DIVERGEABLE_PINNED_PREFIX == "scripts/"
+
+    outside_the_drivers = sorted(
+        relative
+        for relative in adaptive["diverged_from_historical_reference"]
+        if relative in pinned
+        and not relative.startswith(builder.DIVERGEABLE_PINNED_PREFIX)
+    )
+
+    assert outside_the_drivers == sorted(
+        builder.RECLASSIFIED_AS_CAPTURE_SELECTION
+    )
 
     mathematics = sorted(
         relative
         for relative in pinned
         if not relative.startswith(builder.DIVERGEABLE_PINNED_PREFIX)
+        and relative not in builder.RECLASSIFIED_AS_CAPTURE_SELECTION
     )
 
-    assert mathematics == [
-        "src/nba_prop_quant/distributions.py",
-        "src/nba_prop_quant/gate3_v2.py",
-        "src/nba_prop_quant/pricing.py",
-        "src/nba_prop_quant/production.py",
-        "src/nba_prop_quant/prospective_snapshot.py",
-    ]
+    assert mathematics == list(THE_MATHEMATICS)
 
+    # Not relockable by either route: not declared diverged, and not
+    # enumerated as reclassified either.
+    for relative in mathematics:
+        assert relative not in adaptive["diverged_from_historical_reference"]
+        assert relative not in builder.RECLASSIFIED_AS_CAPTURE_SELECTION
+
+    # Still byte-identical to the architecture reference.
     builder.verify_frozen_model_sources(
         PROJECT,
         contract["model_source_commit"],
         mathematics,
     )
+
+    # The measurement passes for the reclassified file.
+    for relative in builder.RECLASSIFIED_AS_CAPTURE_SELECTION:
+        assert builder.mathematics_findings(PROJECT / relative) == []
+
+    # And fails for every file it must never be able to authorise.
+    for relative in mathematics:
+        findings = builder.mathematics_findings(PROJECT / relative)
+
+        assert findings, f"{relative} passes the no-mathematics measurement"
+
+    # Which is also the builder's own refusal, not just this test's reading:
+    # a contract declaring one of the four diverged is refused by name.
+    def mutate(adaptive_contract):
+        adaptive_contract["diverged_from_historical_reference"] = sorted(
+            [*adaptive["diverged_from_historical_reference"], THE_MATHEMATICS[0]]
+        )
+        adaptive_contract["divergence_count"] = len(
+            adaptive_contract["diverged_from_historical_reference"]
+        )
+
+    forged = adaptive_serving_contract()
+
+    mutate(forged)
+
+    with pytest.raises(builder.BuildError, match="may not relock them"):
+        builder.verify_adaptive_serving_sources(
+            PROJECT,
+            forged,
+            anchor_commit=contract["model_source_commit"],
+            historical_contract_path=REAL_CONTRACT_PATH,
+            historically_pinned=contract["frozen_model_source_files"],
+        )
+
+
+#: The contract version whose history entry records the Step 3D discharge.
+#:
+#: Version 11 is where the builder learned to read this contract, which is
+#: what the obligation was. Every version after it is a relock, and a relock
+#: discharges nothing, so the discharge is named once and at a version that
+#: does not move.
+STEP_3D_DISCHARGE_VERSION = 11
 
 
 def test_the_deferred_obligation_is_recorded_as_discharged():
@@ -1604,7 +1691,26 @@ def test_the_deferred_obligation_is_recorded_as_discharged():
     history = adaptive["contract_version_history"]
 
     assert str(adaptive["contract_version"]) in history
-    assert "Step 3D" in history[str(adaptive["contract_version"])]
+
+    # The discharge is found at the version that performed it rather than at
+    # whichever version happens to be latest. It used to be read off the
+    # latest one, which was true for exactly as long as the discharge was the
+    # most recent change and then started asserting that every later relock
+    # re-discharges the same obligation.
+    discharged_at = sorted(
+        int(version)
+        for version, entry in history.items()
+        if "Step 3D" in entry
+    )
+
+    assert discharged_at == [STEP_3D_DISCHARGE_VERSION], (
+        "the Step 3D discharge must be recorded once, at the version that "
+        "discharged it"
+    )
+    assert "19_build_wizardofodds_runtime_bundle.py" in history[
+        str(STEP_3D_DISCHARGE_VERSION)
+    ]
+    assert adaptive["contract_version"] >= STEP_3D_DISCHARGE_VERSION
 
     builder_source = BUILDER_PATH.read_text(encoding="utf-8")
 
@@ -1625,31 +1731,89 @@ def test_the_deferred_obligation_is_recorded_as_discharged():
 #: as version 9 recorded them, with the collector's own lock entry left out.
 #:
 #: The pin used to cover the whole subset, because at the time the only
-#: contract edit in flight was the note and the version. Version 10 then
-#: relocked :data:`THE_ONE_LOCK_ANOTHER_CHANGE_MOVED` as part of the
-#: capture-concurrency correction -- a real lock move, separately declared and
-#: recorded in the version history -- so a whole-subset literal taken before
-#: it would now assert something false, and widening it to the new value would
-#: assert nothing at all.
+#: contract edit in flight was the note and the version. Reviewed relocks have
+#: landed since -- the collector's capture-concurrency correction, the
+#: snapshot module's duplicate-capture resolution, the prediction entry
+#: point's refusal on a short slate -- each separately declared and each named
+#: in the version history. So a whole-subset literal taken before them now
+#: asserts something false, and widening it to the value taken after them
+#: would assert nothing at all: a subset digest recomputed over the current
+#: contract says only that the current contract is what it is.
 #:
-#: So the pin is narrowed to what this test was always for: discharging the
-#: Step 3D obligation moved nothing. It covers every lock-bearing field except
-#: the single entry another reviewed change is allowed to have moved, and the
-#: test accounts for that entry field by field rather than exempting it.
-#: Pinned as a literal rather than read from a git ref so it stays meaningful
-#: after this lands and the ref moves on.
+#: So the literal does not move, and the test puts the subset back into the
+#: shape version 9 left it in before taking the digest. Three substitutions do
+#: that, and every one of them is itself verified rather than trusted, because
+#: the digest covers the result byte for byte -- a substitution that is wrong
+#: by one character fails here:
+#:
+#: * the divergence list and its count go back to version 9's, which are
+#:   enumerated below and cross-checked against the live contract member by
+#:   member, so a divergence appearing from anywhere else fails;
+#: * the snapshot module's entry goes back to the one version 9 held, which
+#:   needs no literal: at version 9 it was byte-identical to the architecture
+#:   reference, so its two hashes are the anchor blob's own and it carried
+#:   neither a divergence reason nor a reclassification reason;
+#: * the prediction entry point's entry goes back to version 9's current hash
+#:   and version 9's divergence reason, the latter by length rather than by
+#:   transcription, because a divergence reason may only ever be extended --
+#:   which this also pins, since a rewritten reason would not have version
+#:   9's text as its prefix.
+#:
+#: The collector's entry stays out, as it was when the literal was taken, and
+#: all three relocks are then accounted for field by field below.
 ADAPTIVE_LOCK_DIGEST_AT_VERSION_NINE_WITHOUT_THE_COLLECTOR = (
     "2492dd67ff7b012aae25116722f026c70d684928230eae0c0d7c6ed1902c7573"
 )
 
-#: The locked file the capture-concurrency correction relocked, and the only
-#: one any change landing beside this one may have moved.
-THE_ONE_LOCK_ANOTHER_CHANGE_MOVED = "scripts/11_collect_snapshots.py"
+#: Every locked file a reviewed relock has moved since version 9, and the only
+#: ones any change landing beside this one may have moved.
+LOCKS_REVIEWED_RELOCKS_MOVED = (
+    "scripts/10_predict_slate.py",
+    "scripts/11_collect_snapshots.py",
+    "src/nba_prop_quant/prospective_snapshot.py",
+)
 
-#: That file's anchor hash, which a relock must never touch: a relock records
-#: what the working tree now is, never what the architecture reference was.
-COLLECTOR_HISTORICAL_REFERENCE = (
-    "dd0c3ed393ec04bbef521c4ff0d719bf3744ee04ef6405e83bc19b99233b6535"
+#: The one of them the digest literal was taken without, because the literal
+#: predates the capture-concurrency correction that relocked it.
+THE_LOCK_LEFT_OUT_OF_THE_DIGEST = "scripts/11_collect_snapshots.py"
+
+#: Those files' anchor hashes, which a relock must never touch: a relock
+#: records what the working tree now is, never what the architecture reference
+#: was.
+HISTORICAL_REFERENCES_AT_VERSION_NINE = {
+    "scripts/10_predict_slate.py": (
+        "045d75037dcb030076aa70e08e3b71b63fa8fba761bd63b9b3a4e20d5f2e5e45"
+    ),
+    "scripts/11_collect_snapshots.py": (
+        "dd0c3ed393ec04bbef521c4ff0d719bf3744ee04ef6405e83bc19b99233b6535"
+    ),
+    "src/nba_prop_quant/prospective_snapshot.py": (
+        "2389d919c1d791eb044f786495cd55d6de505dfd7a58cfa548a7a07f14c9dedb"
+    ),
+}
+
+#: What version 9 recorded for the prediction entry point: the bytes it served
+#: then, and the length of the reason it gave for diverging from the anchor.
+PREDICT_SLATE_CURRENT_SHA256_AT_VERSION_NINE = (
+    "ef2acef39e9fcbd2ac030fd6b3e397ca60337c92ffce0058c0ec481c8be129c1"
+)
+
+PREDICT_SLATE_DIVERGENCE_REASON_CHARS_AT_VERSION_NINE = 1869
+
+#: The divergences version 9 declared.
+DIVERGENCES_AT_VERSION_NINE = (
+    "scripts/10_predict_slate.py",
+    "scripts/11_collect_snapshots.py",
+    "scripts/15_price_markets.py",
+    "src/nba_prop_quant/slate.py",
+    "src/nba_prop_quant/storage.py",
+)
+
+#: The divergences reviewed relocks have declared since. One: the snapshot
+#: module, which version 12 declared and which the builder's measured
+#: reclassification is what allows to be packaged at all.
+DIVERGENCES_DECLARED_SINCE_VERSION_NINE = (
+    "src/nba_prop_quant/prospective_snapshot.py",
 )
 
 ADAPTIVE_LOCK_BEARING_FIELDS = (
@@ -1664,14 +1828,56 @@ ADAPTIVE_LOCK_BEARING_FIELDS = (
 )
 
 
+def lock_entry_at_version_nine(relative: str, entry: dict) -> dict:
+    """One relocked lock entry put back into the form version 9 held it in.
+
+    Only the fields a relock is allowed to move are substituted; everything
+    else is carried through from the live contract, so a change to a field no
+    relock may touch reaches the digest and fails there.
+    """
+
+    restored = dict(entry)
+
+    anchor = anchor_blob_sha256(relative)
+
+    assert restored["historical_reference_sha256"] == anchor
+
+    if relative == "src/nba_prop_quant/prospective_snapshot.py":
+        # Version 9 held it byte-identical to the architecture reference, so
+        # it was not a divergence and had nothing to justify.
+        restored["current_sha256"] = anchor
+        restored["matches_historical_reference"] = True
+        restored.pop("divergence_reason", None)
+        restored.pop("reclassification_reason", None)
+        return restored
+
+    if relative == "scripts/10_predict_slate.py":
+        restored["current_sha256"] = (
+            PREDICT_SLATE_CURRENT_SHA256_AT_VERSION_NINE
+        )
+        reason = restored["divergence_reason"]
+        restored["divergence_reason"] = reason[
+            :PREDICT_SLATE_DIVERGENCE_REASON_CHARS_AT_VERSION_NINE
+        ]
+        return restored
+
+    raise AssertionError(f"no version 9 form is recorded for {relative}")
+
+
 def test_discharging_the_obligation_moved_no_lock():
-    """The contract edit must be the note and the version, nothing else.
+    """Nothing moved except the relocks that were each separately reviewed.
 
     Every lock, hash, divergence and invariant has to be what version 9
     recorded, so teaching the builder to read this contract cannot have
-    quietly relocked anything on the way. The one exception is the collector,
-    which a separate reviewed change relocked, and the exception is read out
-    field by field below rather than taken on trust.
+    quietly relocked anything on the way, and neither can the measured
+    reclassification that lets the snapshot module's relock be packaged. The
+    exceptions are the reviewed relocks. They are not exempted: each one is
+    put back into its version 9 form before the digest is taken, which the
+    digest then verifies byte for byte, and each one is read out field by
+    field afterwards -- its anchor bytes, its pinned status, its divergence
+    from the anchor, and an entry past version 9 in the history naming it. So
+    a lock that moved without being declared fails whether or not it is on
+    the list.
     """
 
     adaptive = adaptive_serving_contract()
@@ -1681,8 +1887,29 @@ def test_discharging_the_obligation_moved_no_lock():
     }
 
     locked = dict(subset["locked_serving_source_files"])
-    collector = locked.pop(THE_ONE_LOCK_ANOTHER_CHANGE_MOVED)
+
+    relocked = {
+        relative: locked[relative]
+        for relative in LOCKS_REVIEWED_RELOCKS_MOVED
+    }
+
+    # The literal was taken without the collector's entry, so it stays out.
+    del locked[THE_LOCK_LEFT_OUT_OF_THE_DIGEST]
+
+    for relative in LOCKS_REVIEWED_RELOCKS_MOVED:
+        if relative == THE_LOCK_LEFT_OUT_OF_THE_DIGEST:
+            continue
+
+        locked[relative] = lock_entry_at_version_nine(
+            relative,
+            locked[relative],
+        )
+
     subset["locked_serving_source_files"] = locked
+    subset["diverged_from_historical_reference"] = list(
+        DIVERGENCES_AT_VERSION_NINE
+    )
+    subset["divergence_count"] = len(DIVERGENCES_AT_VERSION_NINE)
 
     digest = hashlib.sha256(
         json.dumps(subset, sort_keys=True, separators=(",", ":")).encode(
@@ -1692,22 +1919,45 @@ def test_discharging_the_obligation_moved_no_lock():
 
     assert digest == ADAPTIVE_LOCK_DIGEST_AT_VERSION_NINE_WITHOUT_THE_COLLECTOR
 
-    # The collector's entry may have been relocked, but only its current hash
-    # and the reason recording why. Its anchor, its pinned status and its
-    # divergence from the anchor are the reviewed version 9 values.
-    assert collector["historical_reference_sha256"] == (
-        COLLECTOR_HISTORICAL_REFERENCE
+    # The substituted divergence list, cross-checked against the one the
+    # contract actually declares: version 9's plus exactly the ones later
+    # reviewed relocks declared, so a divergence from anywhere else fails.
+    assert adaptive["diverged_from_historical_reference"] == sorted(
+        {
+            *DIVERGENCES_AT_VERSION_NINE,
+            *DIVERGENCES_DECLARED_SINCE_VERSION_NINE,
+        }
     )
-    assert collector["historically_byte_pinned"] is True
-    assert collector["matches_historical_reference"] is False
+    assert adaptive["divergence_count"] == len(
+        adaptive["diverged_from_historical_reference"]
+    )
+    assert set(DIVERGENCES_AT_VERSION_NINE).isdisjoint(
+        DIVERGENCES_DECLARED_SINCE_VERSION_NINE
+    )
 
-    # And a moved lock is only legitimate if the history says it moved, so the
-    # relock has to be named by an entry past the version the pin is taken at.
-    assert any(
-        THE_ONE_LOCK_ANOTHER_CHANGE_MOVED in entry
-        for version, entry in adaptive["contract_version_history"].items()
-        if int(version) > 9
-    )
+    # A relocked entry may have moved its current hash and the reason
+    # recording why. Its anchor, its pinned status and its divergence from the
+    # anchor are the reviewed version 9 values.
+    for relative, entry in sorted(relocked.items()):
+        assert entry["historical_reference_sha256"] == (
+            HISTORICAL_REFERENCES_AT_VERSION_NINE[relative]
+        ), f"{relative}'s anchor hash was rewritten"
+        assert entry["historically_byte_pinned"] is True, relative
+        assert entry["matches_historical_reference"] is False, relative
+        assert entry["current_sha256"] != (
+            HISTORICAL_REFERENCES_AT_VERSION_NINE[relative]
+        ), f"{relative} is listed as relocked but matches the anchor"
+
+        # And a moved lock is only legitimate if the history says it moved, so
+        # each relock has to be named by an entry past the version the pin is
+        # taken at.
+        assert any(
+            relative in entry_text
+            for version, entry_text in adaptive[
+                "contract_version_history"
+            ].items()
+            if int(version) > 9
+        ), f"{relative} was relocked without the history naming it"
 
     # And the version did move, so the edit is not passing itself off as the
     # reviewed version 9 contract.

@@ -32,6 +32,7 @@ from pathlib import Path
 import pytest
 
 from nba_prop_quant.research.game_latent_state.safety import (
+    ADDITIVE_ONLY_CAPTURE_SELECTION_SOURCES,
     ADDITIVE_ONLY_NAMED_DESTINATIONS,
     ADDITIVE_ONLY_PAGE_CONSISTENCY_CHECKS,
     ADDITIVE_ONLY_PUBLICATION_TRANSPORTS,
@@ -39,10 +40,17 @@ from nba_prop_quant.research.game_latent_state.safety import (
     ADDITIVE_ONLY_SERVING_ENTRY_POINTS,
     ADDITIVE_ONLY_SERVING_SOURCES,
     ADDITIVE_ONLY_WORKFLOWS,
+    CAPTURE_SELECTION_CLASS,
+    CAPTURE_SELECTION_EXEMPT_FUNCTIONS,
+    CAPTURE_SELECTION_EXEMPT_METHODS,
     DECLARABLE_SERVING_SOURCE_REGISTRIES,
     NUMERICAL_SURFACE_EXEMPT_FUNCTIONS,
+    DECLARED_CAPTURE_ISOLATION_NAMES,
+    DECLARED_CAPTURE_RESOLUTION_NAMES,
+    DECLARED_CAPTURE_SELECTION_DEFINITIONS,
     DECLARED_PAGE_CONSISTENCY_NAMES,
     DECLARED_PUBLICATION_TRANSPORT_NAMES,
+    DECLARED_SERVING_EXCLUSION_NAMES,
     DECLARED_SERVING_PLUMBING_NAMES,
     PAGE_CONSISTENCY_CLASS,
     PAGE_CONSISTENCY_EXEMPT_FUNCTIONS,
@@ -947,6 +955,153 @@ def assert_only_the_slate_builder_moved(
             )
 
 
+def assert_only_the_capture_selection_moved(
+    relative: str, before: str, after: str
+) -> None:
+    """Nothing about what a capture *is* may differ, only how it is read.
+
+    The snapshot module's byte pin protects a third thing again: not what a
+    published record says and not what the fitted models are shown, but which
+    point-in-time capture pricing is allowed to read at all. It is restated
+    rather than lifted in the one direction the carve-out in ``safety``
+    defines -- ``select_capture_bundle`` is the one definition whose body may
+    differ, and in particular ``canonical_records_sha256`` and
+    ``build_capture_id`` are separate top-level definitions and are held
+    syntax-tree-identical here, which is what keeps the addressing of every
+    capture ever written out of a change to the reading of the log. Every
+    module constant, the component specification among them, is pinned too,
+    and what the exempt function may have gained is held to the declared
+    resolution names.
+
+    That is strictly more than this file's byte comparison asserted, which
+    said nothing about content at all once a file was allowed to differ.
+
+    The second defect in this module is in a method rather than a function:
+    the client assembled the whole slate in one comprehension, so one game's
+    refusal aborted every game's. A class compared whole cannot say "this
+    one method may differ" -- it reads the isolation and a rewritten
+    accessor the same way -- so the client is compared member by member in
+    the shape the page-consistency pin above already uses, ``__init__`` is
+    the only member exempt, and a definition the module gained has to name
+    something declared.
+    """
+    removed = [
+        line for line in before.splitlines() if line not in after.splitlines()
+    ]
+
+    assert removed == [], (
+        f"{relative} removed or edited lines production has: {removed}"
+    )
+
+    definitions_before = top_level(before)
+    definitions_after = top_level(after)
+
+    assert set(definitions_before) <= set(definitions_after), (
+        f"{relative} dropped "
+        f"{sorted(set(definitions_before) - set(definitions_after))}"
+    )
+
+    for name, node in definitions_before.items():
+        if name in CAPTURE_SELECTION_EXEMPT_FUNCTIONS:
+            continue
+
+        if name == CAPTURE_SELECTION_CLASS:
+            continue
+
+        assert ast.dump(node) == ast.dump(definitions_after[name]), (
+            f"{relative}:{name} is not what production has, and only "
+            f"{list(CAPTURE_SELECTION_EXEMPT_FUNCTIONS)} may differ"
+        )
+
+    methods_before = class_methods(before, CAPTURE_SELECTION_CLASS)
+    methods_after = class_methods(after, CAPTURE_SELECTION_CLASS)
+
+    assert methods_before, f"{relative} has no {CAPTURE_SELECTION_CLASS}"
+
+    assert set(methods_before) <= set(methods_after), (
+        f"{relative} dropped "
+        f"{sorted(set(methods_before) - set(methods_after))}"
+    )
+
+    for name, node in methods_before.items():
+        if name in CAPTURE_SELECTION_EXEMPT_METHODS:
+            continue
+
+        assert ast.dump(node) == ast.dump(methods_after[name]), (
+            f"{relative}:{CAPTURE_SELECTION_CLASS}.{name} is not the member "
+            "production has, and only "
+            f"{list(CAPTURE_SELECTION_EXEMPT_METHODS)} may differ"
+        )
+
+    # A definition the module gained is as much a change as one it edited,
+    # and the line-set rule above cannot see it: adding is all that rule
+    # permits. So the additions are enumerated by exact name.
+    gained = sorted(
+        (set(definitions_after) - set(definitions_before))
+        | (set(methods_after) - set(methods_before))
+    )
+
+    assert set(gained) <= set(DECLARED_CAPTURE_SELECTION_DEFINITIONS), (
+        f"{relative} gained "
+        f"{sorted(set(gained) - set(DECLARED_CAPTURE_SELECTION_DEFINITIONS))}"
+        ", which nothing declares"
+    )
+
+    constants_before = module_constants(before)
+    constants_after = module_constants(after)
+
+    assert set(constants_before) <= set(constants_after), (
+        f"{relative} dropped "
+        f"{sorted(set(constants_before) - set(constants_after))}"
+    )
+
+    for name, node in constants_before.items():
+        assert ast.dump(node) == ast.dump(constants_after[name]), (
+            f"{relative}:{name} is a module constant and may not move"
+        )
+
+    # The two exemptions have different subjects and so different declared
+    # names. The function may only gain statements about recognising that
+    # two records are one capture; the method may only gain statements about
+    # which games of the slate a refusal costs.
+    for members, before_nodes, after_nodes, declared_names, subject in (
+        (
+            CAPTURE_SELECTION_EXEMPT_FUNCTIONS,
+            definitions_before,
+            definitions_after,
+            DECLARED_CAPTURE_RESOLUTION_NAMES,
+            "capture resolution",
+        ),
+        (
+            CAPTURE_SELECTION_EXEMPT_METHODS,
+            methods_before,
+            methods_after,
+            DECLARED_CAPTURE_ISOLATION_NAMES,
+            "capture isolation",
+        ),
+    ):
+        for name in members:
+            if name not in before_nodes:
+                continue
+
+            statements = {
+                ast.dump(node) for node in before_nodes[name].body
+            }
+
+            for node in after_nodes[name].body:
+                rendered = ast.dump(node)
+
+                if rendered in statements:
+                    continue
+
+                assert any(
+                    declared in rendered for declared in declared_names
+                ), (
+                    f"{relative}:{name} added a statement that is not "
+                    f"declared {subject}: {ast.unparse(node)[:160]}"
+                )
+
+
 def assert_only_the_serving_entry_point_moved(
     relative: str, before: str, after: str
 ) -> None:
@@ -1017,9 +1172,17 @@ def assert_only_the_serving_entry_point_moved(
             if rendered in statements:
                 continue
 
+            # Both lists, because an entry point may gain a quantity it
+            # carries forward and -- since the capture-selection carve-out
+            # made a short slate possible -- a refusal on a game it could
+            # not serve. The serving-source pin above still accepts only
+            # the first list.
             assert any(
                 declared in rendered
-                for declared in DECLARED_SERVING_PLUMBING_NAMES
+                for declared in (
+                    *DECLARED_SERVING_PLUMBING_NAMES,
+                    *DECLARED_SERVING_EXCLUSION_NAMES,
+                )
             ), (
                 f"{relative}:{name} added a statement that is not declared "
                 f"serving plumbing: {ast.unparse(node)[:160]}"
@@ -1225,6 +1388,10 @@ NARROWED_NUMERICAL_PINS: tuple[tuple[tuple[str, ...], object], ...] = (
     (ADDITIVE_ONLY_SERVING_ENTRY_POINTS, assert_only_the_serving_entry_point_moved),
     (ADDITIVE_ONLY_NAMED_DESTINATIONS, assert_only_named_destinations_were_added),
     (ADDITIVE_ONLY_PUBLISHING_SWITCH, assert_only_the_live_decision_moved),
+    (
+        ADDITIVE_ONLY_CAPTURE_SELECTION_SOURCES,
+        assert_only_the_capture_selection_moved,
+    ),
 )
 
 
