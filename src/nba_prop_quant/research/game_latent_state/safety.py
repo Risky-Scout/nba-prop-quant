@@ -180,10 +180,12 @@ ADDITIVE_ONLY_SERVING_SOURCES: tuple[str, ...] = (
 #: So the module is declarable, on terms narrower than the two serving sources
 #: are held to, because what it decides is more dangerous than what they
 #: decide. :data:`CAPTURE_SELECTION_EXEMPT_FUNCTIONS` names the one function
-#: whose body may differ, every line production has must still be there, every
-#: other function in the module -- the canonical digest, the capture id, the
-#: component reader, the pre-tip check, the snapshot client and every accessor
-#: it serves records through -- is pinned syntax-tree-identical to production,
+#: whose body may differ and :data:`CAPTURE_SELECTION_EXEMPT_METHODS` the one
+#: method, every line production has must still be there, every other
+#: definition in the module -- the canonical digest, the capture id, the
+#: component reader, the pre-tip check, and the snapshot client's every other
+#: method, each accessor it serves records through among them -- is pinned
+#: syntax-tree-identical to production one definition at a time,
 #: every module constant is pinned too, and the one statement the exempt
 #: function may have gained is held to
 #: :data:`DECLARED_CAPTURE_RESOLUTION_NAMES`. In particular
@@ -225,6 +227,98 @@ CAPTURE_SELECTION_EXEMPT_FUNCTIONS: tuple[str, ...] = (
 #: duplicate happened.
 DECLARED_CAPTURE_RESOLUTION_NAMES: tuple[str, ...] = (
     "_resolve_duplicate_scheduled_captures",
+)
+
+#: The only *method* of the declared capture-selection source whose body may
+#: differ from production.
+#:
+#: The carve-out above was written for a defect in a function, and there is a
+#: second defect in the same module that is not in a function. Selecting a
+#: capture refuses per game, which is right; the client assembled the whole
+#: slate by selecting every game of it in one dict comprehension, so the
+#: first game that refused aborted construction and no game of the slate was
+#: priced. The blast radius of a per-game refusal was the evening.
+#:
+#: That is the other half of what 2026-10-23 cost. Three games lost their
+#: predictions and the crash was in this client's construction, so one
+#: conflicted window is sufficient to explain all three, the other two as
+#: collateral rather than as three independent duplicates -- a reading that
+#: fits the evidence and that nobody has confirmed against the production
+#: log. Either way the refusals involved are permanent: two captures of a
+#: window stay two captures and a capture taken after its game tipped stays
+#: post-tip, so for the games they belong to there is no later run that
+#: repairs anything, and for every *other* game of the slate there was no
+#: reason to be paying for it at all.
+#:
+#: So ``__init__`` is exempt, and only ``__init__``. It is where the slate is
+#: assembled and the one place the isolation can be stated; every other
+#: method of the client -- ``games``, ``lineups``, ``live_player_props``,
+#: ``active_players``, ``injuries``, ``lineage_for_game``, ``lineage_frame``
+#: -- is an accessor serving reads records through, and all of them stay
+#: pinned, which is what keeps "one game is excluded" from becoming "a game
+#: is served from something else". Note the unit: these are methods, so the
+#: pins compare the module one method at a time rather than comparing the
+#: class whole, and the exemption buys exactly the one named here.
+CAPTURE_SELECTION_CLASS: str = "ProspectiveSnapshotClient"
+
+CAPTURE_SELECTION_EXEMPT_METHODS: tuple[str, ...] = (
+    "__init__",
+)
+
+#: What a statement added to the capture-selection client is allowed to be
+#: about, and what the module may have gained a definition for.
+#:
+#: The rule :data:`DECLARED_CAPTURE_RESOLUTION_NAMES` states, for the
+#: exemption whose subject is which games of a slate a refusal costs. The way
+#: this exemption would widen is by coming to decide something about a game
+#: it excluded, or by letting an excluded game be quietly absent instead of
+#: named, and the defence is that every added statement has to name one of
+#: these three.
+#:
+#: ``_isolated_capture_refusals`` performs the selection one game at a time
+#: and returns the refusals rather than the bundles, so it cannot become a
+#: second place a capture is chosen; it catches only ``RuntimeError``, which
+#: is every refusal the selection states, so a log that cannot be read at all
+#: still aborts the slate rather than being isolated into one game.
+#: ``_refusals`` is where they are kept and is the only thing the assembly
+#: is allowed to narrow itself by. ``excluded_games`` is how a caller reaches
+#: them, because a release that is missing a game and does not say so is a
+#: worse failure than the one being fixed. None of the three can name a
+#: probability, a price, an edge, an EV, a line or a route, none writes the
+#: capture log, and none can make an ineligible capture eligible: the
+#: comprehension that builds the slate is unchanged, so every eligibility
+#: check still runs over the resolved record exactly where it always ran.
+DECLARED_CAPTURE_ISOLATION_NAMES: tuple[str, ...] = (
+    "_isolated_capture_refusals",
+    "_refusals",
+    "excluded_games",
+)
+
+#: Every definition the declared capture-selection source may have gained.
+#:
+#: The two rules above govern the *statements* an exempt definition may have
+#: gained, and neither says anything about a definition that did not exist
+#: before. A module can be changed as thoroughly by what is added beside a
+#: pinned function as by editing it, and the line-set rule does not notice:
+#: adding is all it permits.
+#:
+#: So the additions are enumerated, by exact name rather than by substring,
+#: and they are the only five. Three belong to the resolution:
+#: ``_capture_identity`` states which fields of a ``capture_run`` envelope
+#: decide that two records are one capture, ``_describe_capture_conflict``
+#: renders the difference when they are not, and
+#: ``_resolve_duplicate_scheduled_captures`` is what
+#: ``select_capture_bundle`` calls. Two belong to the isolation:
+#: ``_isolated_capture_refusals`` finds the games that cannot be served and
+#: ``excluded_games`` is how a caller reaches them. Anything else appearing
+#: in this module is a change nobody declared, whatever the pinned functions
+#: still say.
+DECLARED_CAPTURE_SELECTION_DEFINITIONS: tuple[str, ...] = (
+    "_capture_identity",
+    "_describe_capture_conflict",
+    "_isolated_capture_refusals",
+    "_resolve_duplicate_scheduled_captures",
+    "excluded_games",
 )
 
 #: The only functions in a declared serving source whose bodies may differ
@@ -313,6 +407,32 @@ DECLARED_SERVING_PLUMBING_NAMES: tuple[str, ...] = (
     "_prior_window_participation",
     "prior_participation_rate",
     "NO_APPEARANCE_PRIOR",
+)
+
+#: What a serving entry point may have gained that is not a quantity.
+#:
+#: Every name above is something carried forward: a column the fitted models
+#: want, a flag, a value substituted where training puts one. A refusal is
+#: not one of those, so it gets its own name rather than being filed among
+#: them, and the entry-point pin accepts both lists while the serving-source
+#: pin still accepts only the first.
+#:
+#: There is exactly one, and it exists because the capture-selection
+#: carve-out made a short slate possible. Selecting a capture refuses per
+#: game and the snapshot client used to assemble the whole slate in one
+#: comprehension, so one game's refusal aborted every game's; isolating that
+#: means ``10_predict_slate.py`` can now be handed a slate with a game
+#: missing. A release that is missing a game and does not say so is a worse
+#: failure than the abort it replaced, so ``excluded_games`` is read from
+#: the client and the run refuses on it -- once where every game of the
+#: slate was excluded, which would otherwise take the existing empty-slate
+#: path and exit zero, and once at the end after the projections for the
+#: games that *could* be served are safely written. It names games and
+#: reasons and nothing else: it cannot reach a projection, a probability, a
+#: price, an edge, an EV, a quantile, a line, a feature, a calibration or a
+#: Gate 3 route, and the only thing it can do to a run is stop it.
+DECLARED_SERVING_EXCLUSION_NAMES: tuple[str, ...] = (
+    "excluded_games",
 )
 
 #: The serving *orchestrator* a declaration may name, and only additively.
@@ -981,59 +1101,6 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: happened.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
-        "ops/run_t20_production_controller.py": (
-            "a T-20 window that was captured and that no release carries is "
-            "now a state the controller can see, report and recover from. "
-            "Publication is recorded on publication, as an append-only row "
-            "per published release under processed/t20_served_windows/, "
-            "beside the morning receipt this controller already reads from "
-            "the same durable data root. The collector's capture log is not "
-            "written, read differently or depended on less: it remains the "
-            "capture authority and completed_window_ids is unchanged. plan() "
-            "gains the slate-wide set of captured-but-unpublished windows, "
-            "run() serves and publishes them before its own group work with "
-            "no collector invocation and no sleep, the probe reports them "
-            "and asks for the job, the receipt and the summary name them, a "
-            "refusal carries them out with it, and a segment that still has "
-            "one reports T20_CAPTURED_WINDOWS_UNSERVED and exits non-zero. "
-            "Recovery proves the capture through _verify_captured, which is "
-            "select_capture_bundle, so a capture that is not exactly one "
-            "scheduled pre-tip capture of that window with matching "
-            "component digests refuses here rather than being published. "
-            "Nothing here captures, so nothing here can fabricate, re-time "
-            "or relabel a snapshot or let a later snapshot stand in for a "
-            "T-20 one. No existing refusal, outcome, readiness check, "
-            "ordering or publication idempotency rule is removed or "
-            "weakened, publication stays canary-only with no mode argument, "
-            "and no probability, price, edge, EV, model, calibration or "
-            "Gate 3 route is computed anywhere in this file"
-        ),
-        "scripts/11_collect_snapshots.py": (
-            "two scheduled sweeps of one slate can no longer both record a "
-            "claim to the same capture window. One added context manager, "
-            "capture_window_claim, which is declared capture window "
-            "selection, and one added statement in main that enters it "
-            "alongside the balldontlie client it already entered. It is an "
-            "exclusive flock on a lock file beside capture_runs/{date}.jsonl, "
-            "taken before completed_window_ids is read and released after "
-            "the capture_run envelope is appended, so the second sweep reads "
-            "the claim set the first one left and takes the no-unseen-"
-            "windows path the collector already has. Held across the "
-            "collection and not only across the append, because a capture's "
-            "component digests are recomputed from every row carrying its "
-            "captured_at and two sweeps at one instant otherwise write into "
-            "one another's digests. The wait is bounded by the existing "
-            "--grace-minutes window and refuses rather than duplicating. No "
-            "line production has was removed or edited: every function "
-            "except parse_args and main is syntax-tree-identical to "
-            "production, parse_args is untouched, and main's one changed "
-            "statement is the with statement it already had. No API call, "
-            "component, digest, grace window, due-window rule or "
-            "capture_run key moved -- capture_id is derived from that "
-            "envelope, so a changed key would invalidate every capture ever "
-            "written -- and no probability, price, edge, EV, quantile, line, "
-            "calibration or Gate 3 route is computed or changed"
-        ),
         "src/nba_prop_quant/prospective_snapshot.py": (
             "a window with two records of one capture is now served rather "
             "than refused for the rest of the slate's life, and a window "
@@ -1065,7 +1132,64 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
             "the change that decides when two records denote one -- and no "
             "probability, price, edge, EV, quantile, line, distribution, "
             "calibration, dependence coefficient, Gate 3 route or "
-            "publication rule is computed or changed"
+            "publication rule is computed or changed. Second change, same "
+            "module and the other half of the same principle: a refusal now "
+            "costs the game it belongs to and no other game. "
+            "ProspectiveSnapshotClient.__init__ assembled the slate by "
+            "selecting every game of it in one dict comprehension, so the "
+            "first game whose capture could not be selected aborted "
+            "construction and nothing in the slate was priced -- which is "
+            "why three games lost predictions on 2026-10-23 when one "
+            "conflicted window is enough to explain all three. It gains two "
+            "statements, both declared capture isolation: the games that "
+            "refuse are found one at a time by _isolated_capture_refusals "
+            "and kept in _refusals with the reason selection gave verbatim, "
+            "and the comprehension then runs over the games that are left. "
+            "The comprehension itself is unchanged line for line, so the "
+            "scheduled-reason filter, the error count, the missing hashes, "
+            "the component digests, the capture id, the target game and the "
+            "pre-tip bound all still decide every served game exactly where "
+            "they always did, and no game is served from anything the first "
+            "pass decided -- it returns refusals, never bundles. Only "
+            "RuntimeError is isolated, which is every refusal the selection "
+            "states; a log that cannot be read at all still aborts the "
+            "slate rather than becoming a quietly short one. An excluded "
+            "game is named rather than absent: excluded_games is added to "
+            "the client, it carries the whole refusal, and the serving "
+            "entry point declared below refuses the run on it. Every other "
+            "method of the client is pinned syntax-tree-identical one "
+            "method at a time -- games, lineups, live_player_props, "
+            "active_players, injuries, lineage_for_game and lineage_frame, "
+            "which is every route a caller has to a game's records, so an "
+            "excluded game stays unreachable rather than becoming reachable "
+            "through something else"
+        ),
+        "scripts/10_predict_slate.py": (
+            "a slate that could not serve every game must say so rather "
+            "than be short. The isolation declared above means this script "
+            "can now be handed a slate with a game missing, and a release "
+            "that is missing a game and does not say so is a worse failure "
+            "than the abort it replaced. main gains two refusals and "
+            "nothing else: the excluded games are read from the client "
+            "immediately after the slate is read, and if every game of the "
+            "slate was excluded the run refuses there rather than taking "
+            "the existing empty-slate path, which prints No games found and "
+            "exits zero -- a slate nothing could serve must not read as a "
+            "quiet evening. Otherwise the projections are written first, "
+            "because they are every game that could be served and an "
+            "operator adjudicating captures against a tip should not have "
+            "to rebuild them, and then each excluded game is printed with "
+            "the reason select_capture_bundle gave and the run exits "
+            "non-zero. That keeps the automated path exactly as closed as "
+            "it was when one refusal aborted the client -- the segment "
+            "refuses and nothing is published -- and what is new is that "
+            "the refusal names the games and the reasons instead of being a "
+            "traceback out of a dict comprehension. parse_args is "
+            "untouched, no line production has was removed or edited, every "
+            "other definition in the file is syntax-tree-identical to "
+            "production, and no projection, probability, price, edge, EV, "
+            "quantile, line, feature, model, calibration, Gate 3 route or "
+            "publication rule is computed or changed anywhere in it"
         ),
         "models/frozen_manifests/"
         "nba_prop_quant_v2_adaptive_serving_source_contract.json": (

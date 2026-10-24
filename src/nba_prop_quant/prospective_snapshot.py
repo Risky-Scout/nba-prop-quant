@@ -958,6 +958,69 @@ def _dedupe(
     ]
 
 
+def _isolated_capture_refusals(
+    snapshot_dir: Path,
+    *,
+    date: str,
+    game_ids: list[int],
+    offset_minutes: int,
+) -> dict[int, str]:
+    """Which games of a slate cannot be served, decided one game at a time.
+
+    :func:`select_capture_bundle` decides one game and refuses one game. The
+    slate was assembled by selecting every game of it in a single
+    comprehension, so the first game that refused aborted the assembly and
+    no game in the slate was priced: a conflict in one window cost every
+    other window of the evening, and the refusals it fires on are permanent
+    ones. Two captures of a window stay two captures, a capture taken after
+    its game tipped stays post-tip, and the capture log is append-only, so
+    for those games "try again later" is not a thing that exists.
+
+    A refusal has to cost the game it belongs to and no other game, so the
+    selection is attempted per game here and the games that refuse are
+    recorded with the reason they gave, verbatim. Nothing is decided about
+    them beyond that they cannot be served: this returns refusals rather
+    than bundles precisely so that it cannot become a second place where a
+    capture is chosen.
+
+    Only ``RuntimeError`` is caught, which is every refusal the selection
+    states -- the scheduled-reason filter finding nothing, two records that
+    are two captures, a recorded error, a missing hash, a component digest
+    that is not the content on disk, a capture id that is not the envelope's
+    own, a games payload without the target game, a capture past the tip.
+    Anything else means the log could not be read at all rather than that
+    one game is unservable, and a truncated line or a window id that is not
+    a number has to keep aborting the slate: swallowing it per game would
+    turn a corrupt log into a quietly short release, which is the failure
+    this whole path exists to prevent.
+    """
+    refusals = {}
+
+    for game_id in sorted(
+        {
+            int(x)
+            for x in game_ids
+        }
+    ):
+        try:
+            select_capture_bundle(
+                snapshot_dir,
+                date=date,
+                game_id=game_id,
+                offset_minutes=(
+                    offset_minutes
+                ),
+            )
+        except RuntimeError as error:
+            refusals[
+                game_id
+            ] = str(
+                error
+            )
+
+    return refusals
+
+
 class ProspectiveSnapshotClient:
     def __init__(
         self,
@@ -1027,6 +1090,45 @@ class ProspectiveSnapshotClient:
                     )
                 )
 
+        # One game's refusal is one game's problem. The comprehension below
+        # selects every game of the slate, so before it runs the games that
+        # cannot be selected are found and set aside with the reason
+        # selection gave. What is left is the slate that can be served, and
+        # the comprehension builds it from exactly the games that can.
+        #
+        # Selecting twice is deliberate and is the cheaper half of the
+        # trade. The selection is a pure read of an append-only log, so the
+        # two passes cannot disagree, and the second is production's own
+        # line-for-line selection: every eligibility check -- the
+        # scheduled-reason filter, the error count, the missing hashes, the
+        # component digests recomputed from the rows on disk, the capture id
+        # recomputed from the envelope, the target game, the pre-tip bound
+        # -- runs inside the comprehension over the resolved record exactly
+        # as it always did. No game is served from anything this pass
+        # decided. On a slate heavier than production has ever had -- twelve
+        # games and a full evening of sweeps in one day's component logs --
+        # the extra read costs under half a second, which is a fair price
+        # for "the selection pricing reads is still the unchanged one".
+        self._refusals = (
+            _isolated_capture_refusals(
+                self.snapshot_dir,
+                date=self.target_date,
+                game_ids=sorted(
+                    game_ids
+                ),
+                offset_minutes=(
+                    self.offset_minutes
+                ),
+            )
+        )
+
+        game_ids = sorted(
+            set(game_ids)
+            - set(
+                self._refusals
+            )
+        )
+
         self._bundles = {
             game_id: (
                 select_capture_bundle(
@@ -1042,6 +1144,30 @@ class ProspectiveSnapshotClient:
                 game_ids
             )
         }
+
+    def excluded_games(
+        self,
+    ) -> dict[int, str]:
+        """The games of this slate that cannot be served, and why.
+
+        An excluded game must not be a quietly shorter slate. A release that
+        is missing a game and does not say so is a worse failure than the
+        one the isolation fixes, so every game left out is reachable here,
+        by game id, carrying the refusal :func:`select_capture_bundle`
+        raised verbatim rather than a summary of it -- which window, how
+        many records it found, how many captures those records denote and
+        the fields they differ on. A caller that writes a release is
+        expected to read this and refuse rather than publish a short slate.
+
+        Sorted by game id so that a log line or a receipt naming them reads
+        the same way on every run, and a copy so that a caller cannot drop a
+        game from the record of what was not served.
+        """
+        return dict(
+            sorted(
+                self._refusals.items()
+            )
+        )
 
     def __enter__(
         self,
