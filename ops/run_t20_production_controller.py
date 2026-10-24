@@ -435,6 +435,31 @@ SERVED_WINDOWS_RELATIVE = Path("processed") / "t20_served_windows"
 #: the capture log.
 SERVED_RECORD_TYPE = "t20_windows_served"
 
+#: Where every serving receipt this controller obtains is durably kept, one
+#: append-only file per slate.
+#:
+#: Serving rewrites ``processed/priced_markets/<slate>.parquet`` in place, so
+#: the last serve of a slate owns the bytes that survive the night. The
+#: morning lifecycle's receipt is copied into ``processed/incumbent_serving``
+#: and provenances the morning's bytes; every serve after it -- each advisory
+#: window, each T-20 segment -- replaced those bytes and kept its receipt only
+#: in ``RUNNER_TEMP``, which the job deletes. The next morning the grader
+#: compared the surviving parquet against the morning receipt, found the
+#: digests disagreed and refused, which is how run 40082999575 ended: the
+#: 2026-10-23 slate was served, published and then ungradable.
+#:
+#: The morning receipt is not touched, because the readiness proof the
+#: controller itself reads is that exact file and a later write there would
+#: re-date it. The provenance for the later bytes goes here instead: whole
+#: receipts, appended in the order they were produced, fsynced before the
+#: release they describe is published, never rewritten.
+SERVING_PROVENANCE_RELATIVE = Path("processed") / "incumbent_serving_provenance"
+
+#: The row type in that ledger, for the reason :data:`SERVED_RECORD_TYPE`
+#: exists. A reader that does not recognise it must skip the row rather than
+#: guess at it.
+SERVING_PROVENANCE_RECORD_TYPE = "incumbent_serving_provenance"
+
 #: Where the morning lifecycle's own serving receipt is durably kept. Written
 #: by the lifecycle's grading step, which copies the run-temporary receipt
 #: into the durable data root so a slate can be graded on a later day. That
@@ -1635,6 +1660,12 @@ class T20Controller:
         self.served_path = (
             self.data_root
             / SERVED_WINDOWS_RELATIVE
+            / f"{self.slate_date}.jsonl"
+        )
+
+        self.serving_provenance_path = (
+            self.data_root
+            / SERVING_PROVENANCE_RELATIVE
             / f"{self.slate_date}.jsonl"
         )
 
@@ -3371,6 +3402,22 @@ class T20Controller:
 
             return None
 
+        # This serve has already rewritten the slate's priced markets, so its
+        # provenance is recorded before the advisory release is published,
+        # exactly as the T-20 path does it. A failure here fails the advisory
+        # window rather than the segment: the T-20 serve later in the night
+        # rewrites those bytes and records its own receipt, so the slate stays
+        # gradable, and an advisory window has never been allowed to take the
+        # production window down with it.
+        try:
+            self._persist_serving_provenance(
+                served, offset_minutes=offset, window_ids=windows
+            )
+        except ControllerRefused as error:
+            self._fail_advisory(rows, offset=offset, reason=str(error))
+
+            return None
+
         return served
 
     def _advisory_stage(
@@ -4002,6 +4049,14 @@ class T20Controller:
                 "a served slate",
             )
 
+        self._persist_serving_provenance(
+            served,
+            offset_minutes=self.offset_minutes,
+            window_ids=[
+                str(window.get("window_id") or "") for window in windows
+            ],
+        )
+
         self.serving.append(
             {
                 "outcome": outcome,
@@ -4010,6 +4065,7 @@ class T20Controller:
                     or ""
                 ),
                 "receipt_path": str(serving_receipt),
+                "serving_provenance_path": str(self.serving_provenance_path),
                 "slate_date": str(served.get("slate_date") or ""),
             }
         )
@@ -4260,6 +4316,58 @@ class T20Controller:
             os.fsync(handle.fileno())
 
         self.publications.append(row)
+
+    def _persist_serving_provenance(
+        self,
+        served: dict[str, Any],
+        *,
+        offset_minutes: int,
+        window_ids: Sequence[str],
+    ) -> None:
+        """Keep the receipt for the bytes this serve just wrote.
+
+        Called the moment a serve is known to have succeeded and before the
+        release it produced is published, because by then
+        ``processed/priced_markets/<slate>.parquet`` already holds the new
+        bytes and the only copy of their provenance is in a directory the job
+        will delete. See :data:`SERVING_PROVENANCE_RELATIVE`.
+
+        The receipt is stored whole and unedited. The grader re-verifies it
+        against the parquet it is about to read, so a row that this ledger
+        paraphrased or summarised would be a row the grader could not use;
+        the added fields are only the ones that say which serve wrote it, and
+        none of them collide with a name ``build_receipt`` emits.
+
+        A failure here is a refusal, not a warning. Publishing a release
+        whose provenance was not written down is exactly the state that made
+        2026-10-23 ungradable.
+        """
+        row = {
+            **served,
+            "offset_minutes": int(offset_minutes),
+            "record_type": SERVING_PROVENANCE_RECORD_TYPE,
+            "recorded_at_utc": self.clock().isoformat(),
+            "served_window_ids": sorted(str(value) for value in window_ids),
+        }
+
+        try:
+            self.serving_provenance_path.parent.mkdir(parents=True, exist_ok=True)
+
+            with self.serving_provenance_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(row, sort_keys=True) + "\n")
+
+                handle.flush()
+
+                os.fsync(handle.fileno())
+        except OSError as error:
+            raise ControllerRefused(
+                OUTCOME_FAILED,
+                f"the serving receipt for {self.slate_date} could not be "
+                f"recorded at {self.serving_provenance_path} ({error}), so "
+                "the release about to be published would describe priced "
+                "markets nothing provenances and the slate could not be "
+                "graded",
+            ) from error
 
     def _read_receipt(self, path: Path, *, what: str) -> dict[str, Any]:
         if not path.exists():

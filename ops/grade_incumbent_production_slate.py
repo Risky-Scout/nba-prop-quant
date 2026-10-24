@@ -108,6 +108,31 @@ RECEIPTS_RELATIVE = GRADES_RELATIVE / "_receipts"
 #: with the run would leave every grade unprovenanced.
 SERVING_RECEIPTS_RELATIVE = Path("processed") / "incumbent_serving"
 
+#: Where the receipts for every serve *after* the morning one are durably
+#: kept, relative to the data root. Written by
+#: ``ops/run_t20_production_controller.py``; see its
+#: ``SERVING_PROVENANCE_RELATIVE`` for why it is a separate tree.
+#:
+#: Serving rewrites ``processed/priced_markets/<slate>.parquet`` in place and
+#: the evening's T-20 and advisory serves are the last writers, so the morning
+#: receipt provenances bytes that no longer exist and this grader refused
+#: every slate the controller published. The receipt for the surviving bytes
+#: is in here.
+SERVING_PROVENANCE_RELATIVE = Path("processed") / "incumbent_serving_provenance"
+
+#: The row type that ledger's writer stamps. A row without it was written by
+#: something else and is not read as provenance.
+SERVING_PROVENANCE_RECORD_TYPE = "incumbent_serving_provenance"
+
+#: The field ``ops/run_advisory_window_serving.py`` puts on its own receipts.
+#: An advisory serve rewrites the same priced-markets file, so its receipt is
+#: in the ledger and does describe bytes -- but it published to an advisory
+#: destination, not to the production one, and an advisory run may not
+#: contaminate the production record. A night whose T-20 serve never landed
+#: therefore grades as refused rather than grading advisory prices as though
+#: the incumbent had served them.
+ADVISORY_RECEIPT_MARKER_FIELD = "advisory"
+
 #: The grade store's primary key. Replacing on it is what makes a rerun
 #: idempotent: one row per prediction, whatever happens to it afterwards.
 GRADE_KEY = ["prediction_id"]
@@ -377,6 +402,110 @@ def verify_receipt(
         "production_code_sha": receipt.get("production_code_sha"),
         "served_at": receipt.get("generated_at"),
     }
+
+
+def serving_provenance_rows(path: Path | None) -> list[dict[str, Any]]:
+    """Every serving receipt in a slate's provenance ledger, oldest first.
+
+    Append-only JSON lines. A line that does not parse, or that carries a
+    record type this reader does not know, is skipped rather than guessed at:
+    the ledger is a durable production tree and a later writer may add rows
+    of its own, exactly as the capture log allows.
+
+    Advisory rows are skipped too, and for a stronger reason: see
+    :data:`ADVISORY_RECEIPT_MARKER_FIELD`.
+    """
+    if path is None or not Path(path).is_file():
+        return []
+
+    rows: list[dict[str, Any]] = []
+
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+
+        if not line:
+            continue
+
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        if not isinstance(row, dict):
+            continue
+
+        if row.get("record_type") != SERVING_PROVENANCE_RECORD_TYPE:
+            continue
+
+        if row.get(ADVISORY_RECEIPT_MARKER_FIELD) is True:
+            continue
+
+        rows.append(row)
+
+    return rows
+
+
+def select_provenance(
+    *,
+    slate_date: str,
+    priced_path: Path,
+    canonical: Path | None,
+    ledger: Path | None,
+) -> dict[str, Any]:
+    """The provenance for the priced bytes on disk, or a refusal.
+
+    A slate is served more than once: the morning lifecycle serves it, then
+    each advisory window and each T-20 segment serves it again, and every
+    serve rewrites the same priced-markets file. So the question is not which
+    receipt is canonical, it is which receipt describes *these* rows -- and
+    the answer is whichever one provenances the digest the file now holds.
+
+    Candidates are offered newest-first, because in production the answer is
+    the last serve of the night, and each is put through the unchanged
+    :func:`verify_receipt`. Nothing here relaxes that check: a candidate that
+    names another slate, carries no digest, disagrees with the bytes or is
+    missing a required provenance field is rejected on exactly the grounds it
+    was rejected on before. With no candidate left the grade is refused, which
+    is the same fail-closed answer a single mismatched receipt gave.
+    """
+    candidates: list[tuple[str, dict[str, Any]]] = [
+        (f"{ledger} row {index + 1}", row)
+        for index, row in reversed(
+            list(enumerate(serving_provenance_rows(ledger)))
+        )
+    ]
+
+    if canonical is not None and Path(canonical).is_file():
+        candidates.append((str(canonical), _load_json(Path(canonical))))
+
+    if not candidates:
+        raise GradingRefused(
+            f"priced markets exist for {slate_date} but no serving receipt is "
+            f"at {canonical}. A grade with no provenance cannot satisfy "
+            "the frozen policy's provenance gate, so none is written"
+        )
+
+    refusals: list[tuple[str, GradingRefused]] = []
+
+    for origin, receipt in candidates:
+        try:
+            return verify_receipt(
+                receipt, slate_date=slate_date, priced_path=priced_path
+            )
+        except GradingRefused as error:
+            refusals.append((origin, error))
+
+    # One candidate is the case this function used to be, so it refuses in
+    # the words it refused in then.
+    if len(refusals) == 1:
+        raise refusals[0][1]
+
+    raise GradingRefused(
+        f"none of the {len(refusals)} serving receipts recorded for "
+        f"{slate_date} provenances {priced_path}, which holds "
+        f"{sha256_file(priced_path)}. "
+        + " | ".join(f"{origin}: {error}" for origin, error in refusals)
+    )
 
 
 def refuse_on_lookahead(
@@ -838,6 +967,7 @@ def grade_slate(
     receipt_path: Path | None,
     rules: Any,
     grades_root: Path,
+    provenance_ledger: Path | None = None,
 ) -> dict[str, Any]:
     """Grade one served slate and persist its rows. Returns the receipt."""
     graded_at = _utc_now()
@@ -866,15 +996,11 @@ def grade_slate(
             "grade_artifact": None,
         }
 
-    if receipt_path is None or not Path(receipt_path).is_file():
-        raise GradingRefused(
-            f"priced markets exist for {slate_date} but no serving receipt is "
-            f"at {receipt_path}. A grade with no provenance cannot satisfy "
-            "the frozen policy's provenance gate, so none is written"
-        )
-
-    provenance = verify_receipt(
-        _load_json(Path(receipt_path)), slate_date=slate_date, priced_path=priced_path
+    provenance = select_provenance(
+        slate_date=slate_date,
+        priced_path=priced_path,
+        canonical=receipt_path,
+        ledger=provenance_ledger,
     )
 
     priced = pd.read_parquet(priced_path)
@@ -1319,6 +1445,15 @@ def serving_receipt_path(
     return Path(data_root) / SERVING_RECEIPTS_RELATIVE / f"{slate_date}.json"
 
 
+def serving_provenance_path(*, data_root: Path, slate_date: str) -> Path:
+    """Where this slate's post-morning serving receipts are, by convention.
+
+    By convention only, and with no override: an explicit ``--serving-receipt``
+    names one receipt and means it, so it is not joined by a ledger of others.
+    """
+    return Path(data_root) / SERVING_PROVENANCE_RELATIVE / f"{slate_date}.jsonl"
+
+
 def run(args: argparse.Namespace) -> dict[str, Any]:
     rules = load_settlement_rules()
 
@@ -1334,6 +1469,13 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         ),
         rules=rules,
         grades_root=Path(grades_root),
+        provenance_ledger=(
+            None
+            if args.serving_receipt is not None
+            else serving_provenance_path(
+                data_root=Path(args.data_root), slate_date=args.slate_date
+            )
+        ),
     )
 
     caught_up: list[dict[str, Any]] = []
@@ -1355,6 +1497,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                     ),
                     rules=rules,
                     grades_root=Path(grades_root),
+                    provenance_ledger=serving_provenance_path(
+                        data_root=Path(args.data_root), slate_date=date
+                    ),
                 )
             )
         except GradingRefused as error:

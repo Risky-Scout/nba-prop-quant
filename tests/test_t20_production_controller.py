@@ -4809,6 +4809,170 @@ def test_publication_is_recorded_on_publication_and_names_the_release(
     assert row["offset_minutes"] == 20
 
 
+def serving_provenance(world: World, *, slate_date: str = SLATE) -> list[dict]:
+    path = (
+        world.data_root
+        / "processed"
+        / "incumbent_serving_provenance"
+        / f"{slate_date}.jsonl"
+    )
+
+    if not path.exists():
+        return []
+
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def test_every_serve_leaves_a_durable_receipt_for_the_bytes_it_wrote(tmp_path):
+    """Why: serving rewrites the slate's priced markets in place.
+
+    The morning receipt in ``processed/incumbent_serving`` provenances the
+    morning's bytes, and the receipt for the bytes a T-20 serve leaves behind
+    used to exist only in ``RUNNER_TEMP``. So from the next morning nothing
+    provenanced the priced markets on disk and the grader refused every slate
+    this controller published -- which is how run 40082999575 ended.
+    """
+    clock = Clock(at(19, 25))
+
+    world = World(tmp_path, schedules=[[game(101, at(23, 0))]], clock=clock)
+
+    write_morning_receipt(world)
+
+    build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    ).run()
+
+    production = [
+        row
+        for row in serving_provenance(world)
+        if row["offset_minutes"] == 20
+    ]
+
+    assert len(production) == 1
+
+    row = production[0]
+
+    assert row["record_type"] == controller.SERVING_PROVENANCE_RECORD_TYPE
+
+    # The grader must be able to tell this row from the advisory ones in the
+    # same file, because only this one published to the production feed.
+    assert controller.ADVISORY_RECEIPT_MARKER_FIELD not in row
+
+    assert row["outcome"] == "SERVED"
+
+    assert row["slate_date"] == SLATE
+
+    assert row["offset_minutes"] == 20
+
+    assert row["served_window_ids"] == ["101:T-20m"]
+
+    # The whole receipt, unedited: the grader re-verifies it against the
+    # parquet, so a summarised row would be a row it could not use.
+    assert row["priced_market_artifact"]["sha256"] == (
+        served_records(world)[0]["priced_market_artifact_sha256"]
+    )
+
+
+def test_the_receipt_is_durable_before_the_release_that_describes_it(tmp_path):
+    """Order matters: the bytes exist the moment serving returns.
+
+    A publication that went out first and then failed to record its own
+    provenance would be a live release nothing could grade.
+    """
+    clock = Clock(at(19, 25))
+
+    world = World(tmp_path, schedules=[[game(101, at(23, 0))]], clock=clock)
+
+    write_morning_receipt(world)
+
+    path = (
+        world.data_root
+        / "processed"
+        / "incumbent_serving_provenance"
+        / f"{SLATE}.jsonl"
+    )
+
+    seen: list[bool] = []
+
+    publish = world._publish
+
+    def watched(command):
+        seen.append(path.exists())
+
+        return publish(command)
+
+    world._publish = watched
+
+    build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    ).run()
+
+    assert seen and all(seen), (
+        "a release was published before its serving receipt was durable"
+    )
+
+
+def test_a_serve_whose_receipt_cannot_be_recorded_publishes_nothing(tmp_path):
+    """Fail closed. An ungradable release is worse than a missing one."""
+    clock = Clock(at(19, 25))
+
+    world = World(tmp_path, schedules=[[game(101, at(23, 0))]], clock=clock)
+
+    write_morning_receipt(world)
+
+    # A file where the ledger's directory has to go, so the append cannot
+    # happen for a reason the controller did not invent.
+    blocked = world.data_root / "processed" / "incumbent_serving_provenance"
+    blocked.parent.mkdir(parents=True, exist_ok=True)
+    blocked.write_text("not a directory", encoding="utf-8")
+
+    with pytest.raises(controller.ControllerRefused) as refusal:
+        build(
+            world,
+            clock=clock,
+            segment_start=SEGMENT_2[0],
+            segment_end=SEGMENT_2[1],
+        ).run()
+
+    assert "could not be recorded" in str(refusal.value)
+
+    assert not served_records(world), (
+        "a release was recorded despite its provenance never being written"
+    )
+
+
+def test_an_advisory_window_records_the_receipt_for_its_own_bytes(tmp_path):
+    """The advisory serves rewrite the same file, so they record too."""
+    clock = Clock(at(14, 25))
+
+    world = World(tmp_path, schedules=[[game(101, at(20, 0))]], clock=clock)
+
+    write_morning_receipt(world)
+
+    build(
+        world, clock=clock, segment_start=SEGMENT_1[0], segment_end=SEGMENT_1[1]
+    ).run()
+
+    rows = serving_provenance(world)
+
+    assert rows, "the advisory serves left no provenance at all"
+
+    offsets = sorted(int(row["offset_minutes"]) for row in rows)
+
+    assert offsets == sorted(controller.ADVISORY_OFFSETS_MINUTES), (
+        "a serve that rewrote the slate's priced markets left no provenance"
+    )
+
+    for row in rows:
+        assert row["record_type"] == controller.SERVING_PROVENANCE_RECORD_TYPE
+
+        assert row["priced_market_artifact"]["sha256"]
+
+
 def test_each_group_records_what_the_release_it_published_carries(tmp_path):
     """Two groups, two releases, and the second row names both windows.
 

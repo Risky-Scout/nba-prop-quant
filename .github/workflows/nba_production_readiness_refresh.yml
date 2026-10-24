@@ -394,8 +394,17 @@ jobs:
             --github-output "$GITHUB_OUTPUT" \
             --summary-path "$GITHUB_STEP_SUMMARY"
 
+      # Only when the resolver above found a segment to catch up. It answers
+      # catchup=false between 05:25 and 14:25 UTC, when no NBA T-20 window
+      # exists, and the probe is a controller invocation that fails closed on
+      # a segment it cannot establish -- so running it anyway turned every
+      # push outside those hours into a red readiness refresh whose readiness
+      # job had in fact succeeded. Four consecutive production pushes read
+      # that way, which is exactly how a real readiness failure would get
+      # missed.
       - name: Probe the catch-up segment for uncaptured T-20 work
         id: probe
+        if: steps.segment.outputs.catchup == 'true'
         env:
           BDL_API_KEY: ${{ secrets.BDL_API_KEY }}
           NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
@@ -413,13 +422,13 @@ jobs:
             --github-output "$GITHUB_OUTPUT"
 
       - name: Install the production package
-        if: steps.probe.outputs.t20_work == 'true'
+        if: steps.segment.outputs.catchup == 'true' && steps.probe.outputs.t20_work == 'true'
         run: |
           set -euo pipefail
           python -m pip install -e .
 
       - name: Capture T-20, serve the slate and publish the canary
-        if: steps.probe.outputs.t20_work == 'true'
+        if: steps.segment.outputs.catchup == 'true' && steps.probe.outputs.t20_work == 'true'
         env:
           BDL_API_KEY: ${{ secrets.BDL_API_KEY }}
           NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}

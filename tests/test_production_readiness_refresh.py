@@ -568,6 +568,49 @@ def test_the_catchup_only_runs_after_readiness_succeeds(workflow):
     assert "needs.readiness.result == 'success'" in job["if"]
 
 
+def test_the_catchup_probe_runs_only_when_there_is_a_segment_to_catch_up(
+    workflow,
+):
+    """The resolver answers catchup=false; the probe has to believe it.
+
+    ``resolve`` returns ``catchup: False`` between 05:25 and 14:25 UTC and
+    emits no segment bounds, and the probe is a controller invocation that
+    fails closed when it cannot establish its own segment. Running it on
+    empty bounds turned a successful readiness refresh into a red workflow
+    run on every production push outside those hours, which is how a genuine
+    readiness failure would be missed.
+    """
+    steps = {
+        step["name"]: step for step in workflow["jobs"]["t20_catchup"]["steps"]
+    }
+
+    guard = "steps.segment.outputs.catchup == 'true'"
+
+    for name in (
+        "Probe the catch-up segment for uncaptured T-20 work",
+        "Install the production package",
+        "Capture T-20, serve the slate and publish the canary",
+    ):
+        assert guard in steps[name]["if"], (
+            f"the {name!r} step runs without checking that a catch-up "
+            "segment exists"
+        )
+
+
+def test_the_catchup_still_captures_when_a_segment_is_live(workflow):
+    """The guard above may not be the whole condition on the working step."""
+    steps = {
+        step["name"]: step for step in workflow["jobs"]["t20_catchup"]["steps"]
+    }
+
+    capture = steps["Capture T-20, serve the slate and publish the canary"]
+
+    assert "steps.probe.outputs.t20_work == 'true'" in capture["if"], (
+        "a catch-up that captures without the probe finding uncaptured work "
+        "would re-capture windows the scheduled segment already owns"
+    )
+
+
 def test_the_refresh_neither_refits_nor_promotes(workflow):
     """A readiness refresh is not a lifecycle run and must not become one.
 

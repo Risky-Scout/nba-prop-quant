@@ -14,6 +14,7 @@ of lookahead.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
 from pathlib import Path
@@ -27,6 +28,48 @@ ENTRY_POINT = PROJECT / "ops" / "grade_incumbent_production_slate.py"
 
 SLATE = "2026-11-04"
 SEASON = 2026
+
+
+def controller_constants(*names: str) -> dict[str, Any]:
+    """Module-level constants the T-20 controller declares, read statically.
+
+    The grader may not import the controller -- that would pull the fit
+    registry and the frozen-bundle installer in behind it, which is the same
+    reason the controller restates the grader's constants rather than
+    importing them. So the agreement between the two is checked from the
+    source text instead.
+    """
+    source = (PROJECT / "ops" / "run_t20_production_controller.py").read_text(
+        encoding="utf-8"
+    )
+
+    wanted = set(names)
+    found: dict[str, Any] = {}
+
+    for node in ast.parse(source).body:
+        if not isinstance(node, ast.Assign):
+            continue
+
+        for target in node.targets:
+            if not isinstance(target, ast.Name) or target.id not in wanted:
+                continue
+
+            if isinstance(node.value, ast.Constant):
+                found[target.id] = node.value.value
+            else:
+                # Path("processed") / "name", read as the set of its parts:
+                # ast.walk does not promise the order of a BinOp's operands.
+                found[target.id] = {
+                    part.value
+                    for part in ast.walk(node.value)
+                    if isinstance(part, ast.Constant)
+                }
+
+    missing = wanted - set(found)
+
+    assert not missing, f"the controller declares no {sorted(missing)}"
+
+    return found
 
 
 def load_grader():
@@ -966,6 +1009,430 @@ def test_priced_markets_with_no_receipt_at_all_are_refused(grader, tmp_path):
 
     assert invoke(grader, paths) == 1
     assert not list(paths["grades_root"].rglob("*.parquet"))
+
+
+# ======================================================================
+# provenance for a slate that was served more than once
+# ======================================================================
+#
+# A real slate is served several times: the morning lifecycle serves it, then
+# every advisory window and every T-20 segment serves it again, and each serve
+# rewrites the same priced-markets file. Only the morning receipt is kept in
+# ``processed/incumbent_serving``, so from 2026-10-23 onwards the bytes that
+# survived the night were provenanced by nothing the grader looked at and
+# every published slate was refused. The controller now records each serve's
+# receipt in ``processed/incumbent_serving_provenance/<slate>.jsonl`` and these
+# are the tests that the grader reads it without relaxing anything.
+
+
+def served_again(
+    paths: dict[str, Path],
+    grader,
+    *,
+    priced: pd.DataFrame | None = None,
+    slate_date: str = SLATE,
+    overrides: dict[str, Any] | None = None,
+    record_type: str | None = "incumbent_serving_provenance",
+) -> dict[str, Any]:
+    """Reprice the slate and append the receipt for the new bytes."""
+    if priced is not None:
+        priced.to_parquet(paths["priced_path"], index=False)
+
+    row = {
+        "generated_at": "2026-11-04T23:40:00+00:00",
+        "incumbent_authority": "frozen_deployment_bundle",
+        "incumbent_fit_id": None,
+        "incumbent_version": "freeze-2026-10-01",
+        "input_state_fingerprint": "e5c2" * 16,
+        "model_authority": "incumbent",
+        "offset_minutes": 20,
+        "outcome": "SERVED",
+        "prediction_artifact": {"path": "projections", "sha256": "cd" * 32},
+        "priced_market_artifact": {
+            "path": str(paths["priced_path"]),
+            "sha256": grader.sha256_file(paths["priced_path"]),
+        },
+        "production_code_sha": "ee63d6c36b53ac92584ca6a79cf734d413a151b8",
+        "recorded_at_utc": "2026-11-04T23:40:02+00:00",
+        "served_window_ids": ["1:T-20m"],
+        "slate_date": slate_date,
+    }
+
+    if record_type is not None:
+        row["record_type"] = record_type
+
+    row.update(overrides or {})
+
+    ledger = (
+        paths["data_root"]
+        / grader.SERVING_PROVENANCE_RELATIVE
+        / f"{slate_date}.jsonl"
+    )
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+
+    with ledger.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(row, sort_keys=True) + "\n")
+
+    return row
+
+
+def by_convention(grader, paths: dict[str, Path], slate_date: str = SLATE) -> int:
+    """Grade without naming a receipt, which is how production calls it.
+
+    ``invoke`` passes ``--serving-receipt`` explicitly and so deliberately
+    opts out of the ledger. The lifecycle does not pass it, so these tests
+    must not either.
+    """
+    return grader.main(
+        [
+            "--slate-date",
+            slate_date,
+            "--data-root",
+            str(paths["data_root"]),
+            "--grades-root",
+            str(paths["grades_root"]),
+            "--receipt-path",
+            str(paths["receipt_path"]),
+            "--catch-up-days",
+            "0",
+        ]
+    )
+
+
+@pytest.fixture
+def reserved(tmp_path, grader):
+    """A settled slate whose evening serve replaced the morning's bytes."""
+    paths = build_root(
+        tmp_path,
+        priced=priced_frame(
+            [{"game_id": 1, "player_id": 11, "line": 24.5, "q_over": 0.62}],
+            priced_at="2026-11-04T22:05:00+00:00",
+        ),
+        stats=stats_frame([{"game_id": 1, "player_id": 11, "pts": 31.0}], date=SLATE),
+        games=games_frame([{"game_id": 1}], date=SLATE),
+    )
+
+    row = served_again(
+        paths,
+        grader,
+        priced=priced_frame(
+            [{"game_id": 1, "player_id": 11, "line": 24.5, "q_over": 0.71}],
+            priced_at="2026-11-04T23:40:00+00:00",
+        ),
+    )
+
+    return paths, row
+
+
+def test_the_morning_receipt_alone_cannot_grade_a_reserved_slate(
+    grader, reserved
+):
+    """The defect, stated as the state it leaves behind.
+
+    Without the ledger this is all the grader had, and it is the exact
+    refusal run 40082999575 recorded for 2026-10-23.
+    """
+    paths, _ = reserved
+
+    assert invoke(grader, paths) == 1
+
+    receipt = json.loads(paths["receipt_path"].read_text(encoding="utf-8"))
+    assert receipt["outcome"] == grader.OUTCOME_REFUSED
+    assert "changed after they were served" in receipt["reason"]
+
+
+def test_the_evening_serve_s_own_receipt_provenances_the_surviving_bytes(
+    grader, reserved
+):
+    paths, _ = reserved
+
+    assert by_convention(grader, paths) == 0
+
+    receipt = json.loads(paths["receipt_path"].read_text(encoding="utf-8"))
+    assert receipt["outcome"] == grader.OUTCOME_GRADED
+
+    rows = stored_grades(paths)
+    assert len(rows) == 1
+
+
+def test_the_grade_records_the_identities_of_the_serve_that_wrote_the_rows(
+    grader, reserved
+):
+    """Not the morning's. A grade row's provenance has to be its own."""
+    paths, row = reserved
+
+    assert by_convention(grader, paths) == 0
+
+    rows = stored_grades(paths)
+
+    assert set(rows["production_code_sha"]) == {row["production_code_sha"]}
+    assert set(rows["input_state_fingerprint"]) == {
+        row["input_state_fingerprint"]
+    }
+    assert set(rows["prediction_artifact_sha256"]) == {
+        row["priced_market_artifact"]["sha256"]
+    }
+
+
+def test_the_serve_that_wrote_the_bytes_is_used_even_with_a_later_serve_logged(
+    grader, reserved
+):
+    """Newest first, but correctness decides: only one digest can match.
+
+    A segment that served and then refused before repricing leaves a newer
+    row describing bytes that are not on disk. It must be passed over rather
+    than refuse the slate.
+    """
+    paths, row = reserved
+
+    served_again(
+        paths,
+        grader,
+        overrides={
+            "priced_market_artifact": {
+                "path": str(paths["priced_path"]),
+                "sha256": "f0" * 32,
+            },
+            "production_code_sha": "0" * 40,
+            "recorded_at_utc": "2026-11-04T23:55:02+00:00",
+        },
+    )
+
+    assert by_convention(grader, paths) == 0
+
+    rows = stored_grades(paths)
+    assert set(rows["production_code_sha"]) == {row["production_code_sha"]}
+
+
+def test_a_ledger_that_describes_none_of_the_bytes_is_refused(grader, reserved):
+    """Fail closed, and say so. No candidate means no grade."""
+    paths, _ = reserved
+
+    ledger = (
+        paths["data_root"] / grader.SERVING_PROVENANCE_RELATIVE / f"{SLATE}.jsonl"
+    )
+    ledger.write_text("", encoding="utf-8")
+
+    served_again(
+        paths,
+        grader,
+        overrides={
+            "priced_market_artifact": {
+                "path": str(paths["priced_path"]),
+                "sha256": "f0" * 32,
+            }
+        },
+    )
+
+    assert by_convention(grader, paths) == 1
+
+    receipt = json.loads(paths["receipt_path"].read_text(encoding="utf-8"))
+    assert receipt["outcome"] == grader.OUTCOME_REFUSED
+    assert "none of the 2 serving receipts" in receipt["reason"]
+    assert not list(paths["grades_root"].rglob("*.parquet"))
+
+
+def test_a_ledger_row_for_another_slate_is_not_provenance(grader, reserved):
+    """verify_receipt still decides, and it still checks the slate."""
+    paths, _ = reserved
+
+    ledger = (
+        paths["data_root"] / grader.SERVING_PROVENANCE_RELATIVE / f"{SLATE}.jsonl"
+    )
+    ledger.write_text("", encoding="utf-8")
+
+    served_again(paths, grader, overrides={"slate_date": "2026-11-03"})
+
+    assert by_convention(grader, paths) == 1
+
+    receipt = json.loads(paths["receipt_path"].read_text(encoding="utf-8"))
+    assert "does not provenance these predictions" in receipt["reason"]
+
+
+@pytest.mark.parametrize(
+    "field", ["production_code_sha", "input_state_fingerprint"]
+)
+def test_a_ledger_row_missing_a_required_identity_is_not_provenance(
+    grader, reserved, field
+):
+    paths, _ = reserved
+
+    ledger = (
+        paths["data_root"] / grader.SERVING_PROVENANCE_RELATIVE / f"{SLATE}.jsonl"
+    )
+    ledger.write_text("", encoding="utf-8")
+
+    served_again(paths, grader, overrides={field: ""})
+
+    assert by_convention(grader, paths) == 1
+
+    receipt = json.loads(paths["receipt_path"].read_text(encoding="utf-8"))
+    assert field in receipt["reason"]
+
+
+def test_a_row_without_the_ledger_s_record_type_is_not_read(grader, reserved):
+    """A later writer's rows in the same tree are skipped, not guessed at."""
+    paths, _ = reserved
+
+    ledger = (
+        paths["data_root"] / grader.SERVING_PROVENANCE_RELATIVE / f"{SLATE}.jsonl"
+    )
+    ledger.write_text("", encoding="utf-8")
+
+    served_again(paths, grader, record_type=None)
+
+    assert by_convention(grader, paths) == 1
+
+    receipt = json.loads(paths["receipt_path"].read_text(encoding="utf-8"))
+    assert "changed after they were served" in receipt["reason"]
+
+
+def test_an_advisory_serve_cannot_provenance_a_production_grade(
+    grader, reserved
+):
+    """An advisory run may not contaminate the production record.
+
+    The advisory serves rewrite the same priced-markets file, so their
+    receipts are in the ledger and do describe real bytes -- but they
+    published to an advisory destination. A night whose T-20 serve never
+    landed has to refuse rather than score advisory prices as the
+    incumbent's.
+    """
+    paths, _ = reserved
+
+    ledger = (
+        paths["data_root"] / grader.SERVING_PROVENANCE_RELATIVE / f"{SLATE}.jsonl"
+    )
+    ledger.write_text("", encoding="utf-8")
+
+    served_again(
+        paths,
+        grader,
+        overrides={
+            grader.ADVISORY_RECEIPT_MARKER_FIELD: True,
+            "advisory_capture_offset_minutes": 45,
+            "offset_minutes": 45,
+        },
+    )
+
+    assert by_convention(grader, paths) == 1
+
+    receipt = json.loads(paths["receipt_path"].read_text(encoding="utf-8"))
+    assert receipt["outcome"] == grader.OUTCOME_REFUSED
+    assert not list(paths["grades_root"].rglob("*.parquet"))
+
+
+def test_the_advisory_marker_the_grader_skips_is_the_one_that_is_written(
+    grader,
+):
+    """Two modules naming the same field, pinned equal rather than imported.
+
+    The grader may not import the controller -- it would pull the fit
+    registry and the frozen-bundle installer behind it -- so the constant is
+    restated and this is what keeps the two honest.
+    """
+    declared = controller_constants(
+        "ADVISORY_RECEIPT_MARKER_FIELD",
+        "SERVING_PROVENANCE_RECORD_TYPE",
+        "SERVING_PROVENANCE_RELATIVE",
+    )
+
+    assert declared["ADVISORY_RECEIPT_MARKER_FIELD"] == (
+        grader.ADVISORY_RECEIPT_MARKER_FIELD
+    )
+
+    assert declared["SERVING_PROVENANCE_RECORD_TYPE"] == (
+        grader.SERVING_PROVENANCE_RECORD_TYPE
+    )
+
+    # Read from the source as the set of path segments the controller joins,
+    # which is what Path("processed") / "incumbent_serving_provenance" is.
+    assert declared["SERVING_PROVENANCE_RELATIVE"] == set(
+        grader.SERVING_PROVENANCE_RELATIVE.parts
+    )
+
+
+def test_an_unreadable_ledger_line_does_not_cost_the_slate_its_grade(
+    grader, reserved
+):
+    paths, _ = reserved
+
+    ledger = (
+        paths["data_root"] / grader.SERVING_PROVENANCE_RELATIVE / f"{SLATE}.jsonl"
+    )
+
+    ledger.write_text(
+        "not json\n\n[1, 2, 3]\n" + ledger.read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+
+    assert by_convention(grader, paths) == 0
+
+
+def test_an_explicitly_named_receipt_is_not_joined_by_the_ledger(
+    grader, reserved
+):
+    """``--serving-receipt`` names one receipt and means it.
+
+    Letting the ledger stand in would make the flag advisory, and the flag is
+    how an operator provenances a slate deliberately.
+    """
+    paths, _ = reserved
+
+    assert invoke(grader, paths) == 1
+
+    receipt = json.loads(paths["receipt_path"].read_text(encoding="utf-8"))
+    assert receipt["outcome"] == grader.OUTCOME_REFUSED
+
+
+def test_every_caught_up_slate_is_offered_its_own_ledger(grader, reserved):
+    """The catch-up path grades slates served last night, so it needs it too.
+
+    A slate is caught up a day or more after it was served, which is exactly
+    when the morning receipt is least likely to describe the surviving bytes.
+    Asserted on the call rather than by building a settled-then-pending slate,
+    because the question here is only which provenance each date is offered.
+    """
+    paths, _ = reserved
+
+    calls: list[tuple[str, object]] = []
+
+    def record(**kwargs):
+        calls.append((kwargs["slate_date"], kwargs.get("provenance_ledger")))
+
+        return {"outcome": grader.OUTCOME_GRADED, "slate_date": kwargs["slate_date"]}
+
+    grader_grade_slate = grader.grade_slate
+    grader_dates = grader.dates_needing_another_attempt
+
+    grader.grade_slate = record
+    grader.dates_needing_another_attempt = lambda **_: ["2026-11-03"]
+
+    try:
+        grader.run(
+            grader.parse_args(
+                [
+                    "--slate-date",
+                    SLATE,
+                    "--data-root",
+                    str(paths["data_root"]),
+                    "--grades-root",
+                    str(paths["grades_root"]),
+                    "--catch-up-days",
+                    "7",
+                ]
+            )
+        )
+    finally:
+        grader.grade_slate = grader_grade_slate
+        grader.dates_needing_another_attempt = grader_dates
+
+    assert [date for date, _ in calls] == [SLATE, "2026-11-03"]
+
+    for date, ledger in calls:
+        assert ledger == grader.serving_provenance_path(
+            data_root=paths["data_root"], slate_date=date
+        ), f"{date} was graded without its own serving provenance"
 
 
 def test_a_slate_whose_games_are_scheduled_elsewhere_is_refused(grader, tmp_path):
