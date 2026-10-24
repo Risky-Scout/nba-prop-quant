@@ -823,130 +823,131 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: rather than introduced and are recorded nowhere, so touching any of them
 #: again requires declaring it again.
 #:
-#: This branch declares the capture entry point, the T-20 controller and
-#: both serving-source registries, and widens the capture entry point's
-#: selection names by one, all named above. The controller is owned below,
-#: which is the reason it is declared again. The two defects it fixes are
-#: the two halves of one evening: the first made a window unpriceable, the
-#: second made that invisible and permanent.
+#: The duplicate-capture branch's four entries -- the capture entry point,
+#: the T-20 controller and both serving-source registries -- were retired in
+#: turn when they landed. Its capture lock, its durable publication ledger
+#: and its per-window recovery isolation are all in production now, so the
+#: entry that described them has gone and its text with it. The controller
+#: is owned below, which is the reason this branch declares it again rather
+#: than inheriting anything from that entry.
 #:
-#: The first is the capture carve-out's first use for a defect rather than
-#: for an argument, and the defect is one the carve-out's own text did not
-#: anticipate: not what the collector captures, nor which window it
-#: captures, but what happens when two sweeps capture at once.
+#: This branch declares the T-20 controller, and only the T-20 controller.
+#: It adds the one refusal the integration never had: nothing is published
+#: for a game that has already started.
 #:
-#: A scheduled sweep decides which windows are unclaimed by reading the
-#: capture-run log, then collects for as long as the slate takes, then
-#: appends its own claim. Nothing holds the log across those three steps, so
-#: two sweeps whose collections overlap both read the window as unclaimed
-#: and both record it. ``select_capture_bundle`` requires exactly one
-#: scheduled capture per window and refuses two, which is correct and which
-#: is permanent: the log is append-only, both captures are genuine
-#: point-in-time data, and nothing may retract or relabel either. The window
-#: becomes unpriceable for the rest of the slate's life.
+#: ``select_capture_bundle`` refuses a capture *taken* after its game tipped
+#: and nothing refused a release *published* after its game tipped, which
+#: are not the same question. The first is about when a snapshot may exist.
+#: The second is about when a price may be shown, and between them sits
+#: every way a sound pre-tip capture can be reached late: a runner picked up
+#: hours after the window, a recovery of a capture an earlier run never
+#: published, an advisory window held back for a T-20 reservation and
+#: retried in a gap that has moved past the game.
 #:
-#: That is not hypothetical. On 2026-10-23 a catch-up run and the scheduled
-#: segment run both swept the 01:40Z window, serving raised
-#: ``21717943:T-20m: expected exactly one scheduled capture, found 2``, and
-#: the three games tipping at 02:00 UTC were captured, marked complete and
-#: never priced. The published canary carried nine of the slate's twelve
-#: games and nothing in either run's receipt said which three were missing.
+#: That is not hypothetical either. On 2026-10-23 the T-20 group holding
+#: game 21717941 was priced and published two hours and forty minutes after
+#: that game tipped, and every stage reported success: the capture was
+#: pre-tip and eligible, the serving receipt said SERVED and the feed said
+#: PUBLISHED. The release that landed was a pregame page for a game in its
+#: third quarter.
 #:
-#: The fix is an exclusive ``flock`` on a lock file beside the capture-run
-#: log, taken before the log is read and released after the claim is
-#: appended, so the second sweep reads the claim set the first one left
-#: rather than the one it found and captures nothing. It is held across the
-#: collection rather than only across the append because a capture's
-#: component digests are recomputed from every row carrying its
-#: ``captured_at``: two sweeps invoked with the same instant write into one
-#: another's digests whatever either of them claims, so claiming later would
-#: have replaced an ambiguous window with a corrupt one. The wait is bounded
-#: by the capture grace window, which is the span in which a due window may
-#: legitimately be captured at all, and a sweep that cannot get the claim
-#: inside it refuses and exits non-zero rather than appending a second claim.
+#: The guard is ``assert_no_window_has_tipped`` and it sits at
+#: ``_serve_and_publish``, which every production release goes through --
+#: the capture path and the recovery path both call it and there is no
+#: third caller. The windows it is about are the ones the caller declares
+#: the publication is for, as a required keyword-only argument, so a new
+#: caller cannot reach a publication without answering the question. The
+#: advisory path is guarded at its own publication entry the same way.
 #:
-#: Nothing about what is captured moves. Every component, every API call,
-#: every digest, the grace window, the due-window rule and all sixteen keys
-#: of the ``capture_run`` envelope are the ones production has, which the
-#: branch-safety tests and the capture-policy tests both pin; every function
-#: in the file except ``parse_args`` and ``main`` is syntax-tree-identical to
-#: production and neither of those lost a line. No probability, price, edge,
-#: EV, quantile, line, distribution, calibration, dependence coefficient,
-#: Gate 3 route or publication rule is computed or changed anywhere in this
-#: change, and no fitted artifact is touched.
+#: The scoping is the load-bearing part. A release is cumulative -- one
+#: serve at an offset prices every game with an eligible capture at that
+#: offset -- so the last T-20 group of a staggered twelve-game slate is
+#: published hours after the first game of it tipped, and that first game's
+#: rows belong in the release because they were priced and published before
+#: its own tip. A guard that read the whole release rather than the windows
+#: the publication is for would refuse every late group of every staggered
+#: evening.
 #:
-#: The second defect is the durability one, and it is the one that made the
-#: first unrecoverable. Completion was recorded on capture and nowhere else:
-#: ``completed_window_ids`` reads the collector's capture log, and both the
-#: collector and the controller treat a window in it as done. That is right
-#: for capture, which is the input, and wrong for the question a run is
-#: answering, which is whether anybody was served. So a run that captured a
-#: window and then died in serving left that window indistinguishable from
-#: one a release carried. The next run's probe saw it under
-#: ``already_completed_windows``, found nothing pending, and exited a green
-#: no-op. Three games were captured, marked complete, never priced, and
-#: absent from the published feed with nothing anywhere saying which three.
+#: A refusal is taken before the serving entry point runs, so it writes
+#: nothing: no priced artifact is rebuilt, no release is minted, no
+#: ``current.json`` is repointed and no ledger row is appended. It declines
+#: to add and it never retracts -- the release already serving stays exactly
+#: as it is, and the pointer still names what it named.
 #:
-#: Publication is now recorded too, separately and durably, as an
-#: append-only row per published release under
-#: ``<data_root>/processed/t20_served_windows/``. The capture log is not
-#: touched and stays the capture authority: this is a second fact beside it,
-#: not a rewrite of it. A window that is captured and that no row names is
-#: reported by the probe, named in the receipt and shown in the job summary,
-#: makes the probe ask for the full job, and is recovered by the next run --
-#: which verifies the existing captures through ``select_capture_bundle``
-#: and then runs the same serving and publication entry points, with no
-#: collector invocation and nothing slept for. Nothing in it can fabricate,
-#: re-time or relabel a snapshot, and a window with no capture is not made
-#: recoverable by any of it. A segment that nonetheless ends with such a
-#: window reports ``T20_CAPTURED_WINDOWS_UNSERVED`` and exits non-zero,
-#: which is the first thing that has ever consulted ``OUTCOMES_THAT_SUCCEED``.
+#: It is loud. ``POST_TIP_PUBLICATION_REFUSED`` is not in
+#: ``OUTCOMES_THAT_SUCCEED``, the refusal names the game, its tip and how
+#: long ago that was, and the run exits non-zero -- through the refused
+#: window staying in the unserved set on the T-20 path, and through the
+#: segment outcome on the advisory path. The advisory refusal is still never
+#: raised from inside the advisory path: it is recorded there and escalated
+#: by ``run`` once every capture is behind it, which is the arrangement
+#: production already uses for a deferred recovery refusal, and which is
+#: what keeps a reading aid from costing the slate a capture.
 #:
-#: No workflow changes. The probe already decides whether the heavy job
-#: starts, so teaching it that an unpublished capture is work keeps the
-#: schedule the production branch runs byte-identical.
+#: It composes with the per-window recovery isolation production already
+#: has rather than duplicating it. A post-tip window is recorded through
+#: ``_record_unrecoverable`` beside the duplicate conflicts and the digest
+#: mismatches, under its own outcome because the operator response differs,
+#: and it is subtracted from the ledger row by the subtraction that is
+#: already there. It is checked behind the selection, not in front of it,
+#: so a capture that is itself post-tip is still reported with selection's
+#: own more specific reason.
+#:
+#: Nothing else moves. No capture is taken, re-timed, relabelled, merged or
+#: synthesised; the capture log is not read differently and not written at
+#: all; no non-T-20 snapshot can stand in for a T-20 one; and no
+#: probability, price, edge, EV, quantile, line, distribution, calibration,
+#: dependence coefficient, Gate 3 route, routing decision or publication
+#: destination is computed or changed anywhere in this change. No fitted
+#: artifact is touched, no gate or receipt is weakened, and no workflow,
+#: publishing switch, model, config, release or review path is modified.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
         "ops/run_t20_production_controller.py": (
-            "the blast radius of a recovery that cannot succeed, narrowed to "
-            "the window it is about. _recover verified every unserved window "
-            "of the slate in one call and the first refusal raised, so one "
-            "capture selection can never accept took the segment with it: "
-            "the verifiable windows beside it, the pending T-20 captures of "
-            "games that had not tipped, and the advisory windows after them. "
-            "Every cause is permanent and every one is a correct refusal -- a "
-            "duplicate conflict, a post-tip capture, a component digest that "
-            "no longer matches the bytes, a recorded error_count -- so each "
-            "later segment re-derived the same unserved set and stopped in "
-            "the same place. "
-            "What changes: the per-game selection is split into "
-            "_select_capture, which returns the refusal instead of raising "
-            "it, so the two callers can differ. _verify_captured, which is "
-            "the caller for a capture the run has just taken, still raises "
-            "with the same outcome and the same message and is byte-for-byte "
-            "as loud as it was. _recover verifies one window at a time, "
-            "records each refusal with the selection's own reason, and "
-            "recovers the rest. The isolation is the verification and not "
-            "the publication because publication is not divisible -- the "
-            "serving entry point prices the whole slate -- and that costs "
-            "nothing, because the selection performed here is the selection "
-            "serving performs. A serving or publication stage that refuses "
-            "after the windows verified is deferred rather than discarded: "
-            "it leaves run() with its own outcome and its own message, after "
-            "the capture work instead of instead of it, and only while the "
-            "windows are still unserved. _record_served_windows subtracts "
-            "the windows this segment proved serving cannot select, which "
-            "keeps the row's claim true and keeps the lost window in the "
-            "unserved set rather than retiring it into a green segment. "
-            "What does not change: T20_CAPTURED_WINDOWS_UNSERVED, its "
-            "absence from OUTCOMES_THAT_SUCCEED and the non-zero exit; "
-            "every capture-path refusal; the duplicate-capture claim; the "
-            "advisory reservation, destinations and refusals; the cumulative "
-            "re-serving; and the order recovery runs in. Nothing is "
-            "repaired, relabelled, re-timed, merged or synthesised, no "
-            "unverified capture is published, no non-T-20 snapshot can stand "
-            "in for a T-20 one, and no model, calibration, price or routing "
-            "is reached from here"
+            "the refusal nothing anywhere performed: no game is priced, "
+            "served or published after its own tip. select_capture_bundle "
+            "refuses a capture taken after tip, which is a statement about "
+            "when a snapshot may exist; nothing was a statement about when a "
+            "price may be shown. On 2026-10-23 the T-20 group holding game "
+            "21717941 was priced and published two hours and forty minutes "
+            "after that game tipped and every stage reported success -- the "
+            "capture was pre-tip and eligible, serving said SERVED and the "
+            "feed said PUBLISHED -- so the release that landed was a pregame "
+            "page for a game in its third quarter. "
+            "What changes: assert_no_window_has_tipped, at "
+            "_serve_and_publish, which every production release goes through "
+            "and which now takes the windows the publication is for as a "
+            "required keyword-only argument, so a caller cannot reach a "
+            "release without declaring them; the same guard at the advisory "
+            "publication entry; POST_TIP_PUBLICATION_REFUSED and its "
+            "advisory twin, neither in OUTCOMES_THAT_SUCCEED nor in "
+            "ADVISORY_OUTCOMES_WITHOUT_FAULT; an outcome argument on "
+            "_record_unrecoverable so a post-tip window joins the permanent "
+            "refusals already recorded there under its own name; and the "
+            "receipt and summary fields that show both the refusals and the "
+            "margin every cleared window had. The guard is scoped to the "
+            "windows a publication is for and never to the whole release, "
+            "because a release is cumulative and the last group of a "
+            "staggered slate is correctly published after earlier games have "
+            "tipped. The advisory refusal is recorded where it is taken and "
+            "escalated by run() after every capture, never raised from "
+            "inside the advisory path, so it cannot cost the slate a "
+            "capture. "
+            "What does not change: every existing refusal, outcome and exit "
+            "code; the capture-side pre-tip check, which still reports its "
+            "own more specific reason because the guard is checked behind "
+            "selection; the per-window recovery isolation, which this joins "
+            "rather than duplicates; the ledger subtraction; the cumulative "
+            "re-serving; the advisory reservation and destinations; and the "
+            "order recovery runs in. A refusal is taken before the serving "
+            "entry point runs, so nothing is priced, no release is minted, "
+            "no current.json is repointed and no ledger row is appended -- "
+            "the guard declines to add and never retracts, and the release "
+            "already serving is left naming exactly what it named. No "
+            "capture is taken, re-timed, relabelled, merged or synthesised, "
+            "no non-T-20 snapshot can stand in for a T-20 one, and no model, "
+            "calibration, price, PMF, Gate 3 route, routing decision or "
+            "publication destination is reached from here"
         ),
     }
 )

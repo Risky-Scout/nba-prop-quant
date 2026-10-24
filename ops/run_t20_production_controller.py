@@ -100,7 +100,10 @@ has, and all three are enforced rather than intended:
   that fails or a publication that fails is reported as
   :data:`OUTCOME_SEGMENT_COMPLETE_ADVISORY_DEGRADED`, which still succeeds,
   because a defect in an advisory window must never cost the slate its
-  production release.
+  production release. The one advisory outcome that does reach the exit code
+  is :data:`ADVISORY_OUTCOME_POST_TIP`, and even that is still not raised from
+  the advisory path: it is recorded there and escalated by :meth:`run` once
+  every capture is behind it.
 * **An advisory release cannot be mistaken for a T-20 one.** It is captured
   at its own window id, served through ``ops/run_advisory_window_serving.py``
   -- which refuses the T-20 offset and refuses to write a T-20 window id --
@@ -108,6 +111,35 @@ has, and all three are enforced rather than intended:
   ``canary-advisory/t<offset>m`` and carry the offset in their release prefix.
   No advisory release touches the T-20 canary's ``current.json``, because no
   advisory run resolves a path inside the directory that holds it.
+
+NOTHING IS PUBLISHED AFTER TIP
+------------------------------
+
+``select_capture_bundle`` refuses a capture *taken* after its game tipped.
+Nothing refused a release *published* after its game tipped, and the two are
+not the same question: the first is about when a snapshot may exist, the
+second about when a price may be shown. Between them sits every way a sound
+pre-tip capture can be reached late -- a runner picked up hours after the
+window, a recovery of a capture an earlier run never published, an advisory
+window held back for a T-20 reservation and retried in a gap that has moved
+past the game.
+
+On 2026-10-23 the T-20 group holding game 21717941 was priced and published
+two hours and forty minutes after that game tipped, and every stage reported
+success. :func:`assert_no_window_has_tipped` is the refusal that was missing.
+It sits at :meth:`T20Controller._serve_and_publish`, which every production
+release goes through, and the windows it is about are the ones the caller
+declares it is publishing for -- the group just captured or the set recovery
+verified -- never every window in the release. That scoping is what makes it
+safe on a staggered slate: a release is cumulative, so the last T-20 group of
+a twelve-game evening is published two hours after the first game tipped, and
+that first game's rows belong in it because they were priced and published
+before its own tip.
+
+A refusal is taken before the serving entry point runs. Nothing is priced,
+no release is minted, no pointer is repointed and no ledger row is appended,
+so the release a reader already has is the release a reader keeps. The
+refusal never retracts anything; it only declines to add.
 """
 
 from __future__ import annotations
@@ -383,6 +415,25 @@ OUTCOME_MISSED_WINDOW = "MISSED_T20_WINDOW"
 OUTCOME_UNSUPPORTED_TIME = "UNSUPPORTED_T20_TIME"
 OUTCOME_FAILED = "T20_CONTROLLER_FAILED"
 
+#: A release this run would have made for a game that has already started.
+#:
+#: The guard nothing anywhere performed. ``select_capture_bundle`` refuses a
+#: capture *taken* after its game tipped, which is a statement about when a
+#: snapshot may exist; nothing was a statement about when a price may be
+#: shown. On 2026-10-23 the T-20 group holding game 21717941 was priced and
+#: published two hours and forty minutes after that game tipped, because
+#: runner pickup was late, and every stage of the pipeline reported success:
+#: the capture was pre-tip and eligible, the serving receipt said SERVED and
+#: the feed said PUBLISHED. The release that landed was a pregame page for a
+#: game in its third quarter.
+#:
+#: Refused rather than recorded, because a post-tip release is the one claim
+#: this integration must never make. It is also permanent in exactly the way
+#: a duplicate conflict is -- the window's T-20 moment is behind the slate
+#: and no later run moves a tip backwards -- so a window refused here is
+#: refused identically by every segment after it.
+OUTCOME_POST_TIP_PUBLICATION = "POST_TIP_PUBLICATION_REFUSED"
+
 #: A segment that finishes with a capture of this slate that no release
 #: carries. Distinguished from every refusal above because nothing refused:
 #: the capture is sound, the recovery was attempted, and it did not get all
@@ -440,6 +491,20 @@ ADVISORY_OUTCOME_WITHDRAWN = "ADVISORY_GAME_WITHDRAWN"
 ADVISORY_OUTCOME_DEFERRED = "ADVISORY_DEFERRED_TO_LATER_SEGMENT"
 
 ADVISORY_OUTCOME_FAILED = "ADVISORY_FAILED"
+
+#: Its game started before the release could be made. The advisory twin of
+#: :data:`OUTCOME_POST_TIP_PUBLICATION`, and the only advisory outcome that
+#: reaches the exit code.
+#:
+#: Recorded here rather than raised, because raising from inside the advisory
+#: path is the one thing that path may never do: a refusal thrown while a
+#: later T-20 group is still ahead would cost the slate the capture of a game
+#: that has not tipped, and a capture is the one step in this pipeline that
+#: cannot be retried. So the refusal is taken where it is, and :meth:`run`
+#: escalates it to the segment outcome once all the capture work is behind
+#: it -- the same arrangement production already uses for a recovery refusal
+#: that has to wait for the work it would otherwise have prevented.
+ADVISORY_OUTCOME_POST_TIP = "ADVISORY_POST_TIP_PUBLICATION_REFUSED"
 
 #: Advisory outcomes that are not a defect: nothing went wrong, the window
 #: was simply not this segment's to serve. Only an outcome outside this set
@@ -799,6 +864,95 @@ def assert_destinations_are_advisory(
                 f"{production!r}, which would repoint the release a reader "
                 "fetches as the production one",
             )
+
+
+def windows_that_have_tipped(
+    rows: Sequence[dict[str, Any]], *, now: datetime
+) -> list[dict[str, Any]]:
+    """The windows among ``rows`` whose game has already started.
+
+    The subject is the windows a publication is *for*, never every window in
+    the release, and that distinction is the whole of why this is scoped to
+    rows rather than read off the capture log. A release is cumulative -- one
+    serve at an offset prices every game with an eligible capture at that
+    offset -- so by the time the last T-20 group of a staggered twelve-game
+    slate is published, the first game tipped two hours earlier and its rows
+    are correctly in the release, because they were priced and published
+    before their own tip. What has to still be ahead is the tip of the game
+    whose window this publication is the publication for.
+
+    Earliest tip first, so a refusal naming several reads in the order the
+    games started.
+    """
+    tipped = [
+        {
+            "game_id": int(row["game_id"]),
+            "minutes_since_tip": round(
+                (now - row["tip_utc"]).total_seconds() / 60.0, 3
+            ),
+            "observed_at_utc": now.isoformat(),
+            "tip_utc": row["tip_utc"].isoformat(),
+            "window_id": str(row["window_id"]),
+        }
+        for row in rows
+        if now >= row["tip_utc"]
+    ]
+
+    return sorted(
+        tipped, key=lambda entry: (entry["tip_utc"], entry["window_id"])
+    )
+
+
+def post_tip_reason(entry: dict[str, Any]) -> str:
+    """Why one window is refused, in the terms an operator can act on.
+
+    The game, the moment it started and how long ago that was, because
+    "post-tip" on its own does not tell an operator whether a runner was
+    thirty seconds late or three hours late, and those are different
+    incidents.
+    """
+    return (
+        f"game {entry['game_id']} tipped at {entry['tip_utc']}, "
+        f"{entry['minutes_since_tip']:g} minutes before "
+        f"{entry['observed_at_utc']}, so the window {entry['window_id']} is "
+        "not a pregame price and is not published. The release already "
+        "serving is left exactly as it is: nothing is retracted, "
+        "overwritten or repointed"
+    )
+
+
+def assert_no_window_has_tipped(
+    rows: Sequence[dict[str, Any]], *, now: datetime
+) -> list[dict[str, Any]]:
+    """Every window this publication is for is still ahead of its own tip.
+
+    Checked before the serving entry point is invoked, so a refusal costs
+    nothing and writes nothing: no priced artifact is rebuilt, no release is
+    minted, no ``current.json`` is repointed and no ledger row is appended.
+    The release a reader already has is the release a reader keeps.
+
+    Returns the windows it cleared, with how long each has left, so a receipt
+    can show the margin rather than only the verdict.
+    """
+    tipped = windows_that_have_tipped(rows, now=now)
+
+    if tipped:
+        raise ControllerRefused(
+            OUTCOME_POST_TIP_PUBLICATION,
+            "; ".join(post_tip_reason(entry) for entry in tipped),
+        )
+
+    return [
+        {
+            "game_id": int(row["game_id"]),
+            "minutes_before_tip": round(
+                (row["tip_utc"] - now).total_seconds() / 60.0, 3
+            ),
+            "tip_utc": row["tip_utc"].isoformat(),
+            "window_id": str(row["window_id"]),
+        }
+        for row in sorted(rows, key=lambda row: str(row["window_id"]))
+    ]
 
 
 def unsupported_t20_times(
@@ -1325,6 +1479,12 @@ class T20Controller:
         #: a later segment can still publish them.
         self.recovery_faults: list[dict[str, Any]] = []
 
+        #: How long each published window had left before its own tip, in the
+        #: order the publications were made. The cleared half of the post-tip
+        #: guard, kept because a receipt that only ever records refusals
+        #: cannot show how close a release that went out actually was.
+        self.pre_tip_margins: list[dict[str, Any]] = []
+
         self.publications: list[dict[str, Any]] = []
         self.serving: list[dict[str, Any]] = []
         self.distributions: list[dict[str, Any]] = []
@@ -1728,6 +1888,47 @@ class T20Controller:
                 readiness=readiness,
             )
 
+        # The advisory path's post-tip refusals, escalated to the segment
+        # outcome now that every capture this segment owns is behind it.
+        #
+        # Behind the outstanding check above because a T-20 window production
+        # is missing is the worse fact and keeps the outcome it has always
+        # had; a post-tip T-20 refusal lands there anyway, because the
+        # window it refused stays unserved.
+        #
+        # Decided here rather than where the refusal is taken for the reason
+        # the deferred recovery refusal is: raised from inside the advisory
+        # path it would abandon the segment with a later T-20 group still
+        # ahead of it, and the capture of a game that has not tipped is the
+        # one thing here that cannot be retried. Reported rather than
+        # degraded because a release for a game already under way is not an
+        # advisory footnote -- it is the claim this integration exists to
+        # refuse, and an operator who sees a green job does not go looking
+        # for it.
+        post_tip = [
+            record
+            for record in self.advisory
+            if str(record.get("outcome")) == ADVISORY_OUTCOME_POST_TIP
+        ]
+
+        if post_tip:
+            return self._receipt(
+                plan=plan,
+                started_at=started_at,
+                outcome=OUTCOME_POST_TIP_PUBLICATION,
+                reason=(
+                    f"{len(post_tip)} advisory window(s) of {self.slate_date} "
+                    "were reached after their own game had started, so the "
+                    "release each one would have made was refused: "
+                    + "; ".join(
+                        str(record.get("reason") or "") for record in post_tip
+                    )
+                    + ". Every release already published is untouched. This "
+                    "segment is not reported as a success"
+                ),
+                readiness=readiness,
+            )
+
         reason = (
             f"{len(self.captures)} T-{self.offset_minutes} capture(s) "
             f"completed for {self.slate_date}"
@@ -1793,6 +1994,10 @@ class T20Controller:
         """
         verified: list[dict[str, Any]] = []
 
+        recovering: list[dict[str, Any]] = []
+
+        now = self.clock()
+
         for row in sorted(rows, key=lambda row: str(row["window_id"])):
             bundle, error = self._select_capture(int(row["game_id"]))
 
@@ -1800,6 +2005,40 @@ class T20Controller:
                 self._record_unrecoverable(row, error)
 
                 continue
+
+            # The post-tip refusal, recorded the same way and for the same
+            # reason: it is permanent, and a permanent refusal must cost the
+            # window it is about and nothing else. A recovery set spans the
+            # whole slate, so on a staggered evening it routinely holds games
+            # that have tipped beside games whose tip is still an hour away,
+            # and raising for the first would discard the second.
+            #
+            # Behind the selection rather than in front of it, because the two
+            # ask different questions and the selection's answer is the more
+            # specific of the two when both apply. Selection asks whether the
+            # *capture* is eligible, which includes it being pre-tip and is a
+            # fact about the snapshot, settled for good when it was written.
+            # This asks whether a *release* may be made now, which depends on
+            # the clock and is the question nothing asked. A capture taken
+            # after tip fails both -- its window is necessarily in the past by
+            # the time anything reads it -- and the operator is better served
+            # by being told the capture is unusable than by being told the
+            # game has started.
+            tipped = windows_that_have_tipped([row], now=now)
+
+            if tipped:
+                self._record_unrecoverable(
+                    row,
+                    ControllerRefused(
+                        OUTCOME_POST_TIP_PUBLICATION,
+                        post_tip_reason(tipped[0]),
+                    ),
+                    outcome=OUTCOME_POST_TIP_PUBLICATION,
+                )
+
+                continue
+
+            recovering.append(row)
 
             verified.append(bundle)
 
@@ -1835,10 +2074,16 @@ class T20Controller:
             }
         )
 
-        self._serve_and_publish(stage_dir, readiness=readiness)
+        self._serve_and_publish(
+            stage_dir, windows=recovering, readiness=readiness
+        )
 
     def _record_unrecoverable(
-        self, row: dict[str, Any], error: RuntimeError
+        self,
+        row: dict[str, Any],
+        error: RuntimeError,
+        *,
+        outcome: str = RECOVERY_OUTCOME_UNRECOVERABLE,
     ) -> None:
         """Record one window that no later run of this controller will serve.
 
@@ -1854,6 +2099,15 @@ class T20Controller:
         The reason recorded is the selection's own, not a summary of it, so
         the receipt distinguishes a duplicate conflict from a post-tip
         capture from a digest that no longer matches the bytes on disk.
+
+        ``outcome`` separates the refusals selection makes from the one the
+        clock makes. Both are permanent, both leave the window unserved and
+        both keep the segment red, so they share this record and the unserved
+        set it feeds; they are told apart because the operator response
+        differs. A conflicted or corrupt capture is a defect in the capture
+        log. A window refused for :data:`OUTCOME_POST_TIP_PUBLICATION` has a
+        perfectly sound capture and was simply reached too late, which is a
+        question about scheduling and runner pickup.
         """
         window_id = str(row["window_id"])
 
@@ -1866,7 +2120,7 @@ class T20Controller:
             {
                 "game_id": int(row["game_id"]),
                 "observed_at_utc": self.clock().isoformat(),
-                "outcome": RECOVERY_OUTCOME_UNRECOVERABLE,
+                "outcome": str(outcome),
                 "reason": str(error),
                 "window_id": window_id,
             }
@@ -2482,6 +2736,54 @@ class T20Controller:
 
         self._advisory_held[offset] = []
 
+    def _drop_windows_that_have_tipped(
+        self,
+        held: Sequence[dict[str, Any]],
+        *,
+        offset: int,
+    ) -> list[dict[str, Any]]:
+        """The held windows still ahead of their tip, refusing the rest.
+
+        An advisory window is captured three hours, an hour and a half or
+        three quarters of an hour before tip, so on an ordinary evening it is
+        served and published long before its game starts. It can still be
+        reached late: a window served inside the reservation before a T-20
+        capture is held back, and the gap it is retried in can fall after the
+        game it is for has tipped. That release would be the same wrong claim
+        the T-20 one would be -- a pregame page for a game already under way
+        -- published to the advisory destination instead of the canary.
+
+        Refused per window and not per offset, which is the same isolation
+        recovery keeps. One offset's held set spans the slate, so on a
+        staggered evening it holds games that have tipped beside games whose
+        tip is still an hour away, and refusing the whole offset would take
+        the second with the first.
+        """
+        tipped = {
+            entry["window_id"]: entry
+            for entry in windows_that_have_tipped(held, now=self.clock())
+        }
+
+        for row in held:
+            entry = tipped.get(str(row["window_id"]))
+
+            if entry is None:
+                continue
+
+            self._record_advisory(
+                row,
+                outcome=ADVISORY_OUTCOME_POST_TIP,
+                reason=post_tip_reason(entry),
+            )
+
+        remaining = [
+            row for row in held if str(row["window_id"]) not in tipped
+        ]
+
+        self._advisory_held[offset] = list(remaining)
+
+        return remaining
+
     def _serve_and_publish_advisory(
         self,
         offset: int,
@@ -2495,10 +2797,23 @@ class T20Controller:
         Every stage boundary re-asks whether there is still room before the
         next T-20 capture, so the T-20 window's protection is not a single
         decision taken minutes earlier. Nothing here raises: an advisory
-        release that cannot be made is a recorded advisory failure, never a
-        failure of the segment.
+        release that cannot be made is a recorded advisory failure, and it
+        never costs the segment a capture. One of those failures --
+        :data:`ADVISORY_OUTCOME_POST_TIP` -- does reach the exit code, and it
+        does so from :meth:`run` after all the capture work rather than from
+        here, for exactly that reason.
         """
-        rows = list(held)
+        rows = self._drop_windows_that_have_tipped(held, offset=offset)
+
+        # Every held window was for a game that has started, so there is no
+        # release left to make. Returning before the serve rather than serving
+        # anyway is the point of the guard: nothing is priced, nothing is
+        # published and the advisory release already serving stays exactly
+        # where it is.
+        if not rows:
+            self._advisory_held[offset] = []
+
+            return
 
         windows = sorted(
             window_id
@@ -2942,7 +3257,7 @@ class T20Controller:
             }
         )
 
-        self._serve_and_publish(stage_dir, readiness=readiness)
+        self._serve_and_publish(stage_dir, windows=group, readiness=readiness)
 
     def _select_capture(
         self, game_id: int
@@ -3056,8 +3371,27 @@ class T20Controller:
         return result
 
     def _serve_and_publish(
-        self, stage_dir: Path, *, readiness: dict[str, Any]
+        self,
+        stage_dir: Path,
+        *,
+        windows: Sequence[dict[str, Any]],
+        readiness: dict[str, Any],
     ) -> None:
+        """Serve the slate once and publish it once, for ``windows``.
+
+        ``windows`` are the schedule rows this publication is being made for
+        -- the group just captured, or the set recovery verified -- and they
+        are required rather than defaulted. Every path to a production
+        release runs through this method, so making the caller say which
+        windows it is publishing for is what makes the post-tip guard below a
+        property of the controller rather than of whoever remembers to call
+        it: a new caller cannot reach a publication without answering the
+        question.
+        """
+        self.pre_tip_margins += assert_no_window_has_tipped(
+            windows, now=self.clock()
+        )
+
         serving_receipt = stage_dir / "incumbent_serving.json"
 
         feed_receipt = stage_dir / "wizardofodds_feed.json"
@@ -3419,6 +3753,16 @@ class T20Controller:
             # whole outstanding set. These are the subset of it that no
             # later run will clear, with the reason selection gave for each.
             "unrecoverable_windows": self.unrecoverable,
+            # Both halves of the post-tip guard, on the receipt whatever the
+            # outcome: the windows it refused, from either path, and the
+            # margin every window it cleared actually had.
+            "post_tip_refused_windows": [
+                record
+                for record in [*self.unrecoverable, *self.advisory]
+                if str(record.get("outcome"))
+                in (OUTCOME_POST_TIP_PUBLICATION, ADVISORY_OUTCOME_POST_TIP)
+            ],
+            "pre_tip_margins": self.pre_tip_margins,
             "recovery_faults": self.recovery_faults,
             "served_window_records": self.publications,
             "capture_ids": sorted(
@@ -3505,6 +3849,14 @@ def render(receipt: dict[str, Any]) -> str:
             ", ".join(
                 str(record.get("window_id"))
                 for record in receipt.get("unrecoverable_windows") or []
+            )
+            or "none",
+        ),
+        (
+            "refused for being post-tip",
+            ", ".join(
+                str(record.get("window_id"))
+                for record in receipt.get("post_tip_refused_windows") or []
             )
             or "none",
         ),
@@ -3595,7 +3947,10 @@ def render(receipt: dict[str, Any]) -> str:
                 "Advisory releases are published to their own confined "
                 "canary destinations and never to the T-20 canary. An "
                 "advisory failure degrades this report and does not fail "
-                "the segment."
+                "the segment, with one exception: a window refused for "
+                "being past its own tip fails it, because a release for a "
+                "game already under way is not a pregame price wherever it "
+                "is published."
             ),
             "",
             "| window | outcome | release | why |",
