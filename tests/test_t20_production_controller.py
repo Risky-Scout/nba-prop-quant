@@ -2766,6 +2766,100 @@ def test_a_window_refreshes_live_from_its_own_canary_and_nothing_else(tmp_path):
 
             assert datetime.fromisoformat(tip) == at(23, 0)
 
+        # And the capture each window's prices were selected from, so the
+        # composite manifest can name the snapshot behind that game's card.
+        # Carried out of the bundle selection the pricing path itself
+        # performed rather than selected again here, and never defaulted:
+        # the refresh refuses an advancing window it cannot name a capture
+        # for, because a card on the served root whose snapshot nobody can
+        # find again is worse than no card.
+        assert "--window-capture" in command
+
+        captures = world._values(command, "--window-capture")
+
+        assert len(captures) == len(
+            world._values(command, "--window-tip-utc")
+        )
+
+        for binding in captures:
+            window_id, _, identity = binding.partition("=")
+
+            assert window_id.endswith(f":T-{offset}m"), binding
+
+            capture_id, separator, captured_at = identity.partition("@")
+
+            assert separator, binding
+
+            assert capture_id, binding
+
+            assert datetime.fromisoformat(captured_at) < at(23, 0), binding
+
+
+def test_every_window_names_the_capture_the_pricing_path_itself_selected(
+    tmp_path,
+):
+    """The capture identity is carried, never invented and never re-derived.
+
+    The composite manifest records the snapshot behind every game's card, and
+    this controller is the only thing in the chain that knows it: the live
+    refresh is handed already-published bytes and has no capture log to read.
+    So what it passes has to be exactly what the pricing path selected, and
+    that is checked here against ``select_capture_bundle`` run independently
+    over the same log -- not against a value this controller recorded.
+    """
+    clock = Clock(at(14, 25))
+
+    games = [
+        game(101, at(23, 0)),
+        game(102, at(23, 30), home=3, away=4),
+    ]
+
+    world = World(tmp_path, schedules=[games], clock=clock)
+
+    write_morning_receipt(world)
+
+    build(
+        world,
+        clock=clock,
+        segment_start=SEGMENT_1[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    from nba_prop_quant.prospective_snapshot import select_capture_bundle
+
+    commands = live_commands(world)
+
+    assert commands
+
+    seen = 0
+
+    for command in commands:
+        offset = int(command[command.index("--snapshot-offset-minutes") + 1])
+
+        for binding in world._values(command, "--window-capture"):
+            window_id, _, identity = binding.partition("=")
+
+            game_id = int(window_id.split(":")[0])
+
+            bundle = select_capture_bundle(
+                world.snapshot_dir,
+                date=SLATE,
+                game_id=game_id,
+                offset_minutes=offset,
+            )
+
+            assert identity == f"{bundle.capture_id}@{bundle.captured_at}", (
+                binding
+            )
+
+            assert bundle.window_id == window_id
+
+            seen += 1
+
+    assert seen == len(games) * len(
+        controller.PROGRESSIVE_LIVE_OFFSETS_MINUTES
+    )
+
 
 def test_the_live_page_is_built_from_the_live_feed_receipt(tmp_path):
     """The page a reader opens is rebuilt from the release that just went live.
