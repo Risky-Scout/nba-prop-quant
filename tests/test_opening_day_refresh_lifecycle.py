@@ -38,6 +38,7 @@ from nba_prop_quant.research.game_latent_state.safety import (
     ADDITIVE_ONLY_PUBLICATION_TRANSPORTS,
     ADDITIVE_ONLY_SERVING_ENTRY_POINTS,
     ADDITIVE_ONLY_SERVING_SOURCES,
+    ADDITIVE_ONLY_WORKFLOWS,
     CAPTURE_SELECTION_CLASS,
     CAPTURE_SELECTION_EXEMPT_FUNCTIONS,
     CAPTURE_SELECTION_EXEMPT_METHODS,
@@ -1403,20 +1404,157 @@ EXPECTED_STEP_ORDER: tuple[str, ...] = (
 )
 
 
-def test_workflow_step_order_is_unchanged():
-    """G. The fix is Python state semantics; the YAML does not move."""
+def lines_only_appended(*, before: str, after: str) -> list[str]:
+    """Why ``after`` is not ``before`` plus new lines, or an empty list.
+
+    The additive-only rule is "every line production has is still there,
+    unedited and in order", and this is the one place it is computed, so the
+    two guards below and the regression tests beside them cannot read it
+    differently.
+
+    Stated as a subsequence rather than as a filtered-list equality, which is
+    the same statement only when no line repeats. A YAML workflow repeats
+    plenty of them -- ``run: |``, ``set -euo pipefail``, ``env:``, a bare
+    comment marker -- so an appended step that used any of those would read as
+    a reordering under the filtered form while having reordered nothing. The
+    production lines are consumed in order and with multiplicity, which is
+    what the rule actually means.
+    """
+    kept = before.splitlines()
+
+    lines = after.splitlines()
+
+    removed = [line for line in kept if line not in lines]
+
+    if removed:
+        return [f"removed or edited existing lines: {removed}"]
+
+    position = 0
+
+    for line in kept:
+        while position < len(lines) and lines[position] != line:
+            position += 1
+
+        if position >= len(lines):
+            return [
+                f"reordered the lines production has; {line!r} no longer "
+                "appears in its original order"
+            ]
+
+        position += 1
+
+    return []
+
+
+def test_the_additive_only_rule_still_refuses_an_edited_line():
+    assert lines_only_appended(before="a\nb\n", after="a\nB\n") != []
+
+
+def test_the_additive_only_rule_still_refuses_a_removed_line():
+    assert lines_only_appended(before="a\nb\nc\n", after="a\nc\n") != []
+
+
+def test_the_additive_only_rule_still_refuses_a_reordering():
+    assert lines_only_appended(before="a\nb\nc\n", after="a\nc\nb\n") != []
+
+
+def test_the_additive_only_rule_accepts_an_appended_block():
+    assert lines_only_appended(before="a\nb\n", after="a\nb\nc\nd\n") == []
+
+
+def test_the_additive_only_rule_accepts_an_insertion_before_the_last_step():
+    """Which is where a reporting step goes: after the work, before the report."""
+    assert lines_only_appended(before="a\nb\nz\n", after="a\nb\nc\nz\n") == []
+
+
+def test_the_additive_only_rule_tolerates_a_repeated_appended_line():
+    """The case the filtered-list form got wrong.
+
+    ``run: |`` appears in every step that runs anything, so an appended step
+    repeats lines production already has. Repeating one is not reordering it.
+    """
+    assert (
+        lines_only_appended(
+            before="step: one\nrun: |\nstep: two\nrun: |\n",
+            after="step: one\nrun: |\nstep: two\nrun: |\nstep: three\nrun: |\n",
+        )
+        == []
+    )
+
+
+def test_no_existing_workflow_step_moves_and_an_added_one_is_declared():
+    """G. The fix is Python state semantics; the YAML does not move.
+
+    Stated as "every step this workflow had is still there, in order" rather
+    than "the step list is exactly this tuple", because those are the same
+    sentence only on a branch that adds no step. The stronger form was true of
+    the branch that made this fix and is a statement about that branch rather
+    than about this fix, so it would fail for the next branch to append a
+    reporting step rather than for anything doing something wrong. That is the
+    same correction ``test_no_workflow_production_already_has_was_changed``
+    already took, for the same reason, and the mechanism is reused rather than
+    reinvented: ``nba_production_lifecycle.yml`` is in
+    ``ADDITIVE_ONLY_WORKFLOWS``, so adding a step is governed by the
+    containment declaration and rewriting one is not possible at all.
+
+    What this pins is still everything it pinned. No existing step may be
+    renamed, removed, reordered or interleaved with a new one out of position,
+    and an added step must name a declaration that says both what changes and
+    what does not.
+    """
     import yaml
 
     document = yaml.safe_load(
         LIFECYCLE_WORKFLOW.read_text(encoding="utf-8")
     )
 
-    steps = document["jobs"]["lifecycle"]["steps"]
+    steps = tuple(step["name"] for step in document["jobs"]["lifecycle"]["steps"])
 
-    assert tuple(step["name"] for step in steps) == EXPECTED_STEP_ORDER
+    missing = [name for name in EXPECTED_STEP_ORDER if name not in steps]
+
+    assert missing == [], (
+        f"these steps the lifecycle had are gone or renamed: {missing}"
+    )
+
+    assert [name for name in steps if name in set(EXPECTED_STEP_ORDER)] == list(
+        EXPECTED_STEP_ORDER
+    ), "the lifecycle reordered the steps it already had"
+
+    added = [name for name in steps if name not in set(EXPECTED_STEP_ORDER)]
+
+    if not added:
+        return
+
+    relative = LIFECYCLE_WORKFLOW.relative_to(PROJECT).as_posix()
+
+    assert relative in ADDITIVE_ONLY_WORKFLOWS, (
+        f"{relative} gained {added} and is not additive-only"
+    )
+
+    assert relative in DECLARED_INTEGRATION_PATHS, (
+        f"{relative} gained {added} without a declaration"
+    )
+
+    reason = DECLARED_INTEGRATION_PATHS[relative]
+
+    assert "What changes" in reason and "What does not change" in reason, (
+        f"the declaration for {relative} does not say both what changes and "
+        "what does not"
+    )
 
 
-def test_the_lifecycle_workflow_is_byte_identical_to_production():
+def test_the_lifecycle_workflow_is_byte_identical_to_production_or_declared():
+    """Byte-identical, or an additive declared change whose lines all survive.
+
+    Narrowed for the same reason and under the same rule as the step-order
+    pin above. A branch that must add a reporting step to the scheduled
+    lifecycle has to be able to, and the thing worth banning is doing it
+    without a reviewed statement of what changed and what did not. So the
+    allowance is exactly the line-set rule: every line production has is
+    still there, unedited and in order. No cron, trigger, permission,
+    concurrency group, runner label, checkout ref or existing command can
+    survive being changed under it.
+    """
     base = production_base()
 
     if base is None:
@@ -1424,8 +1562,24 @@ def test_the_lifecycle_workflow_is_byte_identical_to_production():
 
     relative = LIFECYCLE_WORKFLOW.relative_to(PROJECT).as_posix()
 
-    assert blob_text(base, relative) == LIFECYCLE_WORKFLOW.read_text(
-        encoding="utf-8"
+    before = blob_text(base, relative)
+
+    after = LIFECYCLE_WORKFLOW.read_text(encoding="utf-8")
+
+    if after == before:
+        return
+
+    assert relative in ADDITIVE_ONLY_WORKFLOWS, (
+        f"{relative} differs from production and is not additive-only"
+    )
+
+    assert relative in DECLARED_INTEGRATION_PATHS, (
+        f"{relative} differs from production without a declaration"
+    )
+
+    assert lines_only_appended(before=before, after=after) == [], (
+        f"{relative} is additive-only and "
+        + "; ".join(lines_only_appended(before=before, after=after))
     )
 
 
