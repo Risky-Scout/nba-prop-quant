@@ -566,10 +566,33 @@ ADDITIVE_ONLY_CAPTURE_ENTRY_POINTS: tuple[str, ...] = (
 #: So it is declarable, and the carve-out is narrower in risk than the three
 #: before it, because the file is not on the serving path and holds no model
 #: state. The rest of ``scripts/`` remains undeclarable, and what this script
-#: may do with the registry is itself bounded: a library module under ``src/``
-#: that the historical runtime contract byte-pins can never be relocked, so
-#: the mathematics stays pinned to the architecture reference and no
-#: declaration here can move it.
+#: may do with the registry is itself bounded: it decides whether a
+#: historically pinned file may be relocked by the directory the file sits in,
+#: and everything under ``src/`` is refused by that rule.
+#:
+#: That rule is a proxy, and the second use of this carve-out is to correct it
+#: where it is factually wrong. It reads the same for two different kinds of
+#: module: the four library modules that are the mathematics, and
+#: ``prospective_snapshot.py``, which decides which point-in-time capture may
+#: be read and computes nothing. The deadlock was the same one as before --
+#: the capture-selection carve-out above authorised correcting that module and
+#: every bundle then refused to package it, so the only tree able to serve was
+#: again the one tree the builder would not package.
+#:
+#: The correction is a second allowance beside the prefix rule rather than a
+#: wider prefix, because widening the prefix would have made all four
+#: mathematics files relockable. The prefix rule is unchanged. The script's own
+#: ``RECLASSIFIED_AS_CAPTURE_SELECTION`` enumerates the one file, and a file
+#: named there may be relocked only while the script's own measurement reads
+#: nothing mathematical out of the bytes in the working tree -- no import of a
+#: computing library, no import of a model module, no identifier naming a
+#: probability, a price, an edge, a quantile, a distribution, a calibration, a
+#: dependence, a route, a marginal, a fit, a model, a prediction or training.
+#: It is a measurement rather than a list somebody has to remember to update,
+#: in the sense :func:`serving_reachable_sources` means it: the four
+#: mathematics files fail the same measurement by import and by identifier
+#: both, so the allowance cannot be reached by appealing to it, and an edit
+#: that put mathematics into the reclassified file would refuse the build.
 DECLARABLE_DEPLOYMENT_PACKAGING_TOOLS: tuple[str, ...] = (
     "scripts/19_build_wizardofodds_runtime_bundle.py",
 )
@@ -1154,6 +1177,15 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: games that refuse are now found one at a time and kept with the reason the
 #: selection gave, and the entry point refuses the run on them rather than
 #: publishing a slate that is short and does not say so.
+#:
+#: The bundle builder is declared beside the two because the relock the two
+#: require could not be packaged. It classified a historically pinned file as
+#: mathematics by the directory the file sits in, which is right about the
+#: four library modules that are the mathematics and wrong about the snapshot
+#: module, so every build refused and the only tree able to serve was again
+#: the one tree the builder would not package. Its prefix rule is unchanged;
+#: what is added beside it is one enumerated file and a measurement that file
+#: has to pass, taken over the working tree on every build.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
         "src/nba_prop_quant/prospective_snapshot.py": (
@@ -1246,6 +1278,49 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
             "quantile, line, feature, model, calibration, Gate 3 route or "
             "publication rule is computed or changed anywhere in it"
         ),
+        "scripts/19_build_wizardofodds_runtime_bundle.py": (
+            "the relock declared below could not be packaged. This script "
+            "decided whether a historically pinned file may be relocked by "
+            "reading the directory the file sits in: scripts/ yes, anything "
+            "else no, on the recorded ground that the rest is the "
+            "mathematics. That is right about the four library modules the "
+            "historical runtime contract pins -- distributions.py, "
+            "gate3_v2.py, pricing.py and production.py -- and wrong about "
+            "src/nba_prop_quant/prospective_snapshot.py, which decides which "
+            "point-in-time capture may be read and computes no probability, "
+            "price, edge, expected value, quantile, distribution, "
+            "calibration, dependence coefficient, Gate 3 route or "
+            "publication rule. So every bundle refused, and the tree able to "
+            "serve was again the one tree the builder would not package. "
+            "The prefix rule is unchanged, because widening it would have "
+            "made all four mathematics files relockable. What is added "
+            "beside it is RECLASSIFIED_AS_CAPTURE_SELECTION, which "
+            "enumerates that one file and nothing else, and a measurement a "
+            "file named there has to pass before it may be relocked: "
+            "mathematics_findings parses the module as it stands in the "
+            "working tree and refuses an import of numpy, scipy, sklearn or "
+            "xgboost, an import of pandas beyond constructing a container, "
+            "an import of one of this repository's model modules, and any "
+            "declared, assigned, reached or called identifier naming a "
+            "probability, price, edge, expected value, quantile, "
+            "distribution, calibration, dependence, copula, route, Gate 3 "
+            "route, marginal, fit, model, prediction or training. The "
+            "measurement runs on every build and the build refuses when it "
+            "finds anything, and the four mathematics files fail it 14, 14, "
+            "19 and 22 times over, which is what makes the allowance "
+            "unreachable by appeal rather than merely narrow. The contract "
+            "must also record why the historical classification was wrong, "
+            "so the relock needs a reviewed reason as well as a passing "
+            "measurement. Nothing else in the script moves: every existing "
+            "refusal stands, the anchor check keeps its strictness over "
+            "every file the contract does not declare diverged, the locked "
+            "set must still cover every historically pinned file, the "
+            "recorded anchor bytes must still be the bytes at the anchor "
+            "commit, a file claimed to diverge must still differ from them, "
+            "every required invariant must still be asserted false, and the "
+            "script still trains, fits, calibrates, promotes and publishes "
+            "nothing and contacts no network"
+        ),
         "models/frozen_manifests/"
         "nba_prop_quant_v2_adaptive_serving_source_contract.json": (
             "relocks scripts/11_collect_snapshots.py and "
@@ -1262,7 +1337,16 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
             "are unchanged, and every invariant flag -- feature "
             "definitions, training feature definitions, model mathematics, "
             "mean-model routing, marginal family, calibration, dependence, "
-            "Gate 3 routing, fitted artifacts -- stays false"
+            "Gate 3 routing, fitted artifacts -- stays false. Version 13 "
+            "moves no lock at all. It records, on the snapshot module's own "
+            "entry, why relocking it is a capture-selection relock rather "
+            "than a mathematics relock -- which the packaging tool declared "
+            "above now requires as well as measuring -- and it corrects the "
+            "count in known_limitation, which said three diverged scripts "
+            "when version 12 had made it four diverged serving sources. "
+            "Every current_sha256, every historical_reference_sha256, the "
+            "locked set, the divergence list, the divergence count and "
+            "every invariant flag are the version 12 values"
         ),
         "models/frozen_manifests/"
         "nba_prop_quant_v2_adaptive_update_protocol.json": (
