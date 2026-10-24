@@ -3427,6 +3427,118 @@ def test_a_recovery_that_cannot_publish_still_takes_the_capture_it_owns(
     )
 
 
+class ServingFailsThenWorks(World):
+    """A world whose first production serve fails and whose later ones do not.
+
+    Recovery and the segment's own capture work serve through separate
+    invocations of the same entry point, and the case below is the one
+    where they differ: the serving failure that deferred the refusal is
+    gone by the time the capture is served, and the release that capture
+    publishes carries the recovered windows too.
+    """
+
+    def _serve(self, command):
+        self.serving_outcome = "FAILED" if not self.served else "SERVED"
+
+        return super()._serve(command)
+
+
+def test_a_deferred_refusal_the_later_release_resolved_is_not_raised(
+    tmp_path,
+):
+    """A deferred refusal is re-raised only while it is still true.
+
+    The slate is re-served whole after every capture, so a release
+    published later in the same segment carries the windows the earlier
+    recovery could not. Raising the deferred refusal anyway would fail a
+    segment that had in fact published everything, which is its own kind of
+    false report -- and the opposite error to the one being fixed here.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [
+        game(101, at(23, 0)),
+        game(103, at(0, 0, day=21), home=5, away=6),
+    ]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    retry_clock = Clock(at(23, 0))
+
+    retry = ServingFailsThenWorks(
+        tmp_path, schedules=[games], clock=retry_clock
+    )
+
+    write_morning_receipt(retry)
+
+    receipt = build(
+        retry,
+        clock=retry_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    # The recovery failure is reported rather than hidden ...
+    assert [
+        record["outcome"] for record in receipt["recovery_faults"]
+    ] == [controller.OUTCOME_FAILED]
+
+    # ... and is not raised, because the capture work's own release carries
+    # the window the failed recovery was about.
+    assert receipt["final_outcome"] == controller.OUTCOME_SEGMENT_COMPLETE
+
+    assert receipt["captured_unserved_windows"] == []
+
+    assert served_window_ids_for(retry) == {"101:T-20m", "103:T-20m"}
+
+
+def test_a_slate_with_nothing_recoverable_is_not_served_again(tmp_path):
+    """No window verified, so there is nothing to publish from.
+
+    Serving anyway would re-price and re-publish the slate's existing
+    release for no reason, minting a release that carries exactly what the
+    last one carried. The windows that caused it are recorded either way.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0))]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    conflict(
+        tmp_path,
+        games=games,
+        window_id="101:T-20m",
+        game_id=101,
+        captured_at=at(22, 45),
+    )
+
+    retry_clock = Clock(at(23, 50))
+
+    retry = World(tmp_path, schedules=[games], clock=retry_clock)
+
+    write_morning_receipt(retry)
+
+    receipt = build(
+        retry,
+        clock=retry_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    assert retry.served == []
+
+    assert retry.published == []
+
+    assert receipt["recovered_windows"] == []
+
+    assert [
+        record["window_id"] for record in receipt["unrecoverable_windows"]
+    ] == ["101:T-20m"]
+
+    assert receipt["final_outcome"] == controller.OUTCOME_CAPTURED_NOT_SERVED
+
+
 def test_the_receipt_says_which_unserved_windows_no_run_will_ever_serve(
     tmp_path, monkeypatch
 ):
