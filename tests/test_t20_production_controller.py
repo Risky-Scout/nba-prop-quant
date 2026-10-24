@@ -219,6 +219,15 @@ class World:
 
         self.advisory_published: list[tuple[str, str]] = []
 
+        #: Every slate date the serving-window gates were asked about, in
+        #: order, so a test can say the gates were consulted before the
+        #: slate was served rather than only that nothing blew up.
+        self.window_gate_calls: list[str] = []
+
+        #: Make the gates refuse, which is what a capture that does not
+        #: satisfy the live serving protocol looks like to the controller.
+        self.window_gates_refuse: bool = False
+
     # -- injected collaborators ---------------------------------------
 
     def schedule_source(self, slate_date: str) -> list[dict]:
@@ -253,6 +262,9 @@ class World:
         if script.endswith("run_progressive_live_refresh.py"):
             return self._refresh_live(command)
 
+        if script.endswith("assert_serving_window_gates.py"):
+            return self._window_gates(command)
+
         raise AssertionError(f"unexpected command: {command}")
 
     # -- fakes ---------------------------------------------------------
@@ -279,6 +291,35 @@ class World:
         return subprocess.CompletedProcess(
             args=list(command), returncode=returncode, stdout=stdout, stderr=""
         )
+
+    def _window_gates(self, command):
+        slate = self._value(command, "--slate-date")
+
+        self.window_gate_calls.append(slate)
+
+        status = Path(self._value(command, "--status-path"))
+
+        status.parent.mkdir(parents=True, exist_ok=True)
+
+        outcome = (
+            "SERVING_WINDOW_GATES_REFUSED"
+            if self.window_gates_refuse
+            else "SERVING_WINDOW_GATES_PASS"
+        )
+
+        status.write_text(
+            json.dumps({"outcome": outcome, "slate_date": slate}),
+            encoding="utf-8",
+        )
+
+        if self.window_gates_refuse:
+            return self._completed(
+                command,
+                returncode=1,
+                stdout="t20_protocol_compatible failed for " + slate,
+            )
+
+        return self._completed(command)
 
     def _collect(self, command):
         if self.collector_returncode != 0:
@@ -5695,3 +5736,108 @@ def test_the_2026_10_23_incident_shape_is_refused():
             "window_id": "21717941:T-20m",
         }
     ]
+
+
+# --------------------------------------------------------------------------
+# the serving-window gates
+# --------------------------------------------------------------------------
+
+
+def test_the_window_gates_are_asked_before_the_slate_is_served(tmp_path):
+    """The two checks that moved off promotion are asked at every window.
+
+    Asked here, and asked first: the gates have to decide before pricing
+    produces an artifact, or a window that fails them leaves behind a priced
+    slate nothing is allowed to publish.
+    """
+    clock = Clock(at(19, 25))
+
+    world = World(tmp_path, schedules=[[game(101, at(23, 0))]], clock=clock)
+
+    write_morning_receipt(world)
+
+    build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    ).run()
+
+    assert world.window_gate_calls == [SLATE]
+
+    scripts = [Path(command[1]).name for command in world.commands]
+
+    assert scripts.index("assert_serving_window_gates.py") < scripts.index(
+        "run_incumbent_production_serving.py"
+    )
+
+
+def test_a_window_whose_gates_refuse_serves_and_publishes_nothing(tmp_path):
+    """Fail-closed where the inputs exist, which is the whole point of moving."""
+    clock = Clock(at(19, 25))
+
+    world = World(tmp_path, schedules=[[game(101, at(23, 0))]], clock=clock)
+    world.window_gates_refuse = True
+
+    write_morning_receipt(world)
+
+    with pytest.raises(controller.ControllerRefused) as refusal:
+        build(
+            world,
+            clock=clock,
+            segment_start=SEGMENT_2[0],
+            segment_end=SEGMENT_2[1],
+        ).run()
+
+    assert (
+        refusal.value.outcome
+        == controller.OUTCOME_SERVING_WINDOW_GATES_REFUSED
+    )
+
+    scripts = [Path(command[1]).name for command in world.commands]
+
+    # The production serving entry point is never reached, so there is no
+    # priced artifact for this window and nothing to publish from it. The
+    # advisory windows earlier in the evening are a separate path and are
+    # deliberately not disturbed by a T-20 gate refusal.
+    assert "run_incumbent_production_serving.py" not in scripts
+
+    assert world.served == []
+    assert world.published == []
+
+
+def test_a_refused_window_gate_exits_non_zero(tmp_path, monkeypatch):
+    """Through ``main``, which is where the workflow's exit status comes from."""
+    clock = Clock(at(19, 25))
+
+    world = World(tmp_path, schedules=[[game(101, at(23, 0))]], clock=clock)
+    world.window_gates_refuse = True
+
+    write_morning_receipt(world)
+
+    as_the_entry_point_sees_it(monkeypatch, world, clock=clock)
+
+    receipt_path = tmp_path / "gate-receipt.json"
+
+    exit_code = controller.main(
+        [
+            "--data-root",
+            str(world.data_root),
+            "--production-sha",
+            PRODUCTION_SHA,
+            "--segment-start-utc",
+            SEGMENT_2[0].isoformat(),
+            "--segment-end-utc",
+            SEGMENT_2[1].isoformat(),
+            "--slate-date",
+            SLATE,
+            "--receipt-path",
+            str(receipt_path),
+        ]
+    )
+
+    assert exit_code == 1
+
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+
+    assert (
+        receipt["final_outcome"]
+        == controller.OUTCOME_SERVING_WINDOW_GATES_REFUSED
+    )

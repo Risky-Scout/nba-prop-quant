@@ -344,6 +344,12 @@ T20_PAGE_DESTINATION = "wizardofodds_nba_player_props_page_canary"
 #: are the ones that module owns and not a second copy here.
 LIVE_REFRESH_ENTRY_POINT = Path("ops") / "run_progressive_live_refresh.py"
 
+#: The entry point that recomputes the two serving-window validation checks
+#: against this slate's own capture. Invoked as a subprocess like every other
+#: stage, so the checks are the ones adaptive_validation owns rather than a
+#: second copy here that could answer differently.
+WINDOW_GATE_ENTRY_POINT = Path("ops") / "assert_serving_window_gates.py"
+
 #: The windows that refresh the live release, in the order they occur: the
 #: three advisory offsets and then the production one. Composed from the two
 #: tuples above rather than listed again, so a window this controller serves
@@ -544,6 +550,12 @@ OUTCOME_REQUIRED_SNAPSHOT_MISSING = "REQUIRED_T20_SNAPSHOT_MISSING"
 OUTCOME_MISSED_WINDOW = "MISSED_T20_WINDOW"
 OUTCOME_UNSUPPORTED_TIME = "UNSUPPORTED_T20_TIME"
 OUTCOME_FAILED = "T20_CONTROLLER_FAILED"
+
+#: A window whose serving-window validation checks did not pass. Its own
+#: outcome rather than the generic failure, because the operator response is
+#: different: the capture is there and the fit is sound, and what failed is
+#: the protocol compatibility of that capture with what serving requires.
+OUTCOME_SERVING_WINDOW_GATES_REFUSED = "T20_SERVING_WINDOW_GATES_REFUSED"
 
 #: A release this run would have made for a game that has already started.
 #:
@@ -1690,6 +1702,7 @@ class T20Controller:
         self.pre_tip_margins: list[dict[str, Any]] = []
 
         self.publications: list[dict[str, Any]] = []
+        self.window_gates: list[dict[str, Any]] = []
         self.serving: list[dict[str, Any]] = []
         self.distributions: list[dict[str, Any]] = []
         self.feed: list[dict[str, Any]] = []
@@ -3975,6 +3988,51 @@ class T20Controller:
 
         return result
 
+    def _assert_serving_window_gates(self, stage_dir: Path) -> None:
+        """Refuse this window when a serving-window validation check fails.
+
+        Invoked rather than reimplemented, for the reason every other stage
+        here is: a second answer to "is this capture what the serving
+        protocol requires" could disagree with the first, and the one that
+        decides is the module that owns the checks.
+
+        The refusal is a hard one and is placed before the slate is served,
+        so a window that cannot satisfy them produces no priced artifact at
+        all rather than one nothing is allowed to publish.
+        """
+        status = stage_dir / "serving_window_gates.json"
+
+        command = [
+            sys.executable,
+            str(WINDOW_GATE_ENTRY_POINT),
+            "--slate-date",
+            self.slate_date,
+            "--data-root",
+            str(self.data_root),
+            "--status-path",
+            str(status),
+        ]
+
+        if self.registry_root is not None:
+            command += ["--registry-root", str(self.registry_root)]
+
+        if self.summary_path is not None:
+            command += ["--summary-path", str(self.summary_path)]
+
+        self._stage(
+            str(WINDOW_GATE_ENTRY_POINT),
+            command,
+            outcome=OUTCOME_SERVING_WINDOW_GATES_REFUSED,
+        )
+
+        self.window_gates.append(
+            {
+                "slate_date": self.slate_date,
+                "status_path": str(status),
+                "window_offset_minutes": self.offset_minutes,
+            }
+        )
+
     def _serve_and_publish(
         self,
         stage_dir: Path,
@@ -3996,6 +4054,16 @@ class T20Controller:
         self.pre_tip_margins += assert_no_window_has_tipped(
             windows, now=self.clock()
         )
+
+        # The two validation checks a morning fit cannot answer, asked here
+        # where the capture they are about exists. They were promotion
+        # prerequisites, which made the daily fit permanently unpromotable
+        # because they ask about an evening capture of a morning fit; the
+        # invariant they carry is enforced at this window instead, recomputed
+        # against this window's own capture rather than read off a record
+        # written for an earlier slate. Before the slate is served, so a
+        # window that fails them produces no priced artifact to publish.
+        self._assert_serving_window_gates(stage_dir)
 
         serving_receipt = stage_dir / "incumbent_serving.json"
 
@@ -4475,6 +4543,7 @@ class T20Controller:
             "deferred_to_later_segment": self.deferred,
             "distribution_outcomes": self.distributions,
             "feed_publication_outcomes": self.feed,
+            "serving_window_gate_outcomes": self.window_gates,
             "final_outcome": outcome,
             "finish_time_utc": finished_at.isoformat(),
             "games_discovered": plan["games_discovered"],

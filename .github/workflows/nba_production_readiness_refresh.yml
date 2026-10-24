@@ -224,6 +224,51 @@ jobs:
             --summary-path "$GITHUB_STEP_SUMMARY" \
             --github-env "$GITHUB_ENV"
 
+      # The same two steps the morning lifecycle runs, in the same order and
+      # from the same entry points, because this job re-establishes the day's
+      # serving authority and the promoted fit is part of what that authority
+      # is. Without them a refresh would re-issue a receipt naming the
+      # installed base bundle while the registry had a promoted fit, which is
+      # the receipt saying one authority is in force while another is.
+      #
+      # Neither step fits anything. The promotion reads a candidate the
+      # morning lifecycle registered and re-verifies it; on a day where
+      # nothing new was registered it reports ALREADY_CURRENT and promotes
+      # nothing. The seal is idempotent: a bundle already sealed for this fit
+      # is re-verified and reused rather than rebuilt.
+      - name: Promote the validated daily fit
+        id: promotion
+        if: steps.authorise.outputs.refresh_required == 'true'
+        env:
+          NBA_PROP_FIT_REGISTRY_DIR: ${{ vars.NBA_PROP_FIT_REGISTRY_DIR }}
+        run: |
+          set -euo pipefail
+          python ops/run_daily_fit_promotion.py \
+            --slate-date "${{ steps.slate.outputs.slate_date }}" \
+            --registry-root "$NBA_PROP_FIT_REGISTRY_DIR" \
+            --receipt-path "$RUNNER_TEMP/run/daily_fit_promotion.json" \
+            --github-output "$GITHUB_OUTPUT" \
+            --summary-path "$GITHUB_STEP_SUMMARY"
+
+      - name: Seal the promoted fit into a verified runtime bundle
+        if: >-
+          steps.authorise.outputs.refresh_required == 'true'
+          && steps.promotion.outputs.promoted == 'true'
+        env:
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+          NBA_PROP_FIT_REGISTRY_DIR: ${{ vars.NBA_PROP_FIT_REGISTRY_DIR }}
+          NBA_PROP_WORK_DIR: ${{ vars.NBA_PROP_WORK_DIR }}
+        run: |
+          set -euo pipefail
+          python ops/seal_promoted_fit_bundle.py \
+            --registry-root "$NBA_PROP_FIT_REGISTRY_DIR" \
+            --base-bundle-root "$FROZEN_RUNTIME_BUNDLE_ROOT" \
+            --runtime-root "$NBA_PROP_WORK_DIR" \
+            --data-root "$NBA_PROP_DATA_DIR" \
+            --receipt-path "$RUNNER_TEMP/run/sealed_fit_bundle.json" \
+            --summary-path "$GITHUB_STEP_SUMMARY" \
+            --github-env "$GITHUB_ENV"
+
       # The same entry point the morning lifecycle serves with, writing the
       # same durable receipt in the same place. The only thing that differs is
       # where the refresh classification came from: this run carries forward
