@@ -1871,7 +1871,11 @@ def _observed_live_release(args: argparse.Namespace) -> dict[str, Any]:
             ) or {}
         finally:
             transport.close()
-    except Exception:  # pragma: no cover - the transport is already broken
+    except Exception:  # noqa: BLE001 - observation only, never a verdict
+        # Deliberately total. This reads the destination to describe it, not
+        # to decide anything: a destination that cannot even be read has
+        # certainly not been written by this run, which is what the caller
+        # needs to know.
         return {}
 
 

@@ -901,6 +901,8 @@ def test_an_unusable_serving_receipt_leaves_the_last_valid_release_serving(
 
     assert code == live.EXIT_REFUSED
 
+    assert "the rows carry no provenance" in receipt["message"]
+
     assert_untouched(chain, current, previous, audit)
 
 
@@ -1030,6 +1032,13 @@ def test_an_attestation_that_is_not_about_these_bytes_authorises_nothing(
 
     assert code == live.EXIT_REFUSED
 
+    assert receipt["outcome"] == "LIVE_REFRESH_REFUSED"
+
+    # Each field fails for its own reason, and every reason is about the
+    # canary rather than about the live destination, because the live
+    # destination is never reached.
+    assert "canary" in receipt["message"], receipt["message"]
+
     assert_untouched(chain, current, previous, audit)
 
 
@@ -1100,6 +1109,8 @@ def test_a_transport_that_will_not_talk_leaves_the_pointer_alone(
     code, receipt = chain.refresh(45)
 
     assert code == live.EXIT_REFUSED
+
+    assert "the destination refused" in receipt["message"]
 
     monkeypatch.setattr(
         publisher.LocalDirectoryTransport, "write_bytes", real
@@ -1715,9 +1726,9 @@ def test_this_module_computes_no_number_and_promotes_no_candidate():
             named.add(node.name)
         elif isinstance(node, ast.alias):
             named.update({node.name, node.asname or node.name})
-        elif isinstance(node, ast.arg):
-            named.add(node.arg)
-        elif isinstance(node, ast.keyword) and node.arg:
+        elif isinstance(node, ast.arg) or (
+            isinstance(node, ast.keyword) and node.arg
+        ):
             named.add(node.arg)
 
     for forbidden in (
