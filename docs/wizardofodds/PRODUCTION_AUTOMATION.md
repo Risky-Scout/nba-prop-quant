@@ -670,6 +670,20 @@ three-and-a-quarter-hour wait for its first T-20 window becomes several short
 waits. That is the failure mode recorded in the next section, which has twice
 cost this schedule a whole evening to a job dropped while idling.
 
+`nba_t20_production.yml` is unchanged by all of this, and deliberately. The
+offsets are a module constant in the controller rather than a workflow input,
+because a scheduled event fires from the default branch: a scheduled run
+executes `main`'s copy of the workflow against the production branch's copy of
+the controller, so an opt-in expressed in YAML would never be passed. The
+probe already reports `t20_work=true` for a segment whose only work is
+advisory, so the existing install gate covers it. The escape hatch is
+`--no-advisory-windows` on the controller, for a manual invocation.
+
+One consequence worth knowing: the 14:25Z segment used to be a cheap no-op on
+almost every slate and now does work whenever a T-180 window falls inside it,
+which on a slate with an early tip it does. That segment therefore installs the
+production package where it previously exited before doing so.
+
 ## Segment cancellations, 2026-10-22 and 2026-10-23
 
 Two evenings were lost to a cancellation rather than to any gate, and the
