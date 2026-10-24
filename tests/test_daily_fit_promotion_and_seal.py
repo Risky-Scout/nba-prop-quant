@@ -314,18 +314,51 @@ def test_the_window_gate_entry_point_refuses_a_failed_answer():
 
     measurement = {
         "checks": {
-            "gate3_role_readiness": {
-                "error": "role_state_hash is absent or malformed",
+            "t20_protocol_compatible": {
+                "error": "2 of 6 captures would not verify",
                 "evidence": "measured",
                 "passed": False,
             }
         },
-        "enforced": ["gate3_role_readiness"],
+        "enforced": ["t20_protocol_compatible"],
         "slate_date": "2026-10-24",
     }
 
-    with pytest.raises(gates.WindowGateRefused, match="role_state_hash"):
+    with pytest.raises(gates.WindowGateRefused, match="would not verify"):
         gates.assert_window_gates(measurement)
+
+
+def test_a_failed_role_state_gate_never_refuses_the_window():
+    """The route-scoped gate is not in the set that refuses, by construction.
+
+    Asserted on the refusal function and not only on the constant, because
+    the constant being right buys nothing if the refusal reads a different
+    list. A measurement whose role-state gate failed and whose capture gate
+    passed must return normally: the slate serves, minus three routes on the
+    games that could not supply role state.
+    """
+    import assert_serving_window_gates as gates
+
+    assert gates.ROUTE_SCOPED_GATE not in gates.WINDOW_REFUSING_GATES
+
+    gates.assert_window_gates(
+        {
+            "checks": {
+                "gate3_role_readiness": {
+                    "error": "captures carrying no lineup records: 101:T-20m",
+                    "evidence": "measured",
+                    "passed": False,
+                },
+                "t20_protocol_compatible": {
+                    "error": None,
+                    "evidence": "verified 4 of 4",
+                    "passed": True,
+                },
+            },
+            "enforced": ["t20_protocol_compatible"],
+            "slate_date": "2026-10-24",
+        }
+    )
 
 
 def test_the_window_gate_entry_point_passes_a_measured_pass():
@@ -659,3 +692,172 @@ def test_the_entry_point_never_reaches_a_fit_from_another_day(
 
     assert receipt["outcome"] == "NO_DAILY_FIT"
     assert receipt["candidate_fit_id"] is None
+
+
+# ----------------------------------------------------------------------
+# a serving-window input failure is scoped to the routes that read it
+# ----------------------------------------------------------------------
+
+
+def role_failure(
+    *,
+    advertised: list[str],
+    without: list[str] | None = None,
+    refused: list[str] | None = None,
+    role_state_hash: str = "a" * 64,
+) -> dict:
+    """One ``check_gate3_role_readiness`` payload, as the check records it."""
+    return {
+        "error": "captures carrying no lineup records",
+        "evidence": "measured",
+        "passed": False,
+        "values": {
+            "advertised_windows": advertised,
+            "captures_without_lineups": without or [],
+            "refused_captures": refused or [],
+            "role_state_hash": role_state_hash,
+        },
+    }
+
+
+def test_a_role_state_failure_is_attributed_to_the_games_it_came_from():
+    import assert_serving_window_gates as gates
+
+    attributed = gates.degraded_games(
+        role_failure(
+            advertised=["101:T-20m", "102:T-20m", "103:T-20m"],
+            without=["102:T-20m"],
+        )
+    )
+
+    assert sorted(attributed) == ["102"]
+
+    assert attributed["102"] == ["the capture carries no lineup records"]
+
+
+def test_a_capture_that_would_not_verify_is_attributed_to_its_game():
+    import assert_serving_window_gates as gates
+
+    attributed = gates.degraded_games(
+        role_failure(
+            advertised=["101:T-20m", "102:T-20m"],
+            refused=["101:T-20m: CaptureRefused: digests disagree"],
+        )
+    )
+
+    assert sorted(attributed) == ["101"]
+
+    assert attributed["101"] == ["the capture would not verify"]
+
+
+def test_an_unattributable_role_failure_degrades_every_advertised_game():
+    """Conservative in the only direction that is safe.
+
+    A game left out of the mapping prices its Gate 3 routes on role state
+    nothing checked, so when the evidence cannot name every affected game
+    none is exonerated. Three ways that happens, all of them here.
+    """
+    import assert_serving_window_gates as gates
+
+    advertised = ["101:T-20m", "102:T-20m"]
+
+    # Named nothing.
+    assert sorted(
+        gates.degraded_games(role_failure(advertised=advertised))
+    ) == ["101", "102"]
+
+    # The fit's own role-state hash, which is about no single capture.
+    assert sorted(
+        gates.degraded_games(
+            role_failure(
+                advertised=advertised,
+                without=["101:T-20m"],
+                role_state_hash="",
+            )
+        )
+    ) == ["101", "102"]
+
+    # Evidence up against the limit the check truncates at, so it may have
+    # named only some of the affected games.
+    crowded = [f"{100 + index}:T-20m" for index in range(12)]
+
+    assert sorted(
+        gates.degraded_games(
+            role_failure(
+                advertised=crowded,
+                without=crowded[: gates._EVIDENCE_LIMIT],
+            )
+        )
+    ) == sorted(window.split(":", 1)[0] for window in crowded)
+
+
+def test_the_truncation_limit_matches_the_check_that_truncates():
+    """Stated in one file and true of another, so it is pinned."""
+    import assert_serving_window_gates as gates
+
+    source = (
+        REPO / "src" / "nba_prop_quant" / "adaptive_validation.py"
+    ).read_text(encoding="utf-8")
+
+    assert f"without_lineups[:{gates._EVIDENCE_LIMIT}]" in source
+
+    assert f"refused[:{gates._EVIDENCE_LIMIT}]" in source
+
+
+def test_a_window_input_failure_is_never_written_against_the_fit(
+    registry: FitRegistry, tmp_path: Path
+):
+    """The attribution that would make an input failure permanent.
+
+    ``assert_validation_pass`` requires any recorded window answer to be
+    true and ``resolve_incumbent`` calls it, so recording this evening's
+    missing lineups into the fit's validation record would leave the fit
+    unservable for good -- a serving-window input failure silently retired
+    as a model failure. Only measured passes are recorded.
+    """
+    import assert_serving_window_gates as gates
+
+    fit_id = registry.register(make_staged(tmp_path / "d1"), make_metadata())
+
+    registry.record_validation(fit_id, fit_time_only(), actor="pytest")
+
+    registry.promote(fit_id, reason="step 3d")
+
+    before = registry.load_validation(fit_id)
+
+    gates.record_window_gates(
+        registry,
+        fit_id,
+        {
+            "checks": {
+                "gate3_role_readiness": {
+                    "error": "captures carrying no lineup records",
+                    "evidence": "measured",
+                    "passed": False,
+                },
+                "t20_protocol_compatible": {
+                    "error": None,
+                    "evidence": "verified",
+                    "passed": True,
+                },
+            },
+            "slate_date": "2026-10-24",
+        },
+    )
+
+    after = registry.load_validation(fit_id)
+
+    # The pass was recorded ...
+    assert after["checks"]["t20_protocol_compatible"] is True
+
+    # ... the failure was not, in either direction ...
+    assert "gate3_role_readiness" not in after["checks"]
+
+    # ... no fit-time answer moved ...
+    for name in before["checks"]:
+        assert after["checks"][name] == before["checks"][name]
+
+    # ... and the fit is still servable, which is the whole point.
+    registry.assert_validation_pass(fit_id)
+
+    assert registry.current()["current_good_fit_id"] == fit_id

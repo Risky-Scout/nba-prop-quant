@@ -1479,6 +1479,14 @@ def test_no_model_artifact_or_freeze_manifest_changed():
 
 #: The lifecycle's stages, in the order the production ref runs them. Named
 #: here so the ordering claim is readable rather than implied by a digest.
+#:
+#: Three of these were appended by branches that have since merged -- the
+#: promotion step, the seal step and the training-contract report -- and are
+#: recorded here now that production runs them. That is the tighter statement,
+#: not the looser one: a step named here may not be removed, renamed or
+#: reordered, where a step the guard below only sees as "added" is merely
+#: required to be declared. A step that lands in production and is never
+#: written down here stays permanently declarable instead.
 EXPECTED_STEP_ORDER: tuple[str, ...] = (
     "Check out the authoritative production code",
     "Record the production checkout",
@@ -1490,6 +1498,8 @@ EXPECTED_STEP_ORDER: tuple[str, ...] = (
     "Refresh the current-season rolling state",
     "Run the adaptive daily protocol",
     "Install the verified frozen runtime bundle",
+    "Promote the validated daily fit",
+    "Seal the promoted fit into a verified runtime bundle",
     "Serve the slate with the incumbent",
     "Derive the distributions behind the served prices",
     "Publish the served slate to the WizardOfOdds feed",
@@ -1498,6 +1508,7 @@ EXPECTED_STEP_ORDER: tuple[str, ...] = (
     "Shadow the slate beside production",
     "Monitor the accumulated live shadow evidence",
     "Assert the candidate shadow was healthy",
+    "Report the daily training contract",
     "Report the run",
     "Upload run diagnostics",
 )

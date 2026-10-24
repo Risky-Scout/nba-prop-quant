@@ -1703,6 +1703,14 @@ class T20Controller:
 
         self.publications: list[dict[str, Any]] = []
         self.window_gates: list[dict[str, Any]] = []
+
+        #: One row per game whose role-state-dependent prop routes this
+        #: segment could not carry, and which window it happened at. A
+        #: serving-window input failure scoped to three routes on one game,
+        #: never a statement about the fit: the serving authority is the
+        #: same before and after, and these routes are retried at the next
+        #: scheduled pre-tip window.
+        self.degraded_routes: list[dict[str, Any]] = []
         self.serving: list[dict[str, Any]] = []
         self.distributions: list[dict[str, Any]] = []
         self.feed: list[dict[str, Any]] = []
@@ -3658,6 +3666,18 @@ class T20Controller:
                     ),
                 ]
 
+        # Handed over so the refresh can hold a degraded game at the release
+        # it already validated rather than advance it to this window's
+        # thinner card. The controller decides nothing about it: both the
+        # games and the routes are the gate stage's own measurement, read
+        # back out of the receipt it wrote, and a window that measured
+        # nothing hands over nothing.
+        for game, routes in sorted(self._degraded_routes_at(offset).items()):
+            command += [
+                "--role-state-degraded-game",
+                f"{game}=" + ",".join(routes),
+            ]
+
         if self.summary_path is not None:
             command += ["--summary-path", str(self.summary_path)]
 
@@ -3989,16 +4009,27 @@ class T20Controller:
         return result
 
     def _assert_serving_window_gates(self, stage_dir: Path) -> None:
-        """Refuse this window when a serving-window validation check fails.
+        """Settle what this window may serve, before it serves anything.
 
         Invoked rather than reimplemented, for the reason every other stage
         here is: a second answer to "is this capture what the serving
         protocol requires" could disagree with the first, and the one that
         decides is the module that owns the checks.
 
-        The refusal is a hard one and is placed before the slate is served,
-        so a window that cannot satisfy them produces no priced artifact at
-        all rather than one nothing is allowed to publish.
+        Two outcomes let the window proceed and they are not the same.
+        ``SERVING_WINDOW_GATES_PASS`` is every check passing.
+        ``SERVING_WINDOW_ROUTES_DEGRADED`` is the role-state gate not passing
+        for named games, which costs those games the three prop routes that
+        read role state -- through the rejection the pricing step already
+        owns -- and costs nothing else. The controller records which, and
+        serves either way: refusing the window would turn one game's missing
+        lineups into no forecast for any game, and the serving fit is not
+        changed by either outcome.
+
+        ``SERVING_WINDOW_GATES_REFUSED`` is the gate about the capture every
+        route reads, and that one is hard and is placed before the slate is
+        served, so a window that cannot satisfy it produces no priced
+        artifact at all rather than one nothing is allowed to publish.
         """
         status = stage_dir / "serving_window_gates.json"
 
@@ -4025,13 +4056,66 @@ class T20Controller:
             outcome=OUTCOME_SERVING_WINDOW_GATES_REFUSED,
         )
 
+        decision = self._read_receipt(
+            status, what="serving-window gate decision"
+        )
+
+        degraded = dict(decision.get("degraded_routes") or {})
+
         self.window_gates.append(
             {
+                "degraded_reasons": dict(
+                    decision.get("degraded_reasons") or {}
+                ),
+                "degraded_routes": degraded,
+                "outcome": str(decision.get("outcome") or ""),
+                "route_filter_reason": str(
+                    decision.get("route_filter_reason") or ""
+                ),
                 "slate_date": self.slate_date,
                 "status_path": str(status),
                 "window_offset_minutes": self.offset_minutes,
             }
         )
+
+        # Reported on the segment rather than only in the stage directory,
+        # because "which routes did tonight not carry, and for which games"
+        # is the question an operator asks the next morning and the stage
+        # directory is not where they ask it.
+        for game in sorted(degraded):
+            self.degraded_routes.append(
+                {
+                    "game_id": str(game),
+                    "offset_minutes": self.offset_minutes,
+                    "reasons": list(
+                        (decision.get("degraded_reasons") or {}).get(game)
+                        or []
+                    ),
+                    "routes": list(degraded[game]),
+                    "slate_date": self.slate_date,
+                }
+            )
+
+    def _degraded_routes_at(self, offset: int) -> dict[str, list[str]]:
+        """Which games lost which routes at one window, as measured there.
+
+        One window's measurement and not the segment's: a game whose role
+        state was missing at T-90 and present at T-45 is degraded at T-90 and
+        whole at T-45, and carrying the earlier answer forward would hold it
+        back from a window that can serve it. Unioned per game because a
+        segment can gate more than one tip group at the same offset.
+        """
+        routes: dict[str, set[str]] = {}
+
+        for entry in self.degraded_routes:
+            if int(entry["offset_minutes"]) != int(offset):
+                continue
+
+            routes.setdefault(str(entry["game_id"]), set()).update(
+                str(route) for route in entry["routes"]
+            )
+
+        return {game: sorted(named) for game, named in routes.items()}
 
     def _serve_and_publish(
         self,
@@ -4544,6 +4628,7 @@ class T20Controller:
             "distribution_outcomes": self.distributions,
             "feed_publication_outcomes": self.feed,
             "serving_window_gate_outcomes": self.window_gates,
+            "route_degraded_games": self.degraded_routes,
             "final_outcome": outcome,
             "finish_time_utc": finished_at.isoformat(),
             "games_discovered": plan["games_discovered"],

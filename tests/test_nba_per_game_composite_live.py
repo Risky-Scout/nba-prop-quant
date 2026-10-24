@@ -77,6 +77,12 @@ import publish_incumbent_to_wizardofodds as publisher  # noqa: E402
 import run_progressive_live_refresh as live  # noqa: E402
 import run_wizardofodds_publication as publication  # noqa: E402
 import wizardofodds_publisher_fixture as fixture  # noqa: E402
+from nba_prop_quant.gate3_v2 import GATE3_CHANGED_PROPS  # noqa: E402
+
+#: The prop routes that read role state, from the module that owns the
+#: routing rather than restated here. These are the routes a failed
+#: ``gate3_role_readiness`` costs a game, and the only ones.
+GATE3_ROUTES: tuple[str, ...] = tuple(sorted(GATE3_CHANGED_PROPS))
 
 #: The live approval this repository cannot grant itself. Forged, and
 #: deliberately not the committed token: a test that passed because it reused
@@ -370,6 +376,7 @@ class Slate:
         now: datetime,
         captures: dict[str, str] | None = None,
         receipt_path: Path | None = None,
+        degraded: dict[str, tuple[str, ...]] | None = None,
     ) -> list[str]:
         built = self.built
 
@@ -414,6 +421,12 @@ class Slate:
             )
 
             argv += ["--window-capture", f"{window_id}={identity}"]
+
+        for game_id, routes in sorted((degraded or {}).items()):
+            argv += [
+                "--role-state-degraded-game",
+                f"{game_id}=" + ",".join(routes),
+            ]
 
         return argv
 
@@ -809,6 +822,211 @@ def test_advancing_one_game_leaves_every_other_game_byte_identical(trio):
     # And the document as a whole did move, so the test is not passing
     # because nothing was published.
     assert trio.served_bytes() != served_before
+
+
+# ======================================================================
+# a window that could not price a game's role-state routes
+# ======================================================================
+#
+# ``gate3_role_readiness`` is a serving-window check, and a capture that
+# carries no usable lineup records fails it. That is an input failure for the
+# three prop routes that read role state -- ``assists``, ``points_assists``
+# and ``points_rebounds`` -- for the games the capture was missing them for,
+# and for nothing else. The pricing step already rejects exactly those rows
+# under ``gate3_role_state_unavailable`` and prices the rest of the slate.
+#
+# Which leaves one thing for the live half to get right. The card this window
+# builds for such a game is this window's card minus those three routes, and
+# publishing it over a complete card the game's own earlier window already
+# validated would erase forecasts that are still valid. The offset comparison
+# cannot see that: the offset moved towards the tip, so the no-downgrade rule
+# reads it as an advance. These tests are the fourth decline that closes it.
+
+
+def test_a_game_with_no_role_state_keeps_the_release_it_already_validated(
+    trio,
+):
+    """The retention claim, with another game advancing beside it.
+
+    Three games live at T-180. At T-90 the first game's capture carries no
+    usable role state, so its three role-state routes were rejected at
+    pricing. It keeps its complete T-180 card -- byte for byte -- and the
+    game beside it still advances.
+    """
+    first, middle, last = trio.games
+
+    assert trio.window(180, trio.games)[0] == live.EXIT_OK
+
+    before = {
+        game.game_id: trio.rows_of(game.game_id) for game in trio.games
+    }
+
+    code, receipt = trio.window(
+        90,
+        (first, middle),
+        canary_games=trio.games,
+        degraded={str(first.game_id): GATE3_ROUTES},
+    )
+
+    assert code == live.EXIT_OK, receipt
+
+    advancement = receipt["advancement"]
+
+    assert advancement["advancing_game_ids"] == [str(middle.game_id)]
+
+    assert advancement["retained_for_role_state"] == [str(first.game_id)]
+
+    assert advancement["route_refused"] == []
+
+    # The game that lost its routes is still at the window that carries them,
+    # and the bytes it is serving are the bytes it was already serving.
+    assert trio.live_windows() == {
+        str(first.game_id): "T-180m",
+        str(middle.game_id): "T-90m",
+        str(last.game_id): "T-180m",
+    }
+
+    assert trio.rows_of(first.game_id) == before[first.game_id]
+
+    assert trio.rows_of(last.game_id) == before[last.game_id]
+
+    assert trio.rows_of(middle.game_id) != before[middle.game_id]
+
+
+def test_a_first_window_with_no_role_state_still_serves_the_rest(trio):
+    """No earlier release to keep, so the routes it has are published.
+
+    The other half of the rule. Withholding a game's whole card because three
+    of its routes could not be priced would cost it every route to save
+    three, and there is nothing for it to fall back to. It advances, and the
+    receipt says which routes this window did not carry for it.
+    """
+    first, middle, last = trio.games
+
+    code, receipt = trio.window(
+        180,
+        trio.games,
+        degraded={str(last.game_id): GATE3_ROUTES},
+    )
+
+    assert code == live.EXIT_OK, receipt
+
+    advancement = receipt["advancement"]
+
+    assert advancement["advancing_game_ids"] == sorted(
+        str(game.game_id) for game in trio.games
+    )
+
+    assert advancement["retained_for_role_state"] == []
+
+    assert [
+        entry["game_id"] for entry in advancement["route_refused"]
+    ] == [str(last.game_id)]
+
+    assert advancement["route_refused"][0]["degraded_routes"] == sorted(
+        GATE3_ROUTES
+    )
+
+    assert trio.live_windows() == {
+        str(first.game_id): "T-180m",
+        str(middle.game_id): "T-180m",
+        str(last.game_id): "T-180m",
+    }
+
+
+def test_a_later_valid_window_replaces_the_retained_release(trio):
+    """The retention is for one window, and the next one undoes it.
+
+    A game held at T-180 because T-90 had no role state for it is not stuck
+    there. The routes are retried at the next pre-tip window, and when that
+    window has them the game advances normally.
+    """
+    first, middle, _ = trio.games
+
+    assert trio.window(180, trio.games)[0] == live.EXIT_OK
+
+    assert trio.window(
+        90,
+        (first, middle),
+        canary_games=trio.games,
+        degraded={str(first.game_id): GATE3_ROUTES},
+    )[0] == live.EXIT_OK
+
+    assert trio.live_windows()[str(first.game_id)] == "T-180m"
+
+    held = trio.rows_of(first.game_id)
+
+    code, receipt = trio.window(20, (first,), canary_games=trio.games)
+
+    assert code == live.EXIT_OK, receipt
+
+    assert receipt["advancement"]["advancing_game_ids"] == [
+        str(first.game_id)
+    ]
+
+    assert receipt["advancement"]["retained_for_role_state"] == []
+
+    assert trio.live_windows()[str(first.game_id)] == "T-20m"
+
+    assert trio.rows_of(first.game_id) != held
+
+
+def test_a_window_that_can_improve_on_nothing_writes_nothing(trio):
+    """Every game of the refresh degraded, and the destination untouched.
+
+    The declining verdict rather than a failure: there is no release worth
+    promoting, so none is, and what was live stays live byte for byte.
+    """
+    first, middle, _ = trio.games
+
+    assert trio.window(180, trio.games)[0] == live.EXIT_OK
+
+    served = trio.served_bytes()
+
+    release = trio.pointer()
+
+    code, receipt = trio.window(
+        90,
+        (first, middle),
+        canary_games=trio.games,
+        degraded={
+            str(first.game_id): GATE3_ROUTES,
+            str(middle.game_id): GATE3_ROUTES,
+        },
+    )
+
+    assert code == live.EXIT_OK, receipt
+
+    assert receipt["live_outcome"] == live.OUTCOME_ALREADY_CLOSER_TO_TIP
+
+    assert receipt["outcome"] == "LIVE_REFRESH_DECLINED"
+
+    assert trio.pointer() == release
+
+    assert trio.served_bytes() == served
+
+
+def test_a_degraded_game_a_route_name_is_missing_for_is_refused(trio):
+    """A degradation with no routes named is refused rather than guessed.
+
+    The routes decide whether the game keeps a release or advances without
+    them, so a half-written degradation is not something to interpret.
+    """
+    first, _, _ = trio.games
+
+    trio.canary(180, trio.games)
+
+    code, receipt = trio.refresh(
+        180,
+        trio.games,
+        degraded={str(first.game_id): ()},
+    )
+
+    assert code == live.EXIT_REFUSED
+
+    assert "role-state-degraded-game" in receipt["message"]
+
+    assert trio.pointer() is None
 
 
 def test_three_games_stand_at_three_windows_at_the_same_time(trio):
