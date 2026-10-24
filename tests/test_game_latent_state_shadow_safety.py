@@ -46,6 +46,7 @@ from nba_prop_quant.research.game_latent_state.safety import (
     DECLARED_INTEGRATION_PATHS,
     DECLARED_PAGE_CONSISTENCY_NAMES,
     DECLARED_PUBLICATION_TRANSPORT_NAMES,
+    DECLARED_SERVING_EXCLUSION_NAMES,
     DECLARED_SERVING_PLUMBING_NAMES,
     DECLARED_SERVING_READINESS_NAMES,
     PAGE_CONSISTENCY_CLASS,
@@ -975,6 +976,15 @@ def test_a_declared_serving_script_cannot_change_what_it_computes():
     ``main``, where it is used, may differ at all -- and ``main``'s added
     statements must name declared plumbing, so the permission cannot quietly
     widen into "main is editable".
+
+    Plumbing or an exclusion. Every plumbing name is a quantity carried
+    forward -- a column the fitted models want, a flag, a value substituted
+    where training puts one -- and a refusal is not one of those, so it is
+    declared separately and accepted here as well. That became necessary
+    when the capture-selection carve-out stopped one game's unselectable
+    capture aborting the whole slate: a serving script can now be handed a
+    slate with a game missing, and it has to say so rather than write a
+    release that is short and silent.
     """
     base = production_base()
     if base is None:
@@ -1000,7 +1010,15 @@ def test_a_declared_serving_script_cannot_change_what_it_computes():
             continue
 
         assert_only_declared_plumbing_was_added(
-            relative, "main", before["main"], after["main"]
+            relative,
+            "main",
+            before["main"],
+            after["main"],
+            declared=(
+                *DECLARED_SERVING_PLUMBING_NAMES,
+                *DECLARED_SERVING_EXCLUSION_NAMES,
+            ),
+            subject="serving plumbing or a declared exclusion",
         )
 
 

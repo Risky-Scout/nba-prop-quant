@@ -64,6 +64,12 @@ from t20_capture_fixture import (  # noqa: E402
     write_capture,
 )
 
+# The real serving script, run as a subprocess against a verified bundle, the
+# way the lifecycle runs it. Borrowed rather than rebuilt: that suite already
+# owns the shape of a bundle a serving entry point will accept, and a second
+# copy of it here would be a second thing to keep true.
+import test_real_slate_serving_root as serving_root  # noqa: E402
+
 #: The game whose capture is made unservable, and the one that is left alone.
 CONFLICTED = 101
 CLEAN = 202
@@ -501,6 +507,103 @@ def test_isolating_a_refusal_writes_nothing(tmp_path):
     }
 
     assert after == before
+
+
+# ----------------------------------------------------------------------
+# what the serving entry point does with a slate it cannot fully serve
+# ----------------------------------------------------------------------
+
+
+def run_the_prediction_script(tmp_path):
+    """``scripts/10_predict_slate.py``, as a subprocess, on a captured slate.
+
+    The caller writes the captures into ``data/snapshots`` first. The bundle
+    is the synthetic one, which is enough for the frozen manifest to verify
+    and therefore enough to reach the slate; it holds no real model binaries,
+    so a run that gets past the exclusion checks fails later for a reason
+    that has nothing to do with them, and the tests below say which.
+    """
+    bundle = serving_root.synthetic_bundle(tmp_path / "bundle")
+
+    completed = serving_root.run_script(
+        serving_root.PREDICT_SCRIPT,
+        bundle_root=bundle,
+        model_dir=bundle / "models",
+        data_root=tmp_path / "data",
+    )
+
+    return completed, completed.stdout + completed.stderr
+
+
+def test_a_slate_nothing_can_serve_refuses_instead_of_reporting_no_games(
+    tmp_path,
+):
+    """Every game excluded must not read as a quiet evening.
+
+    This is the hole isolating the refusal opens, and it is the dangerous
+    one. With the client no longer raising, a slate whose every game was
+    excluded reaches the script as zero games, which is the existing
+    empty-slate path: it prints "No games found" and exits zero, so a
+    refusal that used to be a crash would have become a green job that
+    served nothing. The run has to refuse there, and name what it excluded.
+    """
+    snapshot_dir = tmp_path / "data" / "snapshots"
+
+    write_conflicting_pair(snapshot_dir, game_id=CONFLICTED)
+
+    write_conflicting_pair(snapshot_dir, game_id=CLEAN)
+
+    completed, output = run_the_prediction_script(tmp_path)
+
+    assert completed.returncode != 0
+
+    assert "No games found" not in output
+
+    assert (
+        f"no game on the {SLATE} slate has a servable scheduled capture"
+        in output
+    )
+
+    # Both games, each with the whole reason rather than a count.
+    for game_id in (CONFLICTED, CLEAN):
+        assert f"{game_id}:T-20m: expected exactly one" in output
+
+    assert output.count("2 different point-in-time captures") == 2
+
+
+def test_one_unservable_game_does_not_stop_the_script_building_the_slate(
+    tmp_path,
+):
+    """The reproduction, through the entry point the incident crashed in.
+
+    The conflicted game used to abort client construction inside this
+    script, which is how three games lost predictions when one window was
+    in conflict. Now the clean game reaches the slate: the run gets past
+    the client, past the exclusion check -- which must not fire, because
+    this slate is short rather than empty -- and on into the model stage,
+    where it fails for want of the real binaries the synthetic bundle does
+    not have. That last failure is this fixture's limit, not the script's,
+    and reaching it is the evidence: nothing before it refused.
+    """
+    snapshot_dir = tmp_path / "data" / "snapshots"
+
+    write_conflicting_pair(snapshot_dir, game_id=CONFLICTED)
+
+    write_clean_game(snapshot_dir, game_id=CLEAN)
+
+    completed, output = run_the_prediction_script(tmp_path)
+
+    assert completed.returncode != 0
+
+    # Not the conflicted game's error, which is what used to come out here.
+    assert "expected exactly one scheduled capture" not in output
+
+    # Not the every-game-excluded refusal either: this slate has a game.
+    assert "has a servable scheduled capture" not in output
+
+    # It got as far as wanting a model artifact, which means the clean
+    # game was discovered, selected, and built into a non-empty slate.
+    assert "dynamic_params.json" in output
 
 
 def test_the_excluded_mapping_is_ordered_and_is_a_copy(tmp_path):
