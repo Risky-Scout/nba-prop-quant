@@ -455,7 +455,10 @@ def test_ssh_rsync_publishes_a_release_and_promotes_it(
     assert receipt["destination"]["name"] == NBA_DESTINATION
     assert receipt["verification"]["verified"] is True
     assert receipt["promotion"]["promoted"] is True
-    assert receipt["live_publishing"] == publisher.STATE_DISABLED
+    # The state the switch records, reported as a fact about the file rather
+    # than as a claim about this run, which published a canary.
+    assert receipt["live_publishing"] == publisher.STATE_ENABLED
+    assert receipt["mode"] == publisher.MODE_CANARY
     assert receipt["model_authority"] == publisher.MODEL_AUTHORITY
 
     release = receipt["release"]
@@ -963,22 +966,31 @@ def test_retention_keeps_the_served_release_the_previous_one_and_the_receipts(
 # ======================================================================
 
 
-def test_live_mode_refuses_while_the_committed_switch_disables_it(
+def test_live_mode_refuses_while_the_approval_is_not_carried(
     tmp_path: Path, loopback: dict
 ):
     """9. The real destination existing is not an argument for publishing live.
 
     Refused on the committed switch, before any destination is resolved and
-    before the transport is built, so no key is read and nothing is contacted.
+    before the transport is built, so no key is read and nothing is
+    contacted. The switch's state is ENABLED and that is not what decides
+    this: the two approval variables are blockers until they are set, and the
+    refusal names them.
     """
     built = fixture.build(tmp_path / "source")
 
     with pytest.raises(publisher.PublishingRefused) as refusal:
-        publish(built, loopback, mode=publisher.MODE_LIVE)
+        publish(
+            built, loopback, mode=publisher.MODE_LIVE, environment={}
+        )
 
     message = str(refusal.value)
 
-    assert f"live publishing is {publisher.STATE_DISABLED}" in message
+    for variable in (
+        publisher.PUBLISH_ENV_VAR,
+        publisher.PUBLISH_APPROVAL_ENV_VAR,
+    ):
+        assert variable in message
 
     assert list(loopback["published"].rglob("*")) == []
 
@@ -1602,8 +1614,15 @@ def test_no_production_command_names_an_rsync_chmod_option():
     assert offenders == []
 
 
-def test_the_switch_still_enables_the_canary_only():
-    """This is a transport fix, so the publishing authority is where it was."""
+def test_the_switch_still_puts_the_authority_where_it_was():
+    """A transport fix, so the publishing authority is where it was.
+
+    The live state has since been set in a reviewed commit, and nothing about
+    the authority moved with it: the incumbent publishes and the candidate is
+    shadow only, both before and after. The gate is still shut from here --
+    a switch read with nothing in the environment is not enabled -- which is
+    the claim this test was always making.
+    """
     switch = json.loads(
         (PROJECT / publisher.SWITCH_RELATIVE).read_text(encoding="utf-8")
     )
@@ -1611,9 +1630,15 @@ def test_the_switch_still_enables_the_canary_only():
     modes = switch["modes"]
 
     assert modes[publisher.MODE_CANARY]["state"] == publisher.STATE_ENABLED
-    assert modes[publisher.MODE_LIVE]["state"] == publisher.STATE_DISABLED
     assert switch["published_authority"] == publisher.MODEL_AUTHORITY
     assert switch["candidate_authority"] == "shadow_only"
+
+    assert (
+        publisher.read_publishing_switch(
+            publisher.MODE_LIVE, project_root=PROJECT, environment={}
+        ).enabled
+        is False
+    )
 
 
 # ======================================================================

@@ -36,6 +36,7 @@ from nba_prop_quant.research.game_latent_state.safety import (
     ADDITIVE_ONLY_NAMED_DESTINATIONS,
     ADDITIVE_ONLY_PAGE_CONSISTENCY_CHECKS,
     ADDITIVE_ONLY_PUBLICATION_TRANSPORTS,
+    ADDITIVE_ONLY_PUBLISHING_SWITCH,
     ADDITIVE_ONLY_SERVING_ENTRY_POINTS,
     ADDITIVE_ONLY_SERVING_SOURCES,
     ADDITIVE_ONLY_WORKFLOWS,
@@ -1280,6 +1281,103 @@ def assert_only_named_destinations_were_added(
         )
 
 
+def assert_only_the_live_decision_moved(
+    relative: str, before: str, after: str
+) -> None:
+    """No gate may be weakened; the one decision the file carries may be taken.
+
+    The byte pin on the switch is right about every field in it except the
+    three it exists to carry. ``modes.live.state`` is a field whose entire
+    purpose is to be set once, by a human, in a reviewed commit, and a pin
+    that forbade the file to differ at all made it permanently unable to be
+    set -- which is not a freeze on publication but a freeze on the review
+    that authorises it.
+
+    So the pin is restated in the form that tells the two apart, and once the
+    file is allowed to differ at all this is stronger than the byte
+    comparison was: only ``state``, ``approval_token`` and ``reason`` inside
+    ``modes.live`` may move, the state may only move towards ENABLED, the
+    token may not stay the placeholder, and every other key in the document
+    -- the canary mode, the three conditions, the contract version, the
+    approved freeze, both schema versions, the published authority and the
+    candidate authority -- must be deeply equal to the production ref.
+
+    None of which opens anything. ``PublishingSwitch.enabled`` is the state
+    *and* an empty blocker list, and the two approval variables are blockers
+    until they are set in the ``wizardofodds-production`` GitHub environment
+    and agree with this file, which no commit can do.
+    """
+    document_before = json.loads(before)
+
+    document_after = json.loads(after)
+
+    for key, value in document_before.items():
+        if key == "modes":
+            continue
+
+        assert document_after.get(key) == value, (
+            f"{relative}:{key} is not what production has, and only the live "
+            "decision may differ"
+        )
+
+    modes_before = document_before.get("modes") or {}
+
+    modes_after = document_after.get("modes") or {}
+
+    assert set(modes_after) == set(modes_before), (
+        f"{relative} changed which modes exist, which is not a decision this "
+        "file carries"
+    )
+
+    for mode, declared in modes_before.items():
+        if mode == "live":
+            continue
+
+        assert modes_after[mode] == declared, (
+            f"{relative}:modes.{mode} may not move; only the live decision may"
+        )
+
+    live_before = modes_before.get("live") or {}
+
+    live_after = modes_after.get("live") or {}
+
+    assert set(live_after) == set(live_before), (
+        f"{relative}:modes.live changed which fields it has, and the decision "
+        "is taken by setting the three it already had"
+    )
+
+    for field, value in live_before.items():
+        if field in ("approval_token", "reason", "state"):
+            continue
+
+        assert live_after[field] == value, (
+            f"{relative}:modes.live.{field} is not a field the decision moves"
+        )
+
+    assert live_after["state"] in (live_before["state"], "ENABLED"), (
+        f"{relative}:modes.live.state moved to {live_after['state']!r}, and "
+        "the only state a reviewed decision sets is ENABLED"
+    )
+
+    assert "no-approval-has-been-granted" not in str(
+        live_after["approval_token"]
+    ), (
+        f"{relative}:modes.live.state is {live_after['state']!r} while "
+        "approval_token is still the placeholder that says no approval was "
+        "granted, so the file would be claiming a decision nobody took"
+    )
+
+    assert live_after["approval_token"], (
+        f"{relative}:modes.live.approval_token is empty, which an absent "
+        "NBA_PROP_WOO_PUBLISH_APPROVAL would match"
+    )
+
+    assert len(str(live_after["reason"])) > len(str(live_before["reason"])), (
+        f"{relative}:modes.live.reason got shorter while the state moved; the "
+        "reason is where the authorisation is recorded"
+    )
+
+
 #: Each declared file on the numerical list, and the stronger statement it is
 #: held to instead of its bytes. A module reaches this mapping by having a
 #: defect a byte pin makes unfixable while protecting nothing numerical, and
@@ -1290,6 +1388,7 @@ NARROWED_NUMERICAL_PINS: tuple[tuple[tuple[str, ...], object], ...] = (
     (ADDITIVE_ONLY_SERVING_SOURCES, assert_only_the_slate_builder_moved),
     (ADDITIVE_ONLY_SERVING_ENTRY_POINTS, assert_only_the_serving_entry_point_moved),
     (ADDITIVE_ONLY_NAMED_DESTINATIONS, assert_only_named_destinations_were_added),
+    (ADDITIVE_ONLY_PUBLISHING_SWITCH, assert_only_the_live_decision_moved),
     (
         ADDITIVE_ONLY_CAPTURE_SELECTION_SOURCES,
         assert_only_the_capture_selection_moved,
@@ -1637,6 +1736,16 @@ def test_no_workflow_production_already_has_was_changed_silently():
     undeclarable prefixes are the model artifacts, the configs, the scripts
     and the release and review surfaces. So the ban is on the silence, and
     ``DECLARED_INTEGRATION_PATHS`` is where it is broken.
+
+    A declared additive-only workflow is held to the line-set rule instead,
+    for the same reason and not as an exception to it. GitHub does not put a
+    repository variable or a secret into a step's process unless the step
+    binds it, so a value that must reach a subprocess cannot be supplied
+    anywhere but the workflow -- and "every line production has is still
+    there, unedited and in order" is the form of this pin that says a step was
+    appended and not rewritten. No cron, trigger, permission, concurrency
+    group, runner label, checkout ref or existing command can survive it
+    being changed.
     """
     base = production_base()
 
@@ -1647,12 +1756,35 @@ def test_no_workflow_production_already_has_was_changed_silently():
 
     assert existing, "the production ref has no workflows, which cannot be right"
 
-    edited = [
-        name
-        for name in existing
-        if blob_text(base, f".github/workflows/{name}")
-        != (PROJECT / ".github" / "workflows" / name).read_text(encoding="utf-8")
-    ]
+    edited: list[str] = []
+
+    for name in existing:
+        relative = f".github/workflows/{name}"
+
+        before = blob_text(base, relative)
+
+        after = (PROJECT / relative).read_text(encoding="utf-8")
+
+        if after == before:
+            continue
+
+        if relative not in ADDITIVE_ONLY_WORKFLOWS:
+            edited.append(name)
+
+            continue
+
+        lines = after.splitlines()
+
+        removed = [line for line in before.splitlines() if line not in lines]
+
+        assert removed == [], (
+            f"{relative} is additive-only and removed or edited existing "
+            f"lines: {removed}"
+        )
+
+        assert [line for line in before.splitlines() if line in lines] == [
+            line for line in lines if line in set(before.splitlines())
+        ], f"{relative} reordered the lines production has"
 
     undeclared = [
         name

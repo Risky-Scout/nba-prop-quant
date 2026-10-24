@@ -704,11 +704,15 @@ def test_live_mode_still_refuses_and_writes_no_attestation(tmp_path: Path):
 
     assert not (tmp_path / "destination").exists()
 
-    switch = json.loads(
-        (PROJECT / publisher.SWITCH_RELATIVE).read_text(encoding="utf-8")
+    # The live state is set in the committed switch, and the gate it is one
+    # of three conditions for is still shut, which is why nothing above was
+    # written.
+    assert (
+        publisher.read_publishing_switch(
+            publisher.MODE_LIVE, project_root=PROJECT, environment={}
+        ).enabled
+        is False
     )
-
-    assert switch["modes"][publisher.MODE_LIVE]["state"] == publisher.STATE_DISABLED
 
 
 def test_a_shadow_candidate_slate_still_refuses(tmp_path: Path):

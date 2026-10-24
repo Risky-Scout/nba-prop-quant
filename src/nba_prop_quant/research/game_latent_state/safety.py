@@ -1218,6 +1218,217 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
             "already has -- run, set -euo pipefail, env, a bare comment "
             "marker -- as a reordering of lines nothing reordered"
         ),
+        "ops/wizardofodds_publishing_switch.json": (
+            "three fields inside modes.live and nothing else: state from "
+            "DISABLED to ENABLED, approval_token from the placeholder that "
+            "said no approval had been granted to the token the owner's "
+            "decision sets, and reason to the record of that decision. This "
+            "is the first of the three conditions the file's own "
+            "what_enabling_live_requires lists and it is deliberately the "
+            "only one a commit can hold: the other two are "
+            "NBA_PROP_WOO_PUBLISH and NBA_PROP_WOO_PUBLISH_APPROVAL in the "
+            "wizardofodds-production GitHub environment, which no file in "
+            "this repository can set. PublishingSwitch.enabled is the state "
+            "AND an empty blocker list, and both variables are blockers "
+            "until they are set and agree, so the gate is not opened by this "
+            "change and every live publication still refuses by name. "
+            "modes.canary, what_enabling_live_requires, the contract "
+            "version, the approved freeze, both schema versions, "
+            "published_authority incumbent and candidate_authority "
+            "shadow_only are all byte-identical to production, which the "
+            "narrowed numerical pin checks field by field. No destination, "
+            "credential, host, model artifact or number is touched"
+        ),
+        "ops/run_progressive_live_refresh.py": (
+            "a new file, and the only thing the decision above authorises. "
+            "Publishes the live slate as a per-game composite in which every "
+            "game stands at its own latest validated window on the reviewed "
+            "progression T-180, T-90, T-45, T-20 final. The one global "
+            "forward-only pointer it replaced was wrong on any staggered "
+            "slate and provably so: on an eight-game 6:00-to-10:00 evening "
+            "the first game's T-20 capture is taken before the last game's "
+            "T-180 one, so the slate-wide 'closest window reached' declined "
+            "fourteen of twenty-four window groups and seven of eight games "
+            "never got a card. A game is now declined only when that same "
+            "game has already validly reached a window closer to its own "
+            "tip, a game nobody advanced keeps the component recorded for it "
+            "byte for byte, and no game is ever downgraded. Re-derives, "
+            "re-prices, re-routes and synthesises nothing: composition is "
+            "selection and concatenation of rows copied out of releases a "
+            "canary already read back and attested, every source is put "
+            "through the frozen publisher's own assert_canary_attested, "
+            "every composed row is looked up by the publisher's own logical "
+            "key in bytes re-read and re-digested from the stored source, "
+            "and COMPOSITE_UNATTESTED_ROWS, LIVE_SOURCE_MISMATCH_COUNT and "
+            "COMPOSITE_UNATTESTED_DISTRIBUTIONS must all be zero or nothing "
+            "is published. A composite that is exactly one canary release's "
+            "whole game set still has to equal that release's digest three "
+            "ways, which is the original check kept where it still applies. "
+            "Refuses an offset outside the progression, a canary of another "
+            "window, a destination other than the single live pair, an "
+            "advancing window with no named capture, a downgrade, and an "
+            "approval that is absent or disagrees -- naming both variables "
+            "and their environment when it does. The tipped guard is per "
+            "game: a started game is refused new publication and the rest of "
+            "the slate still goes, and a card validly published before a tip "
+            "is never retracted. On every refusal it writes nothing to any "
+            "destination and publishes to no canary in their place, so the "
+            "live pointer still names the most recent composite that "
+            "validated and the publisher's own current.json, previous.json, "
+            "audit log and retention are the mechanics used rather than a "
+            "second scheme. Every publication attempt appends one line to "
+            "processed/live_progressive_refresh/<slate>.jsonl naming every "
+            "game and its window, which is where the per-game state is read "
+            "from because the live pointer cannot say it. Computes no "
+            "probability, price, edge, EV, quantile, line, distribution, "
+            "minute or route, imports pandas not at all, names no fitted "
+            "artifact it did not copy from a receipt, and cannot promote a "
+            "candidate: the authority it publishes under is the switch's own "
+            "incumbent and shadow_only"
+        ),
+        "ops/live_slate_composite.py": (
+            "a new file, the per-game composition library the live refresh "
+            "above is written in terms of, and a library rather than an "
+            "entry point so that the attestation arithmetic can be tested "
+            "directly against bytes. It owns four things and no others. A "
+            "durable write-once content-addressed source store at "
+            "processed/live_composite_sources/<slate>/<release_id>/, holding "
+            "the rows, manifest and canary attestation of a release copied "
+            "byte for byte at the one moment the attestation of those exact "
+            "bytes is in hand -- necessary because a canary destination "
+            "retains only current and previous, so a game that advanced out "
+            "of an earlier cumulative release would otherwise have no source "
+            "anybody could read back. The selection itself, which picks each "
+            "game's rows out of its own source, concatenates them in the "
+            "publisher's own logical-key order and copies the matching "
+            "distributions, and which computes nothing: no price, "
+            "probability, projection, quantile, line, minute, edge or route "
+            "is derived, averaged, re-timed, relabelled or merged, and a row "
+            "is only ever moved. The audit, which re-reads every stored "
+            "source, recomputes its digest with the publisher's own digest "
+            "function instead of trusting the recorded field, runs the "
+            "publisher's own assert_canary_attested once per source rather "
+            "than once per release, and counts every composed row that "
+            "cannot be found byte-identical in the source it claims. The "
+            "composite manifest, which records GAME_ID, SOURCE_WINDOW, "
+            "CAPTURE_ID, CAPTURE_TIMESTAMP, SOURCE_RELEASE_ID, "
+            "SOURCE_ROWS_SHA256, PRODUCTION_SHA, FIT_ID, MODEL_ID, "
+            "FACTOR_ID and POLICY_ID per game, all of them copied out of "
+            "receipts and row fields and none of them invented, and which "
+            "refuses to publish a composite with a single untraceable row. "
+            "No destination, credential, host, model artifact, fit, "
+            "calibration, routing decision or number is created, read for "
+            "its value or written here"
+        ),
+        ".github/workflows/nba_t20_production.yml": (
+            "two added lines in the env block of the step that already "
+            "captures, serves and publishes the canary, plus the comment "
+            "that explains them. They bind NBA_PROP_WOO_PUBLISH from a "
+            "repository variable and NBA_PROP_WOO_PUBLISH_APPROVAL from a "
+            "secret, both in the wizardofodds-production environment the job "
+            "already names. Necessary and not avoidable in code: GitHub does "
+            "not put a variable or a secret into a step's process unless the "
+            "step binds it, and the publisher reads the approval out of the "
+            "process environment. Strictly additive -- no cron, trigger, "
+            "permission, "
+            "concurrency group, runner label, checkout ref, step, order or "
+            "existing env entry changes, which the additive-only line-set "
+            "rule and the narrowed workflow pin both check -- and it grants "
+            "nothing: until the owner sets both in the GitHub UI they "
+            "interpolate empty, the switch's blockers stand and every live "
+            "publication refuses. Neither value is printed, echoed or passed "
+            "on a command line"
+        ),
+        "ops/run_t20_production_controller.py": (
+            "one more non-blocking call after each of the four windows has "
+            "published and validated its canary, and nothing else. It "
+            "invokes ops/run_progressive_live_refresh.py for that window and "
+            "then the frozen publication script's live page stage, pinned to "
+            "the receipt the refresh wrote. The window's own tip and the "
+            "capture its prices were selected from are handed over with it, "
+            "both carried out of facts this controller already held -- the "
+            "schedule read and the bundle selection the pricing path itself "
+            "performed -- and neither re-derived, defaulted or invented. "
+            "Nothing selects a capture a second time, and a window selection "
+            "never recorded one for is passed without it, which the refresh "
+            "refuses rather than guesses at. Every T-20 refusal, every T-20 "
+            "receipt field, the cumulative re-serving, the advisory "
+            "scheduling and reservation, the duplicate-capture claim and the "
+            "served-window recovery production already runs are untouched "
+            "and still pinned by their own tests -- including the per-window "
+            "recovery isolation production merged ahead of this branch, "
+            "whose _select_capture split, per-window refusal records, "
+            "deferred serving refusal and unserved-set subtraction are "
+            "carried through this merge unmodified and still reported under "
+            "T20_CAPTURED_WINDOWS_UNSERVED ahead of any live verdict. The "
+            "call can never raise, "
+            "a live fault degrades the segment report under its own outcome "
+            "exactly as an advisory fault does, and the canary a window "
+            "already published is never withdrawn, re-published or "
+            "re-derived because of it. T20_CAPTURED_WINDOWS_UNSERVED and the "
+            "advisory-degraded outcome both still outrank it, so a window "
+            "production is missing is never reported as a live footnote. The "
+            "controller decides nothing about the live release itself -- not "
+            "the digest, not the ordering, not the approval -- it hands over "
+            "the window's own canary and serving receipts and reports what "
+            "came back. Nothing here captures, so nothing here can "
+            "fabricate, re-time or relabel a snapshot or let a non-T-20 "
+            "snapshot stand in for a T-20 one, and no model, calibration, "
+            "price or routing is reached from here"
+        ),
+        "ops/validate_workflows.py": (
+            "one added entry in CONTROLLER_OWNED_ENTRY_POINTS, the live "
+            "refresh script, and the publication-activation check narrowed "
+            "from a flat token ban to the statement it was standing in for. "
+            "The ban existed because no workflow could be allowed to "
+            "activate live publishing by itself, and it refused the two "
+            "approval variables by name because a workflow mentioning them "
+            "was a workflow deciding. That now has to distinguish deciding "
+            "from carrying, and it does so strictly: --mode live and --stage "
+            "live stay refused in every workflow, both variables stay "
+            "refused in every workflow but the T-20 one, and in that one "
+            "each is accepted only as a bare binding of its own name to a "
+            "vars or secrets reference of the same name, only on the step "
+            "that runs the controller entry point, only with its other half "
+            "present, and never inside a run body. Everything else is "
+            "untouched: the three segment crons are still pinned exactly, "
+            "the permissions, concurrency, runner and checkout checks are "
+            "unchanged, and no existing refusal is removed. The live refresh "
+            "entry point belongs to the controller and not to the schedule "
+            "for the reason the advisory one does, plus one more: the window "
+            "it publishes has to have passed its canary first, and only the "
+            "controller knows that it did"
+        ),
+        "docs/wizardofodds/PRODUCTION_AUTOMATION.md": (
+            "one added section describing the progressive live refresh: the "
+            "one live pointer, what each window does to it, the digest "
+            "identity the live publish is conditional on, what is retained "
+            "when a refresh fails, the post-tip guard, where the durable "
+            "record is written, and the two variables the owner has to set "
+            "before any of it publishes. The one thing already documented "
+            "that is edited is the live-is-configured-and-disabled section, "
+            "which now records the state the switch actually carries: the "
+            "decision taken in the commit, the two conditions still "
+            "outstanding, and the refusal that stands until they are met. "
+            "The trigger table, the advisory-window section, the "
+            "single-writer and fail-closed sections and the idempotency "
+            "contract all stand as written"
+        ),
+        "docs/GO_LIVE_CHECKLIST.md": (
+            "the checklist's own step 4 of section 4, carried out and "
+            "recorded. It prescribed exactly this: take the decision in "
+            "ops/wizardofodds_publishing_switch.json, amend "
+            "PUBLICATION_ACTIVATION_TOKENS in ops/validate_workflows.py so "
+            "the workflow may carry the approval it may not grant, and set "
+            "both variables in the wizardofodds-production environment. The "
+            "first two are done and are described here as done; the third is "
+            "not ours to do and is restated as the only thing left, with the "
+            "exact names and the exact values. The placeholder token the "
+            "document quoted is replaced with the real one. No step is "
+            "removed, no gate is described as weaker than it is, and the "
+            "sections on canary proof, rollback and the refusals are "
+            "unchanged"
+        ),
     }
 )
 
@@ -1472,6 +1683,37 @@ SHADOW_OWNED_PRODUCTION_PATHS: Mapping[str, str] = MappingProxyType(
 #: production ref rather than trusting either mapping.
 ADDITIVE_ONLY_WORKFLOWS: tuple[str, ...] = (
     ".github/workflows/nba_production_lifecycle.yml",
+    ".github/workflows/nba_t20_production.yml",
+)
+
+#: The publishing switch, declarable only for the live decision inside it.
+#:
+#: The same correction as the destination registry below, on the file those
+#: live destinations are useless without. The switch was pinned by its bytes
+#: because it decides whether anything publishes at all, and that is right
+#: about every other field in it -- but a byte pin reads the same for two
+#: different changes: weakening a gate, and taking the one decision the file
+#: exists to carry. ``modes.live.state`` is a field whose entire purpose is to
+#: be set once, by a human, in a reviewed commit, and the pin made the file
+#: permanently unable to be set, which is not a freeze on publication but a
+#: freeze on the review that authorises it.
+#:
+#: So it is declarable, under a rule that is strictly stronger than the byte
+#: comparison once the file is allowed to differ at all: only the three fields
+#: inside ``modes.live`` may differ, ``state`` may only move to ``ENABLED``,
+#: ``approval_token`` may not stay the placeholder that said no approval had
+#: been granted, and every other key -- ``modes.canary``,
+#: ``what_enabling_live_requires``, the contract version, the approved freeze,
+#: both schema versions, ``published_authority`` and ``candidate_authority``
+#: -- must be deeply equal to the production ref.
+#:
+#: Flipping the state is also not the same thing as opening the gate.
+#: ``PublishingSwitch.enabled`` is the state *and* an empty blocker list, and
+#: ``NBA_PROP_WOO_PUBLISH`` and ``NBA_PROP_WOO_PUBLISH_APPROVAL`` are blockers
+#: until they are set in the ``wizardofodds-production`` GitHub environment
+#: and agree with this file, neither of which any commit can do.
+ADDITIVE_ONLY_PUBLISHING_SWITCH: tuple[str, ...] = (
+    "ops/wizardofodds_publishing_switch.json",
 )
 
 #: The destination registry, declarable only for added named destinations.

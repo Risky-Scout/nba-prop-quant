@@ -144,6 +144,8 @@ class World:
         advisory_serving_outcome: str = "SERVED",
         advisory_serving_returncode: int = 0,
         advisory_feed_outcome: str = "PUBLISHED",
+        live_refusal: str | None = None,
+        live_page_returncode: int = 0,
     ) -> None:
         self.data_root = tmp_path / "data"
 
@@ -172,6 +174,28 @@ class World:
         self.advisory_serving_returncode = advisory_serving_returncode
 
         self.advisory_feed_outcome = advisory_feed_outcome
+
+        #: When set, every live refresh refuses with this message and exits
+        #: nonzero, which is the state the repository is actually in until
+        #: both approval variables are set in the production environment.
+        self.live_refusal = live_refusal
+
+        self.live_page_returncode = live_page_returncode
+
+        #: What the single live destination is serving, as the fake chain
+        #: leaves it. One pointer, one window, one digest -- which is the
+        #: design, so a test can assert the pointer never went backwards.
+        self.live_release: str | None = None
+
+        self.live_offset: int | None = None
+
+        self.live_rows: str | None = None
+
+        #: Every live refresh asked for, in order, as (offset, rows digest).
+        self.live_refreshes: list[tuple[int, str]] = []
+
+        #: Every live page publication asked for, in order.
+        self.live_pages: list[str] = []
 
         self.commands: list[list[str]] = []
 
@@ -225,6 +249,9 @@ class World:
 
         if script.endswith("run_wizardofodds_publication.py"):
             return self._publish(command)
+
+        if script.endswith("run_progressive_live_refresh.py"):
+            return self._refresh_live(command)
 
         raise AssertionError(f"unexpected command: {command}")
 
@@ -439,7 +466,19 @@ class World:
                         "slate_date": self._value(command, "--slate-date"),
                         "published_game_ids": published,
                         "release": {
-                            "release_id": f"release-{len(self.published)}"
+                            "release_id": f"release-{len(self.published)}",
+                            # The digest the live half is required to carry.
+                            # In the real receipt it is the digest of the rows
+                            # payload; here it is a function of the served
+                            # artifact, which is the property that matters:
+                            # the same priced bytes digest the same and
+                            # different ones do not.
+                            "rows_sha256": str(
+                                (
+                                    served.get("priced_market_artifact") or {}
+                                ).get("sha256")
+                                or ""
+                            ),
                         },
                     }
                 ),
@@ -448,13 +487,157 @@ class World:
 
             return self._completed(command)
 
+        mode = self._value(command, "--mode")
+
+        if mode == "live":
+            self.live_pages.append(
+                self._value(command, "--feed-receipt")
+            )
+
+            if self.live_page_returncode != 0:
+                receipt_path.write_text(
+                    json.dumps(
+                        {
+                            "message": "the live page stage was made to fail",
+                            "mode": mode,
+                            "outcome": "PUBLICATION_STAGE_FAILED",
+                            "slate_date": self._value(
+                                command, "--slate-date"
+                            ),
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+
+                return self._completed(
+                    command, returncode=self.live_page_returncode
+                )
+
         receipt_path.write_text(
             json.dumps(
                 {
                     "outcome": "PUBLISHED",
-                    "mode": self._value(command, "--mode"),
+                    "mode": mode,
                     "slate_date": self._value(command, "--slate-date"),
                     "page_sha256": "0" * 64,
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        return self._completed(command)
+
+    def _refresh_live(self, command):
+        """What ops/run_progressive_live_refresh.py writes, in receipt shape.
+
+        Enough of that module's decision for a controller test to be about
+        the controller: the ordering rule, the idempotent case, the
+        establishment case and the refusal, all driven off the canary feed
+        receipt the controller actually handed over rather than off the
+        controller's own intention.
+
+        Its real rules are not reimplemented here and are not tested here.
+        The attestation read back off the canary destination, the three-way
+        digest match, the publisher's own gates, the post-tip guard and the
+        durable ledger are exercised against the real publisher over real
+        local destinations in tests/test_nba_progressive_live_refresh.py.
+        """
+        offset = int(self._value(command, "--snapshot-offset-minutes"))
+
+        slate_date = self._value(command, "--slate-date")
+
+        receipt_path = Path(self._value(command, "--receipt-path"))
+
+        receipt_path.parent.mkdir(parents=True, exist_ok=True)
+
+        canary = json.loads(
+            Path(
+                self._value(command, "--canary-feed-receipt")
+            ).read_text(encoding="utf-8")
+        )
+
+        rows_sha256 = str((canary.get("release") or {}).get("rows_sha256") or "")
+
+        self.live_refreshes.append((offset, rows_sha256))
+
+        def refuse(outcome: str, message: str, *, returncode: int = 1):
+            receipt_path.write_text(
+                json.dumps(
+                    {
+                        "live_outcome": outcome,
+                        "message": message,
+                        "mode": "live",
+                        "observed_live_release_id": self.live_release or "",
+                        "offset_minutes": offset,
+                        "outcome": (
+                            "LIVE_REFRESH_REFUSED"
+                            if returncode
+                            else "LIVE_REFRESH_DECLINED"
+                        ),
+                        "slate_date": slate_date,
+                        "stage": "live",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            return self._completed(command, returncode=returncode)
+
+        if self.live_refusal is not None:
+            return refuse(
+                controller.LIVE_OUTCOME_REFUSED, self.live_refusal
+            )
+
+        if self.live_offset is not None and offset > self.live_offset:
+            # Exits zero. The ordering rule declining a window is the rule
+            # working, and on a staggered slate it is the ordinary case.
+            return refuse(
+                controller.LIVE_OUTCOME_ALREADY_CLOSER_TO_TIP,
+                f"the T-{self.live_offset} release is already live and this "
+                f"is the T-{offset} refresh, which is an earlier capture "
+                "window",
+                returncode=0,
+            )
+
+        previous = self.live_release or ""
+
+        if rows_sha256 and rows_sha256 == self.live_rows:
+            outcome = controller.LIVE_OUTCOME_ALREADY_CURRENT
+
+            release_id = previous
+
+        else:
+            outcome = (
+                controller.LIVE_OUTCOME_ESTABLISHED
+                if self.live_release is None
+                else controller.LIVE_OUTCOME_REPLACED
+            )
+
+            release_id = f"nba_prop_quant__{slate_date}__{rows_sha256[:16]}"
+
+            self.live_release = release_id
+
+            self.live_rows = rows_sha256
+
+        self.live_offset = offset
+
+        receipt_path.write_text(
+            json.dumps(
+                {
+                    "live_outcome": outcome,
+                    "mode": "live",
+                    "offset_minutes": offset,
+                    "outcome": "PUBLISHED",
+                    "previous_release_id": previous,
+                    "reason": (
+                        f"the T-{offset} release {release_id} is live"
+                    ),
+                    "release": {
+                        "release_id": release_id,
+                        "rows_sha256": rows_sha256,
+                    },
+                    "slate_date": slate_date,
+                    "stage": "live",
                 }
             ),
             encoding="utf-8",
@@ -498,7 +681,8 @@ class World:
                             "release_id": (
                                 f"nba_prop_quant_advisory_t{offset}m__{SLATE}__"
                                 + digest[:16]
-                            )
+                            ),
+                            "rows_sha256": digest,
                         },
                         "slate_date": self._value(command, "--slate-date"),
                     }
@@ -701,13 +885,21 @@ def collector_commands(
     ]
 
 
-def publication_commands(world: World, *, stage: str) -> list[list[str]]:
-    """The T-20 publication invocations at one stage.
+def publication_commands(
+    world: World, *, stage: str, mode: str = "canary"
+) -> list[list[str]]:
+    """The T-20 publication invocations at one stage, in one mode.
 
     An advisory release is addressed by naming its destination; the T-20
     release is published by naming none, because its destination is the
     mode's default. Filtering on that is what keeps every assertion in this
     module about what production published an assertion about T-20.
+
+    The mode is filtered for the same reason, one layer along. A live page is
+    also published without a destination name -- live mode's default page
+    destination is the served root -- so without this every assertion about
+    what the canary published would quietly have become an assertion about
+    the canary and the live page together.
     """
     return [
         command
@@ -715,6 +907,7 @@ def publication_commands(world: World, *, stage: str) -> list[list[str]]:
         if str(command[1]).endswith("run_wizardofodds_publication.py")
         and "--stage" in command
         and command[command.index("--stage") + 1] == stage
+        and command[command.index("--mode") + 1] == mode
         and "--feed-destination-name" not in command
         and "--page-destination-name" not in command
     ]
@@ -2254,36 +2447,131 @@ def test_the_frozen_canonical_identities_are_unchanged():
     )
 
 
-def test_live_publication_remains_disabled():
-    """Case 20."""
+def test_live_publication_is_decided_in_the_commit_and_gated_outside_it():
+    """Case 20, restated for what is now true.
+
+    This used to assert that live publishing was DISABLED in the committed
+    switch, and that was the right assertion while the decision had not been
+    taken. The decision has now been taken -- the owner asked for the early
+    windows to publish live on the reviewed progression -- so the state is
+    ENABLED and asserting otherwise would be asserting against the decision.
+
+    What replaces it is stronger rather than weaker, because it pins the part
+    the old assertion was really protecting: that a commit cannot publish
+    anything. The switch is one of three conditions; the other two are
+    variables in the wizardofodds-production GitHub environment, they cannot
+    be set from this repository at all, and with the committed state as it is
+    and the environment silent the publisher still refuses. That is asserted
+    here against the real switch and the real gate rather than described.
+
+    The canary stays the only mode a *schedule* can reach: the controller has
+    no mode option, its own publication mode is canary, and the one live
+    invocation it makes is to the refresh entry point, which has no mode
+    argument either and is reachable only after a canary of the same bytes.
+    """
     switch = json.loads(
         (PROJECT / "ops" / "wizardofodds_publishing_switch.json").read_text(
             encoding="utf-8"
         )
     )
 
-    assert switch["modes"]["live"]["state"] == "DISABLED"
+    assert switch["modes"]["live"]["state"] == "ENABLED"
 
     assert switch["modes"]["canary"]["state"] == "ENABLED"
+
+    # The decision is recorded, and it is not the placeholder it replaced.
+    token = switch["modes"]["live"]["approval_token"]
+
+    assert token and token != "no-approval-has-been-granted"
+
+    # And it opens nothing. The gate is the committed state *and* both
+    # variables, read here through the publisher's own function with the
+    # environment as a runner without them would have it.
+    publisher = load_ops("publish_incumbent_to_wizardofodds")
+
+    read = publisher.read_publishing_switch(
+        publisher.MODE_LIVE, project_root=PROJECT, environment={}
+    )
+
+    assert read.state == publisher.STATE_ENABLED
+
+    assert read.enabled is False
+
+    assert sorted(read.blockers) == [
+        f"{publisher.PUBLISH_ENV_VAR} does not match the switch state",
+        (
+            f"{publisher.PUBLISH_APPROVAL_ENV_VAR} does not match the "
+            "approval token"
+        ),
+    ]
+
+    with pytest.raises(publisher.PublishingRefused) as refusal:
+        publisher.assert_mode_enabled(read)
+
+    for variable in (
+        publisher.PUBLISH_ENV_VAR,
+        publisher.PUBLISH_APPROVAL_ENV_VAR,
+    ):
+        assert variable in str(refusal.value), variable
+
+    # Half the approval is still no approval.
+    for carried in (
+        {publisher.PUBLISH_ENV_VAR: publisher.STATE_ENABLED},
+        {publisher.PUBLISH_APPROVAL_ENV_VAR: token},
+        {
+            publisher.PUBLISH_ENV_VAR: publisher.STATE_ENABLED,
+            publisher.PUBLISH_APPROVAL_ENV_VAR: "something-else",
+        },
+    ):
+        assert (
+            publisher.read_publishing_switch(
+                publisher.MODE_LIVE,
+                project_root=PROJECT,
+                environment=carried,
+            ).enabled
+            is False
+        ), carried
 
     assert controller.PUBLICATION_MODE == "canary"
 
     source = ENTRY_POINT.read_text(encoding="utf-8")
 
-    # No mode argument, so there is no code path from a schedule to live.
     assert '"--mode"' in source
 
     assert "PUBLICATION_MODE" in source
 
-    for token in ("--mode live", "--stage live", "NBA_PROP_WOO_PUBLISH"):
+    # The controller never spells the forbidden flags as one string, and
+    # never names either approval variable: it does not read them, test them
+    # or pass them on, and the publisher takes them out of the environment.
+    for token in (*validator.PUBLICATION_ACTIVATION_FLAGS, "NBA_PROP_WOO"):
         assert token not in source, token
 
-    workflow = (
-        PROJECT / ".github" / "workflows" / "nba_t20_production.yml"
-    ).read_text(encoding="utf-8")
+    # The workflow carries the two variables and decides nothing. Checked
+    # through the validator's own rule rather than by a substring scan, which
+    # is what that rule exists for.
+    assert validator.APPROVAL_CARRYING_WORKFLOW == T20_WORKFLOW.name
 
-    for token in validator.PUBLICATION_ACTIVATION_TOKENS:
-        assert token not in workflow, token
+    workflow = yaml.safe_load(T20_WORKFLOW.read_text(encoding="utf-8"))
+
+    assert (
+        validator.activation_problems(
+            T20_WORKFLOW.name, workflow.get("jobs") or {}
+        )
+        == []
+    )
+
+    text = T20_WORKFLOW.read_text(encoding="utf-8")
+
+    for flag in validator.PUBLICATION_ACTIVATION_FLAGS:
+        assert flag not in text, flag
+
+    # Both halves, bound from the environment's own vars and from nowhere
+    # else. Both from vars rather than one from each, because neither value
+    # is secret -- one is the literal ENABLED and the other is committed in
+    # plaintext in the switch -- so there is one kind of thing to set, under
+    # the names the switch's own what_enabling_live_requires uses.
+    for variable in validator.PUBLICATION_APPROVAL_VARIABLES:
+        assert f"{variable}: ${{{{ vars.{variable} }}}}" in text, variable
 
 
 def test_the_controller_has_no_mode_option():
@@ -2301,8 +2589,634 @@ def test_the_controller_has_no_mode_option():
 
 
 # ----------------------------------------------------------------------
+# the progressive live refresh, as the controller drives it
+# ----------------------------------------------------------------------
+
+
+def live_commands(
+    world: World, *, offset: int | None = None
+) -> list[list[str]]:
+    """Every live refresh invocation, optionally narrowed to one window."""
+    return [
+        command
+        for command in world.commands
+        if str(command[1]).endswith("run_progressive_live_refresh.py")
+        and (
+            offset is None
+            or int(command[command.index("--snapshot-offset-minutes") + 1])
+            == offset
+        )
+    ]
+
+
+def live_records(receipt: dict, *, offset: int | None = None) -> list[dict]:
+    """The live refresh records, optionally narrowed to one window."""
+    return [
+        record
+        for record in receipt["live_refreshes"]
+        if offset is None or int(record["offset_minutes"]) == offset
+    ]
+
+
+def test_each_window_refreshes_live_after_its_own_canary_published(tmp_path):
+    """The chain, in order, over one segment that owns all four windows.
+
+    T-180 establishes the live release, T-90 replaces it, T-45 replaces that
+    and T-20 replaces that as the final pregame version. The ordering claim
+    is asserted on the live pointer the fake destination ends up holding and
+    on the sequence of offsets that moved it, not on the controller's
+    intention: a refresh is only recorded as having moved the pointer when
+    the refresh itself says it did.
+    """
+    clock = Clock(at(14, 25))
+
+    world = World(tmp_path, schedules=[[game(101, at(23, 0))]], clock=clock)
+
+    write_morning_receipt(world)
+
+    receipt = build(
+        world,
+        clock=clock,
+        segment_start=SEGMENT_1[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    assert receipt["final_outcome"] == controller.OUTCOME_SEGMENT_COMPLETE
+
+    # Four windows, each refreshed once, closest to tip last.
+    assert [int(command[command.index("--snapshot-offset-minutes") + 1])
+            for command in live_commands(world)] == [180, 90, 45, 20]
+
+    assert [record["offset_minutes"] for record in receipt["live_refreshes"]] == [
+        180,
+        90,
+        45,
+        20,
+    ]
+
+    assert [record["outcome"] for record in receipt["live_refreshes"]] == [
+        controller.LIVE_OUTCOME_ESTABLISHED,
+        controller.LIVE_OUTCOME_REPLACED,
+        controller.LIVE_OUTCOME_REPLACED,
+        controller.LIVE_OUTCOME_REPLACED,
+    ]
+
+    # Each one replaced the one before it, and the last is final.
+    releases = [record["release_id"] for record in receipt["live_refreshes"]]
+
+    assert len(set(releases)) == 4
+
+    assert [
+        record["previous_release_id"] for record in receipt["live_refreshes"]
+    ] == ["", *releases[:-1]]
+
+    assert receipt["live_refreshes"][-1]["final_pregame_window"] is True
+
+    assert [
+        record["final_pregame_window"]
+        for record in receipt["live_refreshes"][:-1]
+    ] == [False, False, False]
+
+    # One live destination, and it ends the evening naming the T-20 release.
+    assert world.live_release == releases[-1]
+
+    assert world.live_offset == 20
+
+    assert receipt["live_release_id"] == releases[-1]
+
+    assert receipt["live_refreshes_with_faults"] == []
+
+    assert receipt["progressive_live_offsets"] == [180, 90, 45, 20]
+
+
+def test_a_window_refreshes_live_from_its_own_canary_and_nothing_else(tmp_path):
+    """Each live refresh is handed the receipt of its own canary.
+
+    The equality the whole chain rests on, checked at the point where it
+    could be got wrong: the destination name and the feed receipt the
+    controller passes to the refresh are the ones the canary stage it just
+    ran actually used, so no window can be authorised by another window's
+    canary.
+    """
+    clock = Clock(at(14, 25))
+
+    world = World(tmp_path, schedules=[[game(101, at(23, 0))]], clock=clock)
+
+    write_morning_receipt(world)
+
+    build(
+        world,
+        clock=clock,
+        segment_start=SEGMENT_1[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    expected = {
+        **controller.ADVISORY_FEED_DESTINATIONS,
+        20: controller.T20_FEED_DESTINATION,
+    }
+
+    for command in live_commands(world):
+        offset = int(command[command.index("--snapshot-offset-minutes") + 1])
+
+        assert (
+            command[command.index("--canary-destination-name") + 1]
+            == expected[offset]
+        )
+
+        # The live destinations are named explicitly and are the single pair.
+        assert (
+            command[command.index("--live-feed-destination-name") + 1]
+            == controller.LIVE_FEED_DESTINATION
+        )
+
+        assert (
+            command[command.index("--live-page-destination-name") + 1]
+            == controller.LIVE_PAGE_DESTINATION
+        )
+
+        # The canary receipt handed over is the one that window's canary
+        # stage wrote, which is the file in that window's own stage
+        # directory, and the digest in it is the digest the live release has
+        # to carry.
+        receipt = json.loads(
+            Path(
+                command[command.index("--canary-feed-receipt") + 1]
+            ).read_text(encoding="utf-8")
+        )
+
+        assert receipt["outcome"] == "PUBLISHED"
+
+        assert receipt["mode"] == "canary"
+
+        assert receipt["release"]["rows_sha256"]
+
+        assert (offset, receipt["release"]["rows_sha256"]) in (
+            world.live_refreshes
+        )
+
+        # And the tip of the window it is for, so the post-tip guard has a
+        # subject. Never defaulted and never absent.
+        assert "--window-tip-utc" in command
+
+        for binding in world._values(command, "--window-tip-utc"):
+            window_id, _, tip = binding.partition("=")
+
+            assert window_id.endswith(f":T-{offset}m"), binding
+
+            assert datetime.fromisoformat(tip) == at(23, 0)
+
+        # And the capture each window's prices were selected from, so the
+        # composite manifest can name the snapshot behind that game's card.
+        # Carried out of the bundle selection the pricing path itself
+        # performed rather than selected again here, and never defaulted:
+        # the refresh refuses an advancing window it cannot name a capture
+        # for, because a card on the served root whose snapshot nobody can
+        # find again is worse than no card.
+        assert "--window-capture" in command
+
+        captures = world._values(command, "--window-capture")
+
+        assert len(captures) == len(
+            world._values(command, "--window-tip-utc")
+        )
+
+        for binding in captures:
+            window_id, _, identity = binding.partition("=")
+
+            assert window_id.endswith(f":T-{offset}m"), binding
+
+            capture_id, separator, captured_at = identity.partition("@")
+
+            assert separator, binding
+
+            assert capture_id, binding
+
+            assert datetime.fromisoformat(captured_at) < at(23, 0), binding
+
+
+def test_every_window_names_the_capture_the_pricing_path_itself_selected(
+    tmp_path,
+):
+    """The capture identity is carried, never invented and never re-derived.
+
+    The composite manifest records the snapshot behind every game's card, and
+    this controller is the only thing in the chain that knows it: the live
+    refresh is handed already-published bytes and has no capture log to read.
+    So what it passes has to be exactly what the pricing path selected, and
+    that is checked here against ``select_capture_bundle`` run independently
+    over the same log -- not against a value this controller recorded.
+    """
+    clock = Clock(at(14, 25))
+
+    games = [
+        game(101, at(23, 0)),
+        game(102, at(23, 30), home=3, away=4),
+    ]
+
+    world = World(tmp_path, schedules=[games], clock=clock)
+
+    write_morning_receipt(world)
+
+    build(
+        world,
+        clock=clock,
+        segment_start=SEGMENT_1[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    from nba_prop_quant.prospective_snapshot import select_capture_bundle
+
+    commands = live_commands(world)
+
+    assert commands
+
+    seen = 0
+
+    for command in commands:
+        offset = int(command[command.index("--snapshot-offset-minutes") + 1])
+
+        for binding in world._values(command, "--window-capture"):
+            window_id, _, identity = binding.partition("=")
+
+            game_id = int(window_id.split(":")[0])
+
+            bundle = select_capture_bundle(
+                world.snapshot_dir,
+                date=SLATE,
+                game_id=game_id,
+                offset_minutes=offset,
+            )
+
+            assert identity == f"{bundle.capture_id}@{bundle.captured_at}", (
+                binding
+            )
+
+            assert bundle.window_id == window_id
+
+            seen += 1
+
+    assert seen == len(games) * len(
+        controller.PROGRESSIVE_LIVE_OFFSETS_MINUTES
+    )
+
+
+def test_the_live_page_is_built_from_the_live_feed_receipt(tmp_path):
+    """The page a reader opens is rebuilt from the release that just went live.
+
+    Pinned to the live refresh's own receipt and not to the canary's, which
+    is what makes it the page for the release live is serving rather than a
+    page for a preview with the same numbers in it.
+    """
+    clock = Clock(at(19, 25))
+
+    world = World(tmp_path, schedules=[[game(101, at(23, 0))]], clock=clock)
+
+    write_morning_receipt(world)
+
+    build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    ).run()
+
+    pages = publication_commands(world, stage="page", mode="live")
+
+    assert len(pages) == len(live_commands(world))
+
+    for command in pages:
+        pinned = Path(command[command.index("--feed-receipt") + 1])
+
+        assert pinned.name == "live_refresh.json"
+
+        receipt = json.loads(pinned.read_text(encoding="utf-8"))
+
+        assert receipt["mode"] == "live"
+
+        assert receipt["outcome"] == "PUBLISHED"
+
+        assert receipt["release"]["release_id"]
+
+    # And the page follows its own feed refresh rather than preceding it.
+    order = [
+        index
+        for index, command in enumerate(world.commands)
+        if str(command[1]).endswith("run_progressive_live_refresh.py")
+        or (
+            str(command[1]).endswith("run_wizardofodds_publication.py")
+            and "--mode" in command
+            and command[command.index("--mode") + 1] == "live"
+        )
+    ]
+
+    for first, second in pairwise(order):
+        earlier = world.commands[first]
+
+        later = world.commands[second]
+
+        if str(earlier[1]).endswith("run_progressive_live_refresh.py"):
+            assert str(later[1]).endswith("run_wizardofodds_publication.py")
+
+        else:
+            assert str(later[1]).endswith("run_progressive_live_refresh.py")
+
+
+def test_a_refused_live_refresh_degrades_the_segment_without_failing_it(
+    tmp_path,
+):
+    """The state this repository is actually in, and what it costs.
+
+    Until both approval variables are set in the wizardofodds-production
+    environment every live refresh refuses. A slate that was captured,
+    served and published to the canary must not be a red job because of that,
+    and it must not be a silently green one either: the outcome is its own
+    word, the count leads the report, and the refusal each refresh wrote is
+    carried verbatim so the message naming both variables reaches whoever
+    reads the summary.
+    """
+    clock = Clock(at(19, 25))
+
+    world = World(
+        tmp_path,
+        schedules=[[game(101, at(23, 0))]],
+        clock=clock,
+        live_refusal=(
+            "ops/wizardofodds_publishing_switch.json records live publishing "
+            "as ENABLED and this process does not carry its approval. Both "
+            "variables must be set in the wizardofodds-production GitHub "
+            "environment: NBA_PROP_WOO_PUBLISH and "
+            "NBA_PROP_WOO_PUBLISH_APPROVAL"
+        ),
+    )
+
+    write_morning_receipt(world)
+
+    receipt = build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    ).run()
+
+    assert receipt["final_outcome"] == (
+        controller.OUTCOME_SEGMENT_COMPLETE_LIVE_DEGRADED
+    )
+
+    assert receipt["final_outcome"] in controller.OUTCOMES_THAT_SUCCEED
+
+    # The T-20 deliverable is untouched: served, published, page built.
+    assert [
+        record["outcome"] for record in receipt["feed_publication_outcomes"]
+    ] == ["PUBLISHED"]
+
+    assert [
+        record["outcome"] for record in receipt["page_publication_outcomes"]
+    ] == ["PUBLISHED"]
+
+    # Nothing is live, and nothing claims to be.
+    assert world.live_release is None
+
+    assert receipt["live_release_id"] == ""
+
+    assert receipt["live_refreshes_with_faults"] == receipt["live_refreshes"]
+
+    for record in receipt["live_refreshes"]:
+        assert record["outcome"] == controller.LIVE_OUTCOME_REFUSED
+
+        for variable in (
+            "NBA_PROP_WOO_PUBLISH",
+            "NBA_PROP_WOO_PUBLISH_APPROVAL",
+        ):
+            assert variable in record["reason"], variable
+
+    # No live page was built behind a refusal.
+    assert publication_commands(world, stage="page", mode="live") == []
+
+    # And the summary says so rather than burying it.
+    summary = controller.render(receipt)
+
+    assert "live failures" in summary
+
+    assert controller.LIVE_OUTCOME_REFUSED in summary
+
+    assert "NBA_PROP_WOO_PUBLISH_APPROVAL" in summary
+
+
+def test_a_live_page_that_fails_is_its_own_outcome(tmp_path):
+    """The feed moved and the page did not, which is worth its own word."""
+    clock = Clock(at(19, 25))
+
+    world = World(
+        tmp_path,
+        schedules=[[game(101, at(23, 0))]],
+        clock=clock,
+        live_page_returncode=1,
+    )
+
+    write_morning_receipt(world)
+
+    receipt = build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    ).run()
+
+    assert receipt["final_outcome"] == (
+        controller.OUTCOME_SEGMENT_COMPLETE_LIVE_DEGRADED
+    )
+
+    # Every window's page failed, and each is recorded as the page failure
+    # rather than as a refusal: the feed did move.
+    assert {record["outcome"] for record in receipt["live_refreshes"]} == {
+        controller.LIVE_OUTCOME_PAGE_FAILED
+    }
+
+    # The release is live and the record says which one, so the gap between
+    # the feed and the page is nameable rather than a mystery.
+    assert receipt["live_refreshes"][-1]["release_id"] == world.live_release
+
+    assert receipt["live_refreshes"][0]["live_outcome"] == (
+        controller.LIVE_OUTCOME_ESTABLISHED
+    )
+
+
+def test_an_unchanged_priced_artifact_does_not_refresh_live_twice(tmp_path):
+    """The idempotent case, and the one place it must not be assumed.
+
+    A canary skip says nothing about the live pointer, because the canary can
+    publish while the live refresh refuses. So a repeat of identical priced
+    bytes asks the refresh again, and the refresh is what decides: it skips
+    itself once it has succeeded on those bytes and is retried while it has
+    not.
+    """
+    clock = Clock(at(19, 25))
+
+    world = World(
+        tmp_path,
+        schedules=[[game(101, at(23, 0)), game(102, at(23, 0), home=3, away=4)]],
+        clock=clock,
+    )
+
+    write_morning_receipt(world)
+
+    receipt = build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    ).run()
+
+    assert receipt["final_outcome"] == controller.OUTCOME_SEGMENT_COMPLETE
+
+    # One capture of two games sharing a tip is one serve, one canary and one
+    # live refresh of the T-20 window.
+    assert len(live_commands(world, offset=20)) == 1
+
+    assert [
+        record["outcome"] for record in live_records(receipt, offset=20)
+    ] == [controller.LIVE_OUTCOME_REPLACED]
+
+    # And an advisory window re-served from the same bytes skips itself
+    # rather than minting a second release of them.
+    assert controller.LIVE_OUTCOME_SKIPPED in {
+        record["outcome"] for record in receipt["live_refreshes"]
+    }
+
+
+def test_a_live_refusal_is_retried_when_the_canary_is_skipped(tmp_path):
+    """A canary skip must not be read as live being current.
+
+    Two T-20 groups whose priced artifact is identical: the second canary is
+    skipped, and because the first live refresh refused, the live refresh is
+    asked again rather than inheriting the canary's answer.
+    """
+    clock = Clock(at(19, 25))
+
+    world = World(
+        tmp_path,
+        schedules=[[game(101, at(23, 0)), game(102, at(23, 40), home=3, away=4)]],
+        clock=clock,
+        live_refusal="both approval variables are absent",
+    )
+
+    # The second group prices the cumulative slate, so the artifact differs.
+    # Forcing them identical is what makes the skip reachable at all.
+    world._serve_original = world._serve
+
+    def serve(command):
+        result = world._serve_original(command)
+
+        path = Path(world._value(command, "--receipt-path"))
+
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+
+        receipt["priced_market_artifact"] = {"sha256": "f" * 64}
+
+        path.write_text(json.dumps(receipt), encoding="utf-8")
+
+        return result
+
+    world._serve = serve
+
+    write_morning_receipt(world)
+
+    receipt = build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    ).run()
+
+    assert receipt["captures_completed"] == 2
+
+    # The canary was published once and skipped once.
+    assert [
+        record["outcome"] for record in receipt["feed_publication_outcomes"]
+    ] == ["PUBLISHED", controller.PUBLICATION_OUTCOME_SKIPPED]
+
+    # And live was asked both times, because it had not succeeded.
+    assert len(live_commands(world, offset=20)) == 2
+
+    assert [
+        record["outcome"] for record in live_records(receipt, offset=20)
+    ] == [
+        controller.LIVE_OUTCOME_REFUSED,
+        controller.LIVE_OUTCOME_REFUSED,
+    ]
+
+
+# ----------------------------------------------------------------------
 # constants that must not drift
 # ----------------------------------------------------------------------
+
+
+def test_the_live_vocabulary_is_pinned_to_the_refresh_module():
+    """Stated locally so the probe stays light; pinned here so it stays true.
+
+    The refresh module imports the publisher, which pulls pandas and the
+    transports behind it, so the controller restates the offsets, the
+    destinations and the outcome words rather than importing them. Restating
+    is only safe while something compares the two copies.
+    """
+    refresh = load_ops("run_progressive_live_refresh")
+
+    assert controller.PROGRESSIVE_LIVE_OFFSETS_MINUTES == (
+        refresh.PROGRESSIVE_OFFSETS_MINUTES
+    )
+
+    assert controller.LIVE_FEED_DESTINATION == refresh.LIVE_FEED_DESTINATION
+
+    assert controller.LIVE_PAGE_DESTINATION == refresh.LIVE_PAGE_DESTINATION
+
+    assert controller.LIVE_PUBLICATION_MODE == refresh.publisher.MODE_LIVE
+
+    for mine, theirs in (
+        (controller.LIVE_OUTCOME_ESTABLISHED, refresh.OUTCOME_ESTABLISHED),
+        (controller.LIVE_OUTCOME_REPLACED, refresh.OUTCOME_REPLACED),
+        (
+            controller.LIVE_OUTCOME_ALREADY_CURRENT,
+            refresh.OUTCOME_ALREADY_CURRENT,
+        ),
+        (
+            controller.LIVE_OUTCOME_PROMOTED_THEN_INCOMPLETE,
+            refresh.OUTCOME_PROMOTED_THEN_INCOMPLETE,
+        ),
+        (controller.LIVE_OUTCOME_REFUSED, refresh.OUTCOME_REFUSED),
+        (
+            controller.LIVE_OUTCOME_ALREADY_CLOSER_TO_TIP,
+            refresh.OUTCOME_ALREADY_CLOSER_TO_TIP,
+        ),
+    ):
+        assert mine == theirs
+
+    # Every outcome the refresh exits zero on is one the controller treats as
+    # faultless, and the controller's two extra words are its own.
+    assert refresh.OUTCOMES_THAT_SUCCEED <= (
+        controller.LIVE_OUTCOMES_WITHOUT_FAULT
+    )
+
+    # And the page is only built after an outcome that actually published,
+    # which is a strictly narrower set than the faultless one.
+    assert controller.LIVE_OUTCOMES_THAT_PUBLISH < (
+        controller.LIVE_OUTCOMES_WITHOUT_FAULT
+    )
+
+    assert controller.LIVE_OUTCOMES_THAT_PUBLISH == (
+        refresh.OUTCOMES_THAT_SUCCEED - {refresh.OUTCOME_ALREADY_CLOSER_TO_TIP}
+    )
+
+    assert controller.LIVE_OUTCOMES_WITHOUT_FAULT - (
+        refresh.OUTCOMES_THAT_SUCCEED
+    ) == {controller.LIVE_OUTCOME_SKIPPED}
+
+    # The canary each window is authorised by, agreed between the two.
+    assert refresh.CANARY_FEED_DESTINATIONS == {
+        **controller.ADVISORY_FEED_DESTINATIONS,
+        20: controller.T20_FEED_DESTINATION,
+    }
+
+
+def test_the_live_entry_point_belongs_to_the_controller():
+    """No workflow step may invoke the refresh directly."""
+    assert "ops/run_progressive_live_refresh.py" in (
+        validator.CONTROLLER_OWNED_ENTRY_POINTS
+    )
+
+    assert str(controller.LIVE_REFRESH_ENTRY_POINT) in (
+        validator.CONTROLLER_OWNED_ENTRY_POINTS
+    )
+
+    for workflow in sorted(WORKFLOW_DIR.glob("*.yml")):
+        text = workflow.read_text(encoding="utf-8")
+
+        assert "run_progressive_live_refresh" not in text, workflow.name
 
 
 def test_the_outcome_vocabulary_is_pinned_to_the_serving_module():
@@ -2436,6 +3350,12 @@ def test_the_receipt_carries_everything_a_segment_must_record(tmp_path):
         "distribution_outcomes",
         "feed_publication_outcomes",
         "page_publication_outcomes",
+        "live_feed_destination",
+        "live_page_destination",
+        "live_refreshes",
+        "live_refreshes_with_faults",
+        "live_release_id",
+        "progressive_live_offsets",
         "start_time_utc",
         "finish_time_utc",
         "wall_seconds",
@@ -2443,8 +3363,13 @@ def test_the_receipt_carries_everything_a_segment_must_record(tmp_path):
     ):
         assert field in receipt, field
 
-    # Small: no model arrays, no parquet, no API payload archives.
-    assert len(json.dumps(receipt)) < 8000
+    # Small: no model arrays, no parquet, no API payload archives. The bound
+    # is a bound on what *kind* of thing may be in here, and it moved because
+    # a segment now records four live refreshes as well as three advisory
+    # windows -- one short object per window per stream, which is the record
+    # the whole chain is read from. Still nothing per row, per player or per
+    # quote, which is what the bound is for.
+    assert len(json.dumps(receipt)) < 16000
 
     assert controller.render(receipt).startswith(
         "## NBA T-20 production controller"

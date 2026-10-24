@@ -11,9 +11,9 @@
       "state": "ENABLED"
     },
     "live": {
-      "approval_token": "no-approval-has-been-granted",
-      "reason": "The incumbent has not yet published a slate to the live NBA Player Props path. Enabling this is a separate reviewed decision taken after a real natural-slate proof. The destination, its transport and its credential variable are no longer the obstacle: they are configured on the named live destinations and proven one directory below by the canary. What is missing is the decision itself and the two approval variables that carry it, so an activation supplies an approval rather than any new code or configuration.",
-      "state": "DISABLED"
+      "approval_token": "live-progressive-refresh-approved-2026-10-24",
+      "reason": "The decision this field was waiting for has been taken. The repository owner has asked, explicitly and repeatedly, for the early capture windows to publish live on the reviewed progression T-180 establishes, T-90 replaces, T-45 replaces, T-20 replaces as the final pregame version, with each refresh publishing the same already-validated release that passed canary and the prior valid release retained when a later refresh fails. That is the authorisation, and this commit is where it is recorded; ops/run_progressive_live_refresh.py is the behaviour it authorises and nothing else may use it. What this grants is narrow. It is the first of the three conditions in what_enabling_live_requires and it is deliberately the only one this repository can hold: the other two are variables in the wizardofodds-production GitHub environment, they are not settable from a commit, and until the owner sets both of them every live publication still refuses by name. So the state here is ENABLED and the gate is not open. Flipping it does not publish anything, does not weaken any other refusal, and does not change a single number: the live release is the canary's own bytes, matched on three independent statements of one rows digest, and the model surface behind it is untouched.",
+      "state": "ENABLED"
     }
   },
   "note": "A missing switch file reads as DISABLED for every mode. The absence of a prohibition is not an approval.",

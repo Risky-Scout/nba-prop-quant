@@ -239,6 +239,30 @@ jobs:
           # The deployment key, by name. Never printed, never written to a
           # receipt, and read only by the transport that needs it.
           NBA_WOO_SSH_PRIVATE_KEY: ${{ secrets.NBA_WOO_SSH_PRIVATE_KEY }}
+          # The two halves of the live approval, carried and not decided.
+          #
+          # The decision is modes.live.state in
+          # ops/wizardofodds_publishing_switch.json and is reviewed in a
+          # commit. These two carry it to this process, because an
+          # environment variable does not reach a step unless the step binds
+          # it, and the publisher reads the approval out of the process
+          # environment. Both must be set in the wizardofodds-production
+          # environment and both must agree with the switch, or every live
+          # publication refuses by name and the canary this step already
+          # published is what is retained. Neither is ever printed, echoed or
+          # passed on a command line, and this step cannot grant either.
+          #
+          # Both come from vars and not from secrets, which is what
+          # what_enabling_live_requires asks for, and is right for a reason
+          # worth stating: neither value is a secret. One is the literal
+          # ENABLED and the other is a token committed in plaintext in the
+          # switch file, so binding them from secrets would buy no
+          # confidentiality and would cost the one thing that matters here --
+          # that the person setting them has a single kind of thing to set,
+          # in a single place, under the names this file and the switch both
+          # use. An approval nobody can find is an approval nobody can audit.
+          NBA_PROP_WOO_PUBLISH: ${{ vars.NBA_PROP_WOO_PUBLISH }}
+          NBA_PROP_WOO_PUBLISH_APPROVAL: ${{ vars.NBA_PROP_WOO_PUBLISH_APPROVAL }}
         run: |
           set -euo pipefail
           python ops/run_t20_production_controller.py \
