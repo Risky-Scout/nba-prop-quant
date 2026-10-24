@@ -936,20 +936,6 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
             "advisory path's claim on reliability rests on. No model, no "
             "calibration, no price and no routing is reached from here"
         ),
-        ".github/workflows/nba_t20_production.yml": (
-            "documentation of the advisory windows, one added "
-            "workflow_dispatch input that can switch them off, and the "
-            "flag it passes. Additive under the rule this workflow is already "
-            "held to: the three segment crons are unchanged, the concurrency "
-            "group is unchanged, the runner labels, the environment, the "
-            "explicit production ref and its verification, the probe gate and "
-            "the two-wheel cheap exit all stand, and no step is removed or "
-            "reordered. Names no publication activation material and no live "
-            "mode. The added input is an escape hatch and not the switch: the "
-            "advisory offsets live in the controller, because a scheduled run "
-            "executes this file from the default branch against the "
-            "controller on the production branch"
-        ),
         "ops/validate_workflows.py": (
             "one added entry in T20_FORBIDDEN_ENTRY_POINTS, the advisory "
             "serving script. The advisory entry point belongs to the "
@@ -1228,6 +1214,29 @@ SHADOW_OWNED_PRODUCTION_PATHS: Mapping[str, str] = MappingProxyType(
 #: production ref rather than trusting either mapping.
 ADDITIVE_ONLY_WORKFLOWS: tuple[str, ...] = (
     ".github/workflows/nba_production_lifecycle.yml",
+)
+
+#: The destination registry, declarable only for added named destinations.
+#:
+#: Same correction as the serving entry points above, in a different place.
+#: The registry was pinned by its bytes because it decides where a published
+#: record goes, and that is right about every destination in it -- but it read
+#: the same for two different kinds of change: moving a destination production
+#: already publishes to, and configuring somewhere new. Only the first is what
+#: the pin is about, and conflating them made the file permanently unable to
+#: gain a destination, which is the one thing a new publication stream needs
+#: and the only thing it needs.
+#:
+#: So it is declarable, under a rule stronger than the byte pin was once a
+#: file was allowed to differ at all: every top-level key and every
+#: destination the production ref has must be deeply equal, and an added
+#: destination must be a canary confined to a non-empty subpath of its served
+#: root, with its own release prefix and a transport the file itself declares
+#: supported. The two live destinations, the disabled live switch and the
+#: transport allow-list are therefore unmovable, and a live destination cannot
+#: be added at all.
+ADDITIVE_ONLY_NAMED_DESTINATIONS: tuple[str, ...] = (
+    "ops/wizardofodds_destinations.json",
 )
 
 

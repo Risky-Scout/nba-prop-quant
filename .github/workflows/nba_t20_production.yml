@@ -37,35 +37,6 @@ name: NBA T-20 production capture and serving
 # evening before, so the slate date is derived in America/New_York and never
 # from the UTC calendar date.
 #
-# THE EARLY ADVISORY WINDOWS
-# --------------------------
-#
-# T-20 is twenty minutes before tip, which is late to read a prediction. The
-# same invocation therefore also captures, serves and publishes the T-180,
-# T-90 and T-45 windows -- predictions three hours, ninety minutes and
-# forty-five minutes out -- as *advisory* releases.
-#
-# No fourth cron, and no second workflow. The segments above are pinned
-# contiguous by ops/validate_workflows.py precisely so that no window is owned
-# twice, and every advisory time already falls inside one of them. More
-# importantly, this runner executes one job at a time: the 19:25 UTC
-# invocation holds it from 19:25 until its last publication, which is most of
-# the span the advisory windows live in, so a separate workflow would only
-# move the queue from GitHub's concurrency gate to the runner's and start each
-# advisory run after the window it was for had passed. Handling them inside
-# the invocation that already owns the segment also shortens the longest
-# contiguous sleep -- the 19:25 invocation's three-hour wait for its first
-# T-20 window becomes several short waits -- which is the failure mode that
-# has twice cost this schedule a segment to a dropped long-idling job.
-#
-# The T-20 window keeps absolute priority. No advisory serving starts inside
-# the reservation before a T-20 capture the segment still owns; the advisory
-# release has its own confined canary destinations, its own release prefix and
-# its own current.json pointer, so it cannot repoint or overwrite the T-20
-# record; and the controller refuses outright to write a T-20 window id from
-# an advisory run. Advisory failures degrade the step summary and never fail
-# the segment. See docs/wizardofodds/PRODUCTION_AUTOMATION.md.
-#
 # WHAT THIS IS NOT
 # ----------------
 #
@@ -109,19 +80,6 @@ on:
       slate_date:
         description: 'Slate date YYYY-MM-DD. Defaults to the segment start in US/Eastern.'
         type: string
-        required: false
-      advisory_windows:
-        # The escape hatch, not the switch. The advisory offsets are a module
-        # constant in the controller rather than an input, because a scheduled
-        # event fires from the default branch and so runs this file from
-        # `main` against the controller on production/wizardofodds-integration
-        # -- an opt-in expressed here would simply not be passed on a schedule.
-        description: 'Serve the early T-180/T-90/T-45 advisory windows'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
-        default: 'true'
         required: false
       production_ref:
         description: 'Authoritative production ref to check out'
@@ -263,10 +221,7 @@ jobs:
       # time this segment owns, revalidate the schedule, capture that due
       # group once, prove the capture the pricing path requires is really
       # there, then serve the slate, derive the distributions behind the
-      # prices and publish the canary feed and page. In the gaps between those
-      # windows, the same process takes the segment's T-180, T-90 and T-45
-      # advisory windows and publishes each to its own confined canary
-      # destination.
+      # prices and publish the canary feed and page.
       #
       # The segment bounds and the slate date come from the probe rather than
       # being recomputed, so the two steps cannot disagree about which segment
@@ -275,10 +230,7 @@ jobs:
       # No continue-on-error, on purpose. A due T-20 window that cannot be
       # captured, a capture that cannot be verified, or a served slate that
       # cannot be published is a production failure and the job must go red.
-      # An advisory window that fails is not: it degrades the step summary and
-      # the segment still succeeds, because an advisory release must never be
-      # the reason the window production is required to have goes unserved.
-      - name: Capture T-20 and the advisory windows, serve and publish
+      - name: Capture T-20, serve the slate and publish the canary
         if: steps.probe.outputs.t20_work == 'true'
         env:
           BDL_API_KEY: ${{ secrets.BDL_API_KEY }}
@@ -289,12 +241,6 @@ jobs:
           NBA_WOO_SSH_PRIVATE_KEY: ${{ secrets.NBA_WOO_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
-          # A plain string rather than an array: this runner's bash is 3.2,
-          # where `set -u` makes an empty array expansion an error.
-          ADVISORY_FLAG=""
-          if [ "${{ inputs.advisory_windows }}" = "false" ]; then
-            ADVISORY_FLAG="--no-advisory-windows"
-          fi
           python ops/run_t20_production_controller.py \
             --segment-start-utc "${{ steps.probe.outputs.segment_start_utc }}" \
             --segment-end-utc "${{ steps.probe.outputs.segment_end_utc }}" \
@@ -304,7 +250,6 @@ jobs:
             --production-sha "${{ steps.checkout.outputs.sha }}" \
             --run-dir "$RUNNER_TEMP/t20" \
             --receipt-path "$RUNNER_TEMP/t20/t20_controller.json" \
-            $ADVISORY_FLAG \
             --summary-path "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the segment diagnostics

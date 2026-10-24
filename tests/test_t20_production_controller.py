@@ -1864,7 +1864,7 @@ def test_the_expensive_install_is_gated_behind_the_cheap_probe():
 
     assert [step["name"] for step in gated] == [
         "Install the production package",
-        "Capture T-20 and the advisory windows, serve and publish",
+        "Capture T-20, serve the slate and publish the canary",
     ], names
 
     for step in gated:
