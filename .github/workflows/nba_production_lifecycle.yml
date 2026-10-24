@@ -551,6 +551,45 @@ jobs:
             --health-path "$RUNNER_TEMP/run/shadow_health.json" \
             --summary-path "$GITHUB_STEP_SUMMARY"
 
+      # The one relation that spans the four steps above, which none of them
+      # could report: is the authority that priced tonight's slate trained
+      # through the most recent completed NBA game?
+      #
+      # It was answerable only by reading the refresh banner, the adaptive
+      # status, the serving receipt and the registry by hand, and so it went
+      # unexamined. This reports it as nine named fields and one verdict, from
+      # the durable state those steps already wrote.
+      #
+      # Reported, never gated. The entry point exits 0 whatever the verdict,
+      # because a red lifecycle on a day the contract is unmet would stop the
+      # slate being served, and a slate served by a slightly older validated
+      # authority is strictly better than no slate. An unmet contract is still
+      # not silent: it writes FALLBACK_ACTIVE = YES and a consecutive-day
+      # count into a durable record and raises a workflow annotation on this
+      # run. --github-annotation is what makes that annotation appear; it does
+      # not fail the job.
+      #
+      # always(), and last of the reading steps, so a lifecycle that failed
+      # earlier still says which authority is serving and how long the
+      # fallback has been in force -- which is exactly when that matters.
+      - name: Report the daily training contract
+        if: always() && env.MODE == 'production'
+        env:
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+          NBA_PROP_FIT_REGISTRY_DIR: ${{ vars.NBA_PROP_FIT_REGISTRY_DIR }}
+        run: |
+          set -euo pipefail
+          python ops/report_daily_training_contract.py \
+            --slate-date "$slate" \
+            --data-root "$NBA_PROP_DATA_DIR" \
+            --registry-root "$NBA_PROP_FIT_REGISTRY_DIR" \
+            --adaptive-status "$RUNNER_TEMP/run/adaptive.json" \
+            --serving-receipt "$RUNNER_TEMP/run/incumbent_serving.json" \
+            --production-sha "${{ steps.checkout.outputs.sha }}" \
+            --status-path "$RUNNER_TEMP/run/daily_training_contract.json" \
+            --summary-path "$GITHUB_STEP_SUMMARY" \
+            --github-annotation
+
       - name: Report the run
         if: always()
         run: |

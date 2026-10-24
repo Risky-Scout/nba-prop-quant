@@ -1061,114 +1061,139 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: lineage changed rather than introduced and are recorded nowhere, and this
 #: branch touches none of them, so all five are retired and not replaced.
 #:
-#: This branch declares the T-20 controller, and only the T-20 controller.
-#: It adds the one refusal the integration never had: nothing is published
-#: for a game that has already started.
+#: The post-tip-guard branch's entry for the T-20 controller and the
+#: readiness-refresh workflow were retired when they landed, and so was the
+#: grading branch's entry for the grader. All three are pre-existing
+#: production files that lineage changed rather than introduced, and the
+#: controller is owned below; touching any of them again requires declaring
+#: it again.
 #:
-#: ``select_capture_bundle`` refuses a capture *taken* after its game tipped
-#: and nothing refused a release *published* after its game tipped, which
-#: are not the same question. The first is about when a snapshot may exist.
-#: The second is about when a price may be shown, and between them sits
-#: every way a sound pre-tip capture can be reached late: a runner picked up
-#: hours after the window, a recovery of a capture an earlier run never
-#: published, an advisory window held back for a T-20 reservation and
-#: retried in a gap that has moved past the game.
+#: This branch declares one new file and one added workflow step, and nothing
+#: else.
 #:
-#: That is not hypothetical either. On 2026-10-23 the T-20 group holding
-#: game 21717941 was priced and published two hours and forty minutes after
-#: that game tipped, and every stage reported success: the capture was
-#: pre-tip and eligible, the serving receipt said SERVED and the feed said
-#: PUBLISHED. The release that landed was a pregame page for a game in its
-#: third quarter.
+#: The relation it reports is the one that spans the whole lifecycle and that
+#: none of the lifecycle's own steps could report. The refresh says which
+#: dates it staged, the adaptive protocol says which fit it registered, the
+#: serving step says which authority priced the slate, and the grader says
+#: what settled. The question none of them answers is whether the authority
+#: that priced tonight is trained through the most recent completed NBA game.
 #:
-#: The guard is ``assert_no_window_has_tipped`` and it sits at
-#: ``_serve_and_publish``, which every production release goes through --
-#: the capture path and the recovery path both call it and there is no
-#: third caller. The windows it is about are the ones the caller declares
-#: the publication is for, as a required keyword-only argument, so a new
-#: caller cannot reach a publication without answering the question. The
-#: advisory path is guarded at its own publication entry the same way.
+#: Answering it meant reading a step banner, a status document, a receipt and
+#: the promotion state by hand, so it went unexamined -- and what it would
+#: have exposed is real and standing: the daily fit trains through D-1 and is
+#: never the serving authority, because automatic promotion is prohibited by
+#: the frozen update protocol. That condition was visible nowhere in
+#: production. It is now nine named fields, one verdict and a
+#: consecutive-day count, written durably every production day.
 #:
-#: The scoping is the load-bearing part. A release is cumulative -- one
-#: serve at an offset prices every game with an eligible capture at that
-#: offset -- so the last T-20 group of a staggered twelve-game slate is
-#: published hours after the first game of it tipped, and that first game's
-#: rows belong in the release because they were priced and published before
-#: its own tip. A guard that read the whole release rather than the windows
-#: the publication is for would refuse every late group of every staggered
-#: evening.
+#: Reported, never gated, and the distinction is load-bearing in both
+#: directions. It cannot fail the lifecycle, because a red job on a day the
+#: contract is unmet would stop the slate being served, and a slate served by
+#: a slightly older validated authority is strictly better than no slate. It
+#: also cannot be quiet about it: an unmet contract writes
+#: ``FALLBACK_ACTIVE = YES`` into a durable per-slate record, counts how many
+#: consecutive days it has been unmet, and raises a workflow annotation that
+#: appears on the run without failing it. The daily cron is the retry; the
+#: streak is the evidence that retrying is happening and of how long it has
+#: not worked.
 #:
-#: A refusal is taken before the serving entry point runs, so it writes
-#: nothing: no priced artifact is rebuilt, no release is minted, no
-#: ``current.json`` is repointed and no ledger row is appended. It declines
-#: to add and it never retracts -- the release already serving stays exactly
-#: as it is, and the pointer still names what it named.
+#: The report is read-only over every input it touches, and that is pinned
+#: structurally rather than by convention: a syntax-tree test beside it reads
+#: the module and fails on a mutating registry call or an import of a
+#: fitting, pricing, serving or publishing module. Whether a game is complete
+#: and which season a date belongs to are not decided here either -- both are
+#: imported from the grader that already owns them, through the grader's own
+#: loader, so this cannot develop an opinion the settlement rules do not
+#: share.
 #:
-#: It is loud. ``POST_TIP_PUBLICATION_REFUSED`` is not in
-#: ``OUTCOMES_THAT_SUCCEED``, the refusal names the game, its tip and how
-#: long ago that was, and the run exits non-zero -- through the refused
-#: window staying in the unserved set on the T-20 path, and through the
-#: segment outcome on the advisory path. The advisory refusal is still never
-#: raised from inside the advisory path: it is recorded there and escalated
-#: by ``run`` once every capture is behind it, which is the arrangement
-#: production already uses for a deferred recovery refusal, and which is
-#: what keeps a reading aid from costing the slate a capture.
+#: The workflow change is additive in the strict sense this lineage is held
+#: to: one step appended before the final reporting step, no existing step's
+#: name, condition, environment, arguments or position altered, and no
+#: schedule, concurrency group, runner, environment binding or permission
+#: touched. The step reaches no secret and binds no publishing variable.
 #:
-#: It composes with the per-window recovery isolation production already
-#: has rather than duplicating it. A post-tip window is recorded through
-#: ``_record_unrecoverable`` beside the duplicate conflicts and the digest
-#: mismatches, under its own outcome because the operator response differs,
-#: and it is subtracted from the ledger row by the subtraction that is
-#: already there. It is checked behind the selection, not in front of it,
-#: so a capture that is itself post-tip is still reported with selection's
-#: own more specific reason.
-#:
-#: Nothing else moves. No capture is taken, re-timed, relabelled, merged or
-#: synthesised; the capture log is not read differently and not written at
-#: all; no non-T-20 snapshot can stand in for a T-20 one; and no
-#: probability, price, edge, EV, quantile, line, distribution, calibration,
-#: dependence coefficient, Gate 3 route, routing decision or publication
-#: destination is computed or changed anywhere in this change. No fitted
-#: artifact is touched, no gate or receipt is weakened, and no workflow,
-#: publishing switch, model, config, release or review path is modified.
+#: Nothing else moves. No fit is produced, validated, promoted or rolled
+#: back; no capture, price, PMF, probability, calibration, dependence
+#: coefficient, Gate 3 route, routing decision or publication destination is
+#: computed or changed; no fitted artifact is touched; no gate or receipt is
+#: weakened; and no publishing switch, model, config, release or review path
+#: is modified.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
-        "ops/grade_incumbent_production_slate.py": (
-            "the daily record was one number. Overall Brier and log loss were "
-            "the only figures the grader computed, and a single number over a "
-            "whole slate hides the one thing the record exists to find: the "
-            "model's edge is not uniform across props, across rotation "
-            "minutes, across the side it took or across how confident it "
-            "was. A model that is ahead of the market overall while losing "
-            "badly on every under of a fringe player reads identically to "
-            "one that is evenly ahead. "
-            "What changes: EXPECTED_MINUTES_COLUMNS, "
-            "EXPECTED_MINUTES_BANDS, CONFIDENCE_TIERS, ODDS_COLUMNS, "
-            "FLAT_STAKE and BREAKDOWN_DIMENSIONS; _as_float, band_for, "
-            "american_profit and flat_stake_return; _group_scores and "
-            "slate_breakdowns; five columns carried onto each grade row so "
-            "every cut can be recomputed from the store rather than taken on "
-            "the receipt's word; a flat_stake entry beside the existing "
-            "scores; a breakdowns entry on the receipt; and the lines render "
-            "adds for both. The confidence tier is derived from the "
-            "probability the Brier was computed from rather than from any "
-            "published tier label, because a tier that disagreed with the "
-            "score would make the table unreadable. "
-            "What does not change: every existing score and its name, the "
-            "market pairing and its count, the deltas and their sign "
-            "convention, verify_receipt and the provenance selection around "
-            "it, the grade key, the settlement statuses, the lookahead "
-            "refusal, the log-loss floor and the push convention -- a push "
-            "is removed from the comparison by settlement and is therefore "
-            "neither staked nor scored. All of it is reported and none of it "
-            "is gated: the run outcome is decided before any breakdown is "
-            "computed, a dimension whose column is absent is an empty "
-            "mapping rather than a refusal, a return is reported only when "
-            "the price for the side actually taken is on the row, and no "
-            "number here can change a grade. The grader promotes nothing, "
-            "publishes nothing, leaves serving authority untouched and "
-            "reaches no model, price, PMF, Gate 3 route or routing decision "
-            "from here"
+        "ops/report_daily_training_contract.py": (
+            "nothing reported the one relation that spans the lifecycle. The "
+            "refresh says which dates it staged, the adaptive protocol says "
+            "which fit it registered, the serving step says which authority "
+            "priced the slate and the grader says what settled -- and the "
+            "question an operator actually needs answered each morning is "
+            "none of those four. It is whether the authority that priced "
+            "tonight is trained through the most recent completed NBA game, "
+            "and answering it meant reading a step banner, a status "
+            "document, a receipt and the promotion state by hand. So it went "
+            "unexamined, and the gap it would have exposed -- the daily fit "
+            "trains through D-1 and is never the serving authority, because "
+            "automatic promotion is prohibited by the frozen update protocol "
+            "-- was visible nowhere in production. "
+            "What changes: this file is new. It reports nine named fields "
+            "and one verdict from durable state: the three data dates from "
+            "the rolling tree, the daily fit from the adaptive protocol's "
+            "own status document with the registry as the fallback for a run "
+            "outside the lifecycle, and the serving authority from the "
+            "registry's promotion state, which is what the serving entry "
+            "point itself resolves the incumbent from. The verdict is the "
+            "stated inequality and nothing else, an authority with no dated "
+            "cutoff is UNMET rather than unknown, and FALLBACK_ACTIVE is YES "
+            "whenever the fit registered this morning is not the serving "
+            "authority -- with the reason distinguishing a failed validation "
+            "from the protocol's prohibition on automatic promotion from an "
+            "absent fit, because the operator response to each differs. The "
+            "record and a consecutive-day ledger are written durably before "
+            "anything is reported about them, so retrying has evidence and a "
+            "truncated ledger under-reports rather than inventing a streak. "
+            "What does not change: anything at all in production's "
+            "behaviour. This file is read-only over every input it touches. "
+            "It does not fit, refit, validate, promote, roll back, price, "
+            "publish, serve or touch serving authority; the syntax-tree test "
+            "beside it pins that it calls no mutating registry method and "
+            "imports no fitting, pricing, serving or publishing module. It "
+            "cannot gate: the default exit code is 0 whatever the verdict, "
+            "because a red lifecycle on a day the contract is unmet would "
+            "stop the slate being served, and a slate served by a slightly "
+            "older validated authority is strictly better than no slate. "
+            "--strict exists for an acceptance run that wants the verdict as "
+            "an exit code and is not used by the schedule. Whether a game is "
+            "complete and which season a date belongs to are not decided "
+            "here either: both are imported from the grader that already "
+            "owns them, through the grader's own loader, so this cannot "
+            "develop an opinion the settlement rules do not share. Not "
+            "silent is not the same as blocking -- an unmet contract writes "
+            "FALLBACK_ACTIVE = YES into a durable per-slate record and "
+            "raises a workflow annotation that appears on the run without "
+            "failing it"
+        ),
+        ".github/workflows/nba_production_lifecycle.yml": (
+            "the daily lifecycle had no step that reported the training "
+            "contract, so the report above would have existed and never "
+            "run. "
+            "What changes: one step, 'Report the daily training contract', "
+            "added immediately before 'Report the run' and after every step "
+            "whose durable output it reads. It is gated on "
+            "always() && env.MODE == 'production' so a lifecycle that failed "
+            "earlier still says which authority is serving and how long the "
+            "fallback has been in force, which is exactly when that matters. "
+            "It is handed --github-annotation, which raises an annotation on "
+            "an unmet contract, and is not handed --strict, so it cannot "
+            "fail the job. "
+            "What does not change: every existing step, its name, its "
+            "condition, its environment, its arguments and its order; the "
+            "09:37 UTC schedule; the concurrency group; the self-hosted "
+            "runner and the wizardofodds-production environment binding; the "
+            "permissions block; and the artifact upload. Nothing is "
+            "reordered, nothing is removed and no existing step's line is "
+            "rewritten -- this lineage may add a step to this workflow and "
+            "may not edit one. The new step reaches no secret, binds no "
+            "publishing variable, and writes only its own status file and "
+            "the step summary"
         ),
     }
 )
