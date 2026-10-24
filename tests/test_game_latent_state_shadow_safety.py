@@ -1302,12 +1302,28 @@ def test_the_declaration_module_may_name_the_publisher_only_to_declare_it(tmp_pa
     not give up the publisher's entry point: that name is not a substring of
     any declared path, so reaching for the function the script is called
     through is still reported in the declaration module like anywhere else.
+
+    The precondition is that the exemption is load-bearing at all, and it is
+    taken off the standing list rather than off the declaration. A
+    declaration retires the moment its change reaches production, so pinning
+    one there made this test fail for the branch after the one that added it
+    -- which says nothing about the exemption. The packaging-tool list does
+    not retire, and it is the list that makes the bundle builder's name
+    appear in the declaration module in the first place.
     """
     path = next(p for p in python_sources() if p.name == PATH_DECLARATION_MODULE)
 
-    assert "scripts/19_build_wizardofodds_runtime_bundle.py" in (
-        DECLARED_INTEGRATION_PATHS
+    exempted = (
+        *DECLARED_INTEGRATION_PATHS,
+        *SHADOW_OWNED_PRODUCTION_PATHS,
+        *DECLARABLE_DEPLOYMENT_PACKAGING_TOOLS,
     )
+
+    assert any(
+        token in declared
+        for declared in exempted
+        for token in WIZARDOFODDS_SURFACE_TOKENS
+    ), "no exempted path carries a banned token, so this exemption is untested"
     assert not any(
         token in token_scan_text(path) for token in WIZARDOFODDS_SURFACE_TOKENS
     )

@@ -2318,6 +2318,64 @@ def test_the_receipt_carries_everything_a_segment_must_record(tmp_path):
     )
 
 
+def test_the_reservation_leaves_the_capture_claim_clear_of_a_t20_sweep():
+    """The arithmetic behind the reservation, where the two changes meet.
+
+    The capture claim is an exclusive lock held across a whole collector
+    sweep, so a sweep that overruns delays the next one rather than racing
+    it. Before the advisory windows there was only ever one sweep per group;
+    now a segment can take an advisory capture in the gap before a T-20
+    capture it also owns, and the reservation is what keeps the two apart.
+
+    Three things have to hold at once, and each is a different bound:
+
+    * the reservation has to be a large multiple of what an advisory window
+      actually costs, or a window that ran a little long would eat into it;
+    * it has to stay under the twenty-five minutes between T-45 and T-20, or
+      every T-45 window whose T-20 the same segment owns would be deferred
+      and the T-45 release would reliably arrive after the T-20 one;
+    * and the measured cost has to fit inside the capture grace window, which
+      is the real bound on the claim. The reservation gates advisory
+      *serving*; an advisory *capture* may be taken at any time strictly
+      before the T-20 capture, because another game's T-45 can fall on the
+      same minute as this game's T-20. The claim is therefore held for one
+      collector invocation at worst, and the T-20 sweep behind it still has
+      to find the claim free inside its grace or refuse.
+
+    Pinned as arithmetic rather than left as prose because the third bound is
+    the one neither branch could state on its own.
+    """
+    reservation_seconds = controller.T20_RESERVATION_MINUTES * 60
+    measured = controller.ADVISORY_SWEEP_MEASURED_SECONDS
+
+    assert reservation_seconds >= 4 * measured, (
+        f"a {controller.T20_RESERVATION_MINUTES}-minute reservation is only "
+        f"{reservation_seconds / measured:.1f}x the measured {measured}s "
+        "advisory cycle, which is not enough room for a stage that runs long"
+    )
+
+    assert controller.T20_RESERVATION_MINUTES < 25, (
+        "a reservation of twenty-five minutes or more defers every T-45 "
+        "window whose T-20 the same segment owns, because that is the gap "
+        "between the two by definition"
+    )
+
+    # Read off the parser rather than restated, because this is the value the
+    # controller actually hands the collector as --grace-minutes.
+    grace_seconds = (
+        controller.parse_args(
+            ["--data-root", "/tmp", "--production-sha", "0" * 40]
+        ).grace_minutes
+        * 60
+    )
+
+    assert measured < grace_seconds, (
+        f"an advisory sweep measured at {measured}s does not clear the "
+        f"{grace_seconds}s capture grace, so a T-20 sweep waiting on the "
+        "claim behind it could refuse with its window uncaptured"
+    )
+
+
 # ----------------------------------------------------------------------
 # captured, and never published
 # ----------------------------------------------------------------------
@@ -2533,10 +2591,22 @@ def test_the_recovered_capture_is_the_one_the_failed_run_took(tmp_path):
 
     world = captured_but_unpublished(tmp_path, clock=clock, games=games)
 
-    captured = json.loads(
-        (world.snapshot_dir / "capture_runs" / f"{SLATE}.jsonl")
+    # The row naming the T-20 window, not the first row in the log. The
+    # segment takes its advisory captures before it reaches the T-20 one, so
+    # the log opens with T-180 and the first line stopped being the capture
+    # this test is about.
+    rows = [
+        json.loads(line)
+        for line in (world.snapshot_dir / "capture_runs" / f"{SLATE}.jsonl")
         .read_text(encoding="utf-8")
-        .splitlines()[0]
+        .splitlines()
+        if line.strip()
+    ]
+
+    captured = next(
+        row
+        for row in rows
+        if "101:T-20m" in (row.get("payload") or {}).get("window_ids", [])
     )
 
     recovery_clock = Clock(at(23, 50))
