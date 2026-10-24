@@ -234,6 +234,23 @@ OUTCOME_ALREADY_CURRENT = "LIVE_ALREADY_CURRENT"
 #: put there.
 OUTCOME_PROMOTED_THEN_INCOMPLETE = "LIVE_PROMOTED_THEN_INCOMPLETE"
 
+#: The live release is already at a window closer to tip than this one, so
+#: nothing was written and the pointer is unchanged.
+#:
+#: Its own outcome, and a success, because it is the ordering rule working
+#: rather than anything failing. It is also the ordinary evening state on a
+#: staggered slate and not an edge case: the windows are per game, the
+#: offsets are measured from each game's own tip, and a twelve-game slate
+#: with five tip times interleaves them -- the 7:00 game's T-20 capture is at
+#: 6:40 and the 10:30 game's T-180 capture is at 7:30, an hour *later* in the
+#: evening and three hours *earlier* in its own game's window. So an advisory
+#: window firing after some game has already reached T-20 is routine, and
+#: what the chain does about it is exactly what the rule says: the release
+#: closer to tip stays serving. Reporting that as a fault every evening would
+#: make the segment's own verdict unreadable, which is the only thing a
+#: verdict is for.
+OUTCOME_ALREADY_CLOSER_TO_TIP = "LIVE_ALREADY_CLOSER_TO_TIP"
+
 #: Nothing was written and the live pointer is unchanged.
 OUTCOME_REFUSED = "LIVE_REFUSED"
 
@@ -251,7 +268,12 @@ OUTCOMES_THAT_ARE_LIVE: frozenset[str] = frozenset(
 
 #: The outcomes this entry point exits zero on.
 OUTCOMES_THAT_SUCCEED: frozenset[str] = frozenset(
-    {OUTCOME_ESTABLISHED, OUTCOME_REPLACED, OUTCOME_ALREADY_CURRENT}
+    {
+        OUTCOME_ESTABLISHED,
+        OUTCOME_REPLACED,
+        OUTCOME_ALREADY_CURRENT,
+        OUTCOME_ALREADY_CLOSER_TO_TIP,
+    }
 )
 
 EXIT_OK = 0
@@ -260,6 +282,16 @@ EXIT_REFUSED = 1
 
 class LiveRefreshRefused(RuntimeError):
     """A fail-closed refusal: the live pointer was not touched."""
+
+
+class LiveAlreadyCloserToTip(LiveRefreshRefused):
+    """The ordering rule declined this window. Nothing failed.
+
+    A subclass of the refusal because everything a refusal guarantees is
+    guaranteed here too -- nothing written, no canary published in live's
+    place, the pointer left naming the release it already named -- and the
+    one thing that differs is the verdict.
+    """
 
 
 class LiveRefreshIncomplete(RuntimeError):
@@ -949,6 +981,16 @@ def assert_the_refresh_goes_forward(
     within one window: a segment that captures three tip groups serves and
     publishes three times at T-20, each release holding every game priced so
     far, and the later ones have to be able to replace the earlier ones.
+
+    Going backwards is declined rather than treated as a failure, because on
+    a staggered slate it is the normal case. A window belongs to a game and
+    its offset is measured from that game's own tip, so an evening's windows
+    interleave: on the twelve-game slate of 2026-10-23 the 7:00 game's T-20
+    capture is taken at 6:40 and the 10:30 game's T-180 capture an hour later
+    at 7:30, which is three hours earlier in its own game's window. The
+    advisory refresh that follows it is asking to put a T-180 release live
+    over a T-20 one, and the answer is the one the rule gives: the release
+    closer to tip stays serving, nothing is written, and the chain carries on.
     """
     if live_offset_minutes is None:
         return (
@@ -957,7 +999,7 @@ def assert_the_refresh_goes_forward(
         )
 
     if int(offset_minutes) > int(live_offset_minutes):
-        raise LiveRefreshRefused(
+        raise LiveAlreadyCloserToTip(
             f"the T-{live_offset_minutes} release is already live and this is "
             f"the T-{offset_minutes} refresh, which is an earlier capture "
             "window. The chain only ever moves closer to tip, so a later "
@@ -1864,8 +1906,19 @@ def main(argv: list[str] | None = None) -> int:
             expected and str(observed.get("rows_sha256") or "") == expected
         )
 
+        # The ordering rule declining a window is the one of these that is
+        # not a failure. It is still handled here, by the same code and with
+        # the same guarantees, because it reaches this point by raising and
+        # because every claim the refusal path makes about the destination is
+        # a claim this case needs too.
+        declined = isinstance(error, LiveAlreadyCloserToTip)
+
         outcome = (
-            OUTCOME_PROMOTED_THEN_INCOMPLETE if promoted else OUTCOME_REFUSED
+            OUTCOME_PROMOTED_THEN_INCOMPLETE
+            if promoted
+            else OUTCOME_ALREADY_CLOSER_TO_TIP
+            if declined
+            else OUTCOME_REFUSED
         )
 
         failure = {
@@ -1875,7 +1928,11 @@ def main(argv: list[str] | None = None) -> int:
             "mode": publisher.MODE_LIVE,
             "observed_live_release_id": str(observed.get("release_id") or ""),
             "offset_minutes": offset,
-            "outcome": "LIVE_REFRESH_REFUSED",
+            "outcome": (
+                "LIVE_REFRESH_DECLINED"
+                if declined
+                else "LIVE_REFRESH_REFUSED"
+            ),
             "slate_date": args.slate_date,
             "stage": "live",
         }
@@ -1924,7 +1981,7 @@ def main(argv: list[str] | None = None) -> int:
 
         print(json.dumps(failure, indent=2, sort_keys=True), file=sys.stderr)
 
-        return EXIT_REFUSED
+        return EXIT_OK if outcome in OUTCOMES_THAT_SUCCEED else EXIT_REFUSED
 
     recorded = receipt.pop("_evidence")
 

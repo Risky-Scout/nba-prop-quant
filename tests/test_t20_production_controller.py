@@ -560,7 +560,7 @@ class World:
 
         self.live_refreshes.append((offset, rows_sha256))
 
-        def refuse(outcome: str, message: str):
+        def refuse(outcome: str, message: str, *, returncode: int = 1):
             receipt_path.write_text(
                 json.dumps(
                     {
@@ -569,7 +569,11 @@ class World:
                         "mode": "live",
                         "observed_live_release_id": self.live_release or "",
                         "offset_minutes": offset,
-                        "outcome": "LIVE_REFRESH_REFUSED",
+                        "outcome": (
+                            "LIVE_REFRESH_REFUSED"
+                            if returncode
+                            else "LIVE_REFRESH_DECLINED"
+                        ),
                         "slate_date": slate_date,
                         "stage": "live",
                     }
@@ -577,7 +581,7 @@ class World:
                 encoding="utf-8",
             )
 
-            return self._completed(command, returncode=1)
+            return self._completed(command, returncode=returncode)
 
         if self.live_refusal is not None:
             return refuse(
@@ -585,11 +589,14 @@ class World:
             )
 
         if self.live_offset is not None and offset > self.live_offset:
+            # Exits zero. The ordering rule declining a window is the rule
+            # working, and on a staggered slate it is the ordinary case.
             return refuse(
-                controller.LIVE_OUTCOME_REFUSED,
+                controller.LIVE_OUTCOME_ALREADY_CLOSER_TO_TIP,
                 f"the T-{self.live_offset} release is already live and this "
                 f"is the T-{offset} refresh, which is an earlier capture "
                 "window",
+                returncode=0,
             )
 
         previous = self.live_release or ""
@@ -3056,6 +3063,10 @@ def test_the_live_vocabulary_is_pinned_to_the_refresh_module():
             refresh.OUTCOME_PROMOTED_THEN_INCOMPLETE,
         ),
         (controller.LIVE_OUTCOME_REFUSED, refresh.OUTCOME_REFUSED),
+        (
+            controller.LIVE_OUTCOME_ALREADY_CLOSER_TO_TIP,
+            refresh.OUTCOME_ALREADY_CLOSER_TO_TIP,
+        ),
     ):
         assert mine == theirs
 
@@ -3063,6 +3074,16 @@ def test_the_live_vocabulary_is_pinned_to_the_refresh_module():
     # faultless, and the controller's two extra words are its own.
     assert refresh.OUTCOMES_THAT_SUCCEED <= (
         controller.LIVE_OUTCOMES_WITHOUT_FAULT
+    )
+
+    # And the page is only built after an outcome that actually published,
+    # which is a strictly narrower set than the faultless one.
+    assert controller.LIVE_OUTCOMES_THAT_PUBLISH < (
+        controller.LIVE_OUTCOMES_WITHOUT_FAULT
+    )
+
+    assert controller.LIVE_OUTCOMES_THAT_PUBLISH == (
+        refresh.OUTCOMES_THAT_SUCCEED - {refresh.OUTCOME_ALREADY_CLOSER_TO_TIP}
     )
 
     assert controller.LIVE_OUTCOMES_WITHOUT_FAULT - (

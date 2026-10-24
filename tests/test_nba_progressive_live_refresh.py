@@ -482,12 +482,20 @@ def test_the_live_page_stage_reads_the_refresh_receipt_unchanged(chain):
 
 
 def test_an_earlier_window_never_replaces_a_later_one(chain):
-    """The refusal that keeps a late T-180 from walking the page back.
+    """The rule that keeps a late T-180 from walking the page back.
 
-    Reachable on this repository's runner, where pickup has been delayed by
-    hours: a T-180 invocation can finish after a T-45 one. What it would
-    publish is a real validated release with every digest agreeing and every
-    readback passing. It is simply the wrong one.
+    The ordinary evening case rather than an exotic one, because a window
+    belongs to a game and its offset is measured from that game's own tip. On
+    a slate with several tip times they interleave: the first game's T-20
+    capture is taken before the last game's T-180 capture, so a T-180 refresh
+    running after a T-90 one has nothing wrong with it. What it would publish
+    is a real validated release with every digest agreeing and every readback
+    passing. It is simply the wrong one.
+
+    So it is declined and not failed. Everything a refusal guarantees still
+    holds -- nothing written, both pointers untouched -- and the exit code is
+    zero, because a chain that reported a fault every evening for doing
+    exactly what it was asked to do would be reporting nothing.
     """
     chain.window(180)
 
@@ -507,18 +515,34 @@ def test_an_earlier_window_never_replaces_a_later_one(chain):
         receipt_path=chain.root / "backwards.json",
     )
 
-    assert code == live.EXIT_REFUSED
+    assert code == live.EXIT_OK
 
-    assert receipt["live_outcome"] == live.OUTCOME_REFUSED
+    assert receipt["live_outcome"] == live.OUTCOME_ALREADY_CLOSER_TO_TIP
+
+    assert receipt["live_outcome"] in live.OUTCOMES_THAT_SUCCEED
+
+    assert receipt["outcome"] == "LIVE_REFRESH_DECLINED"
 
     assert "T-90 release is already live" in receipt["message"]
 
     assert "never replaced by an earlier one" in receipt["message"]
 
+    # Declined is not live-bearing: the next refresh still reads T-90 as the
+    # window live is at, not T-180.
+    assert live.OUTCOME_ALREADY_CLOSER_TO_TIP not in live.OUTCOMES_THAT_ARE_LIVE
+
     # Nothing moved, in either pointer.
     assert chain.pointer() == before
 
     assert chain.pointer(publisher.PREVIOUS_POINTER) == before_previous
+
+    # And the window closer to tip still lands afterwards, so declining one
+    # refresh has not wedged the chain.
+    code, replaced = chain.window(45)
+
+    assert code == live.EXIT_OK, replaced
+
+    assert replaced["live_outcome"] == live.OUTCOME_REPLACED
 
 
 def test_the_same_window_twice_writes_nothing_at_all(chain):
@@ -1289,11 +1313,19 @@ def test_every_attempt_leaves_one_line_naming_what_it_did(chain):
     for offset in live.PROGRESSIVE_OFFSETS_MINUTES:
         chain.window(offset)
 
-    # One refusal, which is recorded like everything else.
+    # A window the ordering rule declined, recorded like everything else.
     chain.refresh(
         180,
         canary_receipt=chain.root / "canary_feed_t180.json",
         receipt_path=chain.root / "backwards.json",
+    )
+
+    # And an outright refusal, which is recorded the same way again: the
+    # T-20 window handed the T-45 window's canary receipt.
+    chain.refresh(
+        20,
+        canary_receipt=chain.root / "canary_feed_t45.json",
+        receipt_path=chain.root / "broken.json",
     )
 
     entries = chain.ledger()
@@ -1304,6 +1336,7 @@ def test_every_attempt_leaves_one_line_naming_what_it_did(chain):
         45,
         20,
         180,
+        20,
     ]
 
     assert [entry["outcome"] for entry in entries] == [
@@ -1311,12 +1344,13 @@ def test_every_attempt_leaves_one_line_naming_what_it_did(chain):
         live.OUTCOME_REPLACED,
         live.OUTCOME_REPLACED,
         live.OUTCOME_REPLACED,
+        live.OUTCOME_ALREADY_CLOSER_TO_TIP,
         live.OUTCOME_REFUSED,
     ]
 
-    # The refusal names no release, which is what lets the ordering read pass
-    # over refusals without having to interpret them.
-    assert entries[-1]["live_release_id"] == ""
+    # Neither names a release, which is what lets the ordering read pass over
+    # them without having to interpret them.
+    assert [entry["live_release_id"] for entry in entries[-2:]] == ["", ""]
 
     assert live.last_live_entry(entries)["offset_minutes"] == 20
 

@@ -553,6 +553,18 @@ LIVE_OUTCOME_ALREADY_CURRENT = "LIVE_ALREADY_CURRENT"
 LIVE_OUTCOME_PROMOTED_THEN_INCOMPLETE = "LIVE_PROMOTED_THEN_INCOMPLETE"
 LIVE_OUTCOME_REFUSED = "LIVE_REFUSED"
 
+#: The ordering rule declined this window because the live release is already
+#: at one closer to tip. Not a defect, and the ordinary evening case rather
+#: than an edge one: a window belongs to a game and its offset is measured
+#: from that game's own tip, so a slate with several tip times interleaves
+#: them -- the first game's T-20 capture is taken before the last game's
+#: T-180 capture, which is a later moment in the evening and an earlier point
+#: in its own game's window. The advisory refresh that follows asks to put a
+#: T-180 release live over a T-20 one and is told no, which is the ordering
+#: rule working. Reporting that as a degradation every evening would make the
+#: segment's verdict mean nothing.
+LIVE_OUTCOME_ALREADY_CLOSER_TO_TIP = "LIVE_ALREADY_CLOSER_TO_TIP"
+
 #: The live feed was refreshed and the page a reader actually opens was not.
 #: Its own outcome because it is the worst of the live failures: the release
 #: is current, the digests agree, and the page is the window before. Nothing
@@ -569,14 +581,29 @@ LIVE_OUTCOME_PAGE_FAILED = "LIVE_PAGE_FAILED"
 LIVE_OUTCOME_SKIPPED = "LIVE_SKIPPED_ALREADY_CURRENT_THIS_STATE"
 
 #: Live outcomes that are not a defect. Only an outcome outside this set
-#: degrades the segment, and the three in it are the three after which the
-#: live pointer names this window's release.
+#: degrades the segment. The first three are the ones after which the live
+#: pointer names this window's release, the fourth is this invocation having
+#: already put it there, and the fifth is the ordering rule leaving a release
+#: closer to tip alone.
 LIVE_OUTCOMES_WITHOUT_FAULT: frozenset[str] = frozenset(
     {
         LIVE_OUTCOME_ESTABLISHED,
         LIVE_OUTCOME_REPLACED,
         LIVE_OUTCOME_ALREADY_CURRENT,
         LIVE_OUTCOME_SKIPPED,
+        LIVE_OUTCOME_ALREADY_CLOSER_TO_TIP,
+    }
+)
+
+#: The live outcomes after which there is a release to build the page from.
+#: Narrower than the faultless set on purpose: the ordering rule declining a
+#: window is not a fault and is also not a publication, so the page stage is
+#: not reached and the page is not reported as rebuilt.
+LIVE_OUTCOMES_THAT_PUBLISH: frozenset[str] = frozenset(
+    {
+        LIVE_OUTCOME_ESTABLISHED,
+        LIVE_OUTCOME_REPLACED,
+        LIVE_OUTCOME_ALREADY_CURRENT,
     }
 )
 
@@ -1939,7 +1966,10 @@ class T20Controller:
             }
         )
 
-        self._serve_and_publish(stage_dir, readiness=readiness)
+        # The recovered windows are the group, for the same reason a freshly
+        # captured group is: the post-tip guard is about the windows the
+        # release is *for*, and these are the ones this run is publishing.
+        self._serve_and_publish(stage_dir, rows, readiness=readiness)
 
     def _work(self, plan: dict[str, Any], readiness: dict[str, Any]) -> None:
         rows = {str(row["window_id"]): row for row in plan["pending_rows"]}
@@ -3055,7 +3085,13 @@ class T20Controller:
             "rows_sha256": str(released.get("rows_sha256") or ""),
         }
 
-        if result.returncode != 0 or outcome not in LIVE_OUTCOMES_WITHOUT_FAULT:
+        # Two things end here, and only one of them is a fault. A refusal is
+        # recorded and degrades the segment; the ordering rule declining a
+        # window is recorded and does not. Both stop before the page for the
+        # same reason: there is no release to build one from, and rebuilding
+        # the page from a release that did not change would say the page had
+        # been refreshed when nothing was.
+        if result.returncode != 0 or outcome not in LIVE_OUTCOMES_THAT_PUBLISH:
             self._record_live(
                 offset=offset,
                 outcome=outcome,
