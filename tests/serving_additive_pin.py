@@ -34,14 +34,37 @@ PROJECT = Path(__file__).resolve().parents[1]
 
 #: The serving files an approved additive change may reach, each with the only
 #: functions whose bodies may differ. Mirrors
-#: ``ADDITIVE_ONLY_SERVING_ENTRY_POINTS``, ``ADDITIVE_ONLY_SERVING_SOURCES``
-#: and ``ADDITIVE_ONLY_SERVING_ORCHESTRATORS`` and their exempt-function
+#: ``ADDITIVE_ONLY_SERVING_ENTRY_POINTS``, ``ADDITIVE_ONLY_SERVING_SOURCES``,
+#: ``ADDITIVE_ONLY_SERVING_ORCHESTRATORS`` and
+#: ``ADDITIVE_ONLY_CAPTURE_SELECTION_SOURCES`` and their exempt-function
 #: lists; the branch-safety suite is what enforces the mapping, and this is
 #: how the numerical claims read it.
+#:
+#: ``prospective_snapshot.py`` is the fifth, and it is the one entry where
+#: byte-equality was reading a *correctness* claim as a numerical one. The
+#: module computes no probability and no price; it decides which
+#: point-in-time capture pricing may read, and requiring exactly one
+#: scheduled record per window made a window with two records permanently
+#: unpriceable. ``select_capture_bundle`` is the one function that may
+#: differ, so the digest functions every capture ever written is addressed by
+#: are held syntax-tree-identical here exactly as they are there.
+#:
+#: It is also the one entry whose exemption names a method. Selecting one
+#: game's capture refuses per game, and the client assembled the whole slate
+#: in one comprehension, so a refusal that belonged to one game aborted the
+#: slate; ``ProspectiveSnapshotClient.__init__`` is where that is isolated.
+#: The unit compared is therefore the method rather than the class -- see
+#: :func:`module_definitions` -- so every other method of the client, each
+#: accessor serving reads its records through among them, is pinned
+#: individually instead of disappearing into one class-shaped comparison.
 ADDITIVE_ONLY_SERVING_FILES: dict[str, tuple[str, ...]] = {
     "scripts/10_predict_slate.py": ("parse_args", "main"),
     "scripts/15_price_markets.py": ("parse_args", "main"),
     "src/nba_prop_quant/slate.py": ("build_upcoming_slate_features",),
+    "src/nba_prop_quant/prospective_snapshot.py": (
+        "select_capture_bundle",
+        "ProspectiveSnapshotClient.__init__",
+    ),
     "ops/run_incumbent_production_serving.py": ("slate_readiness", "run"),
 }
 
@@ -62,6 +85,59 @@ def _functions(source: str) -> dict[str, ast.FunctionDef]:
         for node in ast.parse(source).body
         if isinstance(node, ast.FunctionDef)
     }
+
+
+def module_definitions(source: str) -> dict[str, str]:
+    """Every definition in a module, with class methods named one at a time.
+
+    The pins above compare top-level functions, and a class as one node or
+    not at all. Neither can say "this one method may differ": comparing the
+    class whole reads a one-method change and a rewritten accessor the same
+    way, and comparing only top-level functions does not read a method
+    change at all. ``prospective_snapshot.py`` is the first declared file
+    where the thing that has to change is a method, so the unit the pins
+    compare has to become the method.
+
+    A class contributes one entry per method, keyed ``Class.method``, plus a
+    shell entry under its own name holding its bases, decorators and every
+    statement in its body that is not a method -- so a class attribute, a
+    changed base or a dropped ``__slots__`` is still pinned, and the only
+    thing an exemption can buy is the one method it names.
+
+    Returns dumps rather than nodes because a shell is assembled from parts
+    of a node rather than being one.
+    """
+    found: dict[str, str] = {}
+
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.FunctionDef):
+            found[node.name] = ast.dump(node)
+
+        elif isinstance(node, ast.ClassDef):
+            methods = [
+                item
+                for item in node.body
+                if isinstance(item, ast.FunctionDef)
+            ]
+
+            for method in methods:
+                found[f"{node.name}.{method.name}"] = ast.dump(method)
+
+            found[node.name] = repr(
+                (
+                    node.name,
+                    [ast.dump(base) for base in node.bases],
+                    [ast.dump(item) for item in node.keywords],
+                    [ast.dump(item) for item in node.decorator_list],
+                    [
+                        ast.dump(item)
+                        for item in node.body
+                        if not isinstance(item, ast.FunctionDef)
+                    ],
+                )
+            )
+
+    return found
 
 
 def assert_numerically_unchanged(base: str, relative: str) -> None:
@@ -88,18 +164,18 @@ def assert_numerically_unchanged(base: str, relative: str) -> None:
         f"{relative} removed or edited lines production has: {removed}"
     )
 
-    production_functions = _functions(before)
-    branch_functions = _functions(after)
+    production_functions = module_definitions(before)
+    branch_functions = module_definitions(after)
 
     missing = sorted(set(production_functions) - set(branch_functions))
 
     assert missing == [], f"{relative} dropped functions: {missing}"
 
-    for name, node in production_functions.items():
+    for name, dumped in production_functions.items():
         if name in exempt:
             continue
 
-        assert ast.dump(node) == ast.dump(branch_functions[name]), (
+        assert dumped == branch_functions[name], (
             f"{relative}:{name} is not the function production has, and only "
             f"{list(exempt)} may differ"
         )

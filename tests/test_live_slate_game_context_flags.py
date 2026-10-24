@@ -31,6 +31,7 @@ from nba_prop_quant.features import FEATURE_EXACT, build_base_frame
 from nba_prop_quant.game_context import classify_games
 from nba_prop_quant.production import assert_model_feature_contract
 from nba_prop_quant.research.game_latent_state.safety import (
+    DECLARED_SERVING_EXCLUSION_NAMES,
     DECLARED_SERVING_PLUMBING_NAMES,
 )
 from nba_prop_quant.slate import (
@@ -806,10 +807,28 @@ def test_no_model_artifact_or_freeze_manifest_changed():
 
 
 def test_the_prediction_script_only_gained_the_games_table_lookup():
-    """The projection script's change is one import and one argument.
+    """The projection script's change is the games table and the exclusions.
 
     Compared as a line set against production, so an edited computation would
     show up as a removed line even if the file got longer.
+
+    The second subject arrived with the capture-selection carve-out. One
+    game's capture being unselectable used to abort the client this script
+    builds, taking every other game of the slate with it; now it does not,
+    which means this script can be handed a slate with a game missing and
+    has to refuse rather than write a release that is short and says
+    nothing.
+
+    What is added is read by statement rather than by line. The line
+    reading was right for a change that happened to be one line per
+    subject and cannot see a statement that spans several: a continuation
+    line carries none of its statement's names, so under a line reading
+    any multi-line addition fails no matter what it is about, and the only
+    way to pass it is to write the change on one line. The statement rule
+    is the one the containment states for this file, so using it here is
+    the two spellings agreeing rather than this one relaxing; every other
+    definition in the script is still compared syntax tree against
+    production, and ``main`` is still the only one that may differ at all.
     """
     base = production_base()
 
@@ -825,11 +844,50 @@ def test_the_prediction_script_only_gained_the_games_table_lookup():
 
     assert removed == [], f"{relative} removed or edited lines: {removed}"
 
-    added = [line for line in after if line not in before]
+    allowed = (
+        "history_games",
+        "load_history_games",
+        *DECLARED_SERVING_EXCLUSION_NAMES,
+    )
 
-    assert all(
-        "history_games" in line or "load_history_games" in line for line in added
-    ), f"{relative} added lines beyond the games-table lookup: {added}"
+    def functions(source: str) -> dict[str, ast.FunctionDef]:
+        return {
+            node.name: node
+            for node in ast.parse(source).body
+            if isinstance(node, ast.FunctionDef)
+        }
+
+    definitions_before = functions("\n".join(before))
+    definitions_after = functions("\n".join(after))
+
+    assert set(definitions_before) <= set(definitions_after), (
+        f"{relative} dropped "
+        f"{sorted(set(definitions_before) - set(definitions_after))}"
+    )
+
+    for name, node in definitions_before.items():
+        if name in ("parse_args", "main"):
+            continue
+
+        assert ast.dump(node) == ast.dump(definitions_after[name]), (
+            f"{relative}:{name} is not the function production has"
+        )
+
+    statements = {
+        ast.dump(node) for node in definitions_before["main"].body
+    }
+
+    for node in definitions_after["main"].body:
+        rendered = ast.dump(node)
+
+        if rendered in statements:
+            continue
+
+        assert any(subject in rendered for subject in allowed), (
+            f"{relative}:main added a statement beyond the games-table "
+            f"lookup and the declared exclusions: "
+            f"{ast.unparse(node)[:160]}"
+        )
 
 
 def test_the_slate_module_only_gained_the_classification_path():

@@ -31,6 +31,7 @@ from nba_prop_quant.research.game_latent_state.gates import (
 )
 from nba_prop_quant.research.game_latent_state.safety import (
     ADDITIVE_ONLY_CAPTURE_ENTRY_POINTS,
+    ADDITIVE_ONLY_CAPTURE_SELECTION_SOURCES,
     ADDITIVE_ONLY_PAGE_CONSISTENCY_CHECKS,
     ADDITIVE_ONLY_PUBLICATION_TRANSPORTS,
     ADDITIVE_ONLY_SERVING_ENTRY_POINTS,
@@ -38,12 +39,15 @@ from nba_prop_quant.research.game_latent_state.safety import (
     ADDITIVE_ONLY_SERVING_SOURCES,
     ADDITIVE_ONLY_WORKFLOWS,
     CAPTURE_ENTRY_POINT_EXEMPT_FUNCTIONS,
+    CAPTURE_SELECTION_EXEMPT_FUNCTIONS,
     DECLARABLE_DEPLOYMENT_PACKAGING_TOOLS,
     DECLARABLE_SERVING_SOURCE_REGISTRIES,
+    DECLARED_CAPTURE_RESOLUTION_NAMES,
     DECLARED_CAPTURE_SELECTION_NAMES,
     DECLARED_INTEGRATION_PATHS,
     DECLARED_PAGE_CONSISTENCY_NAMES,
     DECLARED_PUBLICATION_TRANSPORT_NAMES,
+    DECLARED_SERVING_EXCLUSION_NAMES,
     DECLARED_SERVING_PLUMBING_NAMES,
     DECLARED_SERVING_READINESS_NAMES,
     PAGE_CONSISTENCY_CLASS,
@@ -214,6 +218,7 @@ def test_the_declared_integration_surface_cannot_reach_the_served_model():
     undeclarable_prefixes = ("models/", "configs/", "scripts/", "release/", "review/")
     exceptions = (
         *ADDITIVE_ONLY_CAPTURE_ENTRY_POINTS,
+        *ADDITIVE_ONLY_CAPTURE_SELECTION_SOURCES,
         *ADDITIVE_ONLY_SERVING_ENTRY_POINTS,
         *ADDITIVE_ONLY_SERVING_SOURCES,
         *DECLARABLE_DEPLOYMENT_PACKAGING_TOOLS,
@@ -547,7 +552,15 @@ def test_only_the_slate_builder_is_declarable_among_serving_sources():
         "src/nba_prop_quant/availability.py",
     }
 
-    still_shut = UNDECLARABLE_PRODUCTION_SOURCES - set(ADDITIVE_ONLY_SERVING_SOURCES)
+    # The capture-selection carve-out below is a separate permission with a
+    # separate subject, so it is subtracted here rather than being reported as
+    # a serving source this one failed to cover. Its own narrowness is
+    # asserted there.
+    still_shut = (
+        UNDECLARABLE_PRODUCTION_SOURCES
+        - set(ADDITIVE_ONLY_SERVING_SOURCES)
+        - set(ADDITIVE_ONLY_CAPTURE_SELECTION_SOURCES)
+    )
 
     for relative in (
         "src/nba_prop_quant/copula.py",
@@ -638,6 +651,134 @@ def test_a_declared_serving_source_cannot_change_what_it_computes():
                 continue
             assert_only_declared_plumbing_was_added(
                 relative, name, before[name], after[name]
+            )
+
+
+def test_only_the_capture_selection_is_declarable_in_the_snapshot_module():
+    """The sixth carve-out is one module and one function inside it.
+
+    What stays shut is the rest of the module, and it is the part that says
+    what a capture *is*: ``canonical_records_sha256`` hashes a component and
+    ``build_capture_id`` hashes the envelope, so every capture ever written
+    is addressed by those two functions and a branch that could move them
+    would invalidate the lot. They are separate top-level definitions, they
+    are outside the exemption, and the pin below holds them
+    syntax-tree-identical to production -- which is the whole point of
+    declaring this file for a defect in *reading* the log: the reading may
+    change, the addressing may not.
+
+    The five carve-outs above are named explicitly. None of them covers this
+    module and this one covers none of their files, so no carve-out can be
+    widened by appealing to another.
+    """
+    assert len(ADDITIVE_ONLY_CAPTURE_SELECTION_SOURCES) == 1
+
+    assert CAPTURE_SELECTION_EXEMPT_FUNCTIONS == ("select_capture_bundle",)
+
+    for relative in ADDITIVE_ONLY_CAPTURE_SELECTION_SOURCES:
+        assert relative.startswith("src/nba_prop_quant/")
+        assert (PROJECT / relative).exists()
+        # Still measured as serving-reachable: the carve-out is an exception
+        # layered on the measurement, not a hole in it.
+        assert relative in UNDECLARABLE_PRODUCTION_SOURCES
+        assert relative not in ADDITIVE_ONLY_CAPTURE_ENTRY_POINTS
+        assert relative not in ADDITIVE_ONLY_PAGE_CONSISTENCY_CHECKS
+        assert relative not in ADDITIVE_ONLY_PUBLICATION_TRANSPORTS
+        assert relative not in ADDITIVE_ONLY_SERVING_ENTRY_POINTS
+        assert relative not in ADDITIVE_ONLY_SERVING_ORCHESTRATORS
+        assert relative not in ADDITIVE_ONLY_SERVING_SOURCES
+
+    assert set(ADDITIVE_ONLY_CAPTURE_SELECTION_SOURCES) == {
+        "src/nba_prop_quant/prospective_snapshot.py",
+    }
+
+    source = (PROJECT / ADDITIVE_ONLY_CAPTURE_SELECTION_SOURCES[0]).read_text(
+        encoding="utf-8"
+    )
+
+    definitions = {
+        node.name
+        for node in ast.parse(source).body
+        if isinstance(node, (ast.FunctionDef, ast.ClassDef))
+    }
+
+    assert set(CAPTURE_SELECTION_EXEMPT_FUNCTIONS) <= definitions
+
+    # What identifies a capture is not what the exemption is for.
+    for name in (
+        "build_capture_id",
+        "canonical_records_sha256",
+        "_component_records",
+        "_capture_runs",
+        "ProspectiveSnapshotClient",
+    ):
+        assert name in definitions, name
+        assert name not in CAPTURE_SELECTION_EXEMPT_FUNCTIONS
+
+    # Every declared name is really in the file, so the declaration cannot
+    # carry a permission nothing uses.
+    for name in DECLARED_CAPTURE_RESOLUTION_NAMES:
+        assert name in source, name
+
+
+def test_a_declared_capture_selection_change_only_ever_adds_lines():
+    """Declaring the capture selection buys an added path, not a rewrite.
+
+    The same line-set comparison every other carve-out is held to. Every line
+    production has must still be there, so no existing refusal -- the
+    scheduled-reason filter, the error check, the missing-hash check, the
+    component-digest comparison, the capture-id comparison, the target-game
+    check or the pre-tip check -- can be changed or dropped.
+    """
+    base = production_base()
+    if base is None:
+        pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
+
+    for relative in ADDITIVE_ONLY_CAPTURE_SELECTION_SOURCES:
+        before = git("show", f"{base}:{relative}").splitlines()
+        after = git("show", f"HEAD:{relative}").splitlines()
+        removed = [line for line in before if line not in after]
+        assert removed == [], f"{relative} removed or edited existing lines: {removed}"
+
+
+def test_a_declared_capture_selection_cannot_change_what_a_capture_is():
+    """Every other definition in the snapshot module is pinned.
+
+    ``CAPTURE_SELECTION_EXEMPT_FUNCTIONS`` names the one function whose body
+    may differ, and what it may have gained is held to the declared
+    resolution names, so the exemption cannot widen into "the module pricing
+    reads its snapshot through is editable".
+    """
+    base = production_base()
+    if base is None:
+        pytest.skip(f"{PRODUCTION_REF} is not available in this checkout")
+
+    for relative in ADDITIVE_ONLY_CAPTURE_SELECTION_SOURCES:
+        before = module_functions(git("show", f"{base}:{relative}"))
+        after = module_functions(git("show", f"HEAD:{relative}"))
+
+        assert set(before) <= set(after), (
+            f"{relative} dropped functions: {sorted(set(before) - set(after))}"
+        )
+
+        for name, node in before.items():
+            if name in CAPTURE_SELECTION_EXEMPT_FUNCTIONS:
+                continue
+            assert ast.dump(node) == ast.dump(after[name]), (
+                f"{relative}:{name} is not the function production has, and "
+                f"only {list(CAPTURE_SELECTION_EXEMPT_FUNCTIONS)} may differ"
+            )
+
+        for name in CAPTURE_SELECTION_EXEMPT_FUNCTIONS:
+            if name not in before:
+                continue
+            assert_only_declared_plumbing_was_added(
+                relative,
+                name,
+                before[name],
+                after[name],
+                declared=DECLARED_CAPTURE_RESOLUTION_NAMES,
+                subject="capture resolution",
             )
 
 
@@ -837,6 +978,15 @@ def test_a_declared_serving_script_cannot_change_what_it_computes():
     ``main``, where it is used, may differ at all -- and ``main``'s added
     statements must name declared plumbing, so the permission cannot quietly
     widen into "main is editable".
+
+    Plumbing or an exclusion. Every plumbing name is a quantity carried
+    forward -- a column the fitted models want, a flag, a value substituted
+    where training puts one -- and a refusal is not one of those, so it is
+    declared separately and accepted here as well. That became necessary
+    when the capture-selection carve-out stopped one game's unselectable
+    capture aborting the whole slate: a serving script can now be handed a
+    slate with a game missing, and it has to say so rather than write a
+    release that is short and silent.
     """
     base = production_base()
     if base is None:
@@ -862,7 +1012,15 @@ def test_a_declared_serving_script_cannot_change_what_it_computes():
             continue
 
         assert_only_declared_plumbing_was_added(
-            relative, "main", before["main"], after["main"]
+            relative,
+            "main",
+            before["main"],
+            after["main"],
+            declared=(
+                *DECLARED_SERVING_PLUMBING_NAMES,
+                *DECLARED_SERVING_EXCLUSION_NAMES,
+            ),
+            subject="serving plumbing or a declared exclusion",
         )
 
 
