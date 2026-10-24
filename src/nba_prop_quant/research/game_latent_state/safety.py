@@ -340,6 +340,41 @@ ADDITIVE_ONLY_CAPTURE_ENTRY_POINTS: tuple[str, ...] = (
     "scripts/11_collect_snapshots.py",
 )
 
+#: The deployment-integrity tool under ``scripts/`` that packages the frozen
+#: model rather than computing anything with it.
+#:
+#: ``scripts/`` was undeclarable apart from the serving entry points and the
+#: collector, and the same conflation that made those unfixable made this one
+#: unfixable too: it reads the same for the numbers a script computes and the
+#: bytes a script verifies. This script computes nothing. Its own module
+#: docstring states it "performs no training, fitting, selection or
+#: recalibration, and it never contacts an external API", a test pins that it
+#: cannot reach the network at all, and nothing on the serving path imports
+#: it. What it does is verify and archive the already-frozen model, so the
+#: lifecycle has a bundle to install.
+#:
+#: It could not do that. It verified the nine files
+#: :data:`DECLARABLE_SERVING_SOURCE_REGISTRIES`' first entry locks against the
+#: architecture reference alone, and three of them had been corrected under
+#: that very registry, so every build refused. The refusal was unsatisfiable
+#: rather than merely strict: two of those corrections add the
+#: ``--frozen-bundle-root`` argument without which the entry points resolve
+#: the frozen manifest against the working directory, so the only tree able to
+#: serve was the one tree it would not package. The registry's own
+#: ``known_limitation`` named teaching this script about it as the deferred
+#: deployment obligation, and a declaration was the only reviewed way in.
+#:
+#: So it is declarable, and the carve-out is narrower in risk than the three
+#: before it, because the file is not on the serving path and holds no model
+#: state. The rest of ``scripts/`` remains undeclarable, and what this script
+#: may do with the registry is itself bounded: a library module under ``src/``
+#: that the historical runtime contract byte-pins can never be relocked, so
+#: the mathematics stays pinned to the architecture reference and no
+#: declaration here can move it.
+DECLARABLE_DEPLOYMENT_PACKAGING_TOOLS: tuple[str, ...] = (
+    "scripts/19_build_wizardofodds_runtime_bundle.py",
+)
+
 #: The only functions in the declared capture entry point whose bodies may
 #: differ from production. ``parse_args`` is where the offset argument is
 #: declared and ``main`` is where it narrows the due list; computing the
@@ -873,57 +908,71 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: column it already was.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
-        "src/nba_prop_quant/slate.py": (
-            "a player with no NBA appearance is now served the value "
-            "training states for an appearance-only prior, which is no "
-            "value, instead of the played population's mean minutes. One "
-            "added condition inside the one exempt function and one added "
-            "module constant, NO_APPEARANCE_PRIOR, which is declared serving "
-            "plumbing and is nan. The lines production has are the two above "
-            "it and both survive, so the substitution is still what runs for "
-            "every player with any appearance at all: the condition is not "
-            "games_prior, and games_prior is the career count the module "
-            "already computes from the same already-leakage-checked, "
-            "already-played-filtered history. build_base_frame takes these "
-            "same columns through a lagged EWM, so a first appearance is fit "
-            "with all of them missing and the fitted minutes model holds a "
-            "learned branch for that row; features.py is byte-identical to "
-            "production and the authority on what the value is. Every other "
-            "function in the module is syntax-tree-identical to production "
-            "and every module constant production has is unmoved, which the "
-            "branch-safety tests pin. No feature definition, prior, window, "
-            "span, weight, threshold, probability, price, edge, EV, "
-            "quantile, line, distribution, simulation count, calibration or "
-            "Gate 3 route is computed or changed, and no fitted artifact is "
-            "touched"
+        "scripts/19_build_wizardofodds_runtime_bundle.py": (
+            "the deployment-integrity tool now reads the serving source "
+            "registry it previously ignored, so the frozen model can be "
+            "packaged from the source production actually serves. Pinned "
+            "coverage widens from the registry's nine historically "
+            "byte-pinned files to all eleven it locks: a file the registry "
+            "declares as diverged is pinned to the hash recorded there, and "
+            "every other historically pinned file is still pinned to the "
+            "architecture reference, so no file loses a byte-exact pin and "
+            "none gains an exemption. It additionally refuses a registry "
+            "anchored to a different commit, one whose recorded digest is "
+            "not the historical runtime contract's bytes, a recorded "
+            "historical hash that is not that file's bytes at the reference, "
+            "a declared divergence that does not differ or carries no "
+            "justification, an undeclared difference, a dropped invariant, "
+            "and a bundle in which any pinned file is absent from both "
+            "verification blocks. A library module under src/ that the "
+            "historical contract byte-pins can never be relocked, so the "
+            "mathematics stays pinned to the reference. The script performs "
+            "no training, fitting, selection, recalibration or inference, "
+            "reaches no network, is imported by nothing on the serving path, "
+            "and no probability, PMF, price, edge, EV, line, minute, "
+            "calibration, Gate 3 route or fitted artifact is read, computed "
+            "or changed"
         ),
         "models/frozen_manifests/"
         "nba_prop_quant_v2_adaptive_serving_source_contract.json": (
-            "relocks src/nba_prop_quant/slate.py at the bytes above and "
-            "records the third reason that file diverges from the "
-            "historical reference, which is what this registry exists for: "
-            "its own purpose requires every difference to be enumerated and "
-            "justified in it. The historical reference hashes are untouched, "
-            "no locked file is dropped or added, the divergence count is "
-            "unchanged because the file was already a declared divergence, "
-            "and every invariant flag -- feature definitions, training "
-            "feature definitions, model mathematics, mean-model routing, "
-            "marginal family, calibration, dependence, Gate 3 routing, "
-            "fitted artifacts -- stays false"
+            "records that the deployment obligation its own known_limitation "
+            "deferred is discharged, which is what this registry exists for: "
+            "it named teaching the bundle builder about itself as the "
+            "remaining Step 3D obligation, and a note still saying the "
+            "builder cannot package this source would be the misleading half "
+            "of the same defect. Three fields change -- contract_version, "
+            "one added contract_version_history entry, and "
+            "known_limitation, rewritten to state the discharge and the "
+            "residual reading hazard that a bundle now carries two source "
+            "pins. No lock moves: every locked file, current and historical "
+            "hash, the divergence list, the divergence count, the coverage "
+            "and invariant bases and every invariant flag are byte-for-byte "
+            "the reviewed version 9 values, which a digest pinned as a "
+            "literal in the bundle tests asserts"
         ),
         "models/frozen_manifests/"
         "nba_prop_quant_v2_adaptive_update_protocol.json": (
             "one field, adaptive_serving_source_contract_sha256, which is the "
-            "digest of the registry relocked above. assert_protocol_matches_tree "
+            "digest of the registry edited above. assert_protocol_matches_tree "
             "refuses a daily fit whose protocol does not describe the working "
-            "tree, so relocking the one without the other is a fit that cannot "
-            "run. The two hashes it derives from the model surface, config_hash "
-            "and feature_schema_hash, are unchanged and are the evidence that "
-            "no config and no feature schema moved. Nothing else in the file "
-            "is touched: the architecture contract digest, the architecture "
-            "reference SHA, the DAG stages, the five frozen policy digests, "
-            "the Gate 3 candidate policy id, the selector prohibition and the "
-            "prohibited-operation list all stand"
+            "tree, and refresh_production_readiness refuses a readiness "
+            "refresh whose protocol does not point at the contract, so "
+            "editing the one without the other is a fit and a refresh that "
+            "cannot run. The two hashes it derives from the model surface, "
+            "config_hash and feature_schema_hash, are unchanged and are the "
+            "evidence that no config and no feature schema moved. Nothing "
+            "else in the file is touched: the architecture contract digest, "
+            "the architecture reference SHA, the DAG stages, the five frozen "
+            "policy digests, the Gate 3 candidate policy id, the selector "
+            "prohibition and the prohibited-operation list all stand"
+        ),
+        "docs/wizardofodds/V2_REFERENCE_PROVENANCE_ADDENDUM.md": (
+            "replaces the section recording the bundle builder's deferred "
+            "obligation as open with one recording it as discharged, and "
+            "states the residual hazard that the manifest's "
+            "frozen_model_source_verification block now lists only what the "
+            "architecture reference verified. Documentation: no behaviour "
+            "depends on this file"
         ),
     }
 )
