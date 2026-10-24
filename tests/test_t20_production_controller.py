@@ -2487,8 +2487,10 @@ def test_live_publication_is_decided_in_the_commit_and_gated_outside_it():
 
     assert sorted(read.blockers) == [
         f"{publisher.PUBLISH_ENV_VAR} does not match the switch state",
-        f"{publisher.PUBLISH_APPROVAL_ENV_VAR} does not match the approval "
-        "token",
+        (
+            f"{publisher.PUBLISH_APPROVAL_ENV_VAR} does not match the "
+            "approval token"
+        ),
     ]
 
     with pytest.raises(publisher.PublishingRefused) as refusal:

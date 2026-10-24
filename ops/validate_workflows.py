@@ -727,7 +727,7 @@ def activation_problems(name: str, jobs: dict) -> list[str]:
                     )
 
             if not run or T20_ENTRY_POINT not in run:
-                for variable in sorted((step.get("env") or {})):
+                for variable in sorted(step.get("env") or {}):
                     if variable in PUBLICATION_APPROVAL_VARIABLES:
                         found.append(
                             f"{name}: job {job_name} step "

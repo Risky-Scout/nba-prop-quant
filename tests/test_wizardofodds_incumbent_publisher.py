@@ -128,8 +128,10 @@ def test_the_committed_switch_opens_nothing_on_its_own():
 
     assert list(switch.blockers) == [
         f"{publisher.PUBLISH_ENV_VAR} does not match the switch state",
-        f"{publisher.PUBLISH_APPROVAL_ENV_VAR} does not match the approval "
-        "token",
+        (
+            f"{publisher.PUBLISH_APPROVAL_ENV_VAR} does not match the "
+            "approval token"
+        ),
     ]
 
     with pytest.raises(publisher.PublishingRefused) as refusal:
