@@ -10,8 +10,10 @@ wizardofodds.com. No technical background assumed.
 | What | Status |
 | --- | --- |
 | Canary (preview) mode | **ENABLED** — but writes only to a non-live destination |
-| Live mode | **DISABLED** |
-| Live approval token | `no-approval-has-been-granted` |
+| Live mode | **ENABLED in the committed switch** — and still gated, see below |
+| Live approval token | `live-progressive-refresh-approved-2026-10-24` |
+| `NBA_PROP_WOO_PUBLISH` | **Not set** — the only thing left to do |
+| `NBA_PROP_WOO_PUBLISH_APPROVAL` | **Not set** — the only thing left to do |
 | Model authority | `shadow_only` |
 | Slate published to the live NBA Player Props path | **Never** |
 | Slate published to the preview path | **Not yet either** — see Section 3 |
@@ -23,12 +25,24 @@ wizardofodds.com. No technical background assumed.
 **Canary mode is ENABLED, and that is safe.** A canary is a preview. It is
 described in full in Section 2.
 
-**Live mode is DISABLED.** This is the real public page a reader opens. Nothing
-has ever been published there.
+**Live mode is ENABLED in the committed switch, and nothing publishes live.**
+Those are not in tension. The switch is one of three conditions, and it is the
+only one a commit can hold. `PublishingSwitch.enabled` is the state *and* an
+empty blocker list, and both environment variables below are blockers until
+somebody sets them, so every live publication still refuses — by name, naming
+both variables, the environment they belong to and the values they need.
 
-**The approval token reads `no-approval-has-been-granted`.** This is not a
-placeholder that someone forgot to fill in. It is the switch stating that the
-decision to publish has not been made.
+**The approval token now reads `live-progressive-refresh-approved-2026-10-24`.**
+It used to read `no-approval-has-been-granted`, which was the switch stating
+that the decision to publish had not been made. The decision has now been
+made: the repository owner asked for the early capture windows to publish live
+on the progression T-180 establishes, T-90 replaces, T-45 replaces, T-20
+replaces as the final pregame version, and `modes.live.reason` is where that
+authorisation is recorded. What it authorises is
+`ops/run_progressive_live_refresh.py` and nothing else.
+
+**Nothing has ever been published to the live path.** That is still true, and
+it stays true until Steps 2 and 3 below are done.
 
 **Authority is `shadow_only`.** The newer candidate model runs, but its numbers
 are never published. The approved incumbent model is the only thing that could
@@ -151,23 +165,35 @@ mismatched, publication refuses and writes nothing at all.** That is intended
 behaviour, not a fault. Three separate places, deliberately, so that no single
 mistake can publish.
 
-### Step 1 — Enable live mode in a reviewed commit
+### Step 1 — Enable live mode in a reviewed commit — **done**
 
 - **File:** `ops/wizardofodds_publishing_switch.json`
-- **Change:** set `modes.live.state` from `"DISABLED"` to `"ENABLED"`
-- **Also:** replace the `modes.live.approval_token` value
-  `"no-approval-has-been-granted"` with a real token the decision chooses
+- **Change:** `modes.live.state` is `"ENABLED"`
+- **Also:** `modes.live.approval_token` is
+  `"live-progressive-refresh-approved-2026-10-24"`, and
+  `modes.live.reason` records the authorisation it was set under
 - **How:** committed and reviewed through a normal pull request
 - **Who:** a code owner
 - **Why a commit:** so the decision is permanently on the record with a name and
   a date against it, rather than typed into a terminal and forgotten
 
-**Replacing the token is not cosmetic.** The code does not treat
+**Replacing the token was not cosmetic.** The code does not treat
 `no-approval-has-been-granted` as a special case — it is already a non-empty
 string, and the gate only checks that the environment matches whatever the file
-says. Leave it in place and anyone who knows that phrase, which is published in
-this repository, satisfies Step 3. Choosing a new token is what makes Step 3 an
+says. Left in place, anyone who knows that phrase, which is published in this
+repository, would satisfy Step 3. Choosing a new token is what makes Step 3 an
 approval rather than a formality.
+
+**What may and may not move in this file is now checked rather than frozen.**
+`assert_only_the_live_decision_moved` in
+`tests/test_opening_day_refresh_lifecycle.py` allows only the three fields
+inside `modes.live` to differ from the production ref, allows `state` to move
+only towards `ENABLED`, refuses the placeholder token while the state is set,
+and requires every other key — `modes.canary`, the three conditions, the
+contract version, the approved freeze, both schema versions,
+`published_authority` and `candidate_authority` — to be deeply equal. The byte
+pin that used to make this file unchangeable made the decision it exists to
+carry impossible to take.
 
 ### Step 2 — Set the publish environment variable
 
@@ -175,49 +201,88 @@ approval rather than a formality.
 - **Set to:** the literal word `ENABLED`, matching the switch exactly
 - **Not accepted:** `enabled`, `true`, `1`, or anything else — it is a
   character-for-character string comparison against the committed file
-- **Where:** a GitHub repository **variable**, the way `NBA_PROP_DATA_DIR` is set
-- **Status now:** not set
-- **Who:** whoever administers Actions variables
+- **Where:** the `wizardofodds-production` environment, as a **variable**
+- **Status now:** **not set — this is one of the two things left to do**
+- **Who:** whoever administers that environment's variables
+
+The T-20 workflow already reads it: the step that captures, serves and
+publishes binds `NBA_PROP_WOO_PUBLISH: ${{ vars.NBA_PROP_WOO_PUBLISH }}` in its
+`env` block. Until the variable exists that interpolates to the empty string,
+which is a blocker, which is a refusal.
 
 ### Step 3 — Set the approval environment variable
 
 - **Variable:** `NBA_PROP_WOO_PUBLISH_APPROVAL`
-- **Set to:** exactly the approval token chosen in Step 1
-- **Where:** a GitHub repository **secret**, the way `NBA_WOO_SSH_PRIVATE_KEY`
-  is set — this string is the approval, so it should not be readable
-- **Status now:** not set
-- **Who:** whoever administers Actions secrets, ideally not the Step 1 reviewer
+- **Set to:** `live-progressive-refresh-approved-2026-10-24` — exactly the
+  approval token Step 1 chose, character for character
+- **Where:** the `wizardofodds-production` environment, as a **variable**,
+  alongside Step 2 and in the same place
+- **Status now:** **not set — this is the other thing left to do**
+- **Who:** whoever administers that environment's variables, ideally not the
+  Step 1 reviewer
 
-### Step 4 — Ask the publisher for live mode
+The same T-20 step binds
+`NBA_PROP_WOO_PUBLISH_APPROVAL: ${{ vars.NBA_PROP_WOO_PUBLISH_APPROVAL }}`,
+so this needs no code change either.
 
-The first three open the gate. **They do not walk through it.** The daily
-automation asks for `--mode canary` in both publication steps and hands them
-neither approval variable, so all three sign-offs could be complete and the
-preview would still be the only thing published.
+**Why a variable and not a secret.** A secret would look like the more careful
+choice and would be the less honest one. This token is committed in plaintext
+in `ops/wizardofodds_publishing_switch.json`, because that file is where the
+decision is reviewed, so there is nothing to keep confidential and a secret
+would only make the approval harder to audit. What the token actually defends
+against is an *accidental* live publication — a scheduled run that was never
+reviewed, or a workflow that granted itself the approval — and a variable stops
+both, because `ops/validate_workflows.py` refuses any literal value, any name
+mismatch, and any binding outside this one step. It is also one less kind of
+thing for the person doing Steps 2 and 3 to get wrong: both go in the same
+place, under the two names the switch's own `what_enabling_live_requires` uses.
 
-**This is on purpose, and it is enforced.** `ops/validate_workflows.py` refuses
-any workflow line naming `NBA_PROP_WOO_PUBLISH`, `NBA_PROP_WOO_PUBLISH_APPROVAL`,
-`--mode live` or `--stage live`, in its own words because
+### Step 4 — Ask the publisher for live mode — **done**
+
+The first three open the gate. **They do not walk through it.** Something has
+to ask for a live publication, and until this step nothing did: the automation
+asked for `--mode canary` in both publication steps and was handed neither
+approval variable, so all three sign-offs could have been complete and the
+preview would still have been the only thing published.
+
+**That was on purpose, and it was enforced.** `ops/validate_workflows.py`
+refused any workflow line naming `NBA_PROP_WOO_PUBLISH`,
+`NBA_PROP_WOO_PUBLISH_APPROVAL`, `--mode live` or `--stage live`, in its own
+words because
 
 > Live publication is a separate reviewed decision taken through the committed
 > switch and two environment variables. None of them belongs in a workflow file:
 > a schedule that carried the approval would make every scheduled run an
 > activation.
 
-So the live steps are deliberately **not** pre-wired, and nothing but a reviewed
-human commit can wire them. That commit has to do two things together, which is
-the review gate working as designed:
+This step is the reviewed human commit that guard was waiting for, and it did
+the two things it prescribed:
 
-1. Add live publication steps to `.github/workflows/nba_production_lifecycle.yml`,
-   carrying both approval variables. They must be **added** beside the canary
-   steps, not edited into them: that file is additive-only, and
-   `test_a_declared_workflow_change_only_ever_adds_steps` requires every line
-   production already has to survive.
-2. Amend `PUBLICATION_ACTIVATION_TOKENS` in `ops/validate_workflows.py` so the
-   guard permits what the decision has authorised.
+1. The T-20 production workflow's existing capture-serve-publish step now binds
+   both approval variables in its `env` block. **Added**, not edited: that file
+   is additive-only, and both
+   `test_a_declared_workflow_change_only_ever_adds_steps` and the narrowed
+   `test_no_workflow_production_already_has_was_changed` require every line
+   production already has to survive, unedited and in order. No cron, trigger,
+   permission, concurrency group, runner label, checkout ref or existing command
+   moved.
+2. `PUBLICATION_ACTIVATION_TOKENS` is narrowed into the statement it was
+   standing in for. `--mode live` and `--stage live` stay refused in every
+   workflow. Both variables stay refused in every workflow but the T-20 one.
+   In that one, each is accepted **only** as a bare binding of its own name to
+   a `vars.` or `secrets.` reference of the same name, **only** on the step
+   that runs `ops/run_t20_production_controller.py`, **only** with its other
+   half present, and **never** inside a `run:` body.
 
-A reviewer who sees step 2 in a diff knows exactly what is being asked for.
-That is the entire point of the guard.
+What asks for the live publication is `ops/run_progressive_live_refresh.py`,
+invoked by the controller after each window's canary has published and
+validated. It publishes the release that canary validated and refuses if the
+bytes differ. See `docs/wizardofodds/PRODUCTION_AUTOMATION.md` for what each
+window does to the live pointer.
+
+A reviewer who sees point 2 in a diff knows exactly what is being asked for.
+That is still the entire point of the guard, and narrowing it kept that: the
+diff that carries an approval is still a diff a reviewer has to approve.
 
 ### Verifying the gate without opening it
 

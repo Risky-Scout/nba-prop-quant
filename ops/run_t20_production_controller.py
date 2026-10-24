@@ -140,6 +140,64 @@ A refusal is taken before the serving entry point runs. Nothing is priced,
 no release is minted, no pointer is repointed and no ledger row is appended,
 so the release a reader already has is the release a reader keeps. The
 refusal never retracts anything; it only declines to add.
+
+THE LIVE RELEASE, A COMPOSITE REFRESHED PER GAME
+------------------------------------------------
+
+Everything above publishes a canary: a real release, read back and attested,
+in a directory a reader does not fetch. What a reader fetches is the single
+live destination, and this controller now refreshes it once per window.
+
+Each game of the slate stands at its own latest validated window. A game gets
+no card until one of its windows has passed canary, serves T-180 once T-180
+has, and is replaced by T-90, then T-45, then T-20 as each of its own windows
+validates. The live release is the composite of all of them at once, so an
+evening with several tip times can hold one game at T-20 while another is
+still at T-180. One pointer and one URL, as before; what changed is that the
+window a reader is shown is now a fact about each game rather than about the
+whole slate.
+
+The refresh happens immediately after a window's canary feed *and* page have
+both succeeded, and that order is the authorisation rather than a preference.
+``ops/run_progressive_live_refresh.py`` publishes the games of that canary at
+their own window and copies every other game's rows byte for byte out of the
+attested release it was already serving from, so a window with no canary has
+nothing that could authorise it and no row reaches the live root that no
+canary validated. Everything else about a live publication -- the switch, the
+destination confinement, the receipt verification, the row rules, the
+rollback target, the readback, the atomic pointer -- belongs to the frozen
+publisher, which that module calls by name.
+
+Three properties mirror the advisory ones, and the third is new:
+
+* **A live failure is not a T-20 failure.** Nothing on this path raises. A
+  refresh that cannot be made is reported as
+  :data:`OUTCOME_SEGMENT_COMPLETE_LIVE_DEGRADED`, which still succeeds, and
+  that is load-bearing rather than lenient: until both approval variables are
+  set in the ``wizardofodds-production`` environment *every* refresh refuses,
+  and a slate that was captured, served and published must not be a red job
+  because of a decision nobody has carried to the runner yet. The refusal is
+  recorded verbatim, so the receipt and the step summary name both variables.
+* **The prior valid release survives.** The refresh promotes last, after every
+  gate, so a missing capture, a failed serve, a canary that did not validate,
+  a digest that does not match, a row that traces to no attested source, a
+  game that has already tipped or a transport that will not talk all leave the
+  live pointer naming the most recent composite that did validate, unaltered.
+* **No game moves away from its tip.** The offsets descend, so a game may be
+  replaced by a window closer to its own tip and never by one further from it.
+  That is reachable on this runner: pickup has been delayed by hours, so a
+  T-180 invocation can finish after a T-45 one, and without the rule it would
+  walk that game back to the market as it stood three hours before tip -- with
+  every digest agreeing and every readback passing, because what it published
+  is a real validated release. It is simply the wrong one. The rule is applied
+  per game, which is what makes it safe to apply at all: measured against one
+  slate-wide pointer, the first game to reach T-20 would forbid every later
+  game's T-180.
+
+This controller still has no mode option and still publishes canary on its
+own account. What it gained is one invocation of one entry point that has no
+mode argument either, after a canary of the identical bytes, and which refuses
+unless the committed switch and both environment variables agree.
 """
 
 from __future__ import annotations
@@ -279,6 +337,46 @@ ADVISORY_PAGE_PREFIXES: dict[int, str] = {
 T20_FEED_DESTINATION = "wizardofodds_nba_canary"
 
 T20_PAGE_DESTINATION = "wizardofodds_nba_player_props_page_canary"
+
+#: The entry point that replaces the live release with the window that has
+#: just passed canary. Invoked as a subprocess like every other stage, so the
+#: publisher, the attestation match, the ordering rule and the durable record
+#: are the ones that module owns and not a second copy here.
+LIVE_REFRESH_ENTRY_POINT = Path("ops") / "run_progressive_live_refresh.py"
+
+#: The entry point that recomputes the two serving-window validation checks
+#: against this slate's own capture. Invoked as a subprocess like every other
+#: stage, so the checks are the ones adaptive_validation owns rather than a
+#: second copy here that could answer differently.
+WINDOW_GATE_ENTRY_POINT = Path("ops") / "assert_serving_window_gates.py"
+
+#: The windows that refresh the live release, in the order they occur: the
+#: three advisory offsets and then the production one. Composed from the two
+#: tuples above rather than listed again, so a window this controller serves
+#: and a window that can replace the live release cannot come apart.
+#:
+#: Restated here rather than imported from the refresh module, for the reason
+#: :data:`ADVISORY_RECEIPT_MARKER_FIELD` is restated -- that module imports
+#: the publisher, which pulls pandas and the transports behind it, and the
+#: probe must stay light. A test pins the two copies equal.
+PROGRESSIVE_LIVE_OFFSETS_MINUTES: tuple[int, ...] = (
+    *ADVISORY_OFFSETS_MINUTES,
+    PRODUCTION_OFFSET_MINUTES,
+)
+
+#: live mode's own word, held as a constant so the only spelling of it here is
+#: ``"--mode", LIVE_PUBLICATION_MODE`` -- two arguments and never the one
+#: string a workflow is forbidden to contain. The distinction is not cosmetic:
+#: what is forbidden is a *schedule* choosing live, and this controller
+#: chooses it only after a canary of the identical bytes has validated.
+LIVE_PUBLICATION_MODE = "live"
+
+#: The single live feed and page destinations, replaced once per window. One
+#: of each, which is the whole design: a reader opens one URL and what changes
+#: through the evening is which release is current there.
+LIVE_FEED_DESTINATION = "wizardofodds_nba_live"
+
+LIVE_PAGE_DESTINATION = "wizardofodds_nba_player_props_page_live"
 
 #: How much room an advisory window needs before the next T-20 capture this
 #: segment owns.
@@ -421,6 +519,19 @@ OUTCOME_SEGMENT_COMPLETE = "T20_SEGMENT_COMPLETE"
 #: the step summary leads with the count.
 OUTCOME_SEGMENT_COMPLETE_ADVISORY_DEGRADED = "T20_SEGMENT_COMPLETE_ADVISORY_DEGRADED"
 
+#: The segment finished its T-20 work, published every canary it was meant to,
+#: and something in the live refresh did not happen.
+#:
+#: Its own outcome, for the same reason the advisory one has its own, and with
+#: one addition: this is the outcome a segment reports when the two approval
+#: variables are not set, which is the state this repository is in until
+#: somebody sets them in the wizardofodds-production environment. So it has to
+#: be a success -- the canary is published, the slate is served, the T-20
+#: deliverable is complete -- and it has to be impossible to mistake for a
+#: clean run. The receipt names every live refusal with the message the
+#: refresh wrote, which names both variables.
+OUTCOME_SEGMENT_COMPLETE_LIVE_DEGRADED = "T20_SEGMENT_COMPLETE_LIVE_DEGRADED"
+
 OUTCOME_MORNING_NOT_READY = "MORNING_PRODUCTION_NOT_READY"
 
 #: Distinguished from the outcome above because the operator action differs.
@@ -439,6 +550,12 @@ OUTCOME_REQUIRED_SNAPSHOT_MISSING = "REQUIRED_T20_SNAPSHOT_MISSING"
 OUTCOME_MISSED_WINDOW = "MISSED_T20_WINDOW"
 OUTCOME_UNSUPPORTED_TIME = "UNSUPPORTED_T20_TIME"
 OUTCOME_FAILED = "T20_CONTROLLER_FAILED"
+
+#: A window whose serving-window validation checks did not pass. Its own
+#: outcome rather than the generic failure, because the operator response is
+#: different: the capture is there and the fit is sound, and what failed is
+#: the protocol compatibility of that capture with what serving requires.
+OUTCOME_SERVING_WINDOW_GATES_REFUSED = "T20_SERVING_WINDOW_GATES_REFUSED"
 
 #: A release this run would have made for a game that has already started.
 #:
@@ -479,6 +596,7 @@ OUTCOMES_THAT_SUCCEED: frozenset[str] = frozenset(
         OUTCOME_NO_WINDOWS,
         OUTCOME_SEGMENT_COMPLETE,
         OUTCOME_SEGMENT_COMPLETE_ADVISORY_DEGRADED,
+        OUTCOME_SEGMENT_COMPLETE_LIVE_DEGRADED,
     }
 )
 
@@ -541,6 +659,73 @@ ADVISORY_OUTCOMES_WITHOUT_FAULT: frozenset[str] = frozenset(
         ADVISORY_OUTCOME_UNSUPPORTED_TIME,
         ADVISORY_OUTCOME_WITHDRAWN,
         ADVISORY_OUTCOME_DEFERRED,
+    }
+)
+
+#: What one window's live refresh is recorded as. Restated from
+#: ``run_progressive_live_refresh`` for the reason the advisory marker is
+#: restated, and pinned against that module's own constants by a test.
+LIVE_OUTCOME_ESTABLISHED = "LIVE_ESTABLISHED"
+LIVE_OUTCOME_REPLACED = "LIVE_REPLACED"
+LIVE_OUTCOME_ALREADY_CURRENT = "LIVE_ALREADY_CURRENT"
+LIVE_OUTCOME_PROMOTED_THEN_INCOMPLETE = "LIVE_PROMOTED_THEN_INCOMPLETE"
+LIVE_OUTCOME_REFUSED = "LIVE_REFUSED"
+
+#: The ordering rule declined this window because every game in it is already
+#: standing at one closer to its own tip. Not a defect: a re-run of a window
+#: that already published, or a delayed invocation whose games have since been
+#: advanced by a later window, asks to move those games away from tip and is
+#: told no, which is the ordering rule working.
+#:
+#: Rare now, and that is the point of the per-game rule. A window belongs to a
+#: game and its offset is measured from that game's own tip, so a slate with
+#: several tip times interleaves them -- the first game's T-20 capture is
+#: taken before the last game's T-180 capture, which is a later moment in the
+#: evening and an earlier point in its own game's window. Decided against one
+#: slate-wide pointer that was the ordinary evening case and it cost every
+#: later game its early windows; decided per game it only fires when the
+#: particular games asked for are genuinely already closer in.
+LIVE_OUTCOME_ALREADY_CLOSER_TO_TIP = "LIVE_ALREADY_CLOSER_TO_TIP"
+
+#: The live feed was refreshed and the page a reader actually opens was not.
+#: Its own outcome because it is the worst of the live failures: the release
+#: is current, the digests agree, and the page is the window before. Nothing
+#: a reader sees is wrong -- the page is a real validated release -- but it is
+#: not the one the feed beside it names.
+LIVE_OUTCOME_PAGE_FAILED = "LIVE_PAGE_FAILED"
+
+#: The live refresh was not attempted because this invocation had already
+#: refreshed live from the identical priced artifact for this window. The
+#: live twin of :data:`PUBLICATION_OUTCOME_SKIPPED`, and recorded only after
+#: a refresh that succeeded on those bytes: a refresh that failed on them is
+#: retried, because the pointer is then one window behind for a reason this
+#: invocation could still fix.
+LIVE_OUTCOME_SKIPPED = "LIVE_SKIPPED_ALREADY_CURRENT_THIS_STATE"
+
+#: Live outcomes that are not a defect. Only an outcome outside this set
+#: degrades the segment. The first three are the ones after which the live
+#: pointer names this window's release, the fourth is this invocation having
+#: already put it there, and the fifth is the ordering rule leaving a release
+#: closer to tip alone.
+LIVE_OUTCOMES_WITHOUT_FAULT: frozenset[str] = frozenset(
+    {
+        LIVE_OUTCOME_ESTABLISHED,
+        LIVE_OUTCOME_REPLACED,
+        LIVE_OUTCOME_ALREADY_CURRENT,
+        LIVE_OUTCOME_SKIPPED,
+        LIVE_OUTCOME_ALREADY_CLOSER_TO_TIP,
+    }
+)
+
+#: The live outcomes after which there is a release to build the page from.
+#: Narrower than the faultless set on purpose: the ordering rule declining a
+#: window is not a fault and is also not a publication, so the page stage is
+#: not reached and the page is not reported as rebuilt.
+LIVE_OUTCOMES_THAT_PUBLISH: frozenset[str] = frozenset(
+    {
+        LIVE_OUTCOME_ESTABLISHED,
+        LIVE_OUTCOME_REPLACED,
+        LIVE_OUTCOME_ALREADY_CURRENT,
     }
 )
 
@@ -1517,6 +1702,7 @@ class T20Controller:
         self.pre_tip_margins: list[dict[str, Any]] = []
 
         self.publications: list[dict[str, Any]] = []
+        self.window_gates: list[dict[str, Any]] = []
         self.serving: list[dict[str, Any]] = []
         self.distributions: list[dict[str, Any]] = []
         self.feed: list[dict[str, Any]] = []
@@ -1529,6 +1715,11 @@ class T20Controller:
         #: whether it was published, held, missed or failed.
         self.advisory: list[dict[str, Any]] = []
 
+        #: One record per live refresh this segment attempted, in order, so
+        #: "which window is live and what happened on the way there" is
+        #: answerable from the receipt without opening the destination.
+        self.live: list[dict[str, Any]] = []
+
         self._published_priced_digest: str | None = None
 
         #: Publication idempotency, per destination. The T-20 digest and each
@@ -1536,6 +1727,34 @@ class T20Controller:
         #: bytes published to two different destinations are two different
         #: releases and skipping the second would leave a destination empty.
         self._published_advisory_digests: dict[int, str] = {}
+
+        #: The priced digest the live refresh last *succeeded* on, per window.
+        #: Separate from the publication digests above because succeeding at a
+        #: canary and succeeding at live are different facts: the canary can
+        #: publish and the live refresh refuse, which is exactly the state
+        #: this repository is in until both approval variables are set, and in
+        #: that state a canary skip must not be read as live being current.
+        self._live_refreshed_digests: dict[int, str] = {}
+
+        #: The feed publication receipt each window's live refresh is the live
+        #: half of, retained so a repeat of identical priced bytes can still
+        #: retry a live refresh that failed. The canary stage writes one per
+        #: stage directory and the skip path has none of its own.
+        self._feed_receipts: dict[int, Path] = {}
+
+        #: The serving receipt behind each of those, for the same reason: the
+        #: publisher re-hashes the priced artifact against it.
+        self._serving_receipts: dict[int, Path] = {}
+
+        #: The capture every window's prices were taken from, by window id.
+        #: Filled in at the one place that already knows it -- the bundle
+        #: selection the pricing path itself performs -- and read only when a
+        #: live refresh is handed a window, so that the composite manifest can
+        #: name the snapshot behind each game's card. Carried rather than
+        #: re-selected because selecting again would be a second answer to a
+        #: question already answered, and a composite may not name a capture
+        #: nobody can find again.
+        self._capture_identity: dict[str, dict[str, str]] = {}
 
         #: Advisory windows captured and not yet served, newest capture last.
         #: Held rather than served immediately when the room before the next
@@ -1900,6 +2119,12 @@ class T20Controller:
             if str(record.get("outcome")) == ADVISORY_OUTCOME_PUBLISHED
         ]
 
+        live_faults = [
+            record
+            for record in self.live
+            if str(record.get("outcome")) not in LIVE_OUTCOMES_WITHOUT_FAULT
+        ]
+
         outstanding = [
             str(row["window_id"])
             for row in self._unserved_rows(plan["rows"])
@@ -1978,12 +2203,32 @@ class T20Controller:
                 f"own confined canary destinations and {len(faults)} failed"
             )
 
+        if self.live:
+            reason += (
+                f"; {len(self.live) - len(live_faults)} of {len(self.live)} "
+                "live refresh(es) left the live release naming the window "
+                "that published"
+            )
+
+            if live_faults:
+                reason += (
+                    ". The live refusals are in live_refreshes with the "
+                    "message each one wrote; the release already live is "
+                    "still serving"
+                )
+
+        # Advisory first when both degraded, because it is the broader
+        # failure: an advisory window that did not publish has no canary and
+        # so could not have refreshed live either, and the counts of both are
+        # in the receipt whichever word the outcome carries.
         return self._receipt(
             plan=plan,
             started_at=started_at,
             outcome=(
                 OUTCOME_SEGMENT_COMPLETE_ADVISORY_DEGRADED
                 if faults
+                else OUTCOME_SEGMENT_COMPLETE_LIVE_DEGRADED
+                if live_faults
                 else OUTCOME_SEGMENT_COMPLETE
             ),
             reason=reason,
@@ -2105,6 +2350,11 @@ class T20Controller:
             }
         )
 
+        # The post-tip guard is about the windows the release is *for*, and
+        # those are the ones being recovered -- not every row handed in. A row
+        # this pass already refused is not part of the publication, so letting
+        # it reach the guard would make one excluded window refuse the whole
+        # recovery, which is the blast radius the isolation above removes.
         self._serve_and_publish(
             stage_dir, windows=recovering, readiness=readiness
         )
@@ -2718,12 +2968,14 @@ class T20Controller:
 
             return None
 
-        return {
-            "capture_id": bundle.capture_id,
-            "captured_at_utc": bundle.captured_at,
-            "game_id": int(row["game_id"]),
-            "window_id": bundle.window_id,
-        }
+        return self._remember_capture(
+            {
+                "capture_id": bundle.capture_id,
+                "captured_at_utc": bundle.captured_at,
+                "game_id": int(row["game_id"]),
+                "window_id": bundle.window_id,
+            }
+        )
 
     def _drain_advisory(
         self, *, readiness: dict[str, Any], next_t20_due: datetime | None
@@ -2933,6 +3185,19 @@ class T20Controller:
                 },
             )
 
+            retained = self._feed_receipts.get(offset)
+
+            if retained is not None:
+                self._refresh_live(
+                    stage_dir,
+                    rows,
+                    offset=offset,
+                    canary_destination=feed_destination,
+                    feed_receipt=retained,
+                    serving_receipt=self._serving_receipts[offset],
+                    priced_digest=digest,
+                )
+
             self._advisory_held[offset] = []
 
             return
@@ -3048,6 +3313,16 @@ class T20Controller:
                 "serving_receipt_path": str(serving_receipt),
                 "windows_priced": windows,
             },
+        )
+
+        self._refresh_live(
+            stage_dir,
+            rows,
+            offset=offset,
+            canary_destination=feed_destination,
+            feed_receipt=feed_receipt,
+            serving_receipt=serving_receipt,
+            priced_digest=digest,
         )
 
         self._advisory_held[offset] = []
@@ -3241,6 +3516,285 @@ class T20Controller:
                 row, outcome=outcome, reason=reason, extra=extra
             )
 
+    # -- the live release ----------------------------------------------
+
+    def _record_live(
+        self,
+        *,
+        offset: int,
+        outcome: str,
+        reason: str,
+        extra: dict[str, Any] | None = None,
+    ) -> None:
+        self.live.append(
+            {
+                "feed_destination": LIVE_FEED_DESTINATION,
+                "final_pregame_window": (
+                    int(offset) == min(PROGRESSIVE_LIVE_OFFSETS_MINUTES)
+                ),
+                "observed_at_utc": self.clock().isoformat(),
+                "offset_minutes": int(offset),
+                "outcome": outcome,
+                "page_destination": LIVE_PAGE_DESTINATION,
+                "reason": reason,
+                **(extra or {}),
+            }
+        )
+
+    def _refresh_live(
+        self,
+        stage_dir: Path,
+        rows: Sequence[dict[str, Any]],
+        *,
+        offset: int,
+        canary_destination: str,
+        feed_receipt: Path,
+        serving_receipt: Path,
+        priced_digest: str,
+    ) -> None:
+        """Advance this group's games to the window that has just published.
+
+        Called immediately after a window's canary feed and page have both
+        succeeded, and in that order on purpose: what authorises a live
+        publication is a canary of the identical bytes, so the canary has to
+        have happened and have validated before this is reachable at all.
+
+        Nothing here raises. A live refresh that cannot be made degrades the
+        segment and never fails it, which is the same asymmetry the advisory
+        path rests on and is load-bearing for a different reason here: until
+        both approval variables are set in the wizardofodds-production
+        environment, *every* live refresh refuses, and a slate that was
+        captured, served and published must not be a red job because of a
+        decision nobody has carried to the runner yet. The refusal is recorded
+        verbatim, so the receipt and the step summary name both variables.
+
+        The tips are this group's own, and so are the games this refresh
+        advances. A release is cumulative -- one serve at an offset prices
+        every game with an eligible capture at that offset -- so by the time
+        the last T-20 group of a twelve-game slate publishes, the first game
+        tipped two hours earlier and its rows are correctly in the release
+        because they were priced before their own tip. The live slate the
+        refresh composes holds every game at its own latest validated window,
+        so handing it this group advances this group and leaves every other
+        game standing exactly where its own last successful refresh put it.
+        Each window is handed the capture its prices were selected from as
+        well as its tip, because the composite manifest names the snapshot
+        behind every game's card and this controller is the only thing that
+        knows it.
+        """
+        self._feed_receipts[offset] = Path(feed_receipt)
+
+        self._serving_receipts[offset] = Path(serving_receipt)
+
+        if priced_digest and priced_digest == self._live_refreshed_digests.get(
+            offset
+        ):
+            self._record_live(
+                offset=offset,
+                outcome=LIVE_OUTCOME_SKIPPED,
+                reason=(
+                    "this invocation already refreshed the live release from "
+                    f"the identical T-{offset} priced artifact, so the "
+                    "release it would publish is the release already serving"
+                ),
+                extra={"priced_market_artifact_sha256": priced_digest},
+            )
+
+            return
+
+        live_receipt = stage_dir / "live_refresh.json"
+
+        label = f"{LIVE_REFRESH_ENTRY_POINT} (T-{offset})"
+
+        command = [
+            sys.executable,
+            str(LIVE_REFRESH_ENTRY_POINT),
+            "--slate-date",
+            self.slate_date,
+            "--data-root",
+            str(self.data_root),
+            "--snapshot-offset-minutes",
+            str(offset),
+            "--canary-feed-receipt",
+            str(feed_receipt),
+            "--serving-receipt",
+            str(serving_receipt),
+            "--canary-destination-name",
+            canary_destination,
+            "--live-feed-destination-name",
+            LIVE_FEED_DESTINATION,
+            "--live-page-destination-name",
+            LIVE_PAGE_DESTINATION,
+            "--receipt-path",
+            str(live_receipt),
+        ]
+
+        for row in rows:
+            tip = row["tip_utc"]
+
+            window_id = str(row["window_id"])
+
+            command += [
+                "--window-tip-utc",
+                f"{window_id}="
+                + (tip.isoformat() if hasattr(tip, "isoformat") else str(tip)),
+            ]
+
+            # Omitted rather than guessed when selection never recorded one.
+            # The refresh refuses an advancing window it cannot name a
+            # capture for, which is the right outcome: a card on the served
+            # root whose snapshot nobody can find again is worse than no
+            # card, and the refusal degrades the segment without touching
+            # what is already live.
+            capture = self._capture_identity.get(window_id)
+
+            if capture is not None:
+                command += [
+                    "--window-capture",
+                    "{}={}@{}".format(
+                        window_id,
+                        capture["capture_id"],
+                        capture["captured_at_utc"],
+                    ),
+                ]
+
+        if self.summary_path is not None:
+            command += ["--summary-path", str(self.summary_path)]
+
+        result = self.run_command(
+            command, environment=self._environment(), cwd=self.project_root
+        )
+
+        refreshed = self._live_receipt(live_receipt)
+
+        if refreshed is None:
+            self._record_live(
+                offset=offset,
+                outcome=LIVE_OUTCOME_REFUSED,
+                reason=(
+                    f"{label} exited {result.returncode} and wrote no "
+                    f"readable receipt at {live_receipt}: "
+                    + ((result.stderr or result.stdout) or "")[-1500:]
+                ),
+            )
+
+            return
+
+        outcome = str(refreshed.get("live_outcome") or LIVE_OUTCOME_REFUSED)
+
+        released = refreshed.get("release") or {}
+
+        shared = {
+            "canary_destination": canary_destination,
+            "priced_market_artifact_sha256": priced_digest,
+            "release_id": str(released.get("release_id") or ""),
+            "rows_sha256": str(released.get("rows_sha256") or ""),
+        }
+
+        # Two things end here, and only one of them is a fault. A refusal is
+        # recorded and degrades the segment; the ordering rule declining a
+        # window is recorded and does not. Both stop before the page for the
+        # same reason: there is no release to build one from, and rebuilding
+        # the page from a release that did not change would say the page had
+        # been refreshed when nothing was.
+        if result.returncode != 0 or outcome not in LIVE_OUTCOMES_THAT_PUBLISH:
+            self._record_live(
+                offset=offset,
+                outcome=outcome,
+                reason=str(
+                    refreshed.get("message") or refreshed.get("reason") or ""
+                )
+                or f"{label} exited {result.returncode}",
+                extra={
+                    **shared,
+                    "observed_live_release_id": str(
+                        refreshed.get("observed_live_release_id") or ""
+                    ),
+                },
+            )
+
+            return
+
+        page_receipt = stage_dir / "live_wizardofodds_page.json"
+
+        page = self.run_command(
+            [
+                sys.executable,
+                str(PUBLICATION_ENTRY_POINT),
+                "--stage",
+                "page",
+                "--mode",
+                LIVE_PUBLICATION_MODE,
+                "--slate-date",
+                self.slate_date,
+                "--feed-receipt",
+                str(live_receipt),
+                "--receipt-path",
+                str(page_receipt),
+                *(
+                    ("--summary-path", str(self.summary_path))
+                    if self.summary_path is not None
+                    else ()
+                ),
+            ],
+            environment=self._environment(),
+            cwd=self.project_root,
+        )
+
+        built = self._live_receipt(page_receipt)
+
+        if page.returncode != 0 or (built or {}).get(
+            "outcome"
+        ) != PUBLICATION_OUTCOME_PUBLISHED:
+            self._record_live(
+                offset=offset,
+                outcome=LIVE_OUTCOME_PAGE_FAILED,
+                reason=(
+                    f"the T-{offset} release {shared['release_id']} is live "
+                    "and the page a reader opens was not rebuilt from it "
+                    f"({PUBLICATION_ENTRY_POINT} --stage page exited "
+                    f"{page.returncode}): "
+                    + (
+                        str((built or {}).get("message") or "")
+                        or ((page.stderr or page.stdout) or "")[-1500:]
+                    )
+                ),
+                extra={**shared, "live_outcome": outcome},
+            )
+
+            return
+
+        self._live_refreshed_digests[offset] = priced_digest or ""
+
+        self._record_live(
+            offset=offset,
+            outcome=outcome,
+            reason=str(refreshed.get("reason") or ""),
+            extra={
+                **shared,
+                "page_sha256": str((built or {}).get("page_sha256") or ""),
+                "previous_release_id": str(
+                    refreshed.get("previous_release_id") or ""
+                ),
+            },
+        )
+
+    def _live_receipt(self, path: Path) -> dict[str, Any] | None:
+        """One receipt, read without refusing. ``None`` when there is none.
+
+        The live twin of :meth:`_read_receipt`, and it does not raise for the
+        same reason :meth:`_advisory_stage` does not: a live refresh writes a
+        receipt on the way out of a refusal as well as a success, so reading
+        it is how the refusal gets into the segment's own record. A receipt
+        that is missing or unreadable is itself recorded, by the caller.
+        """
+        try:
+            document = json.loads(Path(path).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+
+        return document if isinstance(document, dict) else None
+
     # -- one due group -------------------------------------------------
 
     def _capture_group(
@@ -3338,12 +3892,29 @@ class T20Controller:
         except RuntimeError as error:
             return None, error
 
-        return {
-            "capture_id": bundle.capture_id,
-            "captured_at_utc": bundle.captured_at,
-            "game_id": int(game_id),
-            "window_id": bundle.window_id,
-        }, None
+        return self._remember_capture(
+            {
+                "capture_id": bundle.capture_id,
+                "captured_at_utc": bundle.captured_at,
+                "game_id": int(game_id),
+                "window_id": bundle.window_id,
+            }
+        ), None
+
+    def _remember_capture(self, bundle: dict[str, Any]) -> dict[str, Any]:
+        """Keep a selected bundle's capture identity under its window id.
+
+        Returns the bundle so the two selection sites can keep reading as one
+        expression. Last write wins and cannot differ: ``select_capture_bundle``
+        accepts exactly one scheduled capture per window and recomputes its
+        id, so a second selection of the same window is the same answer.
+        """
+        self._capture_identity[str(bundle["window_id"])] = {
+            "capture_id": str(bundle["capture_id"]),
+            "captured_at_utc": str(bundle["captured_at_utc"]),
+        }
+
+        return bundle
 
     def _verify_captured(
         self, game_ids: Sequence[int], *, window_ids: Sequence[str]
@@ -3417,6 +3988,51 @@ class T20Controller:
 
         return result
 
+    def _assert_serving_window_gates(self, stage_dir: Path) -> None:
+        """Refuse this window when a serving-window validation check fails.
+
+        Invoked rather than reimplemented, for the reason every other stage
+        here is: a second answer to "is this capture what the serving
+        protocol requires" could disagree with the first, and the one that
+        decides is the module that owns the checks.
+
+        The refusal is a hard one and is placed before the slate is served,
+        so a window that cannot satisfy them produces no priced artifact at
+        all rather than one nothing is allowed to publish.
+        """
+        status = stage_dir / "serving_window_gates.json"
+
+        command = [
+            sys.executable,
+            str(WINDOW_GATE_ENTRY_POINT),
+            "--slate-date",
+            self.slate_date,
+            "--data-root",
+            str(self.data_root),
+            "--status-path",
+            str(status),
+        ]
+
+        if self.registry_root is not None:
+            command += ["--registry-root", str(self.registry_root)]
+
+        if self.summary_path is not None:
+            command += ["--summary-path", str(self.summary_path)]
+
+        self._stage(
+            str(WINDOW_GATE_ENTRY_POINT),
+            command,
+            outcome=OUTCOME_SERVING_WINDOW_GATES_REFUSED,
+        )
+
+        self.window_gates.append(
+            {
+                "slate_date": self.slate_date,
+                "status_path": str(status),
+                "window_offset_minutes": self.offset_minutes,
+            }
+        )
+
     def _serve_and_publish(
         self,
         stage_dir: Path,
@@ -3438,6 +4054,16 @@ class T20Controller:
         self.pre_tip_margins += assert_no_window_has_tipped(
             windows, now=self.clock()
         )
+
+        # The two validation checks a morning fit cannot answer, asked here
+        # where the capture they are about exists. They were promotion
+        # prerequisites, which made the daily fit permanently unpromotable
+        # because they ask about an evening capture of a morning fit; the
+        # invariant they carry is enforced at this window instead, recomputed
+        # against this window's own capture rather than read off a record
+        # written for an earlier slate. Before the slate is served, so a
+        # window that fails them produces no priced artifact to publish.
+        self._assert_serving_window_gates(stage_dir)
 
         serving_receipt = stage_dir / "incumbent_serving.json"
 
@@ -3564,6 +4190,27 @@ class T20Controller:
                 priced_digest=priced_digest,
             )
 
+            # The canary is current and live may not be. A canary skip says
+            # nothing about the live pointer: the canary can publish while the
+            # live refresh refuses, which is the state this repository is in
+            # until both approval variables are set, so the refresh is asked
+            # again from the receipt the earlier publication left behind. It
+            # skips itself when it has already succeeded on these bytes.
+            retained = self._feed_receipts.get(self.offset_minutes)
+
+            if retained is not None:
+                self._refresh_live(
+                    stage_dir,
+                    windows,
+                    offset=self.offset_minutes,
+                    canary_destination=T20_FEED_DESTINATION,
+                    feed_receipt=retained,
+                    serving_receipt=self._serving_receipts[
+                        self.offset_minutes
+                    ],
+                    priced_digest=priced_digest,
+                )
+
             return
 
         feed_command = [
@@ -3659,6 +4306,16 @@ class T20Controller:
         )
 
         self._published_priced_digest = priced_digest or None
+
+        self._refresh_live(
+            stage_dir,
+            windows,
+            offset=self.offset_minutes,
+            canary_destination=T20_FEED_DESTINATION,
+            feed_receipt=feed_receipt,
+            serving_receipt=serving_receipt,
+            priced_digest=priced_digest,
+        )
 
     def _record_served_windows(
         self,
@@ -3886,13 +4543,33 @@ class T20Controller:
             "deferred_to_later_segment": self.deferred,
             "distribution_outcomes": self.distributions,
             "feed_publication_outcomes": self.feed,
+            "serving_window_gate_outcomes": self.window_gates,
             "final_outcome": outcome,
             "finish_time_utc": finished_at.isoformat(),
             "games_discovered": plan["games_discovered"],
+            "live_feed_destination": LIVE_FEED_DESTINATION,
+            "live_page_destination": LIVE_PAGE_DESTINATION,
+            "live_refreshes": self.live,
+            "live_refreshes_with_faults": [
+                record
+                for record in self.live
+                if str(record.get("outcome"))
+                not in LIVE_OUTCOMES_WITHOUT_FAULT
+            ],
+            "live_release_id": next(
+                (
+                    str(record.get("release_id") or "")
+                    for record in reversed(self.live)
+                    if str(record.get("outcome")) in LIVE_OUTCOMES_WITHOUT_FAULT
+                    and record.get("release_id")
+                ),
+                "",
+            ),
             "morning_readiness": readiness,
             "offset_minutes": self.offset_minutes,
             "page_publication_outcomes": self.page,
             "production_sha": self.production_sha,
+            "progressive_live_offsets": list(PROGRESSIVE_LIVE_OFFSETS_MINUTES),
             "publication_mode": PUBLICATION_MODE,
             "reason": reason,
             "rescheduled_windows": self.rescheduled,
@@ -3987,6 +4664,20 @@ def render(receipt: dict[str, Any]) -> str:
             or "none",
         ),
         ("publication mode", receipt.get("publication_mode")),
+        ("live release", receipt.get("live_release_id") or "none"),
+        (
+            "live refreshes",
+            ", ".join(
+                f"T-{record.get('offset_minutes')} "
+                f"{record.get('outcome')}"
+                for record in receipt.get("live_refreshes") or []
+            )
+            or "none",
+        ),
+        (
+            "live failures",
+            len(receipt.get("live_refreshes_with_faults") or []),
+        ),
         (
             "advisory windows served",
             ", ".join(
@@ -4073,6 +4764,38 @@ def render(receipt: dict[str, Any]) -> str:
                 reason=str(record.get("reason") or "").replace("|", "/")[:300],
             )
             for record in advisory
+        ]
+
+    refreshes = receipt.get("live_refreshes") or []
+
+    if refreshes:
+        lines += [
+            "",
+            "### The live release",
+            "",
+            (
+                "One live destination, replaced by each window that passes "
+                "canary: T-180 establishes it, T-90, T-45 and T-20 replace "
+                "it, and T-20 is the final pregame version. Every refresh "
+                "publishes the bytes its own canary validated, matched on "
+                "the rows digest. A refresh that cannot be made leaves the "
+                "most recent release that did validate serving, and degrades "
+                "this report without failing the segment."
+            ),
+            "",
+            "| window | outcome | release | replaced | why |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+
+        lines += [
+            "| T-{offset} | {outcome} | {release} | {previous} | {reason} |".format(
+                offset=record.get("offset_minutes"),
+                outcome=record.get("outcome"),
+                release=record.get("release_id") or "-",
+                previous=record.get("previous_release_id") or "-",
+                reason=str(record.get("reason") or "").replace("|", "/")[:300],
+            )
+            for record in refreshes
         ]
 
     return "\n".join(lines) + "\n"

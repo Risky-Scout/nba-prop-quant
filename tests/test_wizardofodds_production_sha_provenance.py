@@ -252,7 +252,10 @@ def test_the_manifest_carries_the_receipts_code_sha_exactly(tmp_path: Path):
 
     assert published["manifest"]["model_authority"] == publisher.MODEL_AUTHORITY
     assert published["manifest"]["candidate_authority"] == publisher.CANDIDATE_AUTHORITY
-    assert published["receipt"]["live_publishing"] == publisher.STATE_DISABLED
+    # The state the switch records, not a claim about this run, which is a
+    # canary.
+    assert published["receipt"]["live_publishing"] == publisher.STATE_ENABLED
+    assert published["receipt"]["mode"] == publisher.MODE_CANARY
 
 
 def test_a_different_valid_source_sha_propagates_unchanged(tmp_path: Path):

@@ -11,6 +11,7 @@ code on the self-hosted machine that holds production state.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -78,14 +79,68 @@ PAGE_STAGE_FLAG = "--stage page"
 PAGE_PIN_ARGUMENT = "--feed-receipt"
 
 # Live publication is a separate reviewed decision taken through the committed
-# switch and two environment variables. None of them belongs in a workflow
-# file: a schedule that carried the approval would make every scheduled run an
-# activation.
-PUBLICATION_ACTIVATION_TOKENS = (
-    "NBA_PROP_WOO_PUBLISH",
-    "NBA_PROP_WOO_PUBLISH_APPROVAL",
+# switch and two environment variables.
+#
+# The flags stay forbidden everywhere and unconditionally. A workflow step that
+# said "--mode live" would be a schedule deciding to publish live, which is the
+# thing this check was written to prevent, and it is still prevented: the live
+# refresh is reached through the T-20 controller, which chooses the mode itself
+# after a canary of the same bytes has validated.
+PUBLICATION_ACTIVATION_FLAGS: tuple[str, ...] = (
     "--mode live",
     "--stage live",
+)
+
+# The two variables are a different thing from the flags, and treating them as
+# the same thing is what this list used to get wrong.
+#
+# They are not a decision. The decision is modes.live.state in
+# ops/wizardofodds_publishing_switch.json, which is reviewed in a commit. These
+# two carry it to the runner, they live in the wizardofodds-production GitHub
+# environment, and a workflow is the only thing that can hand an environment
+# variable to a subprocess -- ${{ vars.X }} and ${{ secrets.X }} do not reach a
+# step's environment unless that step binds them. So a blanket ban on the names
+# did not keep the approval out of the schedule; it kept the approval from ever
+# arriving, which left the committed decision unreachable and the whole live
+# path dead with no way to say so.
+#
+# They are therefore permitted in exactly one shape, in exactly one workflow,
+# and the shape is checked rather than described: an env binding of the
+# identically named vars or secrets expression, on the step that runs the T-20
+# controller, both of them or neither, and never anywhere inside a run body.
+# Under that rule a workflow still cannot decide anything -- it names two
+# variables whose values it cannot see and which refuse unless they agree with
+# the committed switch -- and the schedule still cannot publish live on its own
+# account, because every other way of reaching live mode is forbidden above.
+PUBLICATION_APPROVAL_VARIABLES: tuple[str, ...] = (
+    "NBA_PROP_WOO_PUBLISH",
+    "NBA_PROP_WOO_PUBLISH_APPROVAL",
+)
+
+# Kept as the union of the two, because what callers ask this module is "what
+# is live activation material" and the answer is still all four. What changed
+# is not the list; it is that two of the four now have a permitted shape.
+PUBLICATION_ACTIVATION_TOKENS = (
+    *PUBLICATION_APPROVAL_VARIABLES,
+    *PUBLICATION_ACTIVATION_FLAGS,
+)
+
+#: The only workflow permitted to carry the two approval variables, because it
+#: is the only one whose job reaches the live refresh at all: the T-20
+#: controller is what publishes a canary first, proves the digests agree and
+#: then replaces the live release. The lifecycle workflow publishes a canary
+#: and stops there, so an approval in it would be an approval nothing uses.
+APPROVAL_CARRYING_WORKFLOW = T20_WORKFLOW
+
+#: The one permitted spelling of an approval binding. Pinned as a pattern
+#: rather than left to a reviewer's eye because every near miss is a real
+#: failure mode: a literal value would commit the approval, a mismatched name
+#: would bind the wrong variable and refuse with a message about the right one,
+#: and a value read from anywhere other than ``vars`` or ``secrets`` would be
+#: an approval this repository could grant itself.
+APPROVAL_BINDING = re.compile(
+    r"^ +(?P<name>NBA_PROP_WOO_PUBLISH(?:_APPROVAL)?): "
+    r"\$\{\{ (?:vars|secrets)\.(?P<source>[A-Z0-9_]+) \}\}$"
 )
 
 # ----------------------------------------------------------------------
@@ -129,8 +184,18 @@ LIFECYCLE_ENTRY_POINTS: tuple[str, ...] = (
 #: run. A workflow step that invoked the advisory entry point directly would
 #: have none of those guarantees in front of it, which is a different reason
 #: from the lifecycle's and so is a different list.
+#:
+#: The live refresh is here for the sharper version of the same reason. What
+#: authorises a live publication is a canary of the identical bytes that has
+#: already validated, and the controller is what publishes that canary, holds
+#: its receipt and hands it over. A step invoking the refresh directly would
+#: have no canary receipt to offer and so would refuse -- but it would refuse
+#: for a reason about a missing file rather than about having skipped the
+#: ordering, the reservation and the canary that precede it, and the schedule
+#: is not the place that decision is taken.
 CONTROLLER_OWNED_ENTRY_POINTS: tuple[str, ...] = (
     "ops/run_advisory_window_serving.py",
+    "ops/run_progressive_live_refresh.py",
 )
 
 T20_FORBIDDEN_ENTRY_POINTS: tuple[str, ...] = (
@@ -351,14 +416,7 @@ def t20_problems(name: str, on: dict, jobs: dict) -> list[str]:
             "scheduled run would use the default branch"
         )
 
-    for token in PUBLICATION_ACTIVATION_TOKENS:
-        for number, line in enumerate(text.splitlines(), 1):
-            if token in line and not line.strip().startswith("#"):
-                found.append(
-                    f"{name}:{number}: names {token!r}, which is live "
-                    "publication activation material and belongs to a "
-                    "reviewed decision rather than to a schedule"
-                )
+    found += activation_problems(name, jobs)
 
     for job_name, job in jobs.items():
         labels = runner_labels(job)
@@ -558,16 +616,125 @@ def publication_order_problems(name: str, jobs: dict) -> list[str]:
                     "this run published"
                 )
 
+    found += activation_problems(name, jobs)
+
+    return found
+
+
+def activation_problems(name: str, jobs: dict) -> list[str]:
+    """Where live activation material may appear, and in what shape.
+
+    One function for both workflows that publish, because the rule is about
+    the material rather than about the schedule and stating it twice is how
+    the two copies come to disagree.
+
+    The flags are refused everywhere. The two approval variables are refused
+    everywhere too, except as an env binding of the identically named vars or
+    secrets expression on the step that runs the T-20 controller -- which is
+    the only place a committed decision can reach the process that acts on it,
+    and is nothing like a decision itself: the workflow names two variables it
+    cannot read, whose values it cannot set, and which refuse unless they
+    agree with a switch this repository reviews in a commit.
+
+    Both or neither, because one of the two is the worst state. The publisher
+    reports a missing approval as a blocker either way, so a workflow carrying
+    only the state variable would look configured, read as authorised by the
+    half of the gate that was wired, and refuse on the half that was not --
+    every evening, in a message about the variable somebody thought they had
+    already set.
+    """
+    found: list[str] = []
+
     text = (WORKFLOW_DIR / name).read_text(encoding="utf-8")
 
-    for token in PUBLICATION_ACTIVATION_TOKENS:
-        for number, line in enumerate(text.splitlines(), 1):
-            if token in line and not line.strip().startswith("#"):
+    carrier = name == APPROVAL_CARRYING_WORKFLOW
+
+    bound: set[str] = set()
+
+    for number, line in enumerate(text.splitlines(), 1):
+        if line.strip().startswith("#"):
+            continue
+
+        for flag in PUBLICATION_ACTIVATION_FLAGS:
+            if flag in line:
                 found.append(
-                    f"{name}:{number}: names {token!r}, which is live "
+                    f"{name}:{number}: names {flag!r}, which is live "
                     "publication activation material and belongs to a "
                     "reviewed decision rather than to a schedule"
                 )
+
+        if not any(
+            variable in line for variable in PUBLICATION_APPROVAL_VARIABLES
+        ):
+            continue
+
+        if not carrier:
+            found.append(
+                f"{name}:{number}: names a live publication approval "
+                "variable. Only "
+                f"{APPROVAL_CARRYING_WORKFLOW} may carry one, because that is "
+                "the workflow whose controller reaches the live refresh"
+            )
+
+            continue
+
+        binding = APPROVAL_BINDING.match(line)
+
+        if binding is None:
+            found.append(
+                f"{name}:{number}: names a live publication approval "
+                "variable outside an env binding of the identically named "
+                "vars or secrets expression. A literal value here would "
+                "commit the approval, and a value from anywhere else would "
+                "be an approval this repository granted itself"
+            )
+
+            continue
+
+        if binding.group("name") != binding.group("source"):
+            found.append(
+                f"{name}:{number}: binds {binding.group('name')} from "
+                f"{binding.group('source')}. The two names must match, or "
+                "the gate refuses naming the variable somebody did set"
+            )
+
+            continue
+
+        bound.add(binding.group("name"))
+
+    if not carrier:
+        return found
+
+    if bound and bound != set(PUBLICATION_APPROVAL_VARIABLES):
+        found.append(
+            f"{name}: binds {sorted(bound)} and not "
+            f"{sorted(PUBLICATION_APPROVAL_VARIABLES)}. Both carry one "
+            "decision and half of it is worse than none: the publisher would "
+            "refuse every evening on the half that was not wired"
+        )
+
+    for job_name, job in jobs.items():
+        for step in job.get("steps") or []:
+            run = str(step.get("run", ""))
+
+            for variable in PUBLICATION_APPROVAL_VARIABLES:
+                if variable in run:
+                    found.append(
+                        f"{name}: job {job_name} step {step.get('name')!r} "
+                        f"names {variable} in a run body. An approval is read "
+                        "out of the environment by the publisher and is never "
+                        "echoed, tested or passed on a command line"
+                    )
+
+            if not run or T20_ENTRY_POINT not in run:
+                for variable in sorted(step.get("env") or {}):
+                    if variable in PUBLICATION_APPROVAL_VARIABLES:
+                        found.append(
+                            f"{name}: job {job_name} step "
+                            f"{step.get('name')!r} binds {variable} without "
+                            f"running {T20_ENTRY_POINT}. The approval reaches "
+                            "the step that can act on it and no other"
+                        )
 
     return found
 

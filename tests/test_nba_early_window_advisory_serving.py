@@ -439,13 +439,32 @@ def test_the_controller_refuses_a_t20_destination_for_an_advisory_release():
 # ----------------------------------------------------------------------
 
 
-def test_live_publishing_is_still_disabled():
-    """Unchanged by this path, and asserted rather than assumed."""
-    switch = publisher.read_publishing_switch("live", project_root=PROJECT)
+def test_live_publishing_is_not_reachable_from_the_advisory_path():
+    """Unchanged by this path, and asserted rather than assumed.
 
-    assert switch.state == publisher.STATE_DISABLED
+    The live state has since been set in a reviewed commit, and what this
+    test is about survived it: the advisory path cannot publish live. The
+    switch is one of three conditions, the other two are not set, and the
+    advisory serving module names neither variable nor a live mode.
+    """
+    switch = publisher.read_publishing_switch(
+        "live", project_root=PROJECT, environment={}
+    )
 
     assert switch.enabled is False
+
+    source = (PROJECT / "ops" / "run_advisory_window_serving.py").read_text(
+        encoding="utf-8"
+    )
+
+    for forbidden in (
+        publisher.PUBLISH_ENV_VAR,
+        publisher.PUBLISH_APPROVAL_ENV_VAR,
+        "--mode live",
+        "--stage live",
+        f'"{publisher.MODE_LIVE}"',
+    ):
+        assert forbidden not in source, forbidden
 
 
 def test_the_advisory_sources_name_no_publication_activation_material():

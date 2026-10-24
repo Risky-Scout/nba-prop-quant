@@ -499,12 +499,59 @@ def serving_provenance_rows(path: Path | None) -> list[dict[str, Any]]:
     return rows
 
 
+def receipt_priced_source(
+    receipt: dict[str, Any],
+    *,
+    data_root: Path | None,
+    fallback: Path,
+) -> Path:
+    """The bytes a receipt provenances, preferring the immutable copy.
+
+    ``processed/priced_markets/<slate>.parquet`` is rewritten by every serve
+    of that slate, so by the time the grader runs the next morning it holds
+    the last serve's bytes and no earlier receipt can describe it. Grading
+    against it meant the digest check could only pass for one of the night's
+    receipts and refused the slate whenever it was not that one.
+
+    The serving entry point now also copies what it priced to a
+    content-addressed path under ``processed/served_priced_markets``, and
+    names that copy on the receipt. Where a receipt names one, that is what
+    is graded: it is the artifact the receipt is about and nothing rewrites
+    it.
+
+    The mutable path is still the fallback, for receipts written before the
+    immutable store existed, and the digest check is applied to whichever
+    file is returned. Nothing is relaxed by preferring the immutable one;
+    what changes is only which bytes the unchanged check is made against.
+    """
+    sealed = receipt.get("immutable_priced_market_artifact") or {}
+
+    recorded = str(sealed.get("path") or "")
+
+    if recorded and Path(recorded).is_file():
+        return Path(recorded)
+
+    # The absolute path was written on the machine that served. Resolving
+    # the recorded relative path under this run's data root is what lets the
+    # store survive a data root that moved.
+    relative = str(sealed.get("relative") or "")
+
+    if relative and data_root is not None:
+        resolved = Path(data_root) / relative
+
+        if resolved.is_file():
+            return resolved
+
+    return fallback
+
+
 def select_provenance(
     *,
     slate_date: str,
     priced_path: Path,
     canonical: Path | None,
     ledger: Path | None,
+    data_root: Path | None = None,
 ) -> dict[str, Any]:
     """The provenance for the priced bytes on disk, or a refusal.
 
@@ -542,10 +589,18 @@ def select_provenance(
     refusals: list[tuple[str, GradingRefused]] = []
 
     for origin, receipt in candidates:
+        source = receipt_priced_source(
+            receipt, data_root=data_root, fallback=priced_path
+        )
+
         try:
-            return verify_receipt(
-                receipt, slate_date=slate_date, priced_path=priced_path
-            )
+            return {
+                **verify_receipt(
+                    receipt, slate_date=slate_date, priced_path=source
+                ),
+                "priced_source": str(source),
+                "priced_source_is_immutable": source != priced_path,
+            }
         except GradingRefused as error:
             refusals.append((origin, error))
 
@@ -1171,9 +1226,21 @@ def grade_slate(
         priced_path=priced_path,
         canonical=receipt_path,
         ledger=provenance_ledger,
+        data_root=Path(data_root),
     )
 
-    priced = pd.read_parquet(priced_path)
+    # The file the chosen receipt provenances, which is the immutable copy
+    # of the bytes that serve priced whenever the receipt names one. The
+    # convenience path is read only for a receipt written before the
+    # immutable store existed.
+    priced_source = Path(provenance["priced_source"])
+
+    base["priced_market_artifact"] = str(priced_source)
+    base["priced_source_is_immutable"] = bool(
+        provenance.get("priced_source_is_immutable")
+    )
+
+    priced = pd.read_parquet(priced_source)
 
     if priced.empty:
         return {

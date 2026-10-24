@@ -2349,3 +2349,147 @@ def test_the_preferred_side_column_the_incumbent_actually_writes_is_first(grader
         "calibrated_q_over_nonpush",
         "calibrated_q_under_nonpush",
     )
+
+
+# ======================================================================
+# the immutable priced artifact
+# ======================================================================
+#
+# The exact failure of 2026-10-24: the morning grader refused 2026-10-23
+# because the mutable date-keyed parquet held the evening's bytes and the
+# serving receipt provenanced the morning's. Nothing had gone wrong with the
+# model, the capture or the digest check. The artifact the immutable receipt
+# pointed at was mutable, which is a lifecycle defect and not a provenance
+# one, so the fix is to stop overwriting the thing being provenanced.
+
+
+def seal_immutable(paths: dict[str, Path], grader, *, slate_date: str = SLATE) -> Path:
+    """Copy the priced bytes where the serving entry point now copies them."""
+    priced_path = paths["priced_path"]
+
+    digest = grader.sha256_file(priced_path)
+
+    sealed = (
+        paths["data_root"]
+        / "processed"
+        / "served_priced_markets"
+        / slate_date
+        / f"{digest}.parquet"
+    )
+    sealed.parent.mkdir(parents=True, exist_ok=True)
+    sealed.write_bytes(priced_path.read_bytes())
+
+    receipt = json.loads(paths["serving_receipt"].read_text(encoding="utf-8"))
+
+    receipt["immutable_priced_market_artifact"] = {
+        "path": str(sealed),
+        "relative": str(
+            Path("processed")
+            / "served_priced_markets"
+            / slate_date
+            / f"{digest}.parquet"
+        ),
+        "sha256": digest,
+    }
+
+    paths["serving_receipt"].write_text(
+        json.dumps(receipt, indent=2), encoding="utf-8"
+    )
+
+    return sealed
+
+
+def test_grading_follows_the_receipt_when_the_convenience_file_moves_on(
+    grader, settled
+):
+    """Serve A, receipt A, later artifact B overwrites the date-keyed file.
+
+    The grader must still load A, its digest must still match, and the grade
+    must still be written -- which is what the production run of
+    2026-10-24 could not do.
+    """
+    sealed = seal_immutable(settled, grader)
+
+    original = sealed.read_bytes()
+
+    # A second serve of the same slate rewrites the convenience path with
+    # different bytes. This is the ordinary evening behaviour, not a fault.
+    priced_frame(
+        [{"game_id": 1, "player_id": 11, "line": 26.5, "q_over": 0.71}],
+        priced_at="2026-11-04T23:40:00+00:00",
+    ).to_parquet(settled["priced_path"], index=False)
+
+    assert grader.sha256_file(settled["priced_path"]) != grader.sha256_file(sealed)
+
+    assert invoke(grader, settled) == 0
+
+    receipt = json.loads(settled["receipt_path"].read_text(encoding="utf-8"))
+
+    assert receipt["outcome"] == grader.OUTCOME_GRADED
+    assert receipt["priced_source_is_immutable"] is True
+    assert receipt["priced_market_artifact"] == str(sealed)
+
+    # Three rows, which is the sealed artifact's row count and not the one
+    # row the overwritten convenience file now holds.
+    assert receipt["scores"]["events"] == 3
+
+    # And nothing touched the immutable bytes.
+    assert sealed.read_bytes() == original
+
+
+def test_the_digest_check_still_refuses_a_tampered_immutable_artifact(
+    grader, settled
+):
+    """Preferring the immutable artifact is not trusting it."""
+    sealed = seal_immutable(settled, grader)
+
+    priced_frame(
+        [{"game_id": 1, "player_id": 11, "line": 26.5, "q_over": 0.71}],
+        priced_at="2026-11-04T23:40:00+00:00",
+    ).to_parquet(sealed, index=False)
+
+    assert invoke(grader, settled) == grader.EXIT_REFUSED
+
+    receipt = json.loads(settled["receipt_path"].read_text(encoding="utf-8"))
+
+    assert receipt["outcome"] == grader.OUTCOME_REFUSED
+    assert "changed after they were served" in receipt["reason"]
+
+
+def test_a_receipt_with_no_immutable_artifact_still_grades_the_old_way(
+    grader, settled
+):
+    """Receipts written before the store existed are not orphaned by it."""
+    assert invoke(grader, settled) == 0
+
+    receipt = json.loads(settled["receipt_path"].read_text(encoding="utf-8"))
+
+    assert receipt["outcome"] == grader.OUTCOME_GRADED
+    assert receipt["priced_source_is_immutable"] is False
+    assert receipt["priced_market_artifact"] == str(settled["priced_path"])
+
+
+def test_the_immutable_artifact_is_found_when_the_data_root_moved(
+    grader, settled, tmp_path
+):
+    """The recorded absolute path is from the machine that served."""
+    sealed = seal_immutable(settled, grader)
+
+    receipt = json.loads(settled["serving_receipt"].read_text(encoding="utf-8"))
+    receipt["immutable_priced_market_artifact"]["path"] = (
+        "/some/other/machine/served_priced_markets/x.parquet"
+    )
+    settled["serving_receipt"].write_text(
+        json.dumps(receipt, indent=2), encoding="utf-8"
+    )
+
+    priced_frame(
+        [{"game_id": 1, "player_id": 11, "line": 26.5, "q_over": 0.71}],
+        priced_at="2026-11-04T23:40:00+00:00",
+    ).to_parquet(settled["priced_path"], index=False)
+
+    assert invoke(grader, settled) == 0
+
+    graded = json.loads(settled["receipt_path"].read_text(encoding="utf-8"))
+
+    assert graded["priced_market_artifact"] == str(sealed)

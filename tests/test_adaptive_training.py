@@ -1343,20 +1343,54 @@ def test_deferred_checks_are_the_live_ones():
     ) == set(REQUIRED_VALIDATION_CHECKS)
 
 
-def test_incomplete_validation_cannot_promote(
+def test_step3c_cannot_promote_itself_and_step3d_can(
     data_root, work_root, registry
 ):
-    """The candidate is deliberately not promotable after Step 3C."""
+    """Step 3C registers and stops; promotion is a later stage's decision.
+
+    This test used to say the candidate was unpromotable *by anyone*, and
+    that reading made the lifecycle the protocol describes impossible: the
+    two remaining checks can only be answered from a scheduled T-20 capture
+    for the slate being served, no such capture exists at fit time, and a
+    fit missing a required check may not be promoted. Every daily fit was
+    therefore permanently unpromotable, which is why production has priced
+    every slate of the season from an August freeze.
+
+    What the protocol actually prohibits is Step 3C promoting what Step 3C
+    just fitted -- "Step 3C registers an immutable candidate and stops. Live
+    validation and promotion are Step 3D" -- so that is what is asserted
+    here: nothing in the fitting path can promote, the registry will promote
+    the candidate on the thirteen checks an offline fit can answer
+    truthfully, and the two it cannot are still required, fail-closed,
+    before the promoted fit may serve anything.
+    """
     result = fit(
         data_root, work_root, registry=registry, mode=MODE_REGISTER_CANDIDATE
     )
 
     from nba_prop_quant.adaptive_fit_registry import ValidationRefused
 
-    with pytest.raises(ValidationRefused, match="missing required"):
-        registry.promote(result["fit_id"], reason="should be refused")
+    # Step 3C left the two window checks unanswered, and did not promote.
+    record = registry.load_validation(result["fit_id"])
+
+    assert sorted(record["serving_window_missing"]) == [
+        "gate3_role_readiness",
+        "t20_protocol_compatible",
+    ]
 
     assert registry.current()["current_good_fit_id"] is None
+
+    # Step 3D promotes it on the thirteen, which is the stage separation the
+    # protocol names rather than a waiver of anything.
+    registry.promote(result["fit_id"], reason="step 3d")
+
+    assert registry.current()["current_good_fit_id"] == result["fit_id"]
+
+    # And the two deferred checks are still required: unanswered is a
+    # refusal at the serving window, so a promoted fit whose window gates
+    # nobody measured cannot be served.
+    with pytest.raises(ValidationRefused, match="missing required"):
+        registry.assert_serving_window_validation_pass(result["fit_id"])
 
 
 def test_no_step3c_code_promotes():

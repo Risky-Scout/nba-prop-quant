@@ -38,7 +38,7 @@ from contextlib import contextmanager
 from dataclasses import MISSING, dataclass, field
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Sequence
 
 import yaml
 
@@ -182,9 +182,11 @@ FROZEN_POLICY_SOURCES: dict[str, dict[str, Any]] = {
 # validation
 # --------------------------------------------------------------------------
 
-# Checks an adaptive orchestrator must report before a fit may be promoted.
-# The registry records the outcomes; it does not run the model-side checks.
-REQUIRED_VALIDATION_CHECKS = (
+# Checks that judge the fitted model itself. Every one of them is answerable
+# from the candidate tree, the verified rolling state and the frozen policy
+# sources, so a daily fit can satisfy all of them the morning it is produced.
+# These are the promotion prerequisites.
+FIT_TIME_VALIDATION_CHECKS = (
     "training_completed",
     "data_refresh_valid",
     "history_regression_check",
@@ -198,8 +200,32 @@ REQUIRED_VALIDATION_CHECKS = (
     "marginal_fit_valid",
     "calibration_valid",
     "prediction_smoke_test",
+)
+
+# Checks that judge a live slate rather than the fit. Both need a capture that
+# does not exist in the morning: gate3_role_readiness needs a captured lineup
+# snapshot and t20_protocol_compatible needs a real capture at the serving
+# offset. Requiring them to promote made promotion unreachable -- the capture
+# they ask about is taken hours after the fit the question is asked of -- and
+# the invariant they carry is not about the fit at all, so it is enforced
+# where the inputs exist. :func:`assert_serving_window_validation_pass`
+# refuses a fit whose window checks are missing or false, and the serving path
+# re-evaluates them against the window's own capture rather than reading a
+# record made for an earlier slate. That is strictly more checking than
+# requiring them once at promotion ever was.
+SERVING_WINDOW_VALIDATION_CHECKS = (
     "gate3_role_readiness",
     "t20_protocol_compatible",
+)
+
+# Checks an adaptive orchestrator must report before a fit may be promoted.
+# The registry records the outcomes; it does not run the model-side checks.
+#
+# The whole accounting, unchanged: every name here is still recorded, still
+# refused if it is not a boolean, and still refused if it is false. What the
+# partition above decides is *which stage* refuses a name that is absent.
+REQUIRED_VALIDATION_CHECKS = (
+    FIT_TIME_VALIDATION_CHECKS + SERVING_WINDOW_VALIDATION_CHECKS
 )
 
 
@@ -1766,11 +1792,42 @@ class FitRegistry:
             if not value
         )
 
+        # The same two sets the registry refuses against, written down beside
+        # the whole accounting rather than left to be re-derived by whoever
+        # reads the record. ``passed`` keeps meaning what it always meant --
+        # every required check present and true -- so nothing that reads it
+        # starts reading a weaker claim.
+        fit_time_missing = sorted(
+            set(FIT_TIME_VALIDATION_CHECKS) - set(normalised)
+        )
+
+        fit_time_failed = sorted(
+            name
+            for name in FIT_TIME_VALIDATION_CHECKS
+            if name in normalised and not normalised[name]
+        )
+
+        window_missing = sorted(
+            set(SERVING_WINDOW_VALIDATION_CHECKS) - set(normalised)
+        )
+
+        window_failed = sorted(
+            name
+            for name in SERVING_WINDOW_VALIDATION_CHECKS
+            if name in normalised and not normalised[name]
+        )
+
         record = {
             "actor": actor,
             "checks": normalised,
             "failed_checks": failed,
             "fit_id": fit_id,
+            "fit_time_checks": list(FIT_TIME_VALIDATION_CHECKS),
+            "fit_time_failed": fit_time_failed,
+            "fit_time_missing": fit_time_missing,
+            "fit_time_passed": (
+                not fit_time_missing and not fit_time_failed
+            ),
             "missing_checks": missing,
             "notes": notes,
             "passed": not missing and not failed,
@@ -1779,6 +1836,14 @@ class FitRegistry:
                 REQUIRED_VALIDATION_CHECKS
             ),
             "schema_version": VALIDATION_SCHEMA_VERSION,
+            "serving_window_checks": list(
+                SERVING_WINDOW_VALIDATION_CHECKS
+            ),
+            "serving_window_failed": window_failed,
+            "serving_window_missing": window_missing,
+            "serving_window_passed": (
+                not window_missing and not window_failed
+            ),
         }
 
         assert_no_secrets(record)
@@ -1803,8 +1868,8 @@ class FitRegistry:
 
         return _load_json(path)
 
-    def assert_validation_pass(self, fit_id: str) -> None:
-        """Refuse a missing, malformed, mismatched or failing record."""
+    def _validation_checks(self, fit_id: str) -> dict[str, Any]:
+        """The record's check map, with every way of not having one refused."""
         record = self.load_validation(fit_id)
 
         if record is None:
@@ -1843,41 +1908,112 @@ class FitRegistry:
                 f"fit {fit_id} validation record has no checks"
             )
 
+        return checks
+
+    def _assert_checks(
+        self,
+        fit_id: str,
+        checks: dict[str, Any],
+        names: Sequence[str],
+        *,
+        stage: str,
+    ) -> None:
+        """Every name in ``names`` must be present, boolean and true."""
         missing = sorted(
-            name
-            for name in REQUIRED_VALIDATION_CHECKS
-            if name not in checks
+            name for name in names if name not in checks
         )
 
         if missing:
             raise ValidationRefused(
-                f"fit {fit_id} is missing required validation "
-                "checks: " + ", ".join(missing)
+                f"fit {fit_id} is missing required {stage} "
+                "validation checks: " + ", ".join(missing)
             )
 
         non_boolean = sorted(
             name
-            for name in REQUIRED_VALIDATION_CHECKS
+            for name in names
             if not isinstance(checks[name], bool)
         )
 
         if non_boolean:
             raise ValidationRefused(
-                f"fit {fit_id} has non-boolean validation "
+                f"fit {fit_id} has non-boolean {stage} validation "
                 "checks: " + ", ".join(non_boolean)
             )
 
         failed = sorted(
-            name
-            for name in REQUIRED_VALIDATION_CHECKS
-            if not checks[name]
+            name for name in names if not checks[name]
         )
 
         if failed:
             raise ValidationRefused(
-                f"fit {fit_id} failed required validation "
+                f"fit {fit_id} failed required {stage} validation "
                 "checks: " + ", ".join(failed)
             )
+
+    def assert_validation_pass(self, fit_id: str) -> None:
+        """Refuse a missing, malformed, mismatched or failing record.
+
+        The promotion prerequisite, and it is the fit-time set plus any
+        serving-window answer the record happens to carry. Three refusals and
+        the first two are exactly what they were:
+
+            a record that is absent, malformed, of the wrong schema or about
+            another fit
+                refused, unchanged.
+
+            a fit-time check that is absent, non-boolean or false
+                refused, unchanged. All thirteen are still required here.
+
+            a serving-window check the record carries and that is false or
+            non-boolean
+                refused. A measured failure is a failure at whatever stage
+                measured it, so recording one still blocks promotion.
+
+        What moved is the one case promotion could never satisfy: a
+        serving-window check that is *absent* because the slate it asks about
+        had not happened yet. That is not evidence against the fit and it is
+        the only reason no daily fit has ever been promotable. It is refused
+        by :meth:`assert_serving_window_validation_pass` instead, at the
+        window where the capture it asks about exists.
+        """
+        checks = self._validation_checks(fit_id)
+
+        self._assert_checks(
+            fit_id,
+            checks,
+            FIT_TIME_VALIDATION_CHECKS,
+            stage="fit-time",
+        )
+
+        self._assert_checks(
+            fit_id,
+            checks,
+            [
+                name
+                for name in SERVING_WINDOW_VALIDATION_CHECKS
+                if name in checks
+            ],
+            stage="serving-window",
+        )
+
+    def assert_serving_window_validation_pass(
+        self, fit_id: str
+    ) -> None:
+        """Refuse a fit whose serving-window checks are not recorded true.
+
+        Fail-closed over the whole set: absent is a refusal here, which is
+        what carries the invariant promotion used to carry. Called at the
+        serving window, where the capture both checks ask about exists.
+        """
+        checks = self._validation_checks(fit_id)
+
+        self._assert_checks(
+            fit_id,
+            checks,
+            SERVING_WINDOW_VALIDATION_CHECKS,
+            stage="serving-window",
+        )
 
     # -- promotion state ------------------------------------------------
 

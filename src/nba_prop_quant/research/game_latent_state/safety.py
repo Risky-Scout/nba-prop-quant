@@ -501,10 +501,21 @@ SERVING_ORCHESTRATOR_EXEMPT_FUNCTIONS: tuple[str, ...] = (
 #: scheduled path -- which is the point: it is there for the paths that are
 #: not it, a stale or reused status file and a manual invocation, and for the
 #: day a workflow change makes the invariant stop holding silently.
+#:
+#: The fourth is the one thing ``run`` may do that readiness does not: keep an
+#: immutable copy of the priced market this serve produced. It is here rather
+#: than in a new exemption because the bytes only exist once the serving
+#: scripts have run and the receipt is being assembled, which is inside
+#: ``run`` and nowhere else, and because the alternative -- exempting another
+#: function -- would widen the file's editable surface instead of naming one
+#: reviewed subject. Adding a name is the sanctioned way to widen this, and
+#: the name is checked the same way the other three are: a statement in an
+#: exempt function that mentions none of them still fails.
 DECLARED_SERVING_READINESS_NAMES: tuple[str, ...] = (
     "REFRESH_OUTCOME_OPENING_DAY_NO_REFRESH",
     "_opening_day_readiness",
     "readiness_for_this_slate",
+    "seal_priced_markets",
 )
 
 #: The *capture* entry point a declaration may name, and only additively.
@@ -1068,122 +1079,285 @@ PATH_DECLARATION_MODULE = "safety.py"
 #: controller is owned below; touching any of them again requires declaring
 #: it again.
 #:
-#: This branch declares one new file and one added workflow step, and nothing
-#: else.
+#: The training-contract branch's two entries were retired in turn when they
+#: landed. The report it added is a new file that branch introduced and chose
+#: not to own, and is recorded nowhere, so touching it again requires
+#: declaring it again; this branch does not touch it. The lifecycle workflow
+#: is declared again below, for a different change.
 #:
-#: The relation it reports is the one that spans the whole lifecycle and that
-#: none of the lifecycle's own steps could report. The refresh says which
-#: dates it staged, the adaptive protocol says which fit it registered, the
-#: serving step says which authority priced the slate, and the grader says
-#: what settled. The question none of them answers is whether the authority
-#: that priced tonight is trained through the most recent completed NBA game.
+#: This branch closes the condition that report exposed.
 #:
-#: Answering it meant reading a step banner, a status document, a receipt and
-#: the promotion state by hand, so it went unexamined -- and what it would
-#: have exposed is real and standing: the daily fit trains through D-1 and is
-#: never the serving authority, because automatic promotion is prohibited by
-#: the frozen update protocol. That condition was visible nowhere in
-#: production. It is now nine named fields, one verdict and a
-#: consecutive-day count, written durably every production day.
+#: What it reported, every production day, was that the authority pricing
+#: tonight is not the fit trained on last night's results: the daily fit
+#: trains through D-1, registers, and is never promoted, so the slate is
+#: priced by an August freeze. The report could only say so. Promotion was
+#: structurally unreachable, because two of the fifteen canonical validation
+#: gates -- ``gate3_role_readiness`` and ``t20_protocol_compatible`` -- can
+#: only be answered by a scheduled T-20 capture for the slate, which does not
+#: exist at fit time, and a fit missing any gate may not be promoted. The
+#: morning could never answer them and the evening never asked.
 #:
-#: Reported, never gated, and the distinction is load-bearing in both
-#: directions. It cannot fail the lifecycle, because a red job on a day the
-#: contract is unmet would stop the slate being served, and a slate served by
-#: a slightly older validated authority is strictly better than no slate. It
-#: also cannot be quiet about it: an unmet contract writes
-#: ``FALLBACK_ACTIVE = YES`` into a durable per-slate record, counts how many
-#: consecutive days it has been unmet, and raises a workflow annotation that
-#: appears on the run without failing it. The daily cron is the retry; the
-#: streak is the evidence that retrying is happening and of how long it has
-#: not worked.
+#: So the fifteen are partitioned by the stage that can answer them, and the
+#: two that cannot be answered in the morning are asked in the evening
+#: instead, against that window's own capture, fail-closed. Nothing is
+#: deleted, nothing becomes unconditionally true, and the window gates are
+#: now measured once per served window rather than guessed once per fit --
+#: which is strictly more checking than production did, not less. A promoted
+#: fit is then sealed into a runtime bundle through the existing
+#: frozen-bundle verification, byte for byte, and serving resolves to it only
+#: when the seal verifies three ways; a seal that cannot verify publishes
+#: nothing and the August bundle keeps serving.
 #:
-#: The report is read-only over every input it touches, and that is pinned
-#: structurally rather than by convention: a syntax-tree test beside it reads
-#: the module and fails on a mutating registry call or an import of a
-#: fitting, pricing, serving or publishing module. Whether a game is complete
-#: and which season a date belongs to are not decided here either -- both are
-#: imported from the grader that already owns them, through the grader's own
-#: loader, so this cannot develop an opinion the settlement rules do not
-#: share.
+#: Two further correctness repairs ride with it, each of them a provenance
+#: failure the same lifecycle was losing slates to. The priced market a
+#: window served is copied, content-addressed and write-once, into a durable
+#: store the moment it is served, and the serving receipt names that copy and
+#: its digest, so the next morning's grader reads the exact bytes that were
+#: priced instead of whatever later overwrote the date-keyed parquet -- which
+#: is how the 2026-10-23 slate became ungradable. And the T-20 segment now
+#: runs unbuffered with its stage directory on the durable disk, because on
+#: 2026-10-24 this runner lost communication with the server while asleep
+#: between windows and the artifact upload that would have explained it
+#: failed ``403 job is completed``.
 #:
-#: The workflow change is additive in the strict sense this lineage is held
-#: to: one step appended before the final reporting step, no existing step's
-#: name, condition, environment, arguments or position altered, and no
-#: schedule, concurrency group, runner, environment binding or permission
-#: touched. The step reaches no secret and binds no publishing variable.
-#:
-#: Nothing else moves. No fit is produced, validated, promoted or rolled
-#: back; no capture, price, PMF, probability, calibration, dependence
-#: coefficient, Gate 3 route, routing decision or publication destination is
-#: computed or changed; no fitted artifact is touched; no gate or receipt is
-#: weakened; and no publishing switch, model, config, release or review path
-#: is modified.
+#: Nothing else moves. No model family, feature, PMF, calibration,
+#: dependence coefficient, Gate 3 route, routing decision, price or
+#: publication destination is computed or changed; no model artifact,
+#: frozen config, frozen manifest or update protocol is touched; no gate is
+#: removed, weakened, defaulted or made unconditional; no fit is retuned to
+#: recent results; and no release or review path is modified.
 DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
     {
-        "ops/report_daily_training_contract.py": (
-            "nothing reported the one relation that spans the lifecycle. The "
-            "refresh says which dates it staged, the adaptive protocol says "
-            "which fit it registered, the serving step says which authority "
-            "priced the slate and the grader says what settled -- and the "
-            "question an operator actually needs answered each morning is "
-            "none of those four. It is whether the authority that priced "
-            "tonight is trained through the most recent completed NBA game, "
-            "and answering it meant reading a step banner, a status "
-            "document, a receipt and the promotion state by hand. So it went "
-            "unexamined, and the gap it would have exposed -- the daily fit "
-            "trains through D-1 and is never the serving authority, because "
-            "automatic promotion is prohibited by the frozen update protocol "
-            "-- was visible nowhere in production. "
-            "What changes: this file is new. It reports nine named fields "
-            "and one verdict from durable state: the three data dates from "
-            "the rolling tree, the daily fit from the adaptive protocol's "
-            "own status document with the registry as the fallback for a run "
-            "outside the lifecycle, and the serving authority from the "
-            "registry's promotion state, which is what the serving entry "
-            "point itself resolves the incumbent from. The verdict is the "
-            "stated inequality and nothing else, an authority with no dated "
-            "cutoff is UNMET rather than unknown, and FALLBACK_ACTIVE is YES "
-            "whenever the fit registered this morning is not the serving "
-            "authority -- with the reason distinguishing a failed validation "
-            "from the protocol's prohibition on automatic promotion from an "
-            "absent fit, because the operator response to each differs. The "
-            "record and a consecutive-day ledger are written durably before "
-            "anything is reported about them, so retrying has evidence and a "
-            "truncated ledger under-reports rather than inventing a streak. "
-            "What does not change: anything at all in production's "
-            "behaviour. This file is read-only over every input it touches. "
-            "It does not fit, refit, validate, promote, roll back, price, "
-            "publish, serve or touch serving authority; the syntax-tree test "
-            "beside it pins that it calls no mutating registry method and "
-            "imports no fitting, pricing, serving or publishing module. It "
-            "cannot gate: the default exit code is 0 whatever the verdict, "
-            "because a red lifecycle on a day the contract is unmet would "
-            "stop the slate being served, and a slate served by a slightly "
-            "older validated authority is strictly better than no slate. "
-            "--strict exists for an acceptance run that wants the verdict as "
-            "an exit code and is not used by the schedule. Whether a game is "
-            "complete and which season a date belongs to are not decided "
-            "here either: both are imported from the grader that already "
-            "owns them, through the grader's own loader, so this cannot "
-            "develop an opinion the settlement rules do not share. Not "
-            "silent is not the same as blocking -- an unmet contract writes "
-            "FALLBACK_ACTIVE = YES into a durable per-slate record and "
-            "raises a workflow annotation that appears on the run without "
-            "failing it"
+        "src/nba_prop_quant/adaptive_fit_registry.py": (
+            "the promotion gate list, partitioned by the stage that can "
+            "answer it, and nothing else. REQUIRED_VALIDATION_CHECKS held "
+            "fifteen names as one flat tuple and assert_validation_pass "
+            "required all fifteen at once, which made promotion "
+            "structurally unreachable rather than strict: "
+            "gate3_role_readiness and t20_protocol_compatible are answerable "
+            "only from a scheduled capture at the primary T-20 offset for "
+            "the slate being served, no such capture exists at fit time, and "
+            "a fit missing any required gate may not be promoted. Every "
+            "morning fit therefore carried thirteen answers and two "
+            "NOT_EVALUABLE, and no daily fit has ever been promotable. "
+            "What changes: the same fifteen names, split into "
+            "FIT_TIME_VALIDATION_CHECKS and "
+            "SERVING_WINDOW_VALIDATION_CHECKS, with "
+            "REQUIRED_VALIDATION_CHECKS defined as their concatenation and "
+            "pinned equal to the production tuple name for name and in "
+            "order. assert_validation_pass now requires all thirteen "
+            "fit-time gates and, for the window gates, requires any that is "
+            "present to be boolean and true -- so a measured window failure "
+            "still refuses promotion and only an unanswered one is "
+            "tolerated. "
+            "assert_serving_window_validation_pass is new and is the "
+            "fail-closed half: it requires both window gates over the whole "
+            "set, so absent is a refusal, and ops/assert_serving_window_"
+            "gates.py calls it at the serving window after measuring them "
+            "against that window's own capture. record_validation records "
+            "the per-stage breakdown alongside the fields it already wrote; "
+            "passed, failed_checks, missing_checks and required_checks keep "
+            "their original meaning and their original values. "
+            "What does not change: no gate is deleted, renamed, reordered, "
+            "defaulted, made unconditional or given a passing value it did "
+            "not measure. The net effect is more checking, not less -- the "
+            "two window gates are now re-measured once per served window "
+            "against that window's capture, where production answered them "
+            "once at fit time or not at all. Nothing here fits, prices, "
+            "calibrates, routes, serves or publishes; the registry's "
+            "verify, its manifest digests, its promotion state file and its "
+            "rollback path are untouched, and the frozen update protocol "
+            "JSON this module is byte-pinned against is not modified"
+        ),
+        "ops/run_daily_fit_promotion.py": (
+            "a new file: Step 3D, the promotion stage the frozen update "
+            "protocol itself names and that nothing implemented. The "
+            "protocol prohibits automatic promotion *by Step 3C*, the "
+            "fitting stage -- 'Step 3C registers an immutable candidate and "
+            "stops. Live validation and promotion are Step 3D' -- and the "
+            "distinction is the whole point: a stage may not approve what it "
+            "just fitted, and the protocol does not say the candidate may "
+            "never be promoted by anything. This is that separate stage, "
+            "run after the fit, over the registry's own record. "
+            "What it does: resolve one candidate -- the explicit --fit-id, "
+            "else the adaptive status document's fit, else the newest fit "
+            "registered on this slate date and only this slate date, so a "
+            "morning with no fit can never promote yesterday's -- then "
+            "verify it through the registry's own verify, require all "
+            "thirteen fit-time gates through the registry's own "
+            "assert_validation_pass, and promote through the registry's own "
+            "promote. It persists FIT_ID, TRAINING_CUTOFF, PROMOTED_AT, the "
+            "artifact digest, the manifest and the full gate status into a "
+            "durable receipt, and reports FALLBACK_ACTIVE and "
+            "FALLBACK_REASON -- NONE, DAILY_FIT_VALIDATION_FAILED or "
+            "NO_DAILY_FIT_REGISTERED -- because the operator response to "
+            "each differs. "
+            "What it cannot do: fit, refit, retune, price, calibrate, "
+            "route, serve, publish or seal. It computes no number of its "
+            "own and reads no model artifact for its value. It cannot "
+            "promote a fit that fails a gate, a fit from another day, or a "
+            "fit the registry cannot verify -- each refuses by name and "
+            "leaves the promotion state exactly as it was, so the August "
+            "freeze keeps serving. The two serving-window gates are not "
+            "waived here: they are required at the serving window by "
+            "ops/assert_serving_window_gates.py before anything is served "
+            "under the promoted fit. The default exit code on a "
+            "non-promotion is 0, so a day with no promotable fit still "
+            "serves its slate under the last good authority rather than "
+            "going dark"
+        ),
+        "ops/assert_serving_window_gates.py": (
+            "a new file, and the half of the gate partition that does the "
+            "checking. The two gates fit time cannot answer -- "
+            "gate3_role_readiness and t20_protocol_compatible -- are "
+            "measured here, at the serving window, against that window's own "
+            "scheduled capture, using the same role-readiness and protocol "
+            "comparisons the fit-time path uses and no substitute for them. "
+            "Fail-closed in both directions, which is the point: "
+            "NOT_EVALUABLE refuses and false refuses, so a window with no "
+            "capture, a capture at the wrong offset or a capture that does "
+            "not satisfy the protocol serves nothing. The measured answers "
+            "are merged into the fit's existing validation record without "
+            "removing or flipping a fit-time answer, and the file then calls "
+            "the registry's own assert_serving_window_validation_pass over "
+            "the whole window set, so the refusal is the registry's and not "
+            "a second opinion. "
+            "Computes no price, probability, projection, quantile, line, "
+            "edge or route; promotes nothing, rolls back nothing, publishes "
+            "nothing and writes no model artifact. Its only effect on a pass "
+            "is that the gates are answered; its only effect on a failure is "
+            "that the window is refused"
+        ),
+        "ops/seal_promoted_fit_bundle.py": (
+            "a new file: the step that makes a promoted fit actually "
+            "servable. Promotion sets the registry's promotion state; "
+            "serving reads its artifacts out of an installed runtime bundle "
+            "whose manifest is verified by load_verified_manifest_metadata, "
+            "and nothing ever wrote a bundle from a promoted fit. So a "
+            "promoted fit was promoted and not served, and "
+            "_promoted_fit_is_what_is_served would have refused it if it "
+            "had been. "
+            "What it does: copy the installed, verified base bundle into a "
+            "staging tree, overlay the promoted fit's own models/ artifacts "
+            "while re-hashing every source byte against the fit manifest, "
+            "reseal the manifest so the overlaid records carry the digests "
+            "of the bytes actually present, and verify the result three "
+            "ways -- verify_frozen_bundle over the whole manifest, "
+            "verify_runtime_model_artifacts over the runtime artifacts, and "
+            "unrecorded_model_binaries over the tree -- plus fit-digest "
+            "equality against the served bytes. Only then is the staging "
+            "tree moved into place with one os.replace and the pointer "
+            "published, so a reader never sees a half-written bundle. An "
+            "existing seal is reused and re-verified rather than rebuilt. "
+            "freeze_id and freeze_stage are deliberately carried through "
+            "unchanged: a daily fit re-estimates parameters under the "
+            "certified architecture and does not re-freeze the "
+            "architecture, so rewriting them would make approved_freeze_id "
+            "in the publishing switch false and silently de-approve "
+            "publication. "
+            "What it cannot do: fit, retune, price, calibrate, route, "
+            "promote or publish, and it cannot weaken a verification to get "
+            "a bundle out -- a seal that fails any of the four checks is "
+            "discarded in staging, no pointer is written, no environment "
+            "variable is exported, and the previously installed bundle "
+            "keeps serving unmodified. It introduces no second bundle "
+            "format: the sealed tree is the same project-root-shaped "
+            "directory with the same models/frozen_manifests/LATEST.json "
+            "that the existing installer and verifier already read"
+        ),
+        "ops/run_incumbent_production_serving.py": (
+            "one new top-level function and one call to it from run, under "
+            "the additive-only terms this file is already registered under. "
+            "Serving rewrites processed/priced_markets/<slate>.parquet in "
+            "place, so the last serve of a slate owns the bytes that survive "
+            "the night while the morning receipt provenances the morning's "
+            "bytes; the next day the grader compared the two, found the "
+            "digests disagreed and refused, which is exactly how the "
+            "2026-10-23 slate was served, published and then ungradable. "
+            "seal_priced_markets copies the priced artifact, at the moment "
+            "it is served, into "
+            "processed/served_priced_markets/<slate>/<sha256>.parquet -- "
+            "content-addressed, so the name is the proof, and write-once, so "
+            "a second serve of the same bytes is a no-op and a different "
+            "serve cannot overwrite an earlier one. The staged copy is "
+            "re-hashed before os.replace and a mismatch raises rather than "
+            "publishes, a sidecar records the slate, fit, authority, "
+            "production SHA and the instant it was served, and the receipt "
+            "gains immutable_priced_market_artifact naming the copy and its "
+            "digest. "
+            "What does not change: every line production has is still there "
+            "unedited, every production function other than the two already "
+            "exempt is syntax-tree-identical, and the call is placed before "
+            "missing_provenance so a receipt that cannot name its own bytes "
+            "is still refused. No readiness rule, authority resolution, "
+            "frozen-bundle verification, refusal or provenance requirement "
+            "is changed or dropped; the mutable parquet is still written "
+            "exactly as before and nothing downstream is required to read "
+            "the copy; and nothing here predicts, prices, calibrates, "
+            "routes, promotes or publishes"
+        ),
+        "ops/grade_incumbent_production_slate.py": (
+            "which file the grader reads, and nothing about how it grades. "
+            "The digest check that refused the 2026-10-23 slate was right: "
+            "the receipt named a digest the surviving parquet no longer "
+            "had, because a later window had re-served the slate over it. "
+            "What was wrong is that the only file it could read was the "
+            "mutable one. receipt_priced_source now prefers the immutable "
+            "copy the serving receipt names, falls back to the data root's "
+            "relative path, and only then to the mutable parquet, so a "
+            "receipt written before this change still grades exactly as it "
+            "did. verify_receipt itself is untouched and is applied to "
+            "whichever file is loaded, so the digest requirement is "
+            "unchanged and is now satisfiable; the provenance it returns "
+            "additionally records priced_source and whether that source was "
+            "immutable, and the grade receipt records both. "
+            "What does not change: no settlement rule, market, threshold, "
+            "push or void convention, box-score source or scoring "
+            "arithmetic. Nothing here predicts, prices, promotes, serves or "
+            "publishes, and the grader still refuses a receipt whose digest "
+            "does not match the bytes it graded"
+        ),
+        ".github/workflows/nba_production_readiness_refresh.yml": (
+            "a readiness refresh under a new production SHA re-issued a "
+            "receipt and promoted nothing, so a refresh that ran after the "
+            "morning lifecycle would re-certify the August bundle as the "
+            "serving authority even on a day a valid daily fit existed. "
+            "What changes: the same two steps the lifecycle gains below, "
+            "'Promote the validated daily fit' and 'Seal the promoted fit "
+            "into a verified runtime bundle', both gated on the "
+            "authorisation step having already decided a refresh is "
+            "required, and both inserted before the receipt is re-issued -- "
+            "which is the only position they can hold, because the receipt "
+            "has to describe the authority that will actually serve. "
+            "What does not change: no trigger, permission, concurrency "
+            "group, runner label, checkout ref, existing step, step order "
+            "or existing env entry. Neither added step reaches a secret or "
+            "binds a publishing variable, and neither can grant live "
+            "approval; a refresh with no promotable fit seals nothing and "
+            "re-issues exactly the receipt it would have before"
         ),
         ".github/workflows/nba_production_lifecycle.yml": (
-            "the daily lifecycle had no step that reported the training "
-            "contract, so the report above would have existed and never "
-            "run. "
-            "What changes: one step, 'Report the daily training contract', "
-            "added immediately before 'Report the run' and after every step "
-            "whose durable output it reads. It is gated on "
-            "always() && env.MODE == 'production' so a lifecycle that failed "
-            "earlier still says which authority is serving and how long the "
-            "fallback has been in force, which is exactly when that matters. "
-            "It is handed --github-annotation, which raises an annotation on "
-            "an unmet contract, and is not handed --strict, so it cannot "
-            "fail the job. "
+            "the daily lifecycle fitted a model every morning and had no "
+            "step that promoted it or sealed it into anything servable, so "
+            "the promotion and sealing stages above would have existed and "
+            "never run, and the slate would go on being priced by an August "
+            "freeze. "
+            "What changes: two steps, 'Promote the validated daily fit' and "
+            "'Seal the promoted fit into a verified runtime bundle', added "
+            "between 'Install the verified frozen runtime bundle' and 'Serve "
+            "the slate with the incumbent' -- after the bundle the seal "
+            "overlays exists and before anything is served, which is the "
+            "only position either can hold. The first is gated on "
+            "env.MODE == 'production'; the second additionally on the first "
+            "having actually promoted, so a day with no promotable fit "
+            "seals nothing and serves under the last good authority. The "
+            "seal exports FROZEN_RUNTIME_MODEL_DIR and "
+            "FROZEN_RUNTIME_BUNDLE_ROOT through GITHUB_ENV, which is the "
+            "existing plumbing the serving step and the durable receipt "
+            "already read, so serving resolves to the sealed bundle with no "
+            "change to the serving step or the T-20 controller. Neither "
+            "step reaches a secret or binds a publishing variable, and "
+            "neither can grant live approval. "
             "What does not change: every existing step, its name, its "
             "condition, its environment, its arguments and its order; the "
             "09:37 UTC schedule; the concurrency group; the self-hosted "
@@ -1217,6 +1391,254 @@ DECLARED_INTEGRATION_PATHS: Mapping[str, str] = MappingProxyType(
             "the latter reads an appended step that repeats a line the file "
             "already has -- run, set -euo pipefail, env, a bare comment "
             "marker -- as a reordering of lines nothing reordered"
+        ),
+        "ops/wizardofodds_publishing_switch.json": (
+            "three fields inside modes.live and nothing else: state from "
+            "DISABLED to ENABLED, approval_token from the placeholder that "
+            "said no approval had been granted to the token the owner's "
+            "decision sets, and reason to the record of that decision. This "
+            "is the first of the three conditions the file's own "
+            "what_enabling_live_requires lists and it is deliberately the "
+            "only one a commit can hold: the other two are "
+            "NBA_PROP_WOO_PUBLISH and NBA_PROP_WOO_PUBLISH_APPROVAL in the "
+            "wizardofodds-production GitHub environment, which no file in "
+            "this repository can set. PublishingSwitch.enabled is the state "
+            "AND an empty blocker list, and both variables are blockers "
+            "until they are set and agree, so the gate is not opened by this "
+            "change and every live publication still refuses by name. "
+            "modes.canary, what_enabling_live_requires, the contract "
+            "version, the approved freeze, both schema versions, "
+            "published_authority incumbent and candidate_authority "
+            "shadow_only are all byte-identical to production, which the "
+            "narrowed numerical pin checks field by field. No destination, "
+            "credential, host, model artifact or number is touched"
+        ),
+        "ops/run_progressive_live_refresh.py": (
+            "a new file, and the only thing the decision above authorises. "
+            "Publishes the live slate as a per-game composite in which every "
+            "game stands at its own latest validated window on the reviewed "
+            "progression T-180, T-90, T-45, T-20 final. The one global "
+            "forward-only pointer it replaced was wrong on any staggered "
+            "slate and provably so: on an eight-game 6:00-to-10:00 evening "
+            "the first game's T-20 capture is taken before the last game's "
+            "T-180 one, so the slate-wide 'closest window reached' declined "
+            "fourteen of twenty-four window groups and seven of eight games "
+            "never got a card. A game is now declined only when that same "
+            "game has already validly reached a window closer to its own "
+            "tip, a game nobody advanced keeps the component recorded for it "
+            "byte for byte, and no game is ever downgraded. Re-derives, "
+            "re-prices, re-routes and synthesises nothing: composition is "
+            "selection and concatenation of rows copied out of releases a "
+            "canary already read back and attested, every source is put "
+            "through the frozen publisher's own assert_canary_attested, "
+            "every composed row is looked up by the publisher's own logical "
+            "key in bytes re-read and re-digested from the stored source, "
+            "and COMPOSITE_UNATTESTED_ROWS, LIVE_SOURCE_MISMATCH_COUNT and "
+            "COMPOSITE_UNATTESTED_DISTRIBUTIONS must all be zero or nothing "
+            "is published. A composite that is exactly one canary release's "
+            "whole game set still has to equal that release's digest three "
+            "ways, which is the original check kept where it still applies. "
+            "Refuses an offset outside the progression, a canary of another "
+            "window, a destination other than the single live pair, an "
+            "advancing window with no named capture, a downgrade, and an "
+            "approval that is absent or disagrees -- naming both variables "
+            "and their environment when it does. The tipped guard is per "
+            "game: a started game is refused new publication and the rest of "
+            "the slate still goes, and a card validly published before a tip "
+            "is never retracted. On every refusal it writes nothing to any "
+            "destination and publishes to no canary in their place, so the "
+            "live pointer still names the most recent composite that "
+            "validated and the publisher's own current.json, previous.json, "
+            "audit log and retention are the mechanics used rather than a "
+            "second scheme. Every publication attempt appends one line to "
+            "processed/live_progressive_refresh/<slate>.jsonl naming every "
+            "game and its window, which is where the per-game state is read "
+            "from because the live pointer cannot say it. Computes no "
+            "probability, price, edge, EV, quantile, line, distribution, "
+            "minute or route, imports pandas not at all, names no fitted "
+            "artifact it did not copy from a receipt, and cannot promote a "
+            "candidate: the authority it publishes under is the switch's own "
+            "incumbent and shadow_only"
+        ),
+        "ops/live_slate_composite.py": (
+            "a new file, the per-game composition library the live refresh "
+            "above is written in terms of, and a library rather than an "
+            "entry point so that the attestation arithmetic can be tested "
+            "directly against bytes. It owns four things and no others. A "
+            "durable write-once content-addressed source store at "
+            "processed/live_composite_sources/<slate>/<release_id>/, holding "
+            "the rows, manifest and canary attestation of a release copied "
+            "byte for byte at the one moment the attestation of those exact "
+            "bytes is in hand -- necessary because a canary destination "
+            "retains only current and previous, so a game that advanced out "
+            "of an earlier cumulative release would otherwise have no source "
+            "anybody could read back. The selection itself, which picks each "
+            "game's rows out of its own source, concatenates them in the "
+            "publisher's own logical-key order and copies the matching "
+            "distributions, and which computes nothing: no price, "
+            "probability, projection, quantile, line, minute, edge or route "
+            "is derived, averaged, re-timed, relabelled or merged, and a row "
+            "is only ever moved. The audit, which re-reads every stored "
+            "source, recomputes its digest with the publisher's own digest "
+            "function instead of trusting the recorded field, runs the "
+            "publisher's own assert_canary_attested once per source rather "
+            "than once per release, and counts every composed row that "
+            "cannot be found byte-identical in the source it claims. The "
+            "composite manifest, which records GAME_ID, SOURCE_WINDOW, "
+            "CAPTURE_ID, CAPTURE_TIMESTAMP, SOURCE_RELEASE_ID, "
+            "SOURCE_ROWS_SHA256, PRODUCTION_SHA, FIT_ID, MODEL_ID, "
+            "FACTOR_ID and POLICY_ID per game, all of them copied out of "
+            "receipts and row fields and none of them invented, and which "
+            "refuses to publish a composite with a single untraceable row. "
+            "No destination, credential, host, model artifact, fit, "
+            "calibration, routing decision or number is created, read for "
+            "its value or written here"
+        ),
+        ".github/workflows/nba_t20_production.yml": (
+            "one added line in the run body of the step that captures, "
+            "serves and publishes -- export PYTHONUNBUFFERED=1 -- plus the "
+            "comment that explains it. On 2026-10-24 this runner lost "
+            "communication with the server while asleep between windows, "
+            "the server marked the job complete underneath it, and the "
+            "artifact upload that would have explained the two hours before "
+            "that failed '403 job is completed', taking every stage receipt "
+            "with RUNNER_TEMP. What the next invocation needed survived "
+            "regardless: the served-window ledger is written under the "
+            "durable data root and fsynced before the controller sleeps, so "
+            "the windows still owed were still known, which "
+            "test_a_published_window_survives_the_segment_dying_before_the_"
+            "next now pins directly. What did not survive is any account of "
+            "the segment itself, because the job log -- the one piece of "
+            "evidence that is server-side rather than on the vanished "
+            "runner -- had the process's stdout sitting in a buffer that "
+            "was never flushed. An environment variable rather than a -u "
+            "flag precisely because this file is registered additive-only: "
+            "a new line is permitted and editing the existing command is "
+            "not. Changes no behaviour of the controller, reaches no "
+            "secret, and cannot affect what is captured, served or "
+            "published. "
+            "Also on this lineage, already landed: "
+            "two added lines in the env block of the step that already "
+            "captures, serves and publishes the canary, plus the comment "
+            "that explains them. They bind NBA_PROP_WOO_PUBLISH from a "
+            "repository variable and NBA_PROP_WOO_PUBLISH_APPROVAL from a "
+            "secret, both in the wizardofodds-production environment the job "
+            "already names. Necessary and not avoidable in code: GitHub does "
+            "not put a variable or a secret into a step's process unless the "
+            "step binds it, and the publisher reads the approval out of the "
+            "process environment. Strictly additive -- no cron, trigger, "
+            "permission, "
+            "concurrency group, runner label, checkout ref, step, order or "
+            "existing env entry changes, which the additive-only line-set "
+            "rule and the narrowed workflow pin both check -- and it grants "
+            "nothing: until the owner sets both in the GitHub UI they "
+            "interpolate empty, the switch's blockers stand and every live "
+            "publication refuses. Neither value is printed, echoed or passed "
+            "on a command line"
+        ),
+        "ops/run_t20_production_controller.py": (
+            "one blocking call and one non-blocking call, and nothing else. "
+            "The blocking one is the serving-window gate check: the two "
+            "canonical gates that fit time cannot answer are asked, through "
+            "ops/assert_serving_window_gates.py, immediately after the "
+            "post-tip guard clears and before the slate is served, so a "
+            "window whose capture does not satisfy the live serving "
+            "protocol serves and publishes nothing and the segment exits "
+            "non-zero under T20_SERVING_WINDOW_GATES_REFUSED. It is a new "
+            "refusal in front of serving and removes none: the post-tip "
+            "guard, the readiness requirement, the duplicate-capture claim "
+            "and the unserved-window accounting all run exactly as before "
+            "and in the same order. The outcomes are recorded in the "
+            "segment receipt. "
+            "The non-blocking one is "
+            "one more call after each of the four windows has "
+            "published and validated its canary, and nothing else. It "
+            "invokes ops/run_progressive_live_refresh.py for that window and "
+            "then the frozen publication script's live page stage, pinned to "
+            "the receipt the refresh wrote. The window's own tip and the "
+            "capture its prices were selected from are handed over with it, "
+            "both carried out of facts this controller already held -- the "
+            "schedule read and the bundle selection the pricing path itself "
+            "performed -- and neither re-derived, defaulted or invented. "
+            "Nothing selects a capture a second time, and a window selection "
+            "never recorded one for is passed without it, which the refresh "
+            "refuses rather than guesses at. Every T-20 refusal, every T-20 "
+            "receipt field, the cumulative re-serving, the advisory "
+            "scheduling and reservation, the duplicate-capture claim and the "
+            "served-window recovery production already runs are untouched "
+            "and still pinned by their own tests -- including the per-window "
+            "recovery isolation production merged ahead of this branch, "
+            "whose _select_capture split, per-window refusal records, "
+            "deferred serving refusal and unserved-set subtraction are "
+            "carried through this merge unmodified and still reported under "
+            "T20_CAPTURED_WINDOWS_UNSERVED ahead of any live verdict. The "
+            "call can never raise, "
+            "a live fault degrades the segment report under its own outcome "
+            "exactly as an advisory fault does, and the canary a window "
+            "already published is never withdrawn, re-published or "
+            "re-derived because of it. T20_CAPTURED_WINDOWS_UNSERVED and the "
+            "advisory-degraded outcome both still outrank it, so a window "
+            "production is missing is never reported as a live footnote. The "
+            "controller decides nothing about the live release itself -- not "
+            "the digest, not the ordering, not the approval -- it hands over "
+            "the window's own canary and serving receipts and reports what "
+            "came back. Nothing here captures, so nothing here can "
+            "fabricate, re-time or relabel a snapshot or let a non-T-20 "
+            "snapshot stand in for a T-20 one, and no model, calibration, "
+            "price or routing is reached from here"
+        ),
+        "ops/validate_workflows.py": (
+            "one added entry in CONTROLLER_OWNED_ENTRY_POINTS, the live "
+            "refresh script, and the publication-activation check narrowed "
+            "from a flat token ban to the statement it was standing in for. "
+            "The ban existed because no workflow could be allowed to "
+            "activate live publishing by itself, and it refused the two "
+            "approval variables by name because a workflow mentioning them "
+            "was a workflow deciding. That now has to distinguish deciding "
+            "from carrying, and it does so strictly: --mode live and --stage "
+            "live stay refused in every workflow, both variables stay "
+            "refused in every workflow but the T-20 one, and in that one "
+            "each is accepted only as a bare binding of its own name to a "
+            "vars or secrets reference of the same name, only on the step "
+            "that runs the controller entry point, only with its other half "
+            "present, and never inside a run body. Everything else is "
+            "untouched: the three segment crons are still pinned exactly, "
+            "the permissions, concurrency, runner and checkout checks are "
+            "unchanged, and no existing refusal is removed. The live refresh "
+            "entry point belongs to the controller and not to the schedule "
+            "for the reason the advisory one does, plus one more: the window "
+            "it publishes has to have passed its canary first, and only the "
+            "controller knows that it did"
+        ),
+        "docs/wizardofodds/PRODUCTION_AUTOMATION.md": (
+            "one added section describing the progressive live refresh: the "
+            "one live pointer, what each window does to it, the digest "
+            "identity the live publish is conditional on, what is retained "
+            "when a refresh fails, the post-tip guard, where the durable "
+            "record is written, and the two variables the owner has to set "
+            "before any of it publishes. The one thing already documented "
+            "that is edited is the live-is-configured-and-disabled section, "
+            "which now records the state the switch actually carries: the "
+            "decision taken in the commit, the two conditions still "
+            "outstanding, and the refusal that stands until they are met. "
+            "The trigger table, the advisory-window section, the "
+            "single-writer and fail-closed sections and the idempotency "
+            "contract all stand as written"
+        ),
+        "docs/GO_LIVE_CHECKLIST.md": (
+            "the checklist's own step 4 of section 4, carried out and "
+            "recorded. It prescribed exactly this: take the decision in "
+            "ops/wizardofodds_publishing_switch.json, amend "
+            "PUBLICATION_ACTIVATION_TOKENS in ops/validate_workflows.py so "
+            "the workflow may carry the approval it may not grant, and set "
+            "both variables in the wizardofodds-production environment. The "
+            "first two are done and are described here as done; the third is "
+            "not ours to do and is restated as the only thing left, with the "
+            "exact names and the exact values. The placeholder token the "
+            "document quoted is replaced with the real one. No step is "
+            "removed, no gate is described as weaker than it is, and the "
+            "sections on canary proof, rollback and the refusals are "
+            "unchanged"
         ),
     }
 )
@@ -1472,6 +1894,37 @@ SHADOW_OWNED_PRODUCTION_PATHS: Mapping[str, str] = MappingProxyType(
 #: production ref rather than trusting either mapping.
 ADDITIVE_ONLY_WORKFLOWS: tuple[str, ...] = (
     ".github/workflows/nba_production_lifecycle.yml",
+    ".github/workflows/nba_t20_production.yml",
+)
+
+#: The publishing switch, declarable only for the live decision inside it.
+#:
+#: The same correction as the destination registry below, on the file those
+#: live destinations are useless without. The switch was pinned by its bytes
+#: because it decides whether anything publishes at all, and that is right
+#: about every other field in it -- but a byte pin reads the same for two
+#: different changes: weakening a gate, and taking the one decision the file
+#: exists to carry. ``modes.live.state`` is a field whose entire purpose is to
+#: be set once, by a human, in a reviewed commit, and the pin made the file
+#: permanently unable to be set, which is not a freeze on publication but a
+#: freeze on the review that authorises it.
+#:
+#: So it is declarable, under a rule that is strictly stronger than the byte
+#: comparison once the file is allowed to differ at all: only the three fields
+#: inside ``modes.live`` may differ, ``state`` may only move to ``ENABLED``,
+#: ``approval_token`` may not stay the placeholder that said no approval had
+#: been granted, and every other key -- ``modes.canary``,
+#: ``what_enabling_live_requires``, the contract version, the approved freeze,
+#: both schema versions, ``published_authority`` and ``candidate_authority``
+#: -- must be deeply equal to the production ref.
+#:
+#: Flipping the state is also not the same thing as opening the gate.
+#: ``PublishingSwitch.enabled`` is the state *and* an empty blocker list, and
+#: ``NBA_PROP_WOO_PUBLISH`` and ``NBA_PROP_WOO_PUBLISH_APPROVAL`` are blockers
+#: until they are set in the ``wizardofodds-production`` GitHub environment
+#: and agree with this file, neither of which any commit can do.
+ADDITIVE_ONLY_PUBLISHING_SWITCH: tuple[str, ...] = (
+    "ops/wizardofodds_publishing_switch.json",
 )
 
 #: The destination registry, declarable only for added named destinations.

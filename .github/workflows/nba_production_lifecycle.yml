@@ -263,6 +263,78 @@ jobs:
             --summary-path "$GITHUB_STEP_SUMMARY" \
             --github-env "$GITHUB_ENV"
 
+      # Step 3D, which the frozen update protocol names as the promotion
+      # stage and which nothing ever ran. Step 3C registers an immutable
+      # candidate and stops — the protocol prohibits it approving what it
+      # just fitted — so without this step every daily fit stayed
+      # REGISTERED / NOT PROMOTED for ever and the incumbent was the August
+      # freeze on every slate since.
+      #
+      # It fits nothing and reads no training data. It re-verifies the
+      # candidate the step above registered, through the registry's own
+      # assert_validation_pass, under the registry's own promotion lock, and
+      # promotes it only if every fit-time gate passes. A fit that fails is
+      # not promoted and nothing is displaced: the single atomic state
+      # replacement is the last thing that happens, so the previously
+      # promoted daily fit keeps serving and the step records
+      # FALLBACK_ACTIVE with the reason.
+      #
+      # Not --strict, for the reason the training-contract report is not: a
+      # slate served by a slightly older validated authority is strictly
+      # better than no slate, so an unpromotable fit degrades the day rather
+      # than stopping it.
+      - name: Promote the validated daily fit
+        id: promotion
+        if: env.MODE == 'production'
+        env:
+          NBA_PROP_FIT_REGISTRY_DIR: ${{ vars.NBA_PROP_FIT_REGISTRY_DIR }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/run"
+          python ops/run_daily_fit_promotion.py \
+            --slate-date "$slate" \
+            --registry-root "$NBA_PROP_FIT_REGISTRY_DIR" \
+            --adaptive-status "$RUNNER_TEMP/run/adaptive.json" \
+            --receipt-path "$RUNNER_TEMP/run/daily_fit_promotion.json" \
+            --github-output "$GITHUB_OUTPUT" \
+            --summary-path "$GITHUB_STEP_SUMMARY"
+
+      # The other half of the gap. resolve_incumbent refuses to serve a
+      # promoted fit whose artifacts are not the bytes in the serving tree,
+      # and names the step a human has to perform: seal a runtime bundle
+      # from the promoted fit. That refusal is right and is unchanged. This
+      # is the step that performs it.
+      #
+      # The fit's artifacts are overlaid on the bundle installed above, the
+      # frozen manifest is re-sealed over them, and all three of serving's
+      # own verifications are made against the result before anything moves:
+      # the whole manifest against the tree, every runtime model artifact
+      # inside the model directory, and every artifact digest the fit
+      # recorded against the bytes the serving scripts would load. Only then
+      # are FROZEN_RUNTIME_MODEL_DIR and FROZEN_RUNTIME_BUNDLE_ROOT
+      # re-pointed, which is what the serving step below reads.
+      #
+      # A seal that cannot verify writes no pointer, so the installed base
+      # bundle stays exported and the slate is served by the authority that
+      # was already in force. That is the controlled fallback, not a
+      # substitution: serving still reports which authority priced it.
+      - name: Seal the promoted fit into a verified runtime bundle
+        if: env.MODE == 'production' && steps.promotion.outputs.promoted == 'true'
+        env:
+          NBA_PROP_DATA_DIR: ${{ vars.NBA_PROP_DATA_DIR }}
+          NBA_PROP_FIT_REGISTRY_DIR: ${{ vars.NBA_PROP_FIT_REGISTRY_DIR }}
+          NBA_PROP_WORK_DIR: ${{ vars.NBA_PROP_WORK_DIR }}
+        run: |
+          set -euo pipefail
+          python ops/seal_promoted_fit_bundle.py \
+            --registry-root "$NBA_PROP_FIT_REGISTRY_DIR" \
+            --base-bundle-root "$FROZEN_RUNTIME_BUNDLE_ROOT" \
+            --runtime-root "$NBA_PROP_WORK_DIR" \
+            --data-root "$NBA_PROP_DATA_DIR" \
+            --receipt-path "$RUNNER_TEMP/run/sealed_fit_bundle.json" \
+            --summary-path "$GITHUB_STEP_SUMMARY" \
+            --github-env "$GITHUB_ENV"
+
       # The incumbent prices the slate. Nothing automated did this before:
       # the lifecycle refreshed state, fitted a candidate and shadowed it,
       # and the artifact production actually serves was produced by hand.
