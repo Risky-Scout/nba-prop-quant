@@ -132,6 +132,7 @@ cannot be traced to a canary-attested source refuses to publish.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -255,14 +256,25 @@ class GameComponent:
             "SOURCE_INCUMBENT_AUTHORITY": self.incumbent_authority,
         }
 
-    def record(self) -> dict[str, Any]:
-        """This component as the durable per-game record keeps it.
+def window_offset(label: Any) -> int:
+    """The offset a ``T-180m`` window label states, or a refusal.
 
-        The manifest's own entry plus the one field the manifest states as a
-        label rather than a number, so a later refresh can read the offset
-        back without parsing ``SOURCE_WINDOW``.
-        """
-        return {**self.manifest_entry(), "offset_minutes": int(self.offset_minutes)}
+    Strict on purpose. This is read back out of the durable record to decide
+    whether a game would be going forward, so a label this cannot parse has
+    to stop the composite rather than fall back to a number -- every possible
+    fallback is either a downgrade or a false claim about which window a card
+    came from.
+    """
+    text = str(label or "")
+
+    if not re.fullmatch(r"T-\d+m", text):
+        raise CompositeRefused(
+            f"{text!r} is not a window label of the form T-180m, so the "
+            "offset the game it belongs to is serving cannot be established "
+            "and no composite is assembled"
+        )
+
+    return int(text[2:-1])
 
 
 def component_from_record(record: dict[str, Any]) -> GameComponent:
@@ -290,7 +302,7 @@ def component_from_record(record: dict[str, Any]) -> GameComponent:
         "SOURCE_CANARY_DESTINATION",
         "SOURCE_RELEASE_ID",
         "SOURCE_ROWS_SHA256",
-        "offset_minutes",
+        "SOURCE_WINDOW",
     )
 
     missing = sorted(
@@ -307,7 +319,7 @@ def component_from_record(record: dict[str, Any]) -> GameComponent:
 
     return GameComponent(
         game_id=str(record["GAME_ID"]),
-        offset_minutes=int(record["offset_minutes"]),
+        offset_minutes=window_offset(record["SOURCE_WINDOW"]),
         source_release_id=str(record["SOURCE_RELEASE_ID"]),
         source_rows_sha256=str(record["SOURCE_ROWS_SHA256"]),
         capture_id=str(record["CAPTURE_ID"]),

@@ -331,7 +331,20 @@ class LiveAlreadyCloserToTip(LiveRefreshRefused):
     guaranteed here too -- nothing written, no canary published in live's
     place, the pointer left naming the release it already named -- and the
     one thing that differs is the verdict.
+
+    Carries the per-game read it was decided from. Now that a decline is a
+    statement about particular games rather than about one slate-wide
+    pointer, "nothing advanced" is only half an answer: which games were
+    declined and what window each is actually holding is the half a reader
+    needs, and this is the only place that still has it.
     """
+
+    def __init__(
+        self, message: str, *, advancement: dict[str, Any] | None = None
+    ) -> None:
+        super().__init__(message)
+
+        self.advancement = advancement or {}
 
 
 class LiveRefreshIncomplete(RuntimeError):
@@ -1150,6 +1163,8 @@ def resolve_advancement(
 
     declined: list[dict[str, Any]] = []
 
+    repeating: list[str] = []
+
     for entry in pregame:
         game_id = str(entry["game_id"])
 
@@ -1157,6 +1172,12 @@ def resolve_advancement(
 
         if held is None or int(held.offset_minutes) >= int(offset_minutes):
             advancing.append(game_id)
+
+            if held is not None and int(held.offset_minutes) == int(
+                offset_minutes
+            ):
+                repeating.append(game_id)
+
             continue
 
         declined.append(
@@ -1192,6 +1213,7 @@ def resolve_advancement(
         "advancing_game_ids": sorted(advancing),
         "declined": declined,
         "post_tip_refused": refused,
+        "repeating_game_ids": sorted(repeating),
     }
 
 
@@ -1213,9 +1235,24 @@ def assert_something_advances(
     if advancement["advancing_game_ids"]:
         declined = advancement["declined"]
 
+        advancing = advancement["advancing_game_ids"]
+
+        repeating = advancement["repeating_game_ids"]
+
         return (
-            f"{len(advancement['advancing_game_ids'])} game(s) advance to "
-            f"T-{offset_minutes}"
+            f"{len(advancing)} game(s) advance to T-{offset_minutes}"
+            + (
+                ", all of them already at the same window and re-read from "
+                "this window's own canary, which is how a cumulative release "
+                "grows and is why identical bytes end as already-current "
+                "rather than as a second publication"
+                if len(repeating) == len(advancing)
+                else (
+                    f", {len(repeating)} of them already at the same window"
+                    if repeating
+                    else ""
+                )
+            )
             + (
                 f", and {len(declined)} are already closer to their own tips "
                 "and are carried unchanged"
@@ -1240,7 +1277,8 @@ def assert_something_advances(
             )
             + "). A game is never replaced by an earlier one of its own "
             "windows, so nothing is written and every game's latest valid "
-            "prediction is left serving"
+            "prediction is left serving",
+            advancement=advancement,
         )
 
     raise post_tip_refusal(tipped, now=now)
@@ -2595,6 +2633,7 @@ def main(argv: list[str] | None = None) -> int:
         )
 
         failure = {
+            "advancement": getattr(error, "advancement", {}),
             "error": type(error).__name__,
             "live_outcome": outcome,
             "message": str(error),

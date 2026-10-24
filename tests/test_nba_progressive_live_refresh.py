@@ -71,6 +71,14 @@ TIPS: dict[int, str] = dict(fixture.TIP_OFF)
 #: chain. Every refusal about time is then a refusal the test asked for.
 WELL_BEFORE_TIP = "2026-10-20T18:00:00+00:00"
 
+#: The capture identity the harness supplies for every advancing window. The
+#: live refresh carries these into the composite manifest and does not read
+#: the capture log, so a stand-in is honest here in a way inventing one inside
+#: the entry point would not be.
+CAPTURE_PREFIX = "fixture-capture"
+
+CAPTURED_AT = "2026-10-20T17:30:00+00:00"
+
 
 class Chain:
     """One slate, four canary destinations and one live destination.
@@ -211,6 +219,7 @@ class Chain:
         canary_root: Path | None = None,
         now: str = WELL_BEFORE_TIP,
         tips: dict[str, str] | None = None,
+        captures: dict[str, str] | None = None,
         receipt_path: Path | None = None,
     ) -> list[str]:
         built = self.built
@@ -258,15 +267,33 @@ class Chain:
             ),
         ]
 
-        for window_id, tip in (
+        windows = (
             tips
             if tips is not None
             else {
                 f"{game_id}:T-{offset}m": tip
                 for game_id, tip in TIPS.items()
             }
-        ).items():
+        )
+
+        for window_id, tip in windows.items():
             argv += ["--window-tip-utc", f"{window_id}={tip}"]
+
+        # The capture every advancing game's prices came from. Supplied by the
+        # controller in production out of the bundle selection pricing itself
+        # performed; synthesised here, because what these tests are about is
+        # the live half and the fixture's prices are not taken from a
+        # scheduled capture at all. Deterministic per window so a receipt can
+        # be compared against it.
+        for window_id, identity in (
+            captures
+            if captures is not None
+            else {
+                window_id: f"{CAPTURE_PREFIX}-{window_id}@{CAPTURED_AT}"
+                for window_id in windows
+            }
+        ).items():
+            argv += ["--window-capture", f"{window_id}={identity}"]
 
         return argv
 
@@ -482,15 +509,16 @@ def test_the_live_page_stage_reads_the_refresh_receipt_unchanged(chain):
 
 
 def test_an_earlier_window_never_replaces_a_later_one(chain):
-    """The rule that keeps a late T-180 from walking the page back.
+    """The rule that keeps a late T-180 from walking a game's card back.
 
-    The ordinary evening case rather than an exotic one, because a window
-    belongs to a game and its offset is measured from that game's own tip. On
-    a slate with several tip times they interleave: the first game's T-20
-    capture is taken before the last game's T-180 capture, so a T-180 refresh
-    running after a T-90 one has nothing wrong with it. What it would publish
-    is a real validated release with every digest agreeing and every readback
-    passing. It is simply the wrong one.
+    Per game, which is the whole of what the composite changed. A window
+    belongs to a game and its offset is measured from that game's own tip, so
+    on a slate with several tip times the windows interleave and a T-180
+    refresh running after a T-90 one has nothing wrong with it. What it would
+    publish is a real validated release with every digest agreeing and every
+    readback passing. It is simply the wrong one *for the games it names*, and
+    here it names both of the fixture's two, so there is nothing left for it
+    to advance.
 
     So it is declined and not failed. Everything a refusal guarantees still
     holds -- nothing written, both pointers untouched -- and the exit code is
@@ -523,9 +551,19 @@ def test_an_earlier_window_never_replaces_a_later_one(chain):
 
     assert receipt["outcome"] == "LIVE_REFRESH_DECLINED"
 
-    assert "T-90 release is already live" in receipt["message"]
+    # Every game it is for is named with the window it is actually holding,
+    # so the decline is a statement about the games rather than about a single
+    # slate-wide pointer that no longer exists.
+    for game_id in TIPS:
+        assert f"{game_id} at T-90m" in receipt["message"]
 
     assert "never replaced by an earlier one" in receipt["message"]
+
+    assert sorted(
+        entry["game_id"] for entry in receipt["advancement"]["declined"]
+    ) == sorted(str(game_id) for game_id in TIPS)
+
+    assert receipt["advancement"]["advancing_game_ids"] == []
 
     # Declined is not live-bearing: the next refresh still reads T-90 as the
     # window live is at, not T-180.
@@ -901,7 +939,7 @@ def test_an_unusable_serving_receipt_leaves_the_last_valid_release_serving(
 
     assert code == live.EXIT_REFUSED
 
-    assert "the rows carry no provenance" in receipt["message"]
+    assert "carry no provenance" in receipt["message"]
 
     assert_untouched(chain, current, previous, audit)
 
@@ -1705,9 +1743,13 @@ def test_this_module_computes_no_number_and_promotes_no_candidate():
 
     Asserted on the source rather than described, because the claim the whole
     chain rests on is that a live publication is a transport decision and not
-    a modelling one.
+    a modelling one. Over the composition library as well as the entry point,
+    since the two together are now the whole of the live path and a word
+    banned in one of them would mean nothing if the other could say it.
     """
     source = (PROJECT / "ops" / "run_progressive_live_refresh.py").read_text(
+        encoding="utf-8"
+    ) + (PROJECT / "ops" / "live_slate_composite.py").read_text(
         encoding="utf-8"
     )
 
@@ -1755,6 +1797,13 @@ def test_this_module_computes_no_number_and_promotes_no_candidate():
 
     assert switch.candidate_authority == "shadow_only"
 
-    # pandas is imported inside the one function that reads the parquet and
-    # nowhere else, so nothing at module scope can reach a frame.
-    assert source.count("import pandas") == 1
+    # pandas is not imported at all any more, anywhere, in either file. It
+    # used to be reached in one function, to read the priced parquet the
+    # publisher's own publish() wanted handed to it. The composite does not
+    # publish from the parquet -- every row it serves is copied out of an
+    # attested release -- so the one reason this chain ever had to open a
+    # frame is gone, and with it the only path by which a number could have
+    # been recomputed here.
+    assert source.count("import pandas") == 0
+
+    assert "pd." not in source
