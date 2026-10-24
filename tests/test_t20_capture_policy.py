@@ -770,14 +770,16 @@ def test_a_sweep_refuses_rather_than_waiting_out_the_capture_window(tmp_path):
         settings.snapshot_dir / "capture_runs" / f"{SLATE}.jsonl"
     )
 
-    with collector.capture_window_claim(
-        capture_run_path, timeout_seconds=0
-    ) as held:
-        with pytest.raises(RuntimeError) as error:
-            with collector.capture_window_claim(
-                capture_run_path, timeout_seconds=0
-            ):
-                pass
+    with (
+        collector.capture_window_claim(
+            capture_run_path, timeout_seconds=0
+        ) as held,
+        pytest.raises(RuntimeError) as error,
+        collector.capture_window_claim(
+            capture_run_path, timeout_seconds=0
+        ),
+    ):
+        pass
 
     assert str(held) in str(error.value)
 

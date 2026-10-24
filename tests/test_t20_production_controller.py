@@ -2408,7 +2408,7 @@ def test_the_summary_table_states_both_halves_of_done(tmp_path):
 
     games = [game(101, at(23, 0))]
 
-    world = captured_but_unpublished(tmp_path, clock=clock, games=games)
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
 
     recovery_clock = Clock(at(23, 50))
 
