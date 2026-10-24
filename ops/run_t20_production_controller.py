@@ -578,6 +578,19 @@ def advisory_rows(
     """
     requested = [int(offset) for offset in offsets]
 
+    # The production window first, because it is the specific mistake and
+    # "not among the advisory windows" would be a true but useless way to
+    # describe it.
+    if PRODUCTION_OFFSET_MINUTES in requested:
+        raise ControllerRefused(
+            OUTCOME_FAILED,
+            f"T-{PRODUCTION_OFFSET_MINUTES} was asked for as an advisory "
+            "window. It is the production window: it has its own capture, its "
+            "own serving entry point, its own receipt and its own release "
+            "stream, and serving it as advisory would put the same snapshot "
+            "into two release streams under two names",
+        )
+
     unknown = sorted(
         offset for offset in requested if offset not in ADVISORY_OFFSETS_MINUTES
     )
@@ -588,16 +601,6 @@ def advisory_rows(
             f"advisory offset(s) {unknown} are not among the advisory windows "
             f"{list(ADVISORY_OFFSETS_MINUTES)}, so no destination is "
             "configured to publish them and nothing would carry the release",
-        )
-
-    if PRODUCTION_OFFSET_MINUTES in requested:
-        raise ControllerRefused(
-            OUTCOME_FAILED,
-            f"T-{PRODUCTION_OFFSET_MINUTES} was asked for as an advisory "
-            "window. It is the production window: it has its own capture, its "
-            "own serving entry point, its own receipt and its own release "
-            "stream, and serving it as advisory would put the same snapshot "
-            "into two release streams under two names",
         )
 
     try:
@@ -1935,6 +1938,14 @@ class T20Controller:
 
         if bundle is None:
             return
+
+        # Finished with as a *capture*, which is what the scheduling loop
+        # asks about. Its serving is tracked by the held list instead, because
+        # a window whose capture was taken must not be woken for again -- the
+        # capture is the point-in-time market and taking it twice is at best
+        # wasted work and at worst a second scheduled capture for a window
+        # that accepts exactly one.
+        self._advisory_handled.add(window_id)
 
         self._advisory_held.setdefault(offset, []).append(
             {**current, "capture": bundle}

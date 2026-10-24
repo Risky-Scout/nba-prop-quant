@@ -111,21 +111,31 @@ T20_ENTRY_POINT = "ops/run_t20_production_controller.py"
 #: protocol, the frozen-package install, grading, the shadow and the shadow
 #: monitor all belong to the lifecycle, and running any of them per tip group
 #: is the cost this design exists to avoid.
-T20_FORBIDDEN_ENTRY_POINTS: tuple[str, ...] = (
+LIFECYCLE_ENTRY_POINTS: tuple[str, ...] = (
     "ops/refresh_current_season_state.py",
     "ops/run_adaptive_daily_fit.py",
     "ops/install_frozen_model_artifacts.py",
     "ops/grade_incumbent_production_slate.py",
     "ops/run_production_shadow.py",
     "ops/monitor_live_shadow_evidence.py",
-    # Advisory serving, which belongs to the controller and not to the
-    # schedule. The controller is what reserves the runner for the T-20
-    # capture before starting an advisory serve, what addresses each advisory
-    # release to its own confined destination, and what refuses to write a
-    # T-20 window id from an advisory run. A workflow step that invoked the
-    # advisory entry point directly would have none of those guarantees in
-    # front of it.
+)
+
+#: Entry points the T-20 controller owns and no workflow step may call.
+#:
+#: Advisory serving belongs to the controller and not to the schedule. The
+#: controller is what reserves the runner for the T-20 capture before starting
+#: an advisory serve, what addresses each advisory release to its own confined
+#: destination, and what refuses to write a T-20 window id from an advisory
+#: run. A workflow step that invoked the advisory entry point directly would
+#: have none of those guarantees in front of it, which is a different reason
+#: from the lifecycle's and so is a different list.
+CONTROLLER_OWNED_ENTRY_POINTS: tuple[str, ...] = (
     "ops/run_advisory_window_serving.py",
+)
+
+T20_FORBIDDEN_ENTRY_POINTS: tuple[str, ...] = (
+    *LIFECYCLE_ENTRY_POINTS,
+    *CONTROLLER_OWNED_ENTRY_POINTS,
 )
 
 #: A serving workflow installs what it serves with. The dev extra is pytest
@@ -398,12 +408,22 @@ def t20_problems(name: str, on: dict, jobs: dict) -> list[str]:
                 "nothing would capture the snapshot production prices from"
             )
 
-        for entry_point in T20_FORBIDDEN_ENTRY_POINTS:
+        for entry_point in LIFECYCLE_ENTRY_POINTS:
             if entry_point in commands:
                 found.append(
                     f"{name}: job {job_name} runs {entry_point}, which is "
                     "the lifecycle's once-daily work and must not be "
                     "repeated per T-20 segment"
+                )
+
+        for entry_point in CONTROLLER_OWNED_ENTRY_POINTS:
+            if entry_point in commands:
+                found.append(
+                    f"{name}: job {job_name} runs {entry_point}, which the "
+                    "controller owns. Invoking it from a step would skip the "
+                    "reservation that keeps the T-20 capture's priority and "
+                    "the destination check that keeps an advisory release out "
+                    "of the T-20 record"
                 )
 
         for token in T20_FORBIDDEN_INSTALL_TOKENS:
