@@ -54,6 +54,11 @@ ENTRY_POINT = PROJECT / "ops" / "run_t20_production_controller.py"
 
 PRODUCTION_SHA = "a728b342a2f728c13a705abda8a5bbb79caf53ea"
 
+#: The three prop routes that read Gate 3 role state, and the only ones a
+#: role-state failure may cost. Imported rather than typed out in the test
+#: that matters; repeated here only so the fake world can build a receipt.
+GATE3_ROUTES = ("assists", "points_assists", "points_rebounds")
+
 
 def load_ops(name: str):
     spec = importlib.util.spec_from_file_location(
@@ -228,6 +233,11 @@ class World:
         #: satisfy the live serving protocol looks like to the controller.
         self.window_gates_refuse: bool = False
 
+        #: Game ids whose role state is not ready, which is what missing
+        #: lineup records look like to the controller: the three Gate 3
+        #: routes are rejected for those games and the window still serves.
+        self.window_gates_degrade: tuple[int, ...] = ()
+
     # -- injected collaborators ---------------------------------------
 
     def schedule_source(self, slate_date: str) -> list[dict]:
@@ -301,14 +311,31 @@ class World:
 
         status.parent.mkdir(parents=True, exist_ok=True)
 
-        outcome = (
-            "SERVING_WINDOW_GATES_REFUSED"
-            if self.window_gates_refuse
-            else "SERVING_WINDOW_GATES_PASS"
-        )
+        if self.window_gates_refuse:
+            outcome = "SERVING_WINDOW_GATES_REFUSED"
+        elif self.window_gates_degrade:
+            outcome = "SERVING_WINDOW_ROUTES_DEGRADED"
+        else:
+            outcome = "SERVING_WINDOW_GATES_PASS"
+
+        degraded = {
+            str(game): list(GATE3_ROUTES)
+            for game in (self.window_gates_degrade or ())
+        }
 
         status.write_text(
-            json.dumps({"outcome": outcome, "slate_date": slate}),
+            json.dumps(
+                {
+                    "degraded_reasons": {
+                        game: ["the capture carries no lineup records"]
+                        for game in degraded
+                    },
+                    "degraded_routes": degraded,
+                    "outcome": outcome,
+                    "route_filter_reason": "gate3_role_state_unavailable",
+                    "slate_date": slate,
+                }
+            ),
             encoding="utf-8",
         )
 
@@ -5979,3 +6006,384 @@ def test_the_next_invocation_serves_only_what_the_dead_segment_did_not(
 
     # ... and the one it never reached still is.
     assert plan["pending_windows"] == ["102:T-20m"]
+
+
+# ----------------------------------------------------------------------
+# a serving-window input failure is not a model failure
+# ----------------------------------------------------------------------
+#
+# The two gates this controller asks before serving fail in different
+# domains and must therefore fail differently.
+#
+# ``t20_protocol_compatible`` is about the capture every route reads, and
+# its failure refuses the window -- the case the two tests above cover.
+#
+# ``gate3_role_readiness`` is about role state, which exactly three prop
+# routes consume. A game whose capture carries no lineup records costs that
+# game those three routes, through the rejection ``15_price_markets``
+# already applies per row under ``gate3_role_state_unavailable``, and costs
+# nothing else. It is not evidence about the fitted model: changing the
+# serving fit repairs no lineup, and a mid-evening authority change is its
+# own inconsistency. The tests below pin that whole policy.
+
+
+def window_gate_decisions(world: World) -> list[dict]:
+    """Every serving-window gate decision the controller read back."""
+    return [
+        json.loads(
+            Path(command[command.index("--status-path") + 1]).read_text(
+                encoding="utf-8"
+            )
+        )
+        for command in world.commands
+        if str(command[1]).endswith("assert_serving_window_gates.py")
+    ]
+
+
+def test_the_routes_a_role_state_failure_can_cost_are_exactly_gate_threes():
+    """Which routes consume the gate is read from the module that owns them.
+
+    The policy is "reject the routes that read role state", so what those
+    routes are may not be a list somebody retyped. ``gate3_v2`` owns the
+    routing and the window-gate entry point imports its set; the pricing
+    step and the publisher screen on the same set.
+    """
+    gates = load_ops("assert_serving_window_gates")
+
+    from nba_prop_quant.gate3_v2 import GATE3_CHANGED_PROPS
+
+    assert gates.GATE3_DEPENDENT_ROUTES == tuple(sorted(GATE3_CHANGED_PROPS))
+
+    assert set(gates.GATE3_DEPENDENT_ROUTES) == set(GATE3_ROUTES)
+
+    # And the gate is route-scoped rather than window-refusing, which is the
+    # whole distinction.
+    assert gates.ROUTE_SCOPED_GATE == "gate3_role_readiness"
+
+    assert gates.WINDOW_REFUSING_GATES == ("t20_protocol_compatible",)
+
+    assert gates.ROUTE_SCOPED_GATE not in gates.WINDOW_REFUSING_GATES
+
+
+def test_missing_role_data_does_not_change_which_fit_is_served(tmp_path):
+    """The serving authority is identical with and without role state.
+
+    Two runs of the same evening, differing only in whether one game's
+    capture carries lineup records. The fit the serving entry point is
+    invoked under has to be the same in both, because a lineup is not
+    evidence about a model.
+    """
+    games = [
+        game(101, at(20, 0)),
+        game(102, at(23, 0), home=3, away=4),
+    ]
+
+    def serve_the_evening(root, *, degrade):
+        clock = Clock(at(19, 25))
+
+        world = World(root, schedules=[games], clock=clock)
+
+        world.window_gates_degrade = degrade
+
+        write_morning_receipt(world)
+
+        receipt = build(
+            world,
+            clock=clock,
+            segment_start=SEGMENT_2[0],
+            segment_end=SEGMENT_2[1],
+        ).run()
+
+        return world, receipt
+
+    healthy, healthy_receipt = serve_the_evening(
+        tmp_path / "healthy", degrade=()
+    )
+
+    degraded, degraded_receipt = serve_the_evening(
+        tmp_path / "degraded", degrade=(101,)
+    )
+
+    def served_fits(world):
+        return [
+            command[command.index("--registry-root") + 1]
+            for command in world.commands
+            if str(command[1]).endswith(
+                "run_incumbent_production_serving.py"
+            )
+            and "--registry-root" in command
+        ]
+
+    assert served_fits(degraded) == served_fits(healthy)
+
+    # Both evenings served and published the same two groups.
+    assert degraded.published == healthy.published == [[101], [101, 102]]
+
+    assert (
+        degraded_receipt["final_outcome"]
+        == healthy_receipt["final_outcome"]
+        == controller.OUTCOME_SEGMENT_COMPLETE
+    )
+
+
+def test_a_game_with_no_role_state_costs_only_its_own_three_routes(tmp_path):
+    """Unaffected routes serve, and the affected ones are named.
+
+    The slate is served and published exactly as it would have been. What
+    changes is that the segment says, per game, which routes it could not
+    carry -- so the omission is a recorded fact rather than a silence.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [
+        game(101, at(20, 0)),
+        game(102, at(23, 0), home=3, away=4),
+    ]
+
+    world = World(tmp_path, schedules=[games], clock=clock)
+
+    world.window_gates_degrade = (101,)
+
+    write_morning_receipt(world)
+
+    receipt = build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    ).run()
+
+    # Every route on every game still served and published ...
+    assert world.served == [[101], [101, 102]]
+
+    assert world.published == [[101], [101, 102]]
+
+    assert receipt["final_outcome"] == controller.OUTCOME_SEGMENT_COMPLETE
+
+    # ... except the three that read role state, on the one game that could
+    # not supply it, recorded under the reason the pricing step uses.
+    degraded = receipt["route_degraded_games"]
+
+    assert {record["game_id"] for record in degraded} == {"101"}
+
+    assert degraded[0]["routes"] == list(GATE3_ROUTES)
+
+    assert [
+        record["route_filter_reason"]
+        for record in receipt["serving_window_gate_outcomes"]
+    ] == ["gate3_role_state_unavailable"] * 2
+
+    # 102 is never named, because 102's role state was fine.
+    assert "102" not in {record["game_id"] for record in degraded}
+
+
+def test_the_live_refresh_is_told_which_games_lost_their_routes(tmp_path):
+    """The handover, so the live half can keep what this window cannot beat.
+
+    The controller is the only thing that holds both facts -- the gate stage's
+    measurement and the live refresh invocation -- so it passes the first to
+    the second. It decides nothing: the games and the routes are read back out
+    of the gate receipt, and a window that measured no degradation passes none.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [
+        game(101, at(20, 0)),
+        game(102, at(23, 0), home=3, away=4),
+    ]
+
+    world = World(tmp_path, schedules=[games], clock=clock)
+
+    world.window_gates_degrade = (101,)
+
+    write_morning_receipt(world)
+
+    build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    ).run()
+
+    def handed(offset: int | None) -> list[list[str]]:
+        return [
+            [
+                command[index + 1]
+                for index, item in enumerate(command)
+                if item == "--role-state-degraded-game"
+            ]
+            for command in live_commands(world, offset=offset)
+        ]
+
+    gated = handed(controller.PRODUCTION_OFFSET_MINUTES)
+
+    assert gated, "the segment has to have reached the T-20 live refresh"
+
+    expected = "101=" + ",".join(GATE3_ROUTES)
+
+    assert all(carried == [expected] for carried in gated), gated
+
+    # And the game whose role state was fine is never named, so the live half
+    # is never told to hold back a game this window can serve in full.
+    assert not any(
+        item.startswith("102=") for carried in gated for item in carried
+    )
+
+    # The measurement is this window's. The advisory windows this segment
+    # replays were gated by nothing here, so they are handed nothing: a game
+    # held back at a window whose role state nobody measured would be a game
+    # held back on no evidence.
+    assert all(
+        carried == []
+        for offset in controller.PROGRESSIVE_LIVE_OFFSETS_MINUTES
+        if offset != controller.PRODUCTION_OFFSET_MINUTES
+        for carried in handed(offset)
+    )
+
+
+def test_a_window_that_lost_no_routes_hands_over_nothing(tmp_path):
+    """The handover is a measurement, not a default.
+
+    The complement of the test above, and the one that makes it mean
+    something: an ordinary window must not pass a degradation the gate stage
+    did not measure, because every game named is a game held back.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(20, 0)), game(102, at(23, 0), home=3, away=4)]
+
+    world = World(tmp_path, schedules=[games], clock=clock)
+
+    write_morning_receipt(world)
+
+    build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    ).run()
+
+    commands = live_commands(world)
+
+    assert commands, "the segment has to have reached the live refresh"
+
+    for command in commands:
+        assert "--role-state-degraded-game" not in command
+
+
+def test_a_degraded_window_is_not_a_failed_segment(tmp_path):
+    """One game's missing lineups must not cost the slate its forecast.
+
+    The directive this implements is explicit about it, and so is the
+    repository's own principle: a slate served by slightly less than every
+    route is strictly better than no slate.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(20, 0)), game(102, at(23, 0), home=3, away=4)]
+
+    world = World(tmp_path, schedules=[games], clock=clock)
+
+    # Every game, not just one.
+    world.window_gates_degrade = (101, 102)
+
+    write_morning_receipt(world)
+
+    receipt = build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    ).run()
+
+    assert receipt["final_outcome"] == controller.OUTCOME_SEGMENT_COMPLETE
+
+    assert receipt["final_outcome"] in controller.OUTCOMES_THAT_SUCCEED
+
+    assert world.published == [[101], [101, 102]]
+
+    assert served_window_ids_for(world) == {"101:T-20m", "102:T-20m"}
+
+
+def test_no_role_state_failure_reaches_a_promotion_or_a_rollback(tmp_path):
+    """Nothing in this path can change the serving authority.
+
+    Asserted two ways, because one of them alone would be weak. The
+    controller invokes no promotion or rollback entry point on a degraded
+    window, and the window-gate module -- the only thing that learns about
+    the failure -- holds a registry handle and never calls either method on
+    it.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(20, 0))]
+
+    world = World(tmp_path, schedules=[games], clock=clock)
+
+    world.window_gates_degrade = (101,)
+
+    write_morning_receipt(world)
+
+    build(
+        world, clock=clock, segment_start=SEGMENT_2[0], segment_end=SEGMENT_2[1]
+    ).run()
+
+    invoked = {Path(str(command[1])).name for command in world.commands}
+
+    assert "run_daily_fit_promotion.py" not in invoked
+
+    assert "seal_promoted_fit_bundle.py" not in invoked
+
+    source = (
+        PROJECT / "ops" / "assert_serving_window_gates.py"
+    ).read_text(encoding="utf-8")
+
+    for forbidden in (".rollback(", ".promote(", ".demote("):
+        assert forbidden not in source, (
+            f"the window-gate module names {forbidden}, which would make a "
+            "serving-window input failure a model-level event"
+        )
+
+
+def test_a_degraded_window_still_may_not_publish_after_a_tip(tmp_path):
+    """Degrading routes does not buy a window any extra time.
+
+    The post-tip guard is taken before the gates are even asked, so a
+    window reached after its own game started is refused whether or not its
+    role state was ready -- and in particular "most of this game's routes
+    were fine" is never a reason to publish a pregame card for a game
+    already under way.
+    """
+    clock = Clock(at(19, 25))
+
+    games = [game(101, at(23, 0))]
+
+    captured_but_unpublished(tmp_path, clock=clock, games=games)
+
+    recovery_clock = Clock(at(23, 10))
+
+    recovery = World(tmp_path, schedules=[games], clock=recovery_clock)
+
+    recovery.window_gates_degrade = (101,)
+
+    write_morning_receipt(recovery)
+
+    receipt = build(
+        recovery,
+        clock=recovery_clock,
+        segment_start=SEGMENT_2[0],
+        segment_end=SEGMENT_2[1],
+    ).run()
+
+    assert [
+        record["window_id"] for record in receipt["post_tip_refused_windows"]
+    ] == ["101:T-20m"]
+
+    # Nothing was served and nothing was published, and the gates were
+    # never even consulted: the tip settles it first.
+    assert recovery.served == []
+
+    assert recovery.published == []
+
+    assert recovery.window_gate_calls == []
+
+    # The window stays unserved and the segment is red for it. Which of the
+    # two refusals names the segment is the pre-existing ranking -- a window
+    # production is missing outranks why it is missing -- and the point here
+    # is only that degrading routes changed neither.
+    assert (
+        receipt["final_outcome"]
+        == controller.OUTCOME_CAPTURED_NOT_SERVED
+    )
+
+    assert receipt["final_outcome"] not in controller.OUTCOMES_THAT_SUCCEED
+
+    assert receipt["captured_unserved_windows"] == ["101:T-20m"]

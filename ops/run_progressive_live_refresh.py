@@ -157,6 +157,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -1127,6 +1128,7 @@ def resolve_advancement(
     pregame: list[dict[str, Any]],
     tipped: list[dict[str, Any]],
     live_components: dict[str, composite.GameComponent],
+    degraded_routes: Mapping[str, Sequence[str]] | None = None,
 ) -> dict[str, Any]:
     """Which games this refresh advances, which it leaves, and why.
 
@@ -1155,20 +1157,66 @@ def resolve_advancement(
     reason: not because this window is behind it, but because no game is
     newly published after it has started.
 
+    ``degraded_routes`` is the fourth case, and it is a downgrade this rule
+    could not previously see. A game whose capture carried no usable role
+    state had the prop routes that read role state rejected at pricing, so
+    this window's card for it is this window's card *minus* those routes.
+    Advancing it would publish a thinner card over a complete one and erase
+    route forecasts the game's own earlier window had already validated --
+    a downgrade in content rather than in window, which the offset comparison
+    cannot detect because the offset moved the right way. So a degraded game
+    holding a card is declined and keeps it, and the routes are retried at
+    the next window. A degraded game holding nothing is advanced anyway and
+    recorded under ``route_refused``: its unaffected routes are the only live
+    forecast it can have, and withholding them would cost the game every
+    route to save three.
+
     When nothing is left to advance the refresh writes nothing. That is the
     ordering rule declining a window rather than anything failing, and it is
     the ordinary evening state on a staggered slate.
     """
+    degraded = {
+        str(game): sorted({str(route) for route in routes})
+        for game, routes in (degraded_routes or {}).items()
+    }
+
     advancing: list[str] = []
 
     declined: list[dict[str, Any]] = []
 
     repeating: list[str] = []
 
+    refused_routes: list[dict[str, Any]] = []
+
     for entry in pregame:
         game_id = str(entry["game_id"])
 
         held = live_components.get(game_id)
+
+        routes = degraded.get(game_id)
+
+        if routes and held is not None:
+            declined.append(
+                {
+                    "degraded_routes": routes,
+                    "game_id": game_id,
+                    "held_window": composite.window_label(held.offset_minutes),
+                    "reason": (
+                        f"game {game_id} has no usable role state at "
+                        f"T-{offset_minutes}, so its "
+                        f"{len(routes)} role-state route(s) "
+                        f"({', '.join(routes)}) were rejected at pricing and "
+                        f"its T-{offset_minutes} card does not carry them. It "
+                        "keeps the "
+                        f"{composite.window_label(held.offset_minutes)} "
+                        "release it already validated, which does, and those "
+                        "routes are retried at the next pre-tip window"
+                    ),
+                    "window_id": entry["window_id"],
+                }
+            )
+
+            continue
 
         if held is None or int(held.offset_minutes) >= int(offset_minutes):
             advancing.append(game_id)
@@ -1177,6 +1225,25 @@ def resolve_advancement(
                 offset_minutes
             ):
                 repeating.append(game_id)
+
+            if routes:
+                refused_routes.append(
+                    {
+                        "degraded_routes": routes,
+                        "game_id": game_id,
+                        "reason": (
+                            f"game {game_id} has no usable role state at "
+                            f"T-{offset_minutes} and no earlier validated "
+                            "release to keep, so its "
+                            f"{len(routes)} role-state route(s) "
+                            f"({', '.join(routes)}) are refused for this "
+                            "window and every other route it has is "
+                            "published. They are retried at the next pre-tip "
+                            "window"
+                        ),
+                        "window_id": entry["window_id"],
+                    }
+                )
 
             continue
 
@@ -1214,6 +1281,12 @@ def resolve_advancement(
         "declined": declined,
         "post_tip_refused": refused,
         "repeating_game_ids": sorted(repeating),
+        "retained_for_role_state": sorted(
+            str(entry["game_id"])
+            for entry in declined
+            if entry.get("degraded_routes")
+        ),
+        "route_refused": refused_routes,
     }
 
 
@@ -1227,10 +1300,11 @@ def assert_something_advances(
     """At least one game of this refresh has a window to advance to.
 
     Two ways there is nothing, and they are different verdicts. Every game
-    already closer to its own tip is the ordering rule working, and a success.
-    Every game already started is the post-tip guard working, and a refusal:
-    the games are named, nothing is written, and what they were serving stays
-    served.
+    held back -- because it is already closer to its own tip, or because this
+    window could not price its role-state routes and the release it holds
+    could -- is the ordering rule working, and a success. Every game already
+    started is the post-tip guard working, and a refusal: the games are
+    named, nothing is written, and what they were serving stays served.
     """
     if advancement["advancing_game_ids"]:
         declined = advancement["declined"]
@@ -1254,9 +1328,22 @@ def assert_something_advances(
                 )
             )
             + (
-                f", and {len(declined)} are already closer to their own tips "
-                "and are carried unchanged"
+                f", and {len(declined)} are carried unchanged"
                 if declined
+                else ""
+            )
+            + (
+                ", "
+                f"{len(advancement['retained_for_role_state'])} of those "
+                "because this window has no usable role state for them"
+                if advancement["retained_for_role_state"]
+                else ""
+            )
+            + (
+                f", and {len(advancement['route_refused'])} advance without "
+                "their role-state routes, which no earlier release of theirs "
+                "carries either"
+                if advancement["route_refused"]
                 else ""
             )
             + (
@@ -1270,14 +1357,16 @@ def assert_something_advances(
     if advancement["declined"]:
         raise LiveAlreadyCloserToTip(
             f"this is the T-{offset_minutes} refresh and every game it is for "
-            "is already serving a window closer to its own tip ("
+            "is held back at a release of its own that this window cannot "
+            "improve on ("
             + "; ".join(
                 f"{entry['game_id']} at {entry['held_window']}"
                 for entry in advancement["declined"]
             )
             + "). A game is never replaced by an earlier one of its own "
-            "windows, so nothing is written and every game's latest valid "
-            "prediction is left serving",
+            "windows, nor by a later one that carries fewer of its routes, so "
+            "nothing is written and every game's latest valid prediction is "
+            "left serving",
             advancement=advancement,
         )
 
@@ -1744,6 +1833,34 @@ def _window_captures(raw: list[str] | None) -> dict[str, dict[str, str]]:
     return captures
 
 
+def _degraded_routes(raw: list[str] | None) -> dict[str, list[str]]:
+    """``GAME_ID=ROUTE,ROUTE`` -- the routes this window could not price.
+
+    Handed over by the serving-window gate stage, which measured the role
+    state and named the games it was missing for. Parsed strictly for the
+    same reason the capture identities are: a game named with no routes, or a
+    route list with no game, would be a degradation nobody could act on, and
+    guessing either half here would mean guessing which forecasts to withhold.
+    """
+    degraded: dict[str, list[str]] = {}
+
+    for item in raw or []:
+        game_id, separator, routes = str(item).partition("=")
+
+        named = [route.strip() for route in routes.split(",") if route.strip()]
+
+        if not separator or not game_id.strip() or not named:
+            raise LiveRefreshRefused(
+                f"--role-state-degraded-game {item!r} is not "
+                "GAME_ID=ROUTE[,ROUTE], so the routes this window could not "
+                "price for that game cannot be held back"
+            )
+
+        degraded.setdefault(game_id.strip(), []).extend(named)
+
+    return {game: sorted(set(routes)) for game, routes in degraded.items()}
+
+
 def refresh(
     args: argparse.Namespace, *, publishing: dict[str, Any] | None = None
 ) -> dict[str, Any]:
@@ -1802,6 +1919,8 @@ def refresh(
         raise post_tip_refusal(tipped, now=now)
 
     captures = _window_captures(args.window_captures)
+
+    degraded = _degraded_routes(getattr(args, "degraded_routes", None))
 
     project_root = Path(args.project_root).resolve()
 
@@ -1884,6 +2003,7 @@ def refresh(
             pregame=windows,
             tipped=tipped,
             live_components=held,
+            degraded_routes=degraded,
         )
 
         ordering = assert_something_advances(
@@ -2354,6 +2474,19 @@ def render(receipt: dict[str, Any]) -> str:
             ", ".join(advancement.get("advancing_game_ids") or []) or "none",
         ),
         (
+            "held at an earlier release for role state",
+            ", ".join(advancement.get("retained_for_role_state") or [])
+            or "none",
+        ),
+        (
+            "advanced without their role-state routes",
+            ", ".join(
+                str(entry["game_id"])
+                for entry in advancement.get("route_refused") or []
+            )
+            or "none",
+        ),
+        (
             composite.UNATTESTED_ROWS_FIELD,
             manifest.get(composite.UNATTESTED_ROWS_FIELD),
         ),
@@ -2458,6 +2591,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "manifest names the capture behind each game's card, and this module "
         "may not read the capture log to find out -- a live publisher that "
         "could would be a live publisher with an opinion about captures.",
+    )
+
+    parser.add_argument(
+        "--role-state-degraded-game",
+        action="append",
+        default=None,
+        dest="degraded_routes",
+        metavar="GAME_ID=ROUTE[,ROUTE]",
+        help="a game whose role-state prop routes this window could not "
+        "price, and which routes they were, repeatable. Measured by the "
+        "serving-window gate stage and handed over, never decided here. Such "
+        "a game keeps the release it already validated rather than being "
+        "advanced to a card missing those routes; a game with no earlier "
+        "release advances without them and is named in the receipt.",
     )
 
     parser.add_argument(
